@@ -938,4 +938,4 @@ function getRaporOzet(body) {
 // base64 secret sonrasi tetikleme// temizlenmis workflow testi Fri Aug 14 20:10:56 UTC 2026
 
 
- // test push 
+ // test push
