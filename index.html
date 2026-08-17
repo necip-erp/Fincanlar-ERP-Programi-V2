@@ -177,7 +177,7 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
 .ayarlar-kisayol-input{padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--bg3);font-family:inherit}
 #stok-tanim-view .cari-list-panel{width:100%;border-right:none}
 
-.belge-tipi-sekmeler{display:flex;gap:4px;margin-bottom:8px}
+.belge-tipi-sekmeler{display:flex;gap:4px;padding:10px 14px 0}
 .belge-tab{flex:1;padding:7px 4px;border:1px solid var(--border);background:var(--bg3);border-radius:7px;font-size:12px;font-weight:700;color:var(--text3);cursor:pointer}
 .belge-tab.active{background:var(--blue);border-color:var(--blue);color:#fff}
 .fiyat-gecmis-kutu{position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-top:2px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.12)}
@@ -227,15 +227,16 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
         </div>
       </div>
     </div>
-    <div id="stok-panel-view" style="display:none;height:100%">
+    <div id="stok-panel-view" style="display:none;height:100%;flex-direction:column">
       <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="stokAnaSecimeDon()">← Stok seçimine dön</button>
       <iframe id="stok-iframe" src="https://fincanlarnecip.github.io/stok-panel/" title="Stok Paneli"></iframe>
     </div>
     <div id="stok-tanim-view" style="display:none;height:100%" class="cari-list-panel-wrap">
       <div class="cari-list-panel">
+        <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="stokAnaSecimeDon()">← Geri</button>
         <div class="cari-list-head">
-          <button class="cari-back-btn" style="display:inline-flex;padding:0 0 8px" onclick="stokAnaSecimeDon()">← Geri</button>
           <input id="stoktanim-ara" placeholder="Ürün ara..." oninput="stokTanimAramaFiltrele(this.value)">
+          <button class="cari-add-btn" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);width:auto;padding:0 10px;font-size:12px;font-weight:700" onclick="stokTanimIceAktarModalAc()" title="Excel'den içe aktar">📥 İçe Aktar</button>
           <button class="cari-add-btn" onclick="stokTanimModalAc()" title="Yeni ürün tanımla">+</button>
         </div>
         <div class="cari-items" id="stoktanim-items"><div class="cari-empty">Yükleniyor...</div></div>
@@ -293,12 +294,12 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
   </div>
   <div class="modview" id="mod-satis">
     <div class="cari-list-panel">
+      <div class="belge-tipi-sekmeler">
+        <button class="belge-tab active" data-tip="Fatura" onclick="satisBelgeTipiDegistir('Fatura')">Fatura</button>
+        <button class="belge-tab" data-tip="Teklif" onclick="satisBelgeTipiDegistir('Teklif')">Teklif</button>
+        <button class="belge-tab" data-tip="Sipariş" onclick="satisBelgeTipiDegistir('Sipariş')">Sipariş</button>
+      </div>
       <div class="cari-list-head">
-        <div class="belge-tipi-sekmeler">
-          <button class="belge-tab active" data-tip="Fatura" onclick="satisBelgeTipiDegistir('Fatura')">Fatura</button>
-          <button class="belge-tab" data-tip="Teklif" onclick="satisBelgeTipiDegistir('Teklif')">Teklif</button>
-          <button class="belge-tab" data-tip="Sipariş" onclick="satisBelgeTipiDegistir('Sipariş')">Sipariş</button>
-        </div>
         <input id="satis-ara" placeholder="Satış ara (müşteri)..." oninput="satisAramaFiltrele(this.value)">
         <button class="cari-add-btn" onclick="satisModalAc()" title="Yeni ekle">+</button>
       </div>
@@ -430,27 +431,26 @@ function globalAraDegisti(deger){
   }, 250);
 }
 
-// Cari / Satış / Alış / Tahsilat / Ödeme / Finans / Rapor modülleri ilk kez açıldığında yüklenir
+// Cari / Satış / Alış / Tahsilat / Ödeme / Finans / Rapor modülleri ilk kez açıldığında yüklenir.
+// try/catch ile sarmalanıyor: ileride bir modül fonksiyonu henüz tanımlanmamışsa (script
+// sırası sorunu vb.) sessizce konsola hata basar ama SAYFA/DİĞER MODÜLLER çalışmaya devam eder.
 const _origModulAc = modulAc;
 modulAc = function(id){
   _origModulAc(id);
-  if(id === "cari" && !_cariYuklendi){ cariListesiYukle(); }
-  if(id === "satis" && !_satisYuklendi){ satisListesiYukle(); }
-  if(id === "alis" && !_alisYuklendi){ alisListesiYukle(); }
-  if(id === "tahsilat" && !_tahsilatYuklendi){ tahsilatListesiYukle(); }
-  if(id === "odeme" && !_odemeYuklendi){ odemeListesiYukle(); }
-  if(id === "finans"){ finansYukle(); if(!_bankaYapisiYuklendi) bankaYapisiYukle(); }
-  if(id === "rapor" && !_raporIlkYuklemeYapildi){ _raporIlkYuklemeYapildi = true; raporYukle(); }
-  if(id === "ayarlar"){ ayarlarYukle(); }
-  if(id === "stok"){ stokAnaSecimeDon(); }
+  try{
+    if(id === "cari" && !_cariYuklendi){ cariListesiYukle(); }
+    if(id === "satis" && !_satisYuklendi){ satisListesiYukle(); }
+    if(id === "alis" && !_alisYuklendi){ alisListesiYukle(); }
+    if(id === "tahsilat" && !_tahsilatYuklendi){ tahsilatListesiYukle(); }
+    if(id === "odeme" && !_odemeYuklendi){ odemeListesiYukle(); }
+    if(id === "finans"){ finansYukle(); if(!_bankaYapisiYuklendi) bankaYapisiYukle(); }
+    if(id === "rapor" && !_raporIlkYuklemeYapildi){ _raporIlkYuklemeYapildi = true; raporYukle(); }
+    if(id === "ayarlar"){ ayarlarYukle(); }
+    if(id === "stok"){ stokAnaSecimeDon(); }
+  }catch(hata){
+    console.error("Modül yüklenirken hata (" + id + "):", hata);
+  }
 };
-
-// Bu sekme belirli bir modül için mi açıldı? (modulAcYeniSekme ile ?tab=... eklenerek açılır)
-(function(){
-  const params = new URLSearchParams(location.search);
-  const tab = params.get("tab");
-  if(tab && MODULLER.some(m=>m.id===tab)) modulAc(tab);
-})();
 
 // ── Klavye kısayolları ──
 function kisayollariAl(){
@@ -514,6 +514,25 @@ function paraFormat(n){
   return sign + Math.abs(n).toLocaleString("tr-TR", {minimumFractionDigits:2, maximumFractionDigits:2}) + " ₺";
 }
 
+// ── Liste önbellekleme (performans) ──
+// Modüller art\u0131k ayrı sekmelerde açıldığı için her açılış taze bir sayfa yüklemesi demek;
+// bu yüzden son başarılı liste sonucunu tarayıcıda (tüm sekmeler arasında paylaşılan
+// localStorage'da) kısa süreliğine saklıyoruz. Yeni açılan bir sekme önce bu önbellekteki
+// veriyi ANINDA gösterir, sonra arka planda ağdan taze veriyi çekip sessizce günceller —
+// kullanıcı "Yükleniyor..." beklemek yerine veriyi hemen görür.
+function onbellekOku(anahtar, maxYasMs){
+  try{
+    const ham = localStorage.getItem("fincanlar_onbellek_" + anahtar);
+    if(!ham) return null;
+    const kayit = JSON.parse(ham);
+    if(Date.now() - kayit.t > maxYasMs) return null;
+    return kayit.veri;
+  }catch(e){ return null; }
+}
+function onbellekYaz(anahtar, veri){
+  try{ localStorage.setItem("fincanlar_onbellek_" + anahtar, JSON.stringify({t: Date.now(), veri: veri})); }catch(e){}
+}
+
 function bakiyeSinifi(n){
   if(n > 0) return "bakiye-pos";
   if(n < 0) return "bakiye-neg";
@@ -522,13 +541,20 @@ function bakiyeSinifi(n){
 
 function cariListesiYukle(){
   _cariYuklendi = true;
-  document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  const onbellek = onbellekOku("cariListesi", 60000);
+  if(onbellek){
+    _cariListe = onbellek.sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
+    cariListesiCiz(_cariListe);
+  } else {
+    document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  }
   cariApi("getCariListesi").then(res=>{
-    if(!res.ok){ document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(!res.ok){ if(!onbellek) document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _cariListe = res.cariler.sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
+    onbellekYaz("cariListesi", res.cariler);
     cariListesiCiz(_cariListe);
   }).catch(err=>{
-    document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+    if(!onbellek) document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
 }
 
@@ -735,13 +761,16 @@ let _yeniSatisKalemleri = [];
 
 function satisListesiYukle(){
   _satisYuklendi = true;
-  document.getElementById("satis-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  const onbellek = onbellekOku("satisListesi", 60000);
+  if(onbellek){ _satisListe = onbellek; satisListesiCiz(_satisListe); }
+  else document.getElementById("satis-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getSatisListesi").then(res=>{
-    if(!res.ok){ document.getElementById("satis-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(!res.ok){ if(!onbellek) document.getElementById("satis-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _satisListe = res.satislar;
+    onbellekYaz("satisListesi", res.satislar);
     satisListesiCiz(_satisListe);
   }).catch(err=>{
-    document.getElementById("satis-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+    if(!onbellek) document.getElementById("satis-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
 }
 
@@ -998,13 +1027,16 @@ let _yeniAlisKalemleri = [];
 
 function alisListesiYukle(){
   _alisYuklendi = true;
-  document.getElementById("alis-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  const onbellek = onbellekOku("alisListesi", 60000);
+  if(onbellek){ _alisListe = onbellek; alisListesiCiz(_alisListe); }
+  else document.getElementById("alis-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getAlisListesi").then(res=>{
-    if(!res.ok){ document.getElementById("alis-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(!res.ok){ if(!onbellek) document.getElementById("alis-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _alisListe = res.alislar;
+    onbellekYaz("alisListesi", res.alislar);
     alisListesiCiz(_alisListe);
   }).catch(err=>{
-    document.getElementById("alis-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+    if(!onbellek) document.getElementById("alis-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
 }
 
@@ -1206,13 +1238,16 @@ let _tahsilatSecili = null;
 
 function tahsilatListesiYukle(){
   _tahsilatYuklendi = true;
-  document.getElementById("tahsilat-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  const onbellek = onbellekOku("tahsilatListesi", 60000);
+  if(onbellek){ _tahsilatListe = onbellek; tahsilatListesiCiz(_tahsilatListe); }
+  else document.getElementById("tahsilat-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getTahsilatListesi").then(res=>{
-    if(!res.ok){ document.getElementById("tahsilat-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(!res.ok){ if(!onbellek) document.getElementById("tahsilat-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _tahsilatListe = res.tahsilatlar;
+    onbellekYaz("tahsilatListesi", res.tahsilatlar);
     tahsilatListesiCiz(_tahsilatListe);
   }).catch(err=>{
-    document.getElementById("tahsilat-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+    if(!onbellek) document.getElementById("tahsilat-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
 }
 
@@ -1359,13 +1394,16 @@ let _odemeSecili = null;
 
 function odemeListesiYukle(){
   _odemeYuklendi = true;
-  document.getElementById("odeme-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  const onbellek = onbellekOku("odemeListesi", 60000);
+  if(onbellek){ _odemeListe = onbellek; odemeListesiCiz(_odemeListe); }
+  else document.getElementById("odeme-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getOdemeListesi").then(res=>{
-    if(!res.ok){ document.getElementById("odeme-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(!res.ok){ if(!onbellek) document.getElementById("odeme-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _odemeListe = res.odemeler;
+    onbellekYaz("odemeListesi", res.odemeler);
     odemeListesiCiz(_odemeListe);
   }).catch(err=>{
-    document.getElementById("odeme-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+    if(!onbellek) document.getElementById("odeme-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
 }
 
@@ -1743,7 +1781,7 @@ function stokAnaSecimeDon(){
 function stokAltModulAc(hangisi){
   document.getElementById("stok-secim").style.display = "none";
   if(hangisi === "panel"){
-    document.getElementById("stok-panel-view").style.display = "block";
+    document.getElementById("stok-panel-view").style.display = "flex";
     document.getElementById("stok-tanim-view").style.display = "none";
   } else {
     document.getElementById("stok-tanim-view").style.display = "block";
@@ -1758,32 +1796,36 @@ let _stokTanimListe = [];
 
 function stokTanimListesiYukle(){
   _stokTanimYuklendi = true;
-  document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  const onbellek = onbellekOku("stokTanimListesi", 60000);
+  if(onbellek){ _stokTanimListe = onbellek; stokTanimListesiCiz(_stokTanimListe); }
+  else document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getStokTanimListesi").then(res=>{
-    if(!res.ok){ document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(!res.ok){ if(!onbellek) document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _stokTanimListe = res.kalemler;
+    onbellekYaz("stokTanimListesi", res.kalemler);
     stokTanimListesiCiz(_stokTanimListe);
   }).catch(err=>{
-    document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+    if(!onbellek) document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
 }
 
 function stokTanimListesiCiz(liste){
   const el = document.getElementById("stoktanim-items");
-  if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı ürün tanımı yok. "+" ile ekleyin.</div>'; return; }
+  if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı ürün tanımı yok. "+" ile ekleyin ya da Excel\'den içe aktarın.</div>'; return; }
   el.innerHTML = liste.map(k=>`
     <div class="cari-item" onclick="stokTanimModalAc('${k.id}')">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${k.urunAdi}</span>
-        <span class="cari-item-bakiye">${k.birim}</span>
+        <span class="cari-item-ad">${k.stokAdi}</span>
+        <span class="cari-item-bakiye">${paraFormat(k.satisFiyati)}</span>
       </div>
-      <span class="cari-item-tip">${k.ambalajTipi ? k.ambalajTipi+' · '+k.ambalajMiktari+' '+k.birim : '—'}</span>
+      <span class="cari-item-tip">${k.stokKodu ? k.stokKodu+' · ' : ''}${k.ambalajMiktari||''} ${k.ambalajBirimi||k.birim1||''}</span>
     </div>`).join("");
 }
 
 function stokTanimAramaFiltrele(deger){
   const d = deger.trim().toLocaleLowerCase('tr');
-  const filtreli = !d ? _stokTanimListe : _stokTanimListe.filter(k => k.urunAdi.toLocaleLowerCase('tr').includes(d));
+  const filtreli = !d ? _stokTanimListe : _stokTanimListe.filter(k =>
+    k.stokAdi.toLocaleLowerCase('tr').includes(d) || (k.stokKodu||"").toLocaleLowerCase('tr').includes(d));
   stokTanimListesiCiz(filtreli);
 }
 
@@ -1794,12 +1836,17 @@ function stokTanimModalAc(editId){
   overlay.id = "stoktanim-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   overlay.innerHTML = `
-    <div class="modal-box">
-      <h3>${k ? 'Ürün Tanımını Düzenle' : 'Yeni Ürün Tanımı'}</h3>
-      <div class="fld"><label>Ürün Adı *</label><input id="st-urunadi" type="text" value="${k?k.urunAdi:''}"></div>
-      <div class="fld"><label>Birim</label><input id="st-birim" type="text" value="${k?k.birim:'adet'}" placeholder="adet, m2, kg, koli..."></div>
-      <div class="fld"><label>Ambalaj Tipi</label><input id="st-ambalajtipi" type="text" value="${k?k.ambalajTipi:''}" placeholder="Koli, Palet, Rulo..."></div>
-      <div class="fld"><label>Ambalaj Miktarı</label><input id="st-ambalajmiktar" type="number" min="0" step="0.01" value="${k?k.ambalajMiktari:''}" placeholder="Örn. koli başına 12 adet"></div>
+    <div class="modal-box modal-box-wide">
+      <h3>${k ? 'Stok Tanımını Düzenle' : 'Yeni Stok Tanımı'}</h3>
+      <div class="fld"><label>Stok Kodu</label><input id="st-stokkodu" type="text" value="${k?k.stokKodu:''}" placeholder="İsteğe bağlı"></div>
+      <div class="fld"><label>Stok Adı *</label><input id="st-stokadi" type="text" value="${k?k.stokAdi:''}"></div>
+      <div class="fld"><label>1. Birim</label><input id="st-birim1" type="text" value="${k?k.birim1:'adet'}" placeholder="adet, m2, kg..."></div>
+      <div class="fld"><label>Ambalaj Miktarı</label><input id="st-ambalajmiktar" type="number" min="0" step="0.01" value="${k?k.ambalajMiktari:''}"></div>
+      <div class="fld"><label>Ambalaj Birimi</label><input id="st-ambalajbirimi" type="text" value="${k?k.ambalajBirimi:''}" placeholder="Koli, Palet, Rulo..."></div>
+      <div class="fld"><label>Alış Fiyatı</label><input id="st-alisfiyat" type="number" min="0" step="0.01" value="${k?k.alisFiyati:''}"></div>
+      <div class="fld"><label>Alış İskontosu (%)</label><input id="st-aliskonto" type="number" min="0" step="0.01" value="${k?k.alisIskontosu:''}"></div>
+      <div class="fld"><label>Satış Fiyatı</label><input id="st-satisfiyat" type="number" min="0" step="0.01" value="${k?k.satisFiyati:''}"></div>
+      <div class="fld"><label>Satış İskontosu (%)</label><input id="st-satisiskonto" type="number" min="0" step="0.01" value="${k?k.satisIskontosu:''}"></div>
       ${k ? `<div class="btnrow"><button class="btn btn-danger" onclick="stokTanimSilOnay('${k.id}')">🗑 Sil</button></div>` : ''}
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('stoktanim-modal-overlay').remove()">İptal</button>
@@ -1807,18 +1854,23 @@ function stokTanimModalAc(editId){
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  setTimeout(()=>document.getElementById("st-urunadi").focus(), 50);
+  setTimeout(()=>document.getElementById("st-stokadi").focus(), 50);
 }
 
 function stokTanimKaydet(id){
-  const urunAdi = document.getElementById("st-urunadi").value.trim();
-  if(!urunAdi){ alert("Ürün adı gerekli"); return; }
+  const stokAdi = document.getElementById("st-stokadi").value.trim();
+  if(!stokAdi){ alert("Stok adı gerekli"); return; }
   const body = {
     id: id || undefined,
-    urunAdi,
-    birim: document.getElementById("st-birim").value || "adet",
-    ambalajTipi: document.getElementById("st-ambalajtipi").value,
+    stokKodu: document.getElementById("st-stokkodu").value,
+    stokAdi,
+    birim1: document.getElementById("st-birim1").value || "adet",
     ambalajMiktari: document.getElementById("st-ambalajmiktar").value,
+    ambalajBirimi: document.getElementById("st-ambalajbirimi").value,
+    alisFiyati: document.getElementById("st-alisfiyat").value,
+    alisIskontosu: document.getElementById("st-aliskonto").value,
+    satisFiyati: document.getElementById("st-satisfiyat").value,
+    satisIskontosu: document.getElementById("st-satisiskonto").value,
   };
   cariApi("saveStokTanim", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
@@ -1828,13 +1880,101 @@ function stokTanimKaydet(id){
 }
 
 function stokTanimSilOnay(id){
-  if(!confirm("Bu ürün tanımını silmek istediğinize emin misiniz?")) return;
+  if(!confirm("Bu stok tanımını silmek istediğinize emin misiniz?")) return;
   cariApi("silStokTanim", {id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("stoktanim-modal-overlay").remove();
     stokTanimListesiYukle();
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
+
+// ── Excel'den toplu içe aktarma ──
+// Sütun sırası: A Stok Kodu, B Stok Adı, C 1.Birim, D Ambalaj Miktarı, E Ambalaj Birimi,
+// F Alış Fiyatı, G Alış İskontosu, H Satış Fiyatı, I Satış İskontosu.
+// Excel'de ilgili hücreleri seçip kopyalayıp (Ctrl+C) aşağıdaki kutuya yapıştırman yeterli.
+function stokTanimIceAktarModalAc(){
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "stoktanim-ice-aktar-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box modal-box-wide">
+      <h3>Excel'den İçe Aktar</h3>
+      <p style="color:var(--text3);font-size:12px;margin:0 0 10px">
+        Excel'de sütunlar şu sırada olmalı: <b>A</b> Stok Kodu, <b>B</b> Stok Adı, <b>C</b> 1.Birim,
+        <b>D</b> Ambalaj Miktarı, <b>E</b> Ambalaj Birimi, <b>F</b> Alış Fiyatı, <b>G</b> Alış İskontosu,
+        <b>H</b> Satış Fiyatı, <b>I</b> Satış İskontosu. Hücreleri seçip kopyalayın (Ctrl+C), aşağıya yapıştırın (Ctrl+V).
+        Aynı Stok Kodu'na sahip satırlar güncellenir, yeni kodlar eklenir. Başlık satırı varsa otomatik atlanır.
+      </p>
+      <textarea id="st-ice-aktar-veri" rows="10" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)" placeholder="Excel'den kopyaladığınız hücreleri buraya yapıştırın..."></textarea>
+      <div id="st-ice-aktar-onizleme" style="margin-top:10px;font-size:12px;color:var(--text3)"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('stoktanim-ice-aktar-overlay').remove()">İptal</button>
+        <button class="btn btn-primary" onclick="stokTanimIceAktarYap()">İçe Aktar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const alan = document.getElementById("st-ice-aktar-veri");
+  alan.addEventListener("input", stokTanimIceAktarOnizle);
+  setTimeout(()=>alan.focus(), 50);
+}
+
+// Yapıştırılan veriyi satır/sütuna ayırır. Excel kopyalamaları satır sonu \n, sütun ayracı \t kullanır.
+function stokTanimYapistirilaniAyristir(metin){
+  const satirlar = metin.split(/\r\n|\n|\r/).map(s=>s.trim()).filter(s=>s.length>0);
+  const kayitlar = [];
+  satirlar.forEach(satir=>{
+    const h = satir.split("\t");
+    const stokAdi = (h[1]||"").trim();
+    if(!stokAdi) return; // Stok Adı boşsa (muhtemelen başlık satırı ya da boş satır) atla
+    if(stokAdi.toLocaleLowerCase('tr').includes("stok ad")) return; // başlık satırını algıla ve atla
+    kayitlar.push({
+      stokKodu: (h[0]||"").trim(),
+      stokAdi: stokAdi,
+      birim1: (h[2]||"adet").trim(),
+      ambalajMiktari: parseFloat((h[3]||"0").replace(",",".")) || 0,
+      ambalajBirimi: (h[4]||"").trim(),
+      alisFiyati: parseFloat((h[5]||"0").replace(",",".")) || 0,
+      alisIskontosu: parseFloat((h[6]||"0").replace(",",".")) || 0,
+      satisFiyati: parseFloat((h[7]||"0").replace(",",".")) || 0,
+      satisIskontosu: parseFloat((h[8]||"0").replace(",",".")) || 0,
+    });
+  });
+  return kayitlar;
+}
+
+function stokTanimIceAktarOnizle(){
+  const metin = document.getElementById("st-ice-aktar-veri").value;
+  const kayitlar = stokTanimYapistirilaniAyristir(metin);
+  document.getElementById("st-ice-aktar-onizleme").textContent =
+    kayitlar.length > 0 ? kayitlar.length + " satır algılandı, içe aktarılmaya hazır." : "";
+}
+
+function stokTanimIceAktarYap(){
+  const metin = document.getElementById("st-ice-aktar-veri").value;
+  const kayitlar = stokTanimYapistirilaniAyristir(metin);
+  if(kayitlar.length === 0){ alert("İçe aktarılacak geçerli satır bulunamadı. Stok Adı sütununun (B) dolu olduğundan emin olun."); return; }
+  if(!confirm(kayitlar.length + " satır içe aktarılacak. Devam edilsin mi?")) return;
+  cariApi("saveStokTanimTopluce", {kayitlar}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    alert("Tamamlandı — " + res.eklenen + " yeni kayıt eklendi, " + res.guncellenen + " kayıt güncellendi.");
+    document.getElementById("stoktanim-ice-aktar-overlay").remove();
+    stokTanimListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+</script>
+
+<!-- Bu sekme belirli bir modül için mi açıldı? (modulAcYeniSekme ile ?tab=... eklenerek açılır).
+     Bu kod EN SONDA duruyor, çünkü çağırdığı modül fonksiyonları (satisListesiYukle,
+     finansYukle, alisListesiYukle vb.) yukarıdaki script bloklarında tanımlanıyor —
+     daha erken çalıştırılırsa "fonksiyon tanımlı değil" hatası verip modülün
+     yüklenmesini sessizce bozardı. -->
+<script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  const tab = params.get("tab");
+  if(tab && MODULLER.some(m=>m.id===tab)) modulAc(tab);
+})();
 </script>
 
 <script>
