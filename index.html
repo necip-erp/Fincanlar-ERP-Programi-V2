@@ -157,6 +157,19 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
 .satis-kalem-birim{width:56px}
 .satis-kalem-fiyat{width:84px}
 .satis-toplam{text-align:right;margin-top:14px;font-size:15px;font-weight:800}
+.satis-toplam-detay{margin-top:14px;padding:10px 12px;background:var(--bg3);border-radius:8px}
+.satis-toplam-satir{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--text3)}
+.satis-toplam-satir.genel{border-top:1px solid var(--border);margin-top:6px;padding-top:8px;font-size:16px;font-weight:800;color:var(--text)}
+.fis-toplam-tbl{width:260px;margin-left:auto;margin-top:10px;border-collapse:collapse}
+.fis-toplam-tbl td{padding:4px 8px;font-size:13px}
+.fis-toplam-tbl td:last-child{text-align:right}
+.fis-toplam-tbl tr.genel td{border-top:2px solid #333;font-weight:800;font-size:15px;padding-top:8px}
+@media print{
+  body *{visibility:hidden}
+  #fis-yazdirilacak, #fis-yazdirilacak *{visibility:visible}
+  #fis-yazdirilacak{position:absolute;left:0;top:0;width:100%}
+  .modal-overlay{position:absolute !important}
+}
 
 /* ── FİNANS / RAPOR MODÜLLERİ ── */
 .finans-panel{padding:20px;overflow-y:auto;width:100%}
@@ -336,6 +349,15 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
         <button class="btn btn-primary" onclick="kisayollariKaydet()">Kaydet</button>
         <button class="btn" onclick="kisayollariVarsayilanaDondur()">Varsayılana Döndür</button>
       </div>
+    </div>
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Birim Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Ürünler için kullanılacak ölçü birimlerini burada tanımlayın (Adet, Kg, Litre, Kutu vb.). Bu birimler Stok Tanımlama ekranında "1. Birim" seçiminde kullanılır.</p>
+      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="flex:1"><label>Yeni Birim Adı</label><input id="birim-yeni-ad" type="text" placeholder="Örn. Kg, Litre, Kutu"></div>
+        <button class="btn btn-primary" onclick="birimEkle()">+ Ekle</button>
+      </div>
+      <div id="ayarlar-birim-liste" style="margin-top:12px"></div>
     </div>
   </div>
 </div>
@@ -837,10 +859,11 @@ function satisDetayCiz(res){
     </div>
     ${s.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${s.aciklama}</div></div></div>` : ""}
     <div class="btnrow">
+      <button class="btn btn-primary" onclick="satisFisYazdir('${s.id}')">🖨 Yazdır</button>
       <button class="btn btn-danger" onclick="satisSilOnay('${s.id}')">🗑 Satışı Sil</button>
     </div>
     <table class="hareket-tbl">
-      <thead><tr><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>Tutar</th></tr></thead>
+      <thead><tr><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th></tr></thead>
       <tbody>
         ${kalemler.map(k=>`
           <tr>
@@ -848,11 +871,58 @@ function satisDetayCiz(res){
             <td>${k.miktar}</td>
             <td>${k.birim}</td>
             <td>${paraFormat(k.birimFiyat)}</td>
+            <td>${k.iskontoYuzde||0}</td>
+            <td>${k.kdvOrani===undefined?20:k.kdvOrani}</td>
             <td>${paraFormat(k.tutar)}</td>
           </tr>`).join("")}
       </tbody>
     </table>
+    ${s.toplamlar ? `
+    <table class="fis-toplam-tbl">
+      <tr><td>Brüt Toplam</td><td>${paraFormat(s.toplamlar.brutToplam)}</td></tr>
+      <tr><td>İskonto</td><td>-${paraFormat(s.toplamlar.iskontoToplam)}</td></tr>
+      <tr><td>Ara Toplam</td><td>${paraFormat(s.toplamlar.araToplam)}</td></tr>
+      <tr><td>Kdv Toplam</td><td>${paraFormat(s.toplamlar.kdvToplam)}</td></tr>
+      <tr class="genel"><td>Genel Toplam</td><td>${paraFormat(s.toplamlar.genelToplam)}</td></tr>
+    </table>` : ""}
   `;
+}
+
+// Satış fişi tasarımı: Fatura/Teklif/Sipariş için yazdırılabilir görünüm.
+// Alt toplam sırası: Brüt Toplam - İskonto - Ara Toplam - Kdv Toplam - Genel Toplam.
+function satisFisYazdir(id){
+  cariApi("getSatisDetay", {satisId:id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    const s = res.satis, kalemler = res.kalemler, t = s.toplamlar || {};
+    const eski = document.getElementById("fis-yazdirilacak");
+    if(eski) eski.remove();
+    const div = document.createElement("div");
+    div.id = "fis-yazdirilacak";
+    div.style.cssText = "max-width:700px;margin:30px auto;font-family:inherit;color:#111";
+    div.innerHTML = `
+      <h2 style="margin:0 0 4px">${s.belgeTipi||'Fatura'}</h2>
+      <p style="margin:0 0 16px;color:#555">${s.cariAd} · ${s.tarih} · ${s.odemeTipi}</p>
+      <table style="width:100%;border-collapse:collapse" border="1" cellpadding="6">
+        <thead><tr><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th></tr></thead>
+        <tbody>
+          ${kalemler.map(k=>`<tr>
+            <td>${k.urunAdi}</td><td>${k.miktar}</td><td>${k.birim}</td>
+            <td>${paraFormat(k.birimFiyat)}</td><td>${k.iskontoYuzde||0}</td>
+            <td>${k.kdvOrani===undefined?20:k.kdvOrani}</td><td>${paraFormat(k.tutar)}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      <table class="fis-toplam-tbl">
+        <tr><td>Brüt Toplam</td><td>${paraFormat(t.brutToplam||0)}</td></tr>
+        <tr><td>İskonto</td><td>-${paraFormat(t.iskontoToplam||0)}</td></tr>
+        <tr><td>Ara Toplam</td><td>${paraFormat(t.araToplam||0)}</td></tr>
+        <tr><td>Kdv Toplam</td><td>${paraFormat(t.kdvToplam||0)}</td></tr>
+        <tr class="genel"><td>Genel Toplam</td><td>${paraFormat(t.genelToplam||0)}</td></tr>
+      </table>`;
+    document.body.appendChild(div);
+    window.print();
+    setTimeout(()=>{ div.remove(); }, 500);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
 function satisSilOnay(id){
@@ -869,8 +939,9 @@ function satisSilOnay(id){
 // ── Yeni satış modal ── (onCariId ve onBelgeTipi verilirse, Cari sayfasındaki
 // "İşlemler" panelinden ön-doldurulmuş şekilde açılır — Faz 2)
 function satisModalAc(onCariId, onBelgeTipi){
-  _yeniSatisKalemleri = [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0}];
+  _yeniSatisKalemleri = [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20}];
   if(!_cariYuklendi) cariListesiYukle();
+  if(!_stokTanimYuklendi) stokTanimListesiYukle();
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "satis-modal-overlay";
@@ -907,7 +978,7 @@ function satisModalAc(onCariId, onBelgeTipi){
       <div id="sm-kalemler" style="margin:8px 0"></div>
       <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
 
-      <div class="satis-toplam">Toplam: <span id="sm-toplam">0,00 ₺</span></div>
+      <div id="sm-toplam" class="satis-toplam-detay"></div>
 
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('satis-modal-overlay').remove()">İptal</button>
@@ -924,7 +995,7 @@ function satisCariSecimiDegisti(){
 }
 
 function satisKalemEkleUI(){
-  _yeniSatisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0});
+  _yeniSatisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20});
   satisKalemlerCiz();
 }
 
@@ -934,7 +1005,7 @@ function satisKalemSilUI(idx){
 }
 
 function satisKalemAlanDegisti(idx, alan, deger){
-  _yeniSatisKalemleri[idx][alan] = (alan==='miktar'||alan==='birimFiyat') ? (parseFloat(deger)||0) : deger;
+  _yeniSatisKalemleri[idx][alan] = (alan==='miktar'||alan==='birimFiyat'||alan==='iskontoYuzde'||alan==='kdvOrani') ? (parseFloat(deger)||0) : deger;
   satisToplamGuncelle();
 }
 
@@ -943,52 +1014,84 @@ function satisKalemlerCiz(){
   el.innerHTML = _yeniSatisKalemleri.map((k,idx)=>`
     <div class="satis-kalem-satir">
       <div style="flex:1;position:relative">
-        <input class="satis-kalem-urun" style="width:100%" type="text" placeholder="Ürün adı" value="${k.urunAdi}"
-               oninput="satisKalemAlanDegisti(${idx},'urunAdi',this.value)"
-               onblur="setTimeout(()=>fiyatGecmisiKapat(${idx}),200)"
-               onfocus="fiyatGecmisiGoster(${idx})">
-        <div id="fiyat-gecmis-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
+        <input class="satis-kalem-urun" style="width:100%" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
+               oninput="satisKalemAlanDegisti(${idx},'urunAdi',this.value); urunOneriGoster(${idx})"
+               onblur="setTimeout(()=>urunOneriKapat(${idx}),200)"
+               onfocus="urunOneriGoster(${idx})">
+        <div id="urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <input class="satis-kalem-miktar" type="number" min="0" step="0.01" placeholder="Miktar" value="${k.miktar}" oninput="satisKalemAlanDegisti(${idx},'miktar',this.value)">
-      <input class="satis-kalem-birim" type="text" placeholder="Birim" value="${k.birim}" oninput="satisKalemAlanDegisti(${idx},'birim',this.value)">
+      <input class="satis-kalem-birim" style="max-width:80px" type="text" placeholder="Birim" value="${k.birim}" oninput="satisKalemAlanDegisti(${idx},'birim',this.value)">
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.01" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="satisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
+      <input class="satis-kalem-fiyat" style="max-width:64px" type="number" min="0" step="0.01" title="İskonto %" placeholder="İsk.%" value="${k.iskontoYuzde||0}" oninput="satisKalemAlanDegisti(${idx},'iskontoYuzde',this.value)">
+      <input class="satis-kalem-fiyat" style="max-width:64px" type="number" min="0" step="0.01" title="KDV %" placeholder="Kdv%" value="${k.kdvOrani===undefined?20:k.kdvOrani}" oninput="satisKalemAlanDegisti(${idx},'kdvOrani',this.value)">
       ${_yeniSatisKalemleri.length>1 ? `<span class="hk-sil" onclick="satisKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
   satisToplamGuncelle();
 }
 
-// Ürün adı alanına odaklanınca / yazarken, o ürünün geçmiş satış fiyatlarını gösterir.
-let _fiyatGecmisTimer = null;
-function fiyatGecmisiGoster(idx){
-  clearTimeout(_fiyatGecmisTimer);
-  const urunAdi = (_yeniSatisKalemleri[idx] && _yeniSatisKalemleri[idx].urunAdi || "").trim();
-  const kutu = document.getElementById("fiyat-gecmis-"+idx);
-  if(!kutu || urunAdi.length < 2){ if(kutu) kutu.style.display="none"; return; }
-  _fiyatGecmisTimer = setTimeout(()=>{
-    cariApi("getUrunFiyatGecmisi", {urunAdi}).then(res=>{
-      if(!res.ok || !res.gecmis || res.gecmis.length===0){ kutu.style.display="none"; return; }
-      kutu.innerHTML = res.gecmis.map(g=>`
-        <div class="fiyat-gecmis-satir" onclick="fiyatGecmisSec(${idx},${g.birimFiyat})">
-          <span>${g.tarih} · ${g.cariAd||'—'}</span>
-          <b>${paraFormat(g.birimFiyat)}</b>
-        </div>`).join("");
-      kutu.style.display = "block";
-    }).catch(()=>{ kutu.style.display="none"; });
-  }, 300);
+// Ürün adı alanına yazarken, Stok Tanımlama listesinden eşleşen ürünleri önerir.
+// Bir ürün seçilince o ürünün 1. birimi (ve satış fiyatı) otomatik satıra gelir.
+let _urunOneriTimer = null;
+function urunOneriGoster(idx){
+  clearTimeout(_urunOneriTimer);
+  const q = (_yeniSatisKalemleri[idx] && _yeniSatisKalemleri[idx].urunAdi || "").trim().toLocaleLowerCase('tr');
+  const kutu = document.getElementById("urun-oneri-"+idx);
+  if(!kutu) return;
+  if(q.length < 1){ kutu.style.display="none"; return; }
+  _urunOneriTimer = setTimeout(()=>{
+    const eslesenler = (_stokTanimListe||[]).filter(s=>
+      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q)
+    ).slice(0,8);
+    if(eslesenler.length===0){ kutu.style.display="none"; return; }
+    kutu.innerHTML = eslesenler.map((s,i)=>`
+      <div class="fiyat-gecmis-satir" onclick="urunOneriSec(${idx},${i})" data-oneri-idx="${i}">
+        <span>${s.stokKodu?s.stokKodu+' · ':''}${s.stokAdi}</span>
+        <b>${s.birim1||'adet'} · ${paraFormat(s.satisFiyati)}</b>
+      </div>`).join("");
+    kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+    kutu.style.display = "block";
+  }, 200);
 }
-function fiyatGecmisiKapat(idx){
-  const kutu = document.getElementById("fiyat-gecmis-"+idx);
+function urunOneriKapat(idx){
+  const kutu = document.getElementById("urun-oneri-"+idx);
   if(kutu) kutu.style.display = "none";
 }
-function fiyatGecmisSec(idx, fiyat){
-  _yeniSatisKalemleri[idx].birimFiyat = fiyat;
+function urunOneriSec(idx, oneriIdx){
+  const kutu = document.getElementById("urun-oneri-"+idx);
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const s = eslesenler[oneriIdx];
+  if(!s) return;
+  _yeniSatisKalemleri[idx].urunAdi = s.stokAdi;
+  _yeniSatisKalemleri[idx].birim = s.birim1 || "adet";
+  if(s.satisFiyati) _yeniSatisKalemleri[idx].birimFiyat = s.satisFiyati;
+  if(s.satisIskontosu) _yeniSatisKalemleri[idx].iskontoYuzde = s.satisIskontosu;
   satisKalemlerCiz();
 }
 
+// Brüt Toplam - İskonto - Ara Toplam - Kdv Toplam - Genel Toplam kırılımını hesaplar.
+function satisKalemHesaplaJS(k){
+  const miktar = parseFloat(k.miktar)||0, fiyat = parseFloat(k.birimFiyat)||0;
+  const brut = miktar*fiyat;
+  const iskTutar = brut*((parseFloat(k.iskontoYuzde)||0)/100);
+  const araToplam = brut - iskTutar;
+  const kdvTutar = araToplam*((k.kdvOrani===undefined?20:(parseFloat(k.kdvOrani)||0))/100);
+  return {brut, iskTutar, araToplam, kdvTutar, genel: araToplam+kdvTutar};
+}
+
 function satisToplamGuncelle(){
-  const toplam = _yeniSatisKalemleri.reduce((t,k)=>t+(parseFloat(k.miktar)||0)*(parseFloat(k.birimFiyat)||0),0);
+  let brutT=0, iskT=0, kdvT=0;
+  _yeniSatisKalemleri.forEach(k=>{ const h=satisKalemHesaplaJS(k); brutT+=h.brut; iskT+=h.iskTutar; kdvT+=h.kdvTutar; });
+  const araToplam = brutT - iskT;
+  const genelToplam = araToplam + kdvT;
   const el = document.getElementById("sm-toplam");
-  if(el) el.textContent = paraFormat(toplam);
+  if(!el) return;
+  el.innerHTML = `
+    <div class="satis-toplam-satir"><span>Brüt Toplam</span><b>${paraFormat(brutT)}</b></div>
+    <div class="satis-toplam-satir"><span>İskonto</span><b>-${paraFormat(iskT)}</b></div>
+    <div class="satis-toplam-satir"><span>Ara Toplam</span><b>${paraFormat(araToplam)}</b></div>
+    <div class="satis-toplam-satir"><span>Kdv Toplam</span><b>${paraFormat(kdvT)}</b></div>
+    <div class="satis-toplam-satir genel"><span>Genel Toplam</span><b>${paraFormat(genelToplam)}</b></div>`;
 }
 
 function satisKaydet(){
@@ -1726,6 +1829,46 @@ let _ayarlarTaslak = null; // kaydedilmeden önceki geçici değişiklikler
 function ayarlarYukle(){
   _ayarlarTaslak = Object.assign({}, kisayollariAl());
   ayarlarListesiCiz();
+  birimListesiYukle();
+}
+
+// ── Birim Tanımlama ──
+let _birimListe = [];
+function birimListesiYukle(){
+  const el = document.getElementById("ayarlar-birim-liste");
+  if(el) el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getBirimListesi").then(res=>{
+    if(!res.ok){ if(el) el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _birimListe = res.birimler;
+    birimListesiCiz();
+  }).catch(err=>{ if(el) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+function birimListesiCiz(){
+  const el = document.getElementById("ayarlar-birim-liste");
+  if(!el) return;
+  if(_birimListe.length===0){ el.innerHTML = '<div class="cari-empty">Henüz birim tanımlanmadı.</div>'; return; }
+  el.innerHTML = _birimListe.map(b=>`
+    <div class="satis-kalem-satir" style="justify-content:space-between">
+      <span style="flex:1">${b.ad}</span>
+      <span class="hk-sil" onclick="birimSilOnay('${b.id}')" title="Sil">🗑</span>
+    </div>`).join("");
+}
+function birimEkle(){
+  const input = document.getElementById("birim-yeni-ad");
+  const ad = input.value.trim();
+  if(!ad){ alert("Birim adı girin"); return; }
+  cariApi("saveBirim", {ad}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    input.value = "";
+    birimListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+function birimSilOnay(id){
+  if(!confirm("Bu birimi silmek istediğinize emin misiniz?")) return;
+  cariApi("silBirim", {id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    birimListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
 function ayarlarListesiCiz(){
@@ -1830,6 +1973,7 @@ function stokTanimAramaFiltrele(deger){
 }
 
 function stokTanimModalAc(editId){
+  if(_birimListe.length===0) birimListesiYukle();
   const k = editId ? _stokTanimListe.find(x=>x.id===editId) : null;
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -1840,7 +1984,10 @@ function stokTanimModalAc(editId){
       <h3>${k ? 'Stok Tanımını Düzenle' : 'Yeni Stok Tanımı'}</h3>
       <div class="fld"><label>Stok Kodu</label><input id="st-stokkodu" type="text" value="${k?k.stokKodu:''}" placeholder="İsteğe bağlı"></div>
       <div class="fld"><label>Stok Adı *</label><input id="st-stokadi" type="text" value="${k?k.stokAdi:''}"></div>
-      <div class="fld"><label>1. Birim</label><input id="st-birim1" type="text" value="${k?k.birim1:'adet'}" placeholder="adet, m2, kg..."></div>
+      <div class="fld"><label>1. Birim</label>
+        <input id="st-birim1" list="birim-datalist" type="text" value="${k?k.birim1:'adet'}" placeholder="adet, m2, kg...">
+        <datalist id="birim-datalist">${(_birimListe||[]).map(b=>`<option value="${b.ad}">`).join("")}</datalist>
+      </div>
       <div class="fld"><label>Ambalaj Miktarı</label><input id="st-ambalajmiktar" type="number" min="0" step="0.01" value="${k?k.ambalajMiktari:''}"></div>
       <div class="fld"><label>Ambalaj Birimi</label><input id="st-ambalajbirimi" type="text" value="${k?k.ambalajBirimi:''}" placeholder="Koli, Palet, Rulo..."></div>
       <div class="fld"><label>Alış Fiyatı</label><input id="st-alisfiyat" type="number" min="0" step="0.01" value="${k?k.alisFiyati:''}"></div>
