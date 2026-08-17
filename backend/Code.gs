@@ -124,6 +124,7 @@ function handleRequest(e) {
       case "silKrediKarti":   result = silKrediKarti(body); break;
       case "getStokTanimListesi": result = getStokTanimListesi(); break;
       case "saveStokTanim":       result = saveStokTanim(body); break;
+      case "saveStokTanimTopluce": result = saveStokTanimTopluce(body); break;
       case "silStokTanim":        result = silStokTanim(body); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
       default: result = { error: "Bilinmeyen işlem: " + action };
@@ -1157,35 +1158,48 @@ function silKrediKarti(body) {
 
 // ════════════════════════════════════════════════
 // STOK TANIMLAMA (Stok modülünün 2. kademesi — yeni standart modül)
-// Birim, Ambalaj Tipi, Ambalaj Miktarı alanlarıyla ürün tanımlama.
-// Eski Stok Paneli'nden tamamen bağımsız çalışır.
+// Sütunlar: Stok Kodu, Stok Adı, 1. Birim, Ambalaj Miktarı, Ambalaj Birimi,
+// Alış Fiyatı, Alış İskontosu, Satış Fiyatı, Satış İskontosu.
+// Eski Stok Paneli'nden tamamen bağımsız çalışır. Excel'den toplu içe aktarma destekler.
 // ════════════════════════════════════════════════
+
+const STOK_TANIM_BASLIKLAR = ["ID","STOK_KODU","STOK_ADI","BIRIM1","AMBALAJ_MIKTARI","AMBALAJ_BIRIMI","ALIS_FIYATI","ALIS_ISKONTOSU","SATIS_FIYATI","SATIS_ISKONTOSU","KAYIT_TARIHI"];
+
+function stokTanimSatiriNesneYap(row) {
+  return {
+    id: String(row[0] || ""),
+    stokKodu: String(row[1] || ""),
+    stokAdi: String(row[2] || ""),
+    birim1: String(row[3] || ""),
+    ambalajMiktari: parseFloat(row[4]) || 0,
+    ambalajBirimi: String(row[5] || ""),
+    alisFiyati: parseFloat(row[6]) || 0,
+    alisIskontosu: parseFloat(row[7]) || 0,
+    satisFiyati: parseFloat(row[8]) || 0,
+    satisIskontosu: parseFloat(row[9]) || 0,
+    kayitTarihi: String(row[10] || ""),
+  };
+}
 
 function getStokTanimListesi() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari,
-    ["ID","URUN_ADI","BIRIM","AMBALAJ_TIPI","AMBALAJ_MIKTARI","KAYIT_TARIHI"]);
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    if (!row[0]) continue;
-    sonuc.push({
-      id: String(row[0]), urunAdi: String(row[1] || ""), birim: String(row[2] || ""),
-      ambalajTipi: String(row[3] || ""), ambalajMiktari: parseFloat(row[4]) || 0,
-      kayitTarihi: String(row[5] || ""),
-    });
+    if (!data[i][0]) continue;
+    sonuc.push(stokTanimSatiriNesneYap(data[i]));
   }
   return { ok: true, kalemler: sonuc };
 }
 
-// body: { id (varsa güncelleme), urunAdi, birim, ambalajTipi, ambalajMiktari }
+// body: { id (varsa güncelleme), stokKodu, stokAdi, birim1, ambalajMiktari, ambalajBirimi,
+//         alisFiyati, alisIskontosu, satisFiyati, satisIskontosu }
 function saveStokTanim(body) {
-  const urunAdi = String(body.urunAdi || "").trim();
-  if (!urunAdi) return { ok: false, hata: "Ürün adı gerekli" };
+  const stokAdi = String(body.stokAdi || "").trim();
+  if (!stokAdi) return { ok: false, hata: "Stok adı gerekli" };
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari,
-    ["ID","URUN_ADI","BIRIM","AMBALAJ_TIPI","AMBALAJ_MIKTARI","KAYIT_TARIHI"]);
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
 
   let id = String(body.id || "").trim();
@@ -1198,9 +1212,17 @@ function saveStokTanim(body) {
   if (!id) id = "sk_" + Date.now();
 
   const satir = [
-    id, urunAdi, String(body.birim || "adet"), String(body.ambalajTipi || ""),
+    id,
+    String(body.stokKodu || ""),
+    stokAdi,
+    String(body.birim1 || "adet"),
     parseFloat(body.ambalajMiktari) || 0,
-    satirIdx > 0 ? data[satirIdx - 1][5] : Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"),
+    String(body.ambalajBirimi || ""),
+    parseFloat(body.alisFiyati) || 0,
+    parseFloat(body.alisIskontosu) || 0,
+    parseFloat(body.satisFiyati) || 0,
+    parseFloat(body.satisIskontosu) || 0,
+    satirIdx > 0 ? data[satirIdx - 1][10] : Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"),
   ];
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);
@@ -1211,13 +1233,74 @@ function silStokTanim(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari,
-    ["ID","URUN_ADI","BIRIM","AMBALAJ_TIPI","AMBALAJ_MIKTARI","KAYIT_TARIHI"]);
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === id) { sheet.deleteRow(i+1); return { ok: true }; }
   }
   return { ok: false, hata: "Kayıt bulunamadı" };
+}
+
+// Excel'den kopyala-yapıştır ile toplu içe aktarma.
+// body: { kayitlar: [{stokKodu, stokAdi, birim1, ambalajMiktari, ambalajBirimi,
+//                      alisFiyati, alisIskontosu, satisFiyati, satisIskontosu}, ...] }
+// Aynı Stok Kodu zaten varsa günceller (upsert), yoksa yeni satır ekler — tek toplu
+// yazma işlemiyle (appendRow döngüsü yerine setValues) hız kazandırır.
+function saveStokTanimTopluce(body) {
+  const kayitlar = Array.isArray(body.kayitlar) ? body.kayitlar : [];
+  if (kayitlar.length === 0) return { ok: false, hata: "İçe aktarılacak kayıt bulunamadı" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+
+  // Mevcut kayıtları STOK_KODU'na göre satır numarasıyla eşle (upsert için)
+  const kodSatirMap = {};
+  for (let i = 1; i < data.length; i++) {
+    const kod = String(data[i][1] || "").trim();
+    if (kod) kodSatirMap[kod] = i + 1; // 1-index sheet satırı
+  }
+
+  const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+  const yeniSatirlar = [];
+  let guncellenen = 0, eklenen = 0, atlanan = 0;
+
+  kayitlar.forEach((k, idx) => {
+    const stokAdi = String(k.stokAdi || "").trim();
+    if (!stokAdi) { atlanan++; return; }
+    const stokKodu = String(k.stokKodu || "").trim();
+    const satir = [
+      "sk_" + Date.now() + "_" + idx,
+      stokKodu,
+      stokAdi,
+      String(k.birim1 || "adet"),
+      parseFloat(k.ambalajMiktari) || 0,
+      String(k.ambalajBirimi || ""),
+      parseFloat(k.alisFiyati) || 0,
+      parseFloat(k.alisIskontosu) || 0,
+      parseFloat(k.satisFiyati) || 0,
+      parseFloat(k.satisIskontosu) || 0,
+      kayitTarihi,
+    ];
+
+    if (stokKodu && kodSatirMap[stokKodu]) {
+      // Mevcut kaydı güncelle — ID'yi koru
+      const satirNo = kodSatirMap[stokKodu];
+      satir[0] = String(data[satirNo - 1][0]);
+      sheet.getRange(satirNo, 1, 1, satir.length).setValues([satir]);
+      guncellenen++;
+    } else {
+      yeniSatirlar.push(satir);
+      if (stokKodu) kodSatirMap[stokKodu] = -1; // aynı içe aktarma içinde tekrar eşleşmesin
+      eklenen++;
+    }
+  });
+
+  if (yeniSatirlar.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, yeniSatirlar.length, STOK_TANIM_BASLIKLAR.length).setValues(yeniSatirlar);
+  }
+
+  return { ok: true, eklenen: eklenen, guncellenen: guncellenen, atlanan: atlanan };
 }
 
 // ════════════════════════════════════════════════
