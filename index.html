@@ -229,8 +229,9 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
     <div class="modgrid" id="modgrid"></div>
   </div>
 
-  <!-- Stok modülü: 2 kademeli — önce Stok Paneli / Stok Tanımlama seçimi -->
+  <!-- Stok modülü: 3 kademeli — Stok → (Stok Paneli / İşlemler / Tanımlar / Raporlar) → alt seçenek -->
   <div class="modview" id="mod-stok">
+    <!-- KADEME 1 -->
     <div id="stok-secim" class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Stok — Hangisini açmak istersin?</div>
       <div class="modgrid" style="margin-top:14px">
@@ -239,20 +240,93 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
           <div class="lbl">Stok Paneli</div>
           <div class="desc">Mevcut canlı stok listesi ve takip</div>
         </div>
-        <div class="modtile" onclick="stokAltModulAc('tanim')">
+        <div class="modtile" onclick="stokAltModulAc('islemler')">
+          <span class="ic">🔄</span>
+          <div class="lbl">İşlemler</div>
+          <div class="desc">Stok giriş, çıkış, toplu hareket</div>
+        </div>
+        <div class="modtile" onclick="stokAltModulAc('tanimlar')">
           <span class="ic">🏷️</span>
-          <div class="lbl">Stok Tanımlama</div>
-          <div class="desc">Ürün, birim, ambalaj tanımları</div>
+          <div class="lbl">Tanımlar</div>
+          <div class="desc">Stok ve birim tanımları</div>
+        </div>
+        <div class="modtile" onclick="stokAltModulAc('raporlar')">
+          <span class="ic">📊</span>
+          <div class="lbl">Raporlar</div>
+          <div class="desc">Stok hareket ve sipariş raporları</div>
         </div>
       </div>
     </div>
+
+    <!-- KADEME 2: İşlemler -->
+    <div id="stok-islemler-secim" class="finans-panel" style="display:none">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAnaSecimeDon()">← Stok seçimine dön</button>
+      <div class="rapor-baslik" style="margin-top:10px">İşlemler</div>
+      <div class="modgrid" style="margin-top:14px">
+        <div class="modtile" onclick="stokHareketFormAc('giris')">
+          <span class="ic">⬇️</span>
+          <div class="lbl">Stok Giriş Hareketi</div>
+          <div class="desc">Depoya mal girişi kaydet</div>
+        </div>
+        <div class="modtile" onclick="stokHareketFormAc('cikis')">
+          <span class="ic">⬆️</span>
+          <div class="lbl">Stok Çıkış Hareketi</div>
+          <div class="desc">Depodan mal çıkışı kaydet</div>
+        </div>
+        <div class="modtile" onclick="stokHareketFormAc('toplu')">
+          <span class="ic">📋</span>
+          <div class="lbl">Toplu Stok Hareketi</div>
+          <div class="desc">Birden çok ürünü tek seferde işle</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KADEME 2: Tanımlar -->
+    <div id="stok-tanimlar-secim" class="finans-panel" style="display:none">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAnaSecimeDon()">← Stok seçimine dön</button>
+      <div class="rapor-baslik" style="margin-top:10px">Tanımlar</div>
+      <div class="modgrid" style="margin-top:14px">
+        <div class="modtile" onclick="stokTanimAltAc('tanim')">
+          <span class="ic">🏷️</span>
+          <div class="lbl">Stok Tanımları</div>
+          <div class="desc">Ürün, ambalaj, fiyat tanımları</div>
+        </div>
+        <div class="modtile" onclick="stokTanimAltAc('birim')">
+          <span class="ic">📏</span>
+          <div class="lbl">Stok Birim Tanımları</div>
+          <div class="desc">Adet, Kg, Litre, Kutu vb.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KADEME 2: Raporlar -->
+    <div id="stok-raporlar-secim" class="finans-panel" style="display:none">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAnaSecimeDon()">← Stok seçimine dön</button>
+      <div class="rapor-baslik" style="margin-top:10px">Raporlar</div>
+      <div class="modgrid" style="margin-top:14px">
+        <div class="modtile" onclick="stokRaporAltAc('hareket')">
+          <span class="ic">📈</span>
+          <div class="lbl">Stok Hareket Raporu</div>
+          <div class="desc">Giriş/çıkış hareket dökümü</div>
+        </div>
+        <div class="modtile" onclick="stokRaporAltAc('siparis')">
+          <span class="ic">🧾</span>
+          <div class="lbl">Stok Bazlı Sipariş Raporu</div>
+          <div class="desc">Ürün bazlı sipariş raporunu aç</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KADEME 2/3 leaf: Stok Paneli (dış iframe) -->
     <div id="stok-panel-view" style="display:none;height:100%;flex-direction:column">
       <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="stokAnaSecimeDon()">← Stok seçimine dön</button>
       <iframe id="stok-iframe" src="https://fincanlarnecip.github.io/stok-panel/" title="Stok Paneli"></iframe>
     </div>
+
+    <!-- KADEME 3: Stok Tanımları -->
     <div id="stok-tanim-view" style="display:none;height:100%" class="cari-list-panel-wrap">
       <div class="cari-list-panel">
-        <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="stokAnaSecimeDon()">← Geri</button>
+        <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="stokAltModulAc('tanimlar')">← Geri</button>
         <div class="cari-list-head">
           <input id="stoktanim-ara" placeholder="Ürün ara..." oninput="stokTanimAramaFiltrele(this.value)">
           <button class="cari-add-btn" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);width:auto;padding:0 10px;font-size:12px;font-weight:700" onclick="stokTanimIceAktarModalAc()" title="Excel'den içe aktar">📥 İçe Aktar</button>
@@ -260,6 +334,39 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
         </div>
         <div class="cari-items" id="stoktanim-items"><div class="cari-empty">Yükleniyor...</div></div>
       </div>
+    </div>
+
+    <!-- KADEME 3: Stok Birim Tanımları (Ayarlar'dan taşındı) -->
+    <div id="stok-birim-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('tanimlar')">← Geri</button>
+      <div class="rapor-baslik" style="margin-top:10px">Stok Birim Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Ürünler için kullanılacak ölçü birimlerini burada tanımlayın (Adet, Kg, Litre, Kutu vb.). Bu birimler Stok Tanımlama ekranında "1. Birim" seçiminde kullanılır.</p>
+      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="flex:1"><label>Yeni Birim Adı</label><input id="birim-yeni-ad" type="text" placeholder="Örn. Kg, Litre, Kutu"></div>
+        <button class="btn btn-primary" onclick="birimEkle()">+ Ekle</button>
+      </div>
+      <div id="ayarlar-birim-liste" style="margin-top:12px"></div>
+    </div>
+
+    <!-- KADEME 3: Stok Giriş / Çıkış / Toplu Hareket (içerik JS ile dolduruluyor) -->
+    <div id="stok-giris-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel"></div>
+    <div id="stok-cikis-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel"></div>
+    <div id="stok-toplu-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel"></div>
+
+    <!-- KADEME 3: Stok Hareket Raporu -->
+    <div id="stok-hareket-rapor-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('raporlar')">← Geri</button>
+      <div class="rapor-baslik" style="margin-top:10px">Stok Hareket Raporu</div>
+      <div class="rapor-filtre">
+        <div class="fld"><label>Başlangıç</label><input type="date" id="shr-baslangic"></div>
+        <div class="fld"><label>Bitiş</label><input type="date" id="shr-bitis"></div>
+        <div class="fld" style="max-width:240px"><label>Ürün</label>
+          <select id="shr-urun-secim"><option value="">— Tüm ürünler —</option></select>
+        </div>
+        <button class="btn btn-primary" onclick="stokHareketRaporuYukle()">Filtrele</button>
+        <button class="btn" onclick="stokHareketRaporuTemizle()">Tümü</button>
+      </div>
+      <div id="shr-icerik"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
   </div>
 
@@ -372,15 +479,6 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
         <button class="btn btn-primary" onclick="kisayollariKaydet()">Kaydet</button>
         <button class="btn" onclick="kisayollariVarsayilanaDondur()">Varsayılana Döndür</button>
       </div>
-    </div>
-    <div class="finans-panel">
-      <div class="rapor-baslik" style="margin-top:0">Birim Tanımlama</div>
-      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Ürünler için kullanılacak ölçü birimlerini burada tanımlayın (Adet, Kg, Litre, Kutu vb.). Bu birimler Stok Tanımlama ekranında "1. Birim" seçiminde kullanılır.</p>
-      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
-        <div style="flex:1"><label>Yeni Birim Adı</label><input id="birim-yeni-ad" type="text" placeholder="Örn. Kg, Litre, Kutu"></div>
-        <button class="btn btn-primary" onclick="birimEkle()">+ Ekle</button>
-      </div>
-      <div id="ayarlar-birim-liste" style="margin-top:12px"></div>
     </div>
   </div>
 </div>
@@ -2065,7 +2163,6 @@ let _ayarlarTaslak = null; // kaydedilmeden önceki geçici değişiklikler
 function ayarlarYukle(){
   _ayarlarTaslak = Object.assign({}, kisayollariAl());
   ayarlarListesiCiz();
-  birimListesiYukle();
 }
 
 // ── Birim Tanımlama ──
@@ -2171,22 +2268,56 @@ function kisayollariVarsayilanaDondur(){
 }
 </script>
 
-<!-- ══════════════ STOK MODÜLÜ — 2. kademe geçişleri ══════════════ -->
+<!-- ══════════════ STOK MODÜLÜ — 2./3. kademe geçişleri ══════════════ -->
 <script>
-function stokAnaSecimeDon(){
-  document.getElementById("stok-secim").style.display = "block";
-  document.getElementById("stok-panel-view").style.display = "none";
-  document.getElementById("stok-tanim-view").style.display = "none";
+// Tüm Stok alt panelleri — bir tanesi gösterilirken diğerleri gizlenir.
+const STOK_PANELLER = ["stok-secim","stok-islemler-secim","stok-tanimlar-secim","stok-raporlar-secim",
+  "stok-panel-view","stok-tanim-view","stok-birim-view","stok-giris-view","stok-cikis-view","stok-toplu-view",
+  "stok-hareket-rapor-view"];
+
+function stokPaneliGoster(id){
+  STOK_PANELLER.forEach(p=>{
+    const el = document.getElementById(p);
+    if(!el) return;
+    el.style.display = (p===id) ? (p==="stok-panel-view" ? "flex" : "block") : "none";
+  });
 }
+
+function stokAnaSecimeDon(){
+  stokPaneliGoster("stok-secim");
+}
+
+// Kademe 1 → Kademe 2 (veya doğrudan Stok Paneli, o kademe 2 leaf'i)
 function stokAltModulAc(hangisi){
-  document.getElementById("stok-secim").style.display = "none";
-  if(hangisi === "panel"){
-    document.getElementById("stok-panel-view").style.display = "flex";
-    document.getElementById("stok-tanim-view").style.display = "none";
-  } else {
-    document.getElementById("stok-tanim-view").style.display = "block";
-    document.getElementById("stok-panel-view").style.display = "none";
+  if(hangisi === "panel") stokPaneliGoster("stok-panel-view");
+  else if(hangisi === "islemler") stokPaneliGoster("stok-islemler-secim");
+  else if(hangisi === "tanimlar") stokPaneliGoster("stok-tanimlar-secim");
+  else if(hangisi === "raporlar") stokPaneliGoster("stok-raporlar-secim");
+}
+
+// Kademe 2 (Tanımlar) → Kademe 3
+function stokTanimAltAc(hangisi){
+  if(hangisi === "tanim"){
+    stokPaneliGoster("stok-tanim-view");
     if(!_stokTanimYuklendi) stokTanimListesiYukle();
+  } else if(hangisi === "birim"){
+    stokPaneliGoster("stok-birim-view");
+    birimListesiYukle();
+  }
+}
+
+// Kademe 2 (Raporlar) → Kademe 3 (ya da Rapor modülüne geçiş)
+function stokRaporAltAc(hangisi){
+  if(hangisi === "hareket"){
+    stokPaneliGoster("stok-hareket-rapor-view");
+    stokHareketRaporuYukle();
+  } else if(hangisi === "siparis"){
+    // Ayrı bir rapor değil — mevcut "Ürün Bazlı Sipariş Raporu"nu Rapor
+    // modülünde, ilgili tipe seçili şekilde açar.
+    modulAc("rapor");
+    const sel = document.getElementById("mr-tip-secim");
+    if(sel) sel.value = "urunBazliSiparis";
+    muhasebeRaporuYukle();
   }
 }
 
@@ -2404,6 +2535,171 @@ function stokTanimIceAktarYap(){
     document.getElementById("stoktanim-ice-aktar-overlay").remove();
     stokTanimListesiYukle();
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+</script>
+
+<!-- ══════════════ STOK İŞLEMLERİ — Giriş / Çıkış / Toplu Hareket + Stok Hareket Raporu ══════════════ -->
+<script>
+// giris/cikis/toplu — üçü de aynı satır tablosunu paylaşır; tek fark
+// hareketTipi'nin sabit mi (giriş/çıkış) yoksa satır bazlı mı (toplu) olması.
+let _stokHareketKalemleri = { giris: [], cikis: [], toplu: [] };
+
+function stokHareketBosKalem(mod){
+  return { stokTanimId:"", stokKodu:"", urunAdi:"", miktar:1, birim:"adet",
+    hareketTipi: mod==="cikis" ? "Çıkış" : "Giriş", aciklama:"" };
+}
+
+function stokHareketFormAc(mod){
+  if(!_stokTanimYuklendi) stokTanimListesiYukle();
+  if(!_stokHareketKalemleri[mod] || _stokHareketKalemleri[mod].length===0){
+    _stokHareketKalemleri[mod] = [stokHareketBosKalem(mod)];
+  }
+  const bugun = new Date().toISOString().slice(0,10);
+  const baslik = mod==="giris" ? "Stok Giriş Hareketi" : mod==="cikis" ? "Stok Çıkış Hareketi" : "Toplu Stok Hareketi";
+  const aciklama = mod==="giris" ? "Depoya giren ürünleri satır satır ekleyin."
+    : mod==="cikis" ? "Depodan çıkan ürünleri satır satır ekleyin (fire, numune, sayım eksiği vb.)."
+    : "Aynı işlemde hem giriş hem çıkış satırı ekleyebilirsiniz.";
+  document.getElementById("stok-"+mod+"-view").innerHTML = `
+    <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('islemler')">← Geri</button>
+    <div class="rapor-baslik" style="margin-top:10px">${baslik}</div>
+    <p style="color:var(--text3);font-size:13px;margin:0 0 14px">${aciklama}</p>
+    <div class="fld" style="max-width:220px"><label>Tarih</label><input id="sh-${mod}-tarih" type="date" value="${bugun}"></div>
+    <div id="sh-${mod}-kalemler" style="margin-top:10px"></div>
+    <button class="btn" style="margin-top:6px" onclick="stokHareketSatirEkleUI('${mod}')">+ Satır Ekle</button>
+    <div class="modal-actions" style="justify-content:flex-start;margin-top:16px">
+      <button class="btn btn-primary" onclick="stokHareketKaydet('${mod}')">Kaydet</button>
+    </div>`;
+  stokHareketKalemlerCiz(mod);
+}
+
+function stokHareketSatirEkleUI(mod){
+  _stokHareketKalemleri[mod].push(stokHareketBosKalem(mod));
+  stokHareketKalemlerCiz(mod);
+}
+function stokHareketSatirSilUI(mod, idx){
+  _stokHareketKalemleri[mod].splice(idx,1);
+  if(_stokHareketKalemleri[mod].length===0) _stokHareketKalemleri[mod].push(stokHareketBosKalem(mod));
+  stokHareketKalemlerCiz(mod);
+}
+function stokHareketAlanDegisti(mod, idx, alan, deger){
+  _stokHareketKalemleri[mod][idx][alan] = (alan==="miktar") ? (parseFloat(deger)||0) : deger;
+}
+
+function stokHareketKalemlerCiz(mod){
+  const el = document.getElementById("sh-"+mod+"-kalemler");
+  if(!el) return;
+  const kalemler = _stokHareketKalemleri[mod];
+  el.innerHTML = kalemler.map((k,idx)=>`
+    <div class="satis-kalem-satir">
+      <div style="flex:1;position:relative">
+        <input class="satis-kalem-urun" style="width:100%" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
+               oninput="stokHareketAlanDegisti('${mod}',${idx},'urunAdi',this.value); stokHareketUrunOneriGoster('${mod}',${idx})"
+               onblur="setTimeout(()=>stokHareketUrunOneriKapat('${mod}',${idx}),200)"
+               onfocus="stokHareketUrunOneriGoster('${mod}',${idx})">
+        <div id="sh-${mod}-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
+      </div>
+      <input class="satis-kalem-miktar" type="number" min="0" step="0.01" placeholder="Miktar" value="${k.miktar}" oninput="stokHareketAlanDegisti('${mod}',${idx},'miktar',this.value)">
+      <input class="satis-kalem-birim" style="max-width:80px" type="text" placeholder="Birim" value="${k.birim}" oninput="stokHareketAlanDegisti('${mod}',${idx},'birim',this.value)">
+      ${mod==="toplu" ? `
+      <select style="max-width:92px;padding:7px 4px;border:1px solid var(--border);border-radius:7px;background:var(--bg3);font-family:inherit;font-size:13px" onchange="stokHareketAlanDegisti('${mod}',${idx},'hareketTipi',this.value)">
+        <option value="Giriş" ${k.hareketTipi==="Giriş"?"selected":""}>Giriş</option>
+        <option value="Çıkış" ${k.hareketTipi==="Çıkış"?"selected":""}>Çıkış</option>
+      </select>` : ``}
+      <input class="satis-kalem-fiyat" style="width:130px" type="text" placeholder="Açıklama (ops.)" value="${k.aciklama||''}" oninput="stokHareketAlanDegisti('${mod}',${idx},'aciklama',this.value)">
+      ${kalemler.length>1 ? `<span class="hk-sil" onclick="stokHareketSatirSilUI('${mod}',${idx})" title="Sil">🗑</span>` : ""}
+    </div>`).join("");
+}
+
+let _shOneriTimer = null;
+function stokHareketUrunOneriGoster(mod, idx){
+  clearTimeout(_shOneriTimer);
+  const q = (_stokHareketKalemleri[mod][idx].urunAdi||"").trim().toLocaleLowerCase('tr');
+  const kutu = document.getElementById("sh-"+mod+"-oneri-"+idx);
+  if(!kutu) return;
+  if(q.length < 1){ kutu.style.display="none"; return; }
+  _shOneriTimer = setTimeout(()=>{
+    const eslesenler = (_stokTanimListe||[]).filter(s=>
+      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q)
+    ).slice(0,8);
+    if(eslesenler.length===0){ kutu.style.display="none"; return; }
+    kutu.innerHTML = eslesenler.map((s,i)=>`
+      <div class="fiyat-gecmis-satir" onclick="stokHareketUrunOneriSec('${mod}',${idx},${i})" data-oneri-idx="${i}">
+        <span>${s.stokKodu?s.stokKodu+' · ':''}${s.stokAdi}</span>
+        <b>${s.birim1||'adet'}</b>
+      </div>`).join("");
+    kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+    kutu.style.display = "block";
+  }, 200);
+}
+function stokHareketUrunOneriKapat(mod, idx){
+  const kutu = document.getElementById("sh-"+mod+"-oneri-"+idx);
+  if(kutu) kutu.style.display = "none";
+}
+function stokHareketUrunOneriSec(mod, idx, oneriIdx){
+  const kutu = document.getElementById("sh-"+mod+"-oneri-"+idx);
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const s = eslesenler[oneriIdx];
+  if(!s) return;
+  _stokHareketKalemleri[mod][idx].urunAdi = s.stokAdi;
+  _stokHareketKalemleri[mod][idx].stokTanimId = s.id;
+  _stokHareketKalemleri[mod][idx].stokKodu = s.stokKodu;
+  _stokHareketKalemleri[mod][idx].birim = s.birim1 || "adet";
+  stokHareketKalemlerCiz(mod);
+}
+
+function stokHareketKaydet(mod){
+  const tarih = document.getElementById("sh-"+mod+"-tarih").value;
+  if(!tarih){ alert("Tarih seçin"); return; }
+  const kalemler = _stokHareketKalemleri[mod].filter(k => k.urunAdi && k.urunAdi.trim() && (parseFloat(k.miktar)||0) > 0);
+  if(kalemler.length===0){ alert("En az bir ürün ve miktar girin"); return; }
+  cariApi("stokHareketTopluEkle", { tarih, kayitlar: kalemler }).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||res.error||"bilinmiyor")); return; }
+    alert((res.eklenen||kalemler.length) + " hareket kaydedildi.");
+    _stokHareketKalemleri[mod] = [stokHareketBosKalem(mod)];
+    stokHareketFormAc(mod);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ── Stok Hareket Raporu ──
+function stokHareketUrunFiltreDoldur(){
+  const sel = document.getElementById("shr-urun-secim");
+  if(!sel || sel.dataset.dolduruldu) return;
+  if(!_stokTanimListe || _stokTanimListe.length===0){ if(!_stokTanimYuklendi) stokTanimListesiYukle(); return; }
+  sel.innerHTML = '<option value="">— Tüm ürünler —</option>' +
+    _stokTanimListe.map(s=>`<option value="${s.id}">${s.stokAdi}</option>`).join("");
+  sel.dataset.dolduruldu = "1";
+}
+
+function stokHareketRaporuYukle(){
+  stokHareketUrunFiltreDoldur();
+  const baslangic = document.getElementById("shr-baslangic").value;
+  const bitis = document.getElementById("shr-bitis").value;
+  const stokTanimId = document.getElementById("shr-urun-secim").value;
+  const el = document.getElementById("shr-icerik");
+  el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getStokHareketListesi", {baslangic, bitis, stokTanimId}).then(res=>{
+    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(res.hareketler.length===0){ el.innerHTML = '<div class="cari-empty">Bu aralıkta stok hareketi yok.</div>'; return; }
+    el.innerHTML = `
+      <div class="finans-kartlar">
+        <div class="finans-kart"><div class="lbl">Toplam Giriş</div><div class="num">${res.girisToplam}</div></div>
+        <div class="finans-kart"><div class="lbl">Toplam Çıkış</div><div class="num">${res.cikisToplam}</div></div>
+      </div>
+      <table class="rapor-tbl">
+        <thead><tr><th>Tarih</th><th>Ürün</th><th>Tip</th><th>Miktar</th><th>Birim</th><th>Açıklama</th></tr></thead>
+        <tbody>
+          ${res.hareketler.map(h=>`
+            <tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu?h.stokKodu+' · ':''}${h.stokAdi}</td><td>${h.hareketTipi}</td><td>${h.miktar}</td><td>${h.birim}</td><td>${h.aciklama||''}</td></tr>`).join("")}
+        </tbody>
+      </table>`;
+  }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+
+function stokHareketRaporuTemizle(){
+  document.getElementById("shr-baslangic").value = "";
+  document.getElementById("shr-bitis").value = "";
+  document.getElementById("shr-urun-secim").value = "";
+  stokHareketRaporuYukle();
 }
 </script>
 
