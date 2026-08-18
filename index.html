@@ -72,6 +72,8 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 .bakiye-neg{color:#16a34a}
 .bakiye-zero{color:var(--text3)}
 .cari-empty{padding:30px 16px;text-align:center;color:var(--text3);font-size:12px}
+.liste-daha-fazla{padding:12px;text-align:center;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;border-top:1px solid var(--border)}
+.liste-daha-fazla:hover{background:var(--bg3)}
 
 .cari-detail-panel{flex:1;overflow:auto;padding:20px 24px}
 .cari-detail-empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text3);gap:6px}
@@ -613,20 +615,34 @@ function cariListesiYukle(){
   });
 }
 
+let _cariRenderLimit = 80; // Cari sayısı arttıkça binlerce DOM öğesi birden basmak yavaşlar;
+// başlangıçta sınırlı sayıda gösterip "daha fazla göster" ile kademeli açıyoruz.
+let _cariSonGosterilenListe = [];
+
 function cariListesiCiz(liste){
   const el = document.getElementById("cari-items");
   if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı cari yok. "+" ile ekleyin.</div>'; return; }
-  el.innerHTML = liste.map(c=>`
+  _cariSonGosterilenListe = liste;
+  const gosterilecek = liste.slice(0, _cariRenderLimit);
+  el.innerHTML = gosterilecek.map(c=>`
     <div class="cari-item ${_cariSecili===c.id?'sel':''}" onclick="cariAc('${c.id}')">
       <div class="cari-item-top">
         <span class="cari-item-ad">${c.ad}</span>
         <span class="cari-item-bakiye ${bakiyeSinifi(c.bakiye)}">${paraFormat(c.bakiye)}</span>
       </div>
       <span class="cari-item-tip">${c.tip}${c.cariKodu?' · '+c.cariKodu:''}</span>
-    </div>`).join("");
+    </div>`).join("") + (liste.length > _cariRenderLimit
+      ? `<div class="liste-daha-fazla" onclick="cariDahaFazlaGoster()">+ ${liste.length - _cariRenderLimit} kayıt daha göster</div>`
+      : "");
+}
+
+function cariDahaFazlaGoster(){
+  _cariRenderLimit += 80;
+  cariListesiCiz(_cariSonGosterilenListe);
 }
 
 function cariAramaFiltrele(deger){
+  _cariRenderLimit = 80; // yeni bir arama = baştan say
   const d = deger.trim().toLocaleLowerCase('tr');
   const filtreli = !d ? _cariListe : _cariListe.filter(c =>
     c.ad.toLocaleLowerCase('tr').includes(d) || (c.telefon||"").includes(d) || (c.cariKodu||"").toLocaleLowerCase('tr').includes(d));
@@ -2193,20 +2209,33 @@ function stokTanimListesiYukle(){
   });
 }
 
+let _stokTanimRenderLimit = 80;
+let _stokTanimSonGosterilenListe = [];
+
 function stokTanimListesiCiz(liste){
   const el = document.getElementById("stoktanim-items");
   if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı ürün tanımı yok. "+" ile ekleyin ya da Excel\'den içe aktarın.</div>'; return; }
-  el.innerHTML = liste.map(k=>`
+  _stokTanimSonGosterilenListe = liste;
+  const gosterilecek = liste.slice(0, _stokTanimRenderLimit);
+  el.innerHTML = gosterilecek.map(k=>`
     <div class="cari-item" onclick="stokTanimModalAc('${k.id}')">
       <div class="cari-item-top">
         <span class="cari-item-ad">${k.stokAdi}</span>
         <span class="cari-item-bakiye">${paraFormat(k.satisFiyati)}</span>
       </div>
       <span class="cari-item-tip">${k.stokKodu ? k.stokKodu+' · ' : ''}${k.ambalajMiktari||''} ${k.ambalajBirimi||k.birim1||''}</span>
-    </div>`).join("");
+    </div>`).join("") + (liste.length > _stokTanimRenderLimit
+      ? `<div class="liste-daha-fazla" onclick="stokTanimDahaFazlaGoster()">+ ${liste.length - _stokTanimRenderLimit} kayıt daha göster</div>`
+      : "");
+}
+
+function stokTanimDahaFazlaGoster(){
+  _stokTanimRenderLimit += 80;
+  stokTanimListesiCiz(_stokTanimSonGosterilenListe);
 }
 
 function stokTanimAramaFiltrele(deger){
+  _stokTanimRenderLimit = 80;
   const d = deger.trim().toLocaleLowerCase('tr');
   const filtreli = !d ? _stokTanimListe : _stokTanimListe.filter(k =>
     k.stokAdi.toLocaleLowerCase('tr').includes(d) || (k.stokKodu||"").toLocaleLowerCase('tr').includes(d));
