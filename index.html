@@ -202,6 +202,7 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
 .fiyat-gecmis-satir{display:flex;justify-content:space-between;padding:7px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)}
 .fiyat-gecmis-satir:last-child{border-bottom:none}
 .fiyat-gecmis-satir:hover{background:var(--bg3)}
+.fiyat-gecmis-satir.oneri-aktif{background:var(--bg3)}
 .islemler-panel{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;padding:10px;background:var(--bg3);border-radius:10px}
 .islem-btn{padding:7px 12px;border:1px solid var(--border);background:var(--bg2);border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;color:var(--text)}
 .islem-btn:hover{background:var(--blue-l);border-color:var(--blue)}
@@ -407,15 +408,48 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
     </div>
   </div>
   <div class="modview" id="mod-alis">
-    <div class="cari-list-panel">
-      <div class="cari-list-head">
-        <input id="alis-ara" placeholder="Alış ara (tedarikçi)..." oninput="alisAramaFiltrele(this.value)">
-        <button class="cari-add-btn" onclick="alisModalAc()" title="Yeni alış">+</button>
+    <div id="alis-secim" class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Alış — Hangisini açmak istersin?</div>
+      <div class="modgrid" style="margin-top:14px">
+        <div class="modtile" onclick="alisAltModulAc('giris')">
+          <span class="ic">📥</span>
+          <div class="lbl">Alış Girişi</div>
+          <div class="desc">Tedarikçiden mal/hizmet alışı</div>
+        </div>
+        <div class="modtile" onclick="alisAltModulAc('iade')">
+          <span class="ic">↩️</span>
+          <div class="lbl">İade</div>
+          <div class="desc">Tedarikçiye yapılan iade kayıtları</div>
+        </div>
       </div>
-      <div class="cari-items" id="alis-items"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
-    <div class="cari-detail-panel" id="alis-detail-panel">
-      <div class="cari-detail-empty"><span class="ic">📥</span><p>Detayları görmek için soldan bir alış seçin</p></div>
+
+    <div id="alis-giris-view" style="display:none;height:100%;flex-direction:row">
+      <div class="cari-list-panel">
+        <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="alisAnaSecimeDon()">← Alış seçimine dön</button>
+        <div class="cari-list-head">
+          <input id="alis-ara" placeholder="Alış ara (tedarikçi)..." oninput="alisAramaFiltrele(this.value)">
+          <button class="cari-add-btn" onclick="alisModalAc()" title="Yeni alış">+</button>
+        </div>
+        <div class="cari-items" id="alis-items"><div class="cari-empty">Yükleniyor...</div></div>
+      </div>
+      <div class="cari-detail-panel" id="alis-detail-panel">
+        <div class="cari-detail-empty"><span class="ic">📥</span><p>Detayları görmek için soldan bir alış seçin</p></div>
+      </div>
+    </div>
+
+    <div id="alis-iade-view" style="display:none;height:100%;flex-direction:row">
+      <div class="cari-list-panel">
+        <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="alisAnaSecimeDon()">← Alış seçimine dön</button>
+        <div class="cari-list-head">
+          <input id="alisiade-ara" placeholder="İade ara (tedarikçi)..." oninput="alisIadeAramaFiltrele(this.value)">
+          <button class="cari-add-btn" onclick="alisIadeModalAc()" title="Yeni iade">+</button>
+        </div>
+        <div class="cari-items" id="alisiade-items"><div class="cari-empty">Yükleniyor...</div></div>
+      </div>
+      <div class="cari-detail-panel" id="alisiade-detail-panel">
+        <div class="cari-detail-empty"><span class="ic">↩️</span><p>Detayları görmek için soldan bir iade seçin</p></div>
+      </div>
     </div>
   </div>
   <div class="modview" id="mod-satis">
@@ -583,7 +617,7 @@ modulAc = function(id){
   try{
     if(id === "cari" && !_cariYuklendi){ cariListesiYukle(); }
     if(id === "satis" && !_satisYuklendi){ satisListesiYukle(); }
-    if(id === "alis" && !_alisYuklendi){ alisListesiYukle(); }
+    if(id === "alis"){ alisAnaSecimeDon(); }
     if(id === "tahsilat" && !_tahsilatYuklendi){ tahsilatListesiYukle(); }
     if(id === "odeme" && !_odemeYuklendi){ odemeListesiYukle(); }
     if(id === "finans"){ finansYukle(); if(!_bankaYapisiYuklendi) bankaYapisiYukle(); bankaHesapSecimDoldur(); bankaHesapHareketleriYukle(); }
@@ -667,6 +701,26 @@ function tarihGoster(deger){
   if(!m) return s;
   const gun = m[1] && m[2] && m[3] ? `${m[3]}/${m[2]}/${m[1]}` : s;
   return m[4] && m[5] ? `${gun} ${m[4]}:${m[5]}` : gun;
+}
+
+// ── Açılan öneri/arama kutularında ok tuşlarıyla gezinme (genel yardımcı) ──
+// Tüm ürün/cari arama kutuları (data-oneri-idx'li satırlar) bu fonksiyonu
+// paylaşır: ArrowDown/ArrowUp aktif satırı değiştirir, Enter seçer, Escape kapatır.
+function oneriKlavyeYonet(e, kutuId){
+  const kutu = document.getElementById(kutuId);
+  if(!kutu || kutu.style.display==="none") return;
+  const satirlar = Array.from(kutu.querySelectorAll("[data-oneri-idx]"));
+  if(satirlar.length===0) return;
+  let aktif = satirlar.findIndex(s=>s.classList.contains("oneri-aktif"));
+  if(e.key === "ArrowDown"){ e.preventDefault(); aktif = Math.min(aktif+1, satirlar.length-1); }
+  else if(e.key === "ArrowUp"){ e.preventDefault(); aktif = Math.max(aktif-1, 0); }
+  else if(e.key === "Enter"){
+    if(aktif>=0){ e.preventDefault(); satirlar[aktif].click(); }
+    return;
+  } else if(e.key === "Escape"){ kutu.style.display = "none"; return; }
+  else return;
+  satirlar.forEach(s=>s.classList.remove("oneri-aktif"));
+  if(aktif>=0){ satirlar[aktif].classList.add("oneri-aktif"); satirlar[aktif].scrollIntoView({block:"nearest"}); }
 }
 
 // ── Liste önbellekleme (performans) ──
@@ -768,7 +822,6 @@ function cariListeyeDon(){
 function cariDetayCiz(res){
   const c = res.cari, hareketler = res.hareketler, bakiye = res.bakiye;
   const panel = document.getElementById("cari-detail-panel");
-  const bugun = new Date().toISOString().slice(0,10);
   panel.innerHTML = `
     <button class="cari-back-btn" onclick="cariListeyeDon()">← Listeye dön</button>
     <div class="cari-detail-head">
@@ -788,6 +841,7 @@ function cariDetayCiz(res){
       <button class="islem-btn" onclick="satisModalAc('${c.id}','Teklif')">📄 Satış Teklifi</button>
       <button class="islem-btn" onclick="satisModalAc('${c.id}','Fatura')">📤 Satış Faturası</button>
       <button class="islem-btn" onclick="tahsilatModalAcOnCari('${c.id}')">💰 Tahsilat</button>
+      <button class="islem-btn" onclick="odemeModalAcOnCari('${c.id}')">💸 Ödeme</button>
     </div>
 
     <div class="cari-info-grid">
@@ -803,45 +857,59 @@ function cariDetayCiz(res){
       <button class="btn btn-danger" onclick="cariSilOnay('${c.id}')">🗑 Cariyi Sil</button>
     </div>
 
-    <div class="hareket-form">
-      <div class="fld"><label>Tarih</label><input type="date" id="hk-tarih" value="${bugun}"></div>
-      <div class="fld"><label>Tip</label>
-        <select id="hk-tip"><option value="Borç">Borç (bize borçlandı)</option><option value="Alacak">Alacak (ödeme aldık)</option></select>
-      </div>
-      <div class="fld"><label>Tutar</label><input type="number" id="hk-tutar" step="0.01" min="0" placeholder="0.00" style="width:110px"></div>
-      <div class="fld"><label>Açıklama</label><input type="text" id="hk-aciklama" placeholder="İsteğe bağlı"></div>
-      <button class="btn btn-primary" onclick="hareketEkle('${c.id}')">+ Hareket Ekle</button>
-    </div>
-
-    <table class="hareket-tbl">
-      <thead><tr><th>Tarih</th><th>Tip</th><th>Tutar</th><th>Açıklama</th><th>Bakiye</th><th></th></tr></thead>
-      <tbody>
-        ${hareketler.length===0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Henüz hareket yok</td></tr>' :
-        hareketler.map(h=>`
-          <tr>
-            <td>${tarihGoster(h.tarih)}</td>
-            <td class="${h.tip==='Borç'?'hk-borc':'hk-alacak'}">${h.tip}</td>
-            <td>${paraFormat(h.tutar)}</td>
-            <td>${h.aciklama||"—"}</td>
-            <td class="${bakiyeSinifi(h.bakiyeSonrasi)}">${paraFormat(h.bakiyeSonrasi)}</td>
-            <td><span class="hk-sil" onclick="hareketSil('${h.id}','${c.id}')" title="Sil">🗑</span></td>
-          </tr>`).join("")}
-      </tbody>
-    </table>
+    <div id="hk-tablo-yeri"></div>
   `;
+  _cariGuncelHareketler = hareketler;
+  _cariGuncelId = c.id;
+  document.getElementById("hk-tablo-yeri").innerHTML = hareketTabloCiz(hareketler, c.id);
 }
 
-function hareketEkle(cariId){
-  const tarih = document.getElementById("hk-tarih").value;
-  const tip = document.getElementById("hk-tip").value;
-  const tutar = parseFloat(document.getElementById("hk-tutar").value);
-  const aciklama = document.getElementById("hk-aciklama").value;
-  if(!tutar || tutar <= 0){ alert("Geçerli bir tutar girin"); return; }
-  cariApi("cariHareketEkle", {cariId, tarih, tip, tutar, aciklama}).then(res=>{
-    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
-    cariAc(cariId);
-    cariListesiYukle();
-  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+// ── Cari Hareketler tablosu: sütun sırası sürükle-bırakla değiştirilebilir,
+// seçim tarayıcıda (localStorage) kalıcı tutulur ──
+const HK_SUTUNLAR = {
+  tarih:    { baslik:"Tarih",     render: h => tarihGoster(h.tarih) },
+  tip:      { baslik:"Tip",       render: h => `<span class="${h.tip==='Borç'?'hk-borc':'hk-alacak'}">${h.tip}</span>` },
+  tutar:    { baslik:"Tutar",     render: h => paraFormat(h.tutar) },
+  aciklama: { baslik:"Açıklama",  render: h => h.aciklama || "—" },
+  bakiye:   { baslik:"Bakiye",    render: h => `<span class="${bakiyeSinifi(h.bakiyeSonrasi)}">${paraFormat(h.bakiyeSonrasi)}</span>` },
+};
+let _cariGuncelHareketler = [];
+let _cariGuncelId = null;
+
+function hkSutunSirasiAl(){
+  try{
+    const kayitli = JSON.parse(localStorage.getItem("hkSutunSirasi") || "null");
+    if(Array.isArray(kayitli) && kayitli.length===Object.keys(HK_SUTUNLAR).length && kayitli.every(k=>HK_SUTUNLAR[k])) return kayitli;
+  }catch(e){}
+  return Object.keys(HK_SUTUNLAR);
+}
+function hkSutunSirasiKaydet(sira){ localStorage.setItem("hkSutunSirasi", JSON.stringify(sira)); }
+
+function hareketTabloCiz(hareketler, cariId){
+  const sira = hkSutunSirasiAl();
+  const basliklar = sira.map(k => `<th draggable="true" data-kol="${k}"
+      ondragstart="hkKolonDragStart(event)" ondragover="event.preventDefault()" ondrop="hkKolonDrop(event)"
+      title="Sürükleyerek sütun sırasını değiştir" style="cursor:grab">${HK_SUTUNLAR[k].baslik}</th>`).join("") + "<th></th>";
+  const govde = hareketler.length===0
+    ? `<tr><td colspan="${sira.length+1}" style="text-align:center;color:var(--text3);padding:20px">Henüz hareket yok</td></tr>`
+    : hareketler.map(h => "<tr>" + sira.map(k => `<td>${HK_SUTUNLAR[k].render(h)}</td>`).join("") +
+        `<td><span class="hk-sil" onclick="hareketSil('${h.id}','${cariId}')" title="Sil">🗑</span></td></tr>`).join("");
+  return `<table class="hareket-tbl"><thead><tr>${basliklar}</tr></thead><tbody>${govde}</tbody></table>`;
+}
+
+let _hkDragKol = null;
+function hkKolonDragStart(e){ _hkDragKol = e.currentTarget.dataset.kol; e.dataTransfer.effectAllowed = "move"; }
+function hkKolonDrop(e){
+  e.preventDefault();
+  const hedefKol = e.currentTarget.dataset.kol;
+  if(!_hkDragKol || !hedefKol || _hkDragKol===hedefKol) return;
+  const sira = hkSutunSirasiAl();
+  const kaynakIdx = sira.indexOf(_hkDragKol), hedefIdx = sira.indexOf(hedefKol);
+  if(kaynakIdx<0 || hedefIdx<0) return;
+  sira.splice(kaynakIdx,1);
+  sira.splice(hedefIdx,0,_hkDragKol);
+  hkSutunSirasiKaydet(sira);
+  document.getElementById("hk-tablo-yeri").innerHTML = hareketTabloCiz(_cariGuncelHareketler, _cariGuncelId);
 }
 
 function hareketSil(hareketId, cariId){
@@ -1198,10 +1266,11 @@ function satisKalemlerCiz(){
         <input class="satis-kalem-urun" style="width:100%" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
                oninput="satisKalemAlanDegisti(${idx},'urunAdi',this.value); urunOneriGoster(${idx})"
                onblur="setTimeout(()=>urunOneriKapat(${idx}),200)"
-               onfocus="urunOneriGoster(${idx})">
+               onfocus="urunOneriGoster(${idx})"
+               onkeydown="oneriKlavyeYonet(event,'urun-oneri-${idx}')">
         <div id="urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
-      <input class="satis-kalem-miktar" type="number" min="0" step="0.01" placeholder="Miktar" value="${k.miktar}" oninput="satisKalemAlanDegisti(${idx},'miktar',this.value)">
+      <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="satisKalemAlanDegisti(${idx},'miktar',this.value)">
       <input class="satis-kalem-birim" style="max-width:80px" type="text" placeholder="Birim" value="${k.birim}" oninput="satisKalemAlanDegisti(${idx},'birim',this.value)">
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.01" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="satisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
       <input class="satis-kalem-fiyat" style="max-width:64px" type="number" min="0" step="0.01" title="İskonto %" placeholder="İsk.%" value="${k.iskontoYuzde||0}" oninput="satisKalemAlanDegisti(${idx},'iskontoYuzde',this.value)">
@@ -1316,6 +1385,25 @@ let _alisListe = [];
 let _alisSecili = null;
 let _yeniAlisKalemleri = [];
 
+// ── Alış: 2 kademeli seçim (Alış Girişi / İade) ──
+function alisAnaSecimeDon(){
+  document.getElementById("alis-secim").style.display = "block";
+  document.getElementById("alis-giris-view").style.display = "none";
+  document.getElementById("alis-iade-view").style.display = "none";
+}
+function alisAltModulAc(hangisi){
+  document.getElementById("alis-secim").style.display = "none";
+  if(hangisi === "giris"){
+    document.getElementById("alis-giris-view").style.display = "flex";
+    document.getElementById("alis-iade-view").style.display = "none";
+    if(!_alisYuklendi) alisListesiYukle();
+  } else if(hangisi === "iade"){
+    document.getElementById("alis-iade-view").style.display = "flex";
+    document.getElementById("alis-giris-view").style.display = "none";
+    if(!_alisIadeYuklendi) alisIadeListesiYukle();
+  }
+}
+
 function alisListesiYukle(){
   _alisYuklendi = true;
   const onbellek = onbellekOku("alisListesi", 60000);
@@ -1426,11 +1514,15 @@ function alisModalAc(){
   overlay.innerHTML = `
     <div class="modal-box modal-box-wide">
       <h3>Yeni Alış</h3>
-      <div class="fld"><label>Tedarikçi (Cari)</label>
-        <select id="am-cari" onchange="alisCariSecimiDegisti()">
-          <option value="">— Cari seçme (peşin / serbest tedarikçi) —</option>
-          ${_cariListe.map(c=>`<option value="${c.id}">${c.ad}</option>`).join("")}
-        </select>
+      <div class="fld" style="position:relative">
+        <label>Tedarikçi (Cari)</label>
+        <input id="am-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off"
+               oninput="amCariAramaDegisti(this.value)"
+               onfocus="amCariOneriGoster()"
+               onblur="setTimeout(()=>amCariOneriKapat(),200)"
+               onkeydown="oneriKlavyeYonet(event,'am-cari-oneri')">
+        <input type="hidden" id="am-cari" value="">
+        <div id="am-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <div class="fld" id="am-serbest-ad-fld"><label>Tedarikçi Adı (cari seçilmediyse)</label><input id="am-serbest-ad" type="text" placeholder="Peşin Tedarikçi"></div>
       <div class="fld"><label>Tarih</label><input id="am-tarih" type="date" value="${bugun}"></div>
@@ -1462,6 +1554,42 @@ function alisCariSecimiDegisti(){
   document.getElementById("am-serbest-ad-fld").style.display = cariSecili ? "none" : "flex";
 }
 
+function amCariAramaDegisti(deger){
+  document.getElementById("am-cari").value = ""; // yazarken önceki seçim sıfırlanır, listeden yeniden seçilmeli
+  alisCariSecimiDegisti();
+  amCariOneriGoster();
+}
+function amCariOneriGoster(){
+  const kutu = document.getElementById("am-cari-oneri");
+  if(!kutu) return;
+  const q = (document.getElementById("am-cari-arama").value || "").trim().toLocaleLowerCase('tr');
+  if(q.length < 1){ kutu.style.display = "none"; return; }
+  const eslesenler = (_cariListe || []).filter(c =>
+    (c.ad||"").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").toLocaleLowerCase('tr').includes(q)
+  ).slice(0, 8);
+  if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
+  kutu.innerHTML = eslesenler.map((c,i)=>`
+    <div class="fiyat-gecmis-satir" onclick="amCariSec(${i})" data-oneri-idx="${i}">
+      <span>${c.ad}</span><b>${c.cariKodu||''}</b>
+    </div>`).join("");
+  kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+  kutu.style.display = "block";
+}
+function amCariOneriKapat(){
+  const kutu = document.getElementById("am-cari-oneri");
+  if(kutu) kutu.style.display = "none";
+}
+function amCariSec(i){
+  const kutu = document.getElementById("am-cari-oneri");
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const c = eslesenler[i];
+  if(!c) return;
+  document.getElementById("am-cari").value = c.id;
+  document.getElementById("am-cari-arama").value = c.ad;
+  kutu.style.display = "none";
+  alisCariSecimiDegisti();
+}
+
 function alisKalemEkleUI(){
   _yeniAlisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0});
   alisKalemlerCiz();
@@ -1486,10 +1614,11 @@ function alisKalemlerCiz(){
         <input class="satis-kalem-urun" style="width:100%" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
                oninput="alisKalemAlanDegisti(${idx},'urunAdi',this.value); alisUrunOneriGoster(${idx})"
                onblur="setTimeout(()=>alisUrunOneriKapat(${idx}),200)"
-               onfocus="alisUrunOneriGoster(${idx})">
+               onfocus="alisUrunOneriGoster(${idx})"
+               onkeydown="oneriKlavyeYonet(event,'alis-urun-oneri-${idx}')">
         <div id="alis-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
-      <input class="satis-kalem-miktar" type="number" min="0" step="0.01" placeholder="Miktar" value="${k.miktar}" oninput="alisKalemAlanDegisti(${idx},'miktar',this.value)">
+      <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="alisKalemAlanDegisti(${idx},'miktar',this.value)">
       <input class="satis-kalem-birim" style="max-width:80px" type="text" placeholder="Birim" value="${k.birim}" oninput="alisKalemAlanDegisti(${idx},'birim',this.value)">
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.01" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
       ${_yeniAlisKalemleri.length>1 ? `<span class="hk-sil" onclick="alisKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
@@ -1559,6 +1688,290 @@ function alisKaydet(){
     alisListesiYukle();
     if(cariId) cariListesiYukle();
     alisAc(res.id);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+</script>
+
+<!-- ══════════════ ALIŞ İADESİ (Alış > İade) ══════════════ -->
+<script>
+let _alisIadeYuklendi = false;
+let _alisIadeListe = [];
+let _alisIadeSecili = null;
+let _yeniAlisIadeKalemleri = [];
+
+function alisIadeListesiYukle(){
+  _alisIadeYuklendi = true;
+  const onbellek = onbellekOku("alisIadeListesi", 60000);
+  if(onbellek){ _alisIadeListe = onbellek; alisIadeListesiCiz(_alisIadeListe); }
+  else document.getElementById("alisiade-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getAlisIadeListesi").then(res=>{
+    if(!res.ok){ if(!onbellek) document.getElementById("alisiade-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _alisIadeListe = res.iadeler;
+    onbellekYaz("alisIadeListesi", res.iadeler);
+    alisIadeListesiCiz(_alisIadeListe);
+  }).catch(err=>{
+    if(!onbellek) document.getElementById("alisiade-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+  });
+}
+
+function alisIadeListesiCiz(liste){
+  const el = document.getElementById("alisiade-items");
+  if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı iade yok. "+" ile ekleyin.</div>'; return; }
+  el.innerHTML = liste.map(a=>`
+    <div class="cari-item ${_alisIadeSecili===a.id?'sel':''}" onclick="alisIadeAc('${a.id}')">
+      <div class="cari-item-top">
+        <span class="cari-item-ad">${a.cariAd}</span>
+        <span class="cari-item-bakiye">${paraFormat(a.toplamTutar)}</span>
+      </div>
+      <span class="cari-item-tip">${tarihGoster(a.tarih)}</span>
+    </div>`).join("");
+}
+
+function alisIadeAramaFiltrele(deger){
+  const d = deger.trim().toLocaleLowerCase('tr');
+  const filtreli = !d ? _alisIadeListe : _alisIadeListe.filter(a => a.cariAd.toLocaleLowerCase('tr').includes(d));
+  alisIadeListesiCiz(filtreli);
+}
+
+function alisIadeAc(id){
+  _alisIadeSecili = id;
+  document.getElementById("mod-alis").classList.add("detay-acik");
+  const panel = document.getElementById("alisiade-detail-panel");
+  panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⏳</span><p>Yükleniyor...</p></div>';
+  cariApi("getAlisIadeDetay", {iadeId:id}).then(res=>{
+    if(!res.ok){ panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>'+(res.hata||"Hata")+'</p></div>'; return; }
+    alisIadeDetayCiz(res);
+  }).catch(err=>{
+    panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>Bağlantı hatası: '+err.message+'</p></div>';
+  });
+  alisIadeListesiCiz(_alisIadeListe);
+}
+
+function alisIadeListeyeDon(){
+  document.getElementById("mod-alis").classList.remove("detay-acik");
+}
+
+function alisIadeDetayCiz(res){
+  const a = res.iade, kalemler = res.kalemler;
+  const panel = document.getElementById("alisiade-detail-panel");
+  panel.innerHTML = `
+    <button class="cari-back-btn" onclick="alisIadeListeyeDon()">← Listeye dön</button>
+    <div class="cari-detail-head">
+      <div>
+        <h2>${a.cariAd}</h2>
+        <span class="tip-badge">${tarihGoster(a.tarih)} · İade</span>
+      </div>
+      <div class="cari-bakiye-box">
+        <div class="num">${paraFormat(a.toplamTutar)}</div>
+        <div class="lbl">Toplam Tutar</div>
+      </div>
+    </div>
+    ${a.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${a.aciklama}</div></div></div>` : ""}
+    <div class="btnrow">
+      <button class="btn btn-danger" onclick="alisIadeSilOnay('${a.id}')">🗑 İadeyi Sil</button>
+    </div>
+    <table class="hareket-tbl">
+      <thead><tr><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>Tutar</th></tr></thead>
+      <tbody>
+        ${kalemler.map(k=>`
+          <tr>
+            <td>${k.urunAdi}</td>
+            <td>${k.miktar}</td>
+            <td>${k.birim}</td>
+            <td>${paraFormat(k.birimFiyat)}</td>
+            <td>${paraFormat(k.tutar)}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function alisIadeSilOnay(id){
+  if(!confirm("Bu iadeyi silmek istediğinize emin misiniz? (Cariye eklenmiş borç hareketi varsa o da geri alınır)")) return;
+  cariApi("silAlisIade", {id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    alisIadeListeyeDon();
+    document.getElementById("alisiade-detail-panel").innerHTML = '<div class="cari-detail-empty"><span class="ic">↩️</span><p>Detayları görmek için soldan bir iade seçin</p></div>';
+    _alisIadeSecili = null;
+    alisIadeListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ── Yeni iade modal (Alış modalının aynısı, sade — ödeme tipi yok) ──
+function alisIadeModalAc(){
+  _yeniAlisIadeKalemleri = [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0}];
+  if(!_cariYuklendi) cariListesiYukle();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "alisiade-modal-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  const bugun = new Date().toISOString().slice(0,10);
+  overlay.innerHTML = `
+    <div class="modal-box modal-box-wide">
+      <h3>Yeni İade</h3>
+      <div class="fld" style="position:relative">
+        <label>Tedarikçi (Cari)</label>
+        <input id="aim-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off"
+               oninput="aimCariAramaDegisti(this.value)"
+               onfocus="aimCariOneriGoster()"
+               onblur="setTimeout(()=>aimCariOneriKapat(),200)"
+               onkeydown="oneriKlavyeYonet(event,'aim-cari-oneri')">
+        <input type="hidden" id="aim-cari" value="">
+        <div id="aim-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+      </div>
+      <div class="fld" id="aim-serbest-ad-fld"><label>Tedarikçi Adı (cari seçilmediyse)</label><input id="aim-serbest-ad" type="text" placeholder="Peşin Tedarikçi"></div>
+      <div class="fld"><label>Tarih</label><input id="aim-tarih" type="date" value="${bugun}"></div>
+      <div class="fld"><label>Açıklama</label><input id="aim-aciklama" type="text" placeholder="İsteğe bağlı (ör. iade nedeni)"></div>
+
+      <label style="font-size:10px;color:var(--text3);text-transform:uppercase">İade Edilen Ürünler</label>
+      <div id="aim-kalemler" style="margin:8px 0"></div>
+      <button class="btn" onclick="alisIadeKalemEkleUI()">+ Ürün Ekle</button>
+
+      <div class="satis-toplam">Toplam: <span id="aim-toplam">0,00 ₺</span></div>
+
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('alisiade-modal-overlay').remove()">İptal</button>
+        <button class="btn btn-primary" onclick="alisIadeKaydet()">Kaydet</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  alisIadeKalemlerCiz();
+}
+
+function aimCariSecimiDegisti(){
+  const cariSecili = !!document.getElementById("aim-cari").value;
+  document.getElementById("aim-serbest-ad-fld").style.display = cariSecili ? "none" : "flex";
+}
+function aimCariAramaDegisti(){
+  document.getElementById("aim-cari").value = "";
+  aimCariSecimiDegisti();
+  aimCariOneriGoster();
+}
+function aimCariOneriGoster(){
+  const kutu = document.getElementById("aim-cari-oneri");
+  if(!kutu) return;
+  const q = (document.getElementById("aim-cari-arama").value || "").trim().toLocaleLowerCase('tr');
+  if(q.length < 1){ kutu.style.display = "none"; return; }
+  const eslesenler = (_cariListe || []).filter(c =>
+    (c.ad||"").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").toLocaleLowerCase('tr').includes(q)
+  ).slice(0, 8);
+  if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
+  kutu.innerHTML = eslesenler.map((c,i)=>`
+    <div class="fiyat-gecmis-satir" onclick="aimCariSec(${i})" data-oneri-idx="${i}">
+      <span>${c.ad}</span><b>${c.cariKodu||''}</b>
+    </div>`).join("");
+  kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+  kutu.style.display = "block";
+}
+function aimCariOneriKapat(){
+  const kutu = document.getElementById("aim-cari-oneri");
+  if(kutu) kutu.style.display = "none";
+}
+function aimCariSec(i){
+  const kutu = document.getElementById("aim-cari-oneri");
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const c = eslesenler[i];
+  if(!c) return;
+  document.getElementById("aim-cari").value = c.id;
+  document.getElementById("aim-cari-arama").value = c.ad;
+  kutu.style.display = "none";
+  aimCariSecimiDegisti();
+}
+
+function alisIadeKalemEkleUI(){
+  _yeniAlisIadeKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0});
+  alisIadeKalemlerCiz();
+}
+function alisIadeKalemSilUI(idx){
+  _yeniAlisIadeKalemleri.splice(idx,1);
+  if(_yeniAlisIadeKalemleri.length===0) _yeniAlisIadeKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0});
+  alisIadeKalemlerCiz();
+}
+function alisIadeKalemAlanDegisti(idx, alan, deger){
+  _yeniAlisIadeKalemleri[idx][alan] = (alan==='miktar'||alan==='birimFiyat') ? (parseFloat(deger)||0) : deger;
+  if(alan==='miktar' || alan==='birimFiyat') alisIadeToplamGuncelle();
+}
+function alisIadeToplamGuncelle(){
+  const toplam = _yeniAlisIadeKalemleri.reduce((s,k)=> s + (parseFloat(k.miktar)||0)*(parseFloat(k.birimFiyat)||0), 0);
+  const el = document.getElementById("aim-toplam");
+  if(el) el.textContent = paraFormat(toplam);
+}
+
+function alisIadeKalemlerCiz(){
+  if(!_stokTanimYuklendi) stokTanimListesiYukle();
+  const el = document.getElementById("aim-kalemler");
+  el.innerHTML = _yeniAlisIadeKalemleri.map((k,idx)=>`
+    <div class="satis-kalem-satir">
+      <div style="flex:1;position:relative">
+        <input class="satis-kalem-urun" style="width:100%" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
+               oninput="alisIadeKalemAlanDegisti(${idx},'urunAdi',this.value); alisIadeUrunOneriGoster(${idx})"
+               onblur="setTimeout(()=>alisIadeUrunOneriKapat(${idx}),200)"
+               onfocus="alisIadeUrunOneriGoster(${idx})"
+               onkeydown="oneriKlavyeYonet(event,'aim-urun-oneri-${idx}')">
+        <div id="aim-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
+      </div>
+      <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="alisIadeKalemAlanDegisti(${idx},'miktar',this.value)">
+      <input class="satis-kalem-birim" style="max-width:80px" type="text" placeholder="Birim" value="${k.birim}" oninput="alisIadeKalemAlanDegisti(${idx},'birim',this.value)">
+      <input class="satis-kalem-fiyat" type="number" min="0" step="0.01" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisIadeKalemAlanDegisti(${idx},'birimFiyat',this.value)">
+      ${_yeniAlisIadeKalemleri.length>1 ? `<span class="hk-sil" onclick="alisIadeKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
+    </div>`).join("");
+  alisIadeToplamGuncelle();
+}
+
+let _aimOneriTimer = null;
+function alisIadeUrunOneriGoster(idx){
+  clearTimeout(_aimOneriTimer);
+  const q = (_yeniAlisIadeKalemleri[idx].urunAdi||"").trim().toLocaleLowerCase('tr');
+  const kutu = document.getElementById("aim-urun-oneri-"+idx);
+  if(!kutu) return;
+  if(q.length<1){ kutu.style.display="none"; return; }
+  _aimOneriTimer = setTimeout(()=>{
+    const eslesenler = (_stokTanimListe||[]).filter(s=>
+      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q)
+    ).slice(0,8);
+    if(eslesenler.length===0){ kutu.style.display="none"; return; }
+    kutu.innerHTML = eslesenler.map((s,i)=>`
+      <div class="fiyat-gecmis-satir" onclick="alisIadeUrunOneriSec(${idx},${i})" data-oneri-idx="${i}">
+        <span>${s.stokKodu?s.stokKodu+' · ':''}${s.stokAdi}</span>
+        <b>${s.birim1||'adet'}</b>
+      </div>`).join("");
+    kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+    kutu.style.display = "block";
+  }, 200);
+}
+function alisIadeUrunOneriKapat(idx){
+  const kutu = document.getElementById("aim-urun-oneri-"+idx);
+  if(kutu) kutu.style.display = "none";
+}
+function alisIadeUrunOneriSec(idx, oneriIdx){
+  const kutu = document.getElementById("aim-urun-oneri-"+idx);
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const s = eslesenler[oneriIdx];
+  if(!s) return;
+  _yeniAlisIadeKalemleri[idx].urunAdi = s.stokAdi;
+  _yeniAlisIadeKalemleri[idx].birim = s.birim1 || "adet";
+  _yeniAlisIadeKalemleri[idx].birimFiyat = parseFloat(s.alisFiyati) || 0;
+  alisIadeKalemlerCiz();
+}
+
+function alisIadeKaydet(){
+  const cariId = document.getElementById("aim-cari").value;
+  const serbestAd = document.getElementById("aim-serbest-ad").value.trim();
+  const kalemler = _yeniAlisIadeKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
+  if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
+  const body = {
+    cariId: cariId || undefined,
+    cariAd: !cariId ? serbestAd : undefined,
+    tarih: document.getElementById("aim-tarih").value,
+    aciklama: document.getElementById("aim-aciklama").value,
+    kalemler,
+  };
+  cariApi("saveAlisIade", body).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    document.getElementById("alisiade-modal-overlay").remove();
+    alisIadeListesiYukle();
+    if(cariId) cariListesiYukle();
+    alisIadeAc(res.id);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 </script>
@@ -1821,7 +2234,7 @@ function odemeSilOnay(id){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
-function odemeModalAc(){
+function odemeModalAc(onCariId){
   if(!_cariYuklendi) cariListesiYukle();
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -1834,18 +2247,24 @@ function odemeModalAc(){
       <div class="fld"><label>Tedarikçi (Cari)</label>
         <select id="om-cari">
           <option value="">— Seçiniz —</option>
-          ${_cariListe.map(c=>`<option value="${c.id}">${c.ad}</option>`).join("")}
+          ${_cariListe.map(c=>`<option value="${c.id}" ${onCariId===c.id?'selected':''}>${c.ad}</option>`).join("")}
         </select>
       </div>
       <div class="fld"><label>Tutar</label><input id="om-tutar" type="number" min="0" step="0.01" placeholder="0,00"></div>
       <div class="fld"><label>Tarih</label><input id="om-tarih" type="date" value="${bugun}"></div>
       <div class="fld"><label>Yöntem</label>
-        <select id="om-yontem">
+        <select id="om-yontem" onchange="odemeYontemDegisti()">
           <option value="Nakit">Nakit</option>
           <option value="Havale/EFT">Havale/EFT</option>
           <option value="Kredi Kartı">Kredi Kartı</option>
           <option value="Çek">Çek</option>
         </select>
+      </div>
+      <div class="fld" id="om-pos-fld" style="display:none"><label>POS Hesabı</label>
+        <select id="om-pos"><option value="">— Seçiniz —</option>${posSecenekleriHtml()}</select>
+      </div>
+      <div class="fld" id="om-banka-fld" style="display:none"><label>Banka / Hesap</label>
+        <select id="om-banka-hesap"></select>
       </div>
       <div class="fld"><label>Açıklama</label><input id="om-aciklama" type="text" placeholder="İsteğe bağlı"></div>
       <div class="modal-actions">
@@ -1854,6 +2273,30 @@ function odemeModalAc(){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  odemeBankaSecenekleriYukle();
+}
+
+// Cari detayındaki "İşlemler" panelinden çağrılır.
+function odemeModalAcOnCari(cariId){
+  odemeModalAc(cariId);
+}
+
+function odemeBankaSecenekleriYukle(){
+  cariApi("getBankaYapisi").then(res=>{
+    if(!res.ok) return;
+    const sel = document.getElementById("om-banka-hesap");
+    if(!sel) return;
+    sel.innerHTML = res.hesaplar.map(h=>{
+      const banka = res.bankalar.find(b=>b.id===h.bankaId);
+      return `<option value="${h.id}">${banka?banka.ad:''} — ${h.hesapAdi}</option>`;
+    }).join("");
+  }).catch(()=>{});
+}
+
+function odemeYontemDegisti(){
+  const yontem = document.getElementById("om-yontem").value;
+  document.getElementById("om-pos-fld").style.display = (yontem === "Kredi Kartı") ? "flex" : "none";
+  document.getElementById("om-banka-fld").style.display = (yontem === "Havale/EFT") ? "flex" : "none";
 }
 
 function odemeKaydet(){
@@ -1867,6 +2310,8 @@ function odemeKaydet(){
     tarih: document.getElementById("om-tarih").value,
     yontem: document.getElementById("om-yontem").value,
     aciklama: document.getElementById("om-aciklama").value,
+    posHesapId: document.getElementById("om-pos") ? document.getElementById("om-pos").value : "",
+    bankaHesapId: document.getElementById("om-banka-hesap") ? document.getElementById("om-banka-hesap").value : "",
   };
   cariApi("saveOdeme", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
@@ -2595,10 +3040,11 @@ function stokHareketKalemlerCiz(mod){
         <input class="satis-kalem-urun" style="width:100%" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
                oninput="stokHareketAlanDegisti('${mod}',${idx},'urunAdi',this.value); stokHareketUrunOneriGoster('${mod}',${idx})"
                onblur="setTimeout(()=>stokHareketUrunOneriKapat('${mod}',${idx}),200)"
-               onfocus="stokHareketUrunOneriGoster('${mod}',${idx})">
+               onfocus="stokHareketUrunOneriGoster('${mod}',${idx})"
+               onkeydown="oneriKlavyeYonet(event,'sh-${mod}-oneri-${idx}')">
         <div id="sh-${mod}-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
-      <input class="satis-kalem-miktar" type="number" min="0" step="0.01" placeholder="Miktar" value="${k.miktar}" oninput="stokHareketAlanDegisti('${mod}',${idx},'miktar',this.value)">
+      <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="stokHareketAlanDegisti('${mod}',${idx},'miktar',this.value)">
       <input class="satis-kalem-birim" style="max-width:80px" type="text" placeholder="Birim" value="${k.birim}" oninput="stokHareketAlanDegisti('${mod}',${idx},'birim',this.value)">
       ${mod==="toplu" ? `
       <select style="max-width:92px;padding:7px 4px;border:1px solid var(--border);border-radius:7px;background:var(--bg3);font-family:inherit;font-size:13px" onchange="stokHareketAlanDegisti('${mod}',${idx},'hareketTipi',this.value)">
