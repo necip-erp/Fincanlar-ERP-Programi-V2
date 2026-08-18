@@ -22,6 +22,7 @@ const SHEETS = {
   stokTanimlari:  "StokTanimlari",
   birimTanimlari: "BirimTanimlari",
   posHareketleri: "PosHareketleri",
+  bankaHesapHareketleri: "BankaHesapHareketleri",
 };
 
 // ── YARDIMCI FONKSİYONLAR ──
@@ -133,6 +134,8 @@ function handleRequest(e) {
       case "saveBirim":       result = saveBirim(body); break;
       case "silBirim":        result = silBirim(body); break;
       case "getPosHareketleri": result = getPosHareketleri(body.posHesapId); break;
+      case "getBankaHesapHareketleri": result = getBankaHesapHareketleri(body.bankaHesapId); break;
+      case "getMuhasebeRaporu": result = getMuhasebeRaporu(body); break;
       default: result = { error: "Bilinmeyen işlem: " + action };
     }
     return jsonResponse(result);
@@ -341,6 +344,14 @@ function ensureSatisBelgeTipiColonu(sheet) {
   if (String(mevcutBaslik || "") !== "BELGE_TIPI") {
     sheet.getRange(1, 9).setValue("BELGE_TIPI").setFontWeight("bold").setBackground("#e8edf5");
   }
+  const h10 = sheet.getRange(1, 10).getValue();
+  if (String(h10 || "") !== "DIP_ISKONTO_YUZDE") {
+    sheet.getRange(1, 10).setValue("DIP_ISKONTO_YUZDE").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  const h11 = sheet.getRange(1, 11).getValue();
+  if (String(h11 || "") !== "BANKA_HESAP_ID") {
+    sheet.getRange(1, 11).setValue("BANKA_HESAP_ID").setFontWeight("bold").setBackground("#e8edf5");
+  }
 }
 
 // SatisKalemleri sayfası daha önce ISKONTO_YUZDE / KDV_ORANI sütunları olmadan
@@ -417,6 +428,7 @@ function getSatisDetay(satisId) {
         cariAd: String(data[i][3] || ""), toplamTutar: parseFloat(data[i][4]) || 0,
         odemeTipi: String(data[i][5] || ""), aciklama: String(data[i][6] || ""), kayitTarihi: String(data[i][7] || ""),
         belgeTipi: String(data[i][8] || "") || "Fatura",
+        dipIskontoYuzde: parseFloat(data[i][9]) || 0, bankaHesapId: String(data[i][10] || ""),
       };
       break;
     }
@@ -426,7 +438,7 @@ function getSatisDetay(satisId) {
   const kData = kSheet.getDataRange().getValues();
   const kalemler = [];
   // Satış fişi alt toplamı: Brüt Toplam - İskonto - Ara Toplam - Kdv Toplam - Genel Toplam
-  let brutToplam = 0, iskontoToplam = 0, kdvToplam = 0;
+  let brutToplam = 0, iskontoToplam = 0, kdvToplam = 0, araToplamKalem = 0;
   for (let i = 1; i < kData.length; i++) {
     const row = kData[i];
     if (String(row[1]) !== String(satisId)) continue;
@@ -435,7 +447,7 @@ function getSatisDetay(satisId) {
     const iskontoYuzde = parseFloat(row[7]) || 0;
     const kdvOrani = parseFloat(row[8]) || 0;
     const h = satisKalemHesapla(miktar, birimFiyat, iskontoYuzde, kdvOrani);
-    brutToplam += h.brut; iskontoToplam += h.iskontoTutari; kdvToplam += h.kdvTutari;
+    brutToplam += h.brut; iskontoToplam += h.iskontoTutari; kdvToplam += h.kdvTutari; araToplamKalem += h.araToplam;
     kalemler.push({
       id: String(row[0]), satisId: String(row[1]), urunAdi: String(row[2] || ""),
       miktar: miktar, birim: String(row[4] || ""), birimFiyat: birimFiyat,
@@ -443,10 +455,11 @@ function getSatisDetay(satisId) {
       iskontoTutari: h.iskontoTutari, kdvTutari: h.kdvTutari, kalemGenelToplam: h.genelToplam,
     });
   }
-  const araToplam = brutToplam - iskontoToplam;
+  const dipIskontoTutari = araToplamKalem * ((satis.dipIskontoYuzde || 0) / 100);
+  const araToplam = brutToplam - iskontoToplam - dipIskontoTutari;
   const genelToplam = araToplam + kdvToplam;
   satis.toplamlar = {
-    brutToplam: brutToplam, iskontoToplam: iskontoToplam, araToplam: araToplam,
+    brutToplam: brutToplam, iskontoToplam: iskontoToplam + dipIskontoTutari, araToplam: araToplam,
     kdvToplam: kdvToplam, genelToplam: genelToplam,
   };
   return { ok: true, satis: satis, kalemler: kalemler };
@@ -485,17 +498,24 @@ function saveSatis(body) {
 
   // Toplam tutar = Genel Toplam (Brüt Toplam - İskonto + Kdv Toplam), yani cariye
   // yansıyacak/tahsil edilecek nihai tutar. Kalem bazında iskonto % ve kdv % desteklenir.
-  let toplamTutar = 0;
+  // Dip İskonto (fatura geneline uygulanan ek iskonto), kalemlerin toplam ara toplamı
+  // üzerinden hesaplanır ve KDV'den sonra genel toplamdan düşülür.
+  let kalemGenelToplam = 0, kalemAraToplam = 0;
   kalemler.forEach(k => {
     const h = satisKalemHesapla(parseFloat(k.miktar) || 0, parseFloat(k.birimFiyat) || 0,
       parseFloat(k.iskontoYuzde) || 0, k.kdvOrani === undefined ? 20 : (parseFloat(k.kdvOrani) || 0));
-    toplamTutar += h.genelToplam;
+    kalemGenelToplam += h.genelToplam;
+    kalemAraToplam += h.araToplam;
   });
+  const dipIskontoYuzde = parseFloat(body.dipIskontoYuzde) || 0;
+  const dipIskontoTutari = kalemAraToplam * (dipIskontoYuzde / 100);
+  const toplamTutar = kalemGenelToplam - dipIskontoTutari;
 
   const id = "st_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, String(body.belgeTipi || "Fatura")]);
+  const bankaHesapId = String(body.bankaHesapId || "").trim();
+  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, String(body.belgeTipi || "Fatura"), dipIskontoYuzde, bankaHesapId]);
 
   kalemler.forEach((k, idx) => {
     const kId = "sk_" + Date.now() + "_" + idx;
@@ -516,6 +536,13 @@ function saveSatis(body) {
       tutar: toplamTutar,
       aciklama: "SATIS:" + id + (body.aciklama ? " - " + body.aciklama : ""),
     });
+  }
+
+  // Ödeme Tipi "Havale" ise ve bir banka hesabı seçildiyse, o hesaba GİRİŞ kaydı düşülür
+  // (satış tutarı doğrudan banka hesabına havale ile ödenmiş demektir).
+  if (String(body.odemeTipi || "") === "Havale" && bankaHesapId) {
+    bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", toplamTutar,
+      "SATIS:" + id + (body.aciklama ? " - " + body.aciklama : ""));
   }
 
   return { ok: true, id: id, toplamTutar: toplamTutar };
@@ -563,6 +590,9 @@ function silSatis(body) {
       }
     }
   }
+
+  // Bu satışla ilişkili bir Havale banka hareketi varsa geri al.
+  bankaHesapHareketSilByAciklamaOnPrefix("SATIS:" + id);
 
   return { ok: true };
 }
@@ -792,6 +822,7 @@ function saveTahsilat(body) {
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   const yontem = String(body.yontem || "Nakit");
   const posHesapId = String(body.posHesapId || "").trim();
+  const bankaHesapId = String(body.bankaHesapId || "").trim();
   tSheet.appendRow([id, tarih, cariId, cariAd, tutar, yontem, String(body.aciklama || ""), kayitTarihi, posHesapId]);
 
   cariHareketEkle({
@@ -803,6 +834,11 @@ function saveTahsilat(body) {
   // o POS hesabına BORÇ kaydı düşülür (POS/banka bize bu tutarı ödeyecek).
   if (yontem === "Kredi Kartı" && posHesapId) {
     posHareketEkle(posHesapId, tarih, "Borç", tutar, "TAHSILAT:" + id + (body.aciklama ? " - " + body.aciklama : ""));
+  }
+
+  // Havale/EFT ile tahsilat yapıldıysa ve bir banka hesabı seçildiyse, o hesaba GİRİŞ kaydı düşülür.
+  if (yontem === "Havale/EFT" && bankaHesapId) {
+    bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", tutar, "TAHSILAT:" + id + (body.aciklama ? " - " + body.aciklama : ""));
   }
 
   return { ok: true, id: id };
@@ -844,6 +880,7 @@ function silTahsilat(body) {
 
   // Kredi kartı tahsilatıyla birlikte bir POS hesabına düşülmüş BORÇ kaydı varsa geri al.
   posHareketSilByAciklamaOnPrefix("TAHSILAT:" + id);
+  bankaHesapHareketSilByAciklamaOnPrefix("TAHSILAT:" + id);
 
   return { ok: true };
 }
@@ -1053,6 +1090,126 @@ function getRaporOzet(body) {
     satis: satis, alis: alis, tahsilat: tahsilat, odeme: odeme,
     enCokSatilanlar: enCokSatilanlar,
   };
+}
+
+// Muhasebe programlarında bulunan klasik raporlar: Alış Fatura Raporu, Satış Fatura Raporu,
+// Ürün Bazlı Hareket/Sipariş/Fatura Raporu. body: { tip, baslangic, bitis }
+// tip: "alisFatura" | "satisFatura" | "urunBazliHareket" | "urunBazliSiparis" | "urunBazliFatura"
+function getMuhasebeRaporu(body) {
+  const tip = String(body.tip || "");
+  const baslangic = String(body.baslangic || "");
+  const bitis = String(body.bitis || "");
+  function araligaDahilMi(tarih) {
+    if (baslangic && tarih < baslangic) return false;
+    if (bitis && tarih > bitis) return false;
+    return true;
+  }
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+
+  if (tip === "alisFatura") {
+    const sheet = getOrCreateSheet(ss, SHEETS.alislar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+    const data = sheet.getDataRange().getValues();
+    const satirlar = [];
+    let toplam = 0;
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (!row[0] || !araligaDahilMi(String(row[1] || ""))) continue;
+      const tutar = parseFloat(row[4]) || 0;
+      toplam += tutar;
+      satirlar.push({ id: String(row[0]), tarih: String(row[1] || ""), cariAd: String(row[3] || ""),
+        tutar: tutar, odemeTipi: String(row[5] || ""), aciklama: String(row[6] || "") });
+    }
+    satirlar.sort((a, b) => a.tarih < b.tarih ? 1 : -1);
+    return { ok: true, tip: tip, satirlar: satirlar, toplam: toplam };
+  }
+
+  if (tip === "satisFatura") {
+    const sheet = getOrCreateSheet(ss, SHEETS.satislar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+    ensureSatisBelgeTipiColonu(sheet);
+    const data = sheet.getDataRange().getValues();
+    const satirlar = [];
+    let toplam = 0;
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (!row[0] || !araligaDahilMi(String(row[1] || ""))) continue;
+      const belgeTipi = String(row[8] || "") || "Fatura";
+      if (belgeTipi !== "Fatura") continue;
+      const tutar = parseFloat(row[4]) || 0;
+      toplam += tutar;
+      satirlar.push({ id: String(row[0]), tarih: String(row[1] || ""), cariAd: String(row[3] || ""),
+        tutar: tutar, odemeTipi: String(row[5] || ""), aciklama: String(row[6] || "") });
+    }
+    satirlar.sort((a, b) => a.tarih < b.tarih ? 1 : -1);
+    return { ok: true, tip: tip, satirlar: satirlar, toplam: toplam };
+  }
+
+  if (tip === "urunBazliHareket" || tip === "urunBazliSiparis" || tip === "urunBazliFatura") {
+    const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+    ensureSatisBelgeTipiColonu(sSheet);
+    const sData = sSheet.getDataRange().getValues();
+    const satisBelgeTipi = {}, satisTarih = {};
+    for (let i = 1; i < sData.length; i++) {
+      const id = String(sData[i][0] || "");
+      if (!id) continue;
+      satisBelgeTipi[id] = String(sData[i][8] || "") || "Fatura";
+      satisTarih[id] = String(sData[i][1] || "");
+    }
+
+    const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
+      ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI"]);
+    const kData = kSheet.getDataRange().getValues();
+    const urunMap = {};
+    function urunEkle(urunAdi, miktar, tutar, yon) {
+      if (!urunMap[urunAdi]) urunMap[urunAdi] = { urunAdi: urunAdi, girisMiktar: 0, cikisMiktar: 0, tutar: 0 };
+      if (yon === "giris") urunMap[urunAdi].girisMiktar += miktar; else urunMap[urunAdi].cikisMiktar += miktar;
+      urunMap[urunAdi].tutar += tutar;
+    }
+
+    for (let i = 1; i < kData.length; i++) {
+      const row = kData[i];
+      const satisId = String(row[1] || "");
+      const belgeTipi = satisBelgeTipi[satisId];
+      const tarih = satisTarih[satisId] || "";
+      if (!belgeTipi || !araligaDahilMi(tarih)) continue;
+      const urunAdi = String(row[2] || "");
+      if (!urunAdi) continue;
+      if (tip === "urunBazliSiparis" && belgeTipi !== "Sipariş") continue;
+      if (tip === "urunBazliFatura" && belgeTipi !== "Fatura") continue;
+      urunEkle(urunAdi, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
+    }
+
+    // Ürün Bazlı Hareket Raporu ayrıca alış (giriş) hareketlerini de kapsar.
+    if (tip === "urunBazliHareket") {
+      const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
+        ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+      const aData = aSheet.getDataRange().getValues();
+      const alisTarih = {};
+      for (let i = 1; i < aData.length; i++) {
+        const id = String(aData[i][0] || "");
+        if (id) alisTarih[id] = String(aData[i][1] || "");
+      }
+      const akSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
+        ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
+      const akData = akSheet.getDataRange().getValues();
+      for (let i = 1; i < akData.length; i++) {
+        const row = akData[i];
+        const alisId = String(row[1] || "");
+        const tarih = alisTarih[alisId] || "";
+        if (!tarih || !araligaDahilMi(tarih)) continue;
+        const urunAdi = String(row[2] || "");
+        if (!urunAdi) continue;
+        urunEkle(urunAdi, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "giris");
+      }
+    }
+
+    const satirlar = Object.values(urunMap).sort((a, b) => b.tutar - a.tutar);
+    return { ok: true, tip: tip, satirlar: satirlar, toplam: satirlar.reduce((t, s) => t + s.tutar, 0) };
+  }
+
+  return { ok: false, hata: "Bilinmeyen rapor tipi" };
 }
 
 // ════════════════════════════════════════════════
@@ -1464,6 +1621,55 @@ function getPosHareketleri(posHesapId) {
     toplam += (String(row[3]) === "Borç") ? tutar : -tutar;
     sonuc.push({
       id: String(row[0]), posHesapId: String(row[1]), tarih: String(row[2] || ""),
+      tip: String(row[3] || ""), tutar: tutar, aciklama: String(row[5] || ""), kayitTarihi: String(row[6] || ""),
+    });
+  }
+  sonuc.reverse();
+  return { ok: true, hareketler: sonuc, toplam: toplam };
+}
+
+// ════════════════════════════════════════════════
+// BANKA HESAP HAREKETLERİ — Satış/Tahsilat/Ödeme'de ödeme tipi/yöntemi
+// "Havale" seçilip bir banka hesabı belirtildiğinde bu deftere kayıt düşer.
+// TİP: "Giriş" (hesaba para girdi) veya "Çıkış" (hesaptan para çıktı).
+// SATIS:<id> / TAHSILAT:<id> / ODEME:<id> önekiyle geri alınabilir.
+// ════════════════════════════════════════════════
+const BANKA_HESAP_HAREKET_BASLIKLAR = ["ID", "BANKA_HESAP_ID", "TARIH", "TIP", "TUTAR", "ACIKLAMA", "KAYIT_TARIHI"];
+
+function bankaHesapHareketEkle(bankaHesapId, tarih, tip, tutar, aciklama) {
+  if (!bankaHesapId) return null;
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.bankaHesapHareketleri, BANKA_HESAP_HAREKET_BASLIKLAR);
+  const id = "bh_" + Date.now();
+  sheet.appendRow([id, bankaHesapId, tarih, tip, tutar, aciklama,
+    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+  return id;
+}
+
+function bankaHesapHareketSilByAciklamaOnPrefix(prefix) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.bankaHesapHareketleri, BANKA_HESAP_HAREKET_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][5] || "").indexOf(prefix) === 0) { sheet.deleteRow(i + 1); break; }
+  }
+}
+
+// Bir banka hesabının (veya tüm hesapların) hareket dökümü — Finans > Banka Hesap Hareketleri.
+function getBankaHesapHareketleri(bankaHesapId) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.bankaHesapHareketleri, BANKA_HESAP_HAREKET_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const sonuc = [];
+  let toplam = 0;
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0]) continue;
+    if (bankaHesapId && String(row[1]) !== String(bankaHesapId)) continue;
+    const tutar = parseFloat(row[4]) || 0;
+    toplam += (String(row[3]) === "Giriş") ? tutar : -tutar;
+    sonuc.push({
+      id: String(row[0]), bankaHesapId: String(row[1]), tarih: String(row[2] || ""),
       tip: String(row[3] || ""), tutar: tutar, aciklama: String(row[5] || ""), kayitTarihi: String(row[6] || ""),
     });
   }
