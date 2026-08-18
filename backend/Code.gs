@@ -23,6 +23,7 @@ const SHEETS = {
   birimTanimlari: "BirimTanimlari",
   posHareketleri: "PosHareketleri",
   bankaHesapHareketleri: "BankaHesapHareketleri",
+  stokHareketleri: "StokHareketleri",
 };
 
 // ── YARDIMCI FONKSİYONLAR ──
@@ -166,6 +167,9 @@ function handleRequest(e) {
       case "getPosHareketleri": result = getPosHareketleri(body.posHesapId); break;
       case "getBankaHesapHareketleri": result = getBankaHesapHareketleri(body.bankaHesapId); break;
       case "getMuhasebeRaporu": result = getMuhasebeRaporu(body); break;
+      case "getStokHareketListesi": result = getStokHareketListesi(body); break;
+      case "stokHareketTopluEkle":  result = stokHareketTopluEkle(body); break;
+      case "silStokHareket":        result = silStokHareket(body); break;
       default: result = { error: "Bilinmeyen işlem: " + action };
     }
     return jsonResponse(result);
@@ -1576,10 +1580,125 @@ function saveStokTanimTopluce(body) {
 }
 
 // ════════════════════════════════════════════════
-// BİRİM TANIMLAMA (Ayarlar altında — ürünler için ölçü birimleri:
-// Adet, Kg, Litre, Kutu vb. Ürün arama/seçiminde "1. birim" bu listeden
-// gelir; StokTanimlari'ndaki BIRIM1 alanı serbest metin olarak kalır ama
-// kullanıcı arayüzde buradaki tanımlı birimlerden seçim yapabilir.)
+// STOK HAREKETLERİ (Stok > İşlemler — Giriş / Çıkış / Toplu Stok Hareketi)
+// Basit bir stok hareket defteri: her satır tek bir ürün + miktar + yön
+// (Giriş/Çıkış) kaydıdır. Satış/Alış faturalarından BAĞIMSIZDIR — elle
+// girilen düzeltme, sayım, fire, transfer vb. hareketler içindir.
+// Not: Mevcut Stok Paneli (dış iframe) ayrı bir uygulamadır; bu defter onun
+// gösterdiği "güncel stok" rakamını otomatik güncellemez, sadece kendi
+// hareket geçmişini/raporunu tutar.
+// ════════════════════════════════════════════════
+const STOK_HAREKET_BASLIKLAR = ["ID","TARIH","STOK_TANIM_ID","STOK_KODU","STOK_ADI","BIRIM","HAREKET_TIPI","MIKTAR","ACIKLAMA","KAYIT_TARIHI"];
+
+function stokHareketSatiriNesneYap(row) {
+  return {
+    id: String(row[0] || ""),
+    tarih: String(row[1] || ""),
+    stokTanimId: String(row[2] || ""),
+    stokKodu: String(row[3] || ""),
+    stokAdi: String(row[4] || ""),
+    birim: String(row[5] || ""),
+    hareketTipi: String(row[6] || ""),
+    miktar: parseFloat(row[7]) || 0,
+    aciklama: String(row[8] || ""),
+    kayitTarihi: String(row[9] || ""),
+  };
+}
+
+// Tek bir uçtan hem Stok Giriş, hem Stok Çıkış, hem de Toplu Stok Hareketi
+// formları besleniyor — frontend her satırın hareketTipi'ni ("Giriş"/"Çıkış")
+// kendisi belirleyip gönderiyor.
+// body: { tarih, kayitlar: [{stokTanimId, stokKodu, stokAdi/urunAdi, birim, hareketTipi, miktar, aciklama}, ...] }
+function stokHareketTopluEkle(body) {
+  const kayitlar = Array.isArray(body.kayitlar) ? body.kayitlar : [];
+  if (kayitlar.length === 0) return { ok: false, hata: "Kayıt bulunamadı" };
+  const tarih = String(body.tarih || "").trim() || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd");
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+  const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+
+  const satirlar = [];
+  let eklenen = 0, atlanan = 0;
+  kayitlar.forEach((k, idx) => {
+    const stokAdi = String(k.stokAdi || k.urunAdi || "").trim();
+    const miktar = parseFloat(k.miktar) || 0;
+    if (!stokAdi || miktar <= 0) { atlanan++; return; }
+    const hareketTipi = String(k.hareketTipi || "") === "Çıkış" ? "Çıkış" : "Giriş";
+    satirlar.push([
+      "sh_" + Date.now() + "_" + idx,
+      tarih,
+      String(k.stokTanimId || ""),
+      String(k.stokKodu || ""),
+      stokAdi,
+      String(k.birim || "adet"),
+      hareketTipi,
+      miktar,
+      String(k.aciklama || body.genelAciklama || ""),
+      kayitTarihi,
+    ]);
+    eklenen++;
+  });
+
+  if (satirlar.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, satirlar.length, STOK_HAREKET_BASLIKLAR.length).setValues(satirlar);
+  }
+  cacheTemizle(["stokHareketListesi"]);
+  return { ok: true, eklenen: eklenen, atlanan: atlanan };
+}
+
+function silStokHareket(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["stokHareketListesi"]); return { ok: true }; }
+  }
+  return { ok: false, hata: "Kayıt bulunamadı" };
+}
+
+// Stok Hareket Raporu için: tüm hareketler önbelleklenir (kısa süreli), tarih
+// aralığı ve ürün filtresi her istekte önbellekteki liste üzerinden uygulanır
+// — böylece farklı filtre kombinasyonları için ayrı ayrı önbellek gerekmez.
+// body: { baslangic, bitis, stokTanimId }
+function getStokHareketListesi(body) {
+  body = body || {};
+  const baslangic = String(body.baslangic || "");
+  const bitis = String(body.bitis || "");
+  const stokTanimId = String(body.stokTanimId || "");
+
+  const tumListe = cacheOkuVeyaHesapla("stokHareketListesi", 120, function () {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+    const data = sheet.getDataRange().getValues();
+    const sonuc = [];
+    for (let i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      sonuc.push(stokHareketSatiriNesneYap(data[i]));
+    }
+    return sonuc;
+  });
+
+  let sonuc = tumListe;
+  if (baslangic) sonuc = sonuc.filter(h => h.tarih >= baslangic);
+  if (bitis) sonuc = sonuc.filter(h => h.tarih <= bitis);
+  if (stokTanimId) sonuc = sonuc.filter(h => h.stokTanimId === stokTanimId);
+  sonuc = sonuc.slice().sort((a, b) => a.tarih < b.tarih ? 1 : (a.tarih > b.tarih ? -1 : 0));
+
+  let girisToplam = 0, cikisToplam = 0;
+  sonuc.forEach(h => { if (h.hareketTipi === "Giriş") girisToplam += h.miktar; else cikisToplam += h.miktar; });
+
+  return { ok: true, hareketler: sonuc, girisToplam: girisToplam, cikisToplam: cikisToplam };
+}
+
+// ════════════════════════════════════════════════
+// BİRİM TANIMLAMA (Stok > Tanımlar > Stok Birim Tanımları altında —
+// ürünler için ölçü birimleri: Adet, Kg, Litre, Kutu vb. Ürün arama/
+// seçiminde "1. birim" bu listeden gelir; StokTanimlari'ndaki BIRIM1
+// alanı serbest metin olarak kalır ama kullanıcı arayüzde buradaki
+// tanımlı birimlerden seçim yapabilir.)
 // ════════════════════════════════════════════════
 const BIRIM_BASLIKLAR = ["ID", "AD"];
 
