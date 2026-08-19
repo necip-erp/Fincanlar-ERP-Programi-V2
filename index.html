@@ -7,27 +7,59 @@
 <link rel="icon" type="image/png" href="./icon-192.png">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#2563eb">
+<meta name="theme-color" content="#4338ca">
 <style>
 :root{
-  --bg:#f7f8fa; --bg2:#fff; --bg3:#f0f2f5;
-  --border:#e0e3e8; --text:#1a1d23; --text2:#5a6070; --text3:#9099a8;
-  --blue:#2563eb; --blue-l:#dbeafe;
-  --green:#16a34a; --red:#dc2626;
-  --r:10px;
+  /* ── Nötrler: hafif soğuk gri tonu (klasik "SaaS beyazı" değil) ── */
+  --bg:#f4f5f8; --bg2:#fff; --bg3:#eef0f5;
+  --border:#e2e5eb; --text:#161a22; --text2:#555e6d; --text3:#8991a1;
+
+  /* ── Marka rengi: indigo — jenerik Tailwind mavisinden (#2563eb) bilinçli olarak
+     uzaklaştırıldı, daha karakterli/güven veren bir ton ── */
+  --blue:#4338ca; --blue-l:#eeecfc;
+
+  /* ── "Fincanlar" işaretine ince bir gönderme: sıcak bakır/amber ikincil vurgu.
+     Sadece imza niteliğindeki küçük detaylarda (aktif sekme çizgisi, rozet) kullanılır. ── */
+  --amber:#b5651d; --amber-l:#fbeee0;
+
+  --green:#15803d; --green-l:#e3f6e9;
+  --red:#b91c1c;   --red-l:#fbe9e9;
+
+  --r:10px; --r-sm:7px; --r-lg:16px;
+  --shadow-sm:0 1px 2px rgba(20,22,30,.05), 0 1px 1px rgba(20,22,30,.04);
+  --shadow-md:0 10px 24px -8px rgba(30,32,60,.16), 0 2px 6px rgba(30,32,60,.06);
+  --ease:cubic-bezier(.4,0,.2,1);
+  --t:150ms var(--ease);
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important}
 }
 *{box-sizing:border-box}
-body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+
+/* ── İnce, sekmesiz kaydırma çubuğu ── */
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#c9cedb;border-radius:20px;border:2px solid var(--bg2)}
+::-webkit-scrollbar-thumb:hover{background:#aab1c2}
+
+@keyframes fincanFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes fincanModalIn{from{opacity:0;transform:translateY(6px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes fincanOverlayIn{from{opacity:0}to{opacity:1}}
+@keyframes fincanPulse{0%,100%{opacity:.35}50%{opacity:1}}
 
 /* ── ÜST ÇUBUK ── */
-.topbar{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
-.brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;cursor:pointer;user-select:none}
-.brand img{width:26px;height:26px}
+.topbar{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);box-shadow:var(--shadow-sm);flex-shrink:0;position:relative;z-index:2}
+.brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;cursor:pointer;user-select:none;transition:opacity var(--t)}
+.brand:hover{opacity:.7}
+.brand img{width:26px;height:26px;transition:transform var(--t)}
+.brand:hover img{transform:rotate(-6deg) scale(1.06)}
 .searchwrap{flex:1;max-width:480px;position:relative;margin-left:8px}
-.searchwrap input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--border);border-radius:20px;background:var(--bg3);font-size:14px;color:var(--text);outline:none}
-.searchwrap input:focus{border-color:var(--blue);background:var(--bg2)}
+.searchwrap input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--border);border-radius:20px;background:var(--bg3);font-size:14px;color:var(--text);outline:none;transition:border-color var(--t),background var(--t),box-shadow var(--t)}
+.searchwrap input:focus{border-color:var(--blue);background:var(--bg2);box-shadow:0 0 0 3px var(--blue-l)}
 .searchwrap .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;pointer-events:none}
-.homebtn{margin-left:auto;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text2);font-size:12px;cursor:pointer;display:none}
+.homebtn{margin-left:auto;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text2);font-size:12px;cursor:pointer;display:none;transition:background var(--t),border-color var(--t)}
+.homebtn:hover{background:var(--border)}
 .homebtn.show{display:inline-block}
 
 /* ── ANA ALAN ── */
@@ -38,15 +70,18 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 #home h1{font-size:20px;margin:0 0 4px;text-align:center}
 #home p.sub{color:var(--text3);text-align:center;margin:0 0 32px;font-size:13px}
 .modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
-.modtile{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;transition:transform .12s,box-shadow .12s;user-select:none}
-.modtile:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.08)}
-.modtile .ic{font-size:30px;margin-bottom:10px;display:block}
+.modtile{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
+.modtile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--blue),var(--amber));transform:scaleX(0);transform-origin:left;transition:transform .22s var(--ease)}
+.modtile:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:transparent}
+.modtile:hover::before{transform:scaleX(1)}
+.modtile .ic{font-size:30px;margin-bottom:10px;display:block;transition:transform .18s var(--ease)}
+.modtile:hover .ic{transform:scale(1.08)}
 .modtile .lbl{font-weight:700;font-size:13px}
 .modtile .desc{color:var(--text3);font-size:10px;margin-top:3px}
 
 /* Modül içerik alanı */
 .modview{position:absolute;inset:0;display:none;flex-direction:column}
-.modview.active{display:flex}
+.modview.active{display:flex;animation:fincanFadeIn .18s var(--ease)}
 .modview iframe{flex:1;border:none;width:100%}
 .placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text3);gap:8px;padding:20px;text-align:center}
 .placeholder .ic{font-size:44px;opacity:.5}
@@ -57,19 +92,23 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 #mod-cari{flex-direction:row}
 .cari-list-panel{width:320px;min-width:260px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg2)}
 .cari-list-head{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center}
-.cari-list-head input{flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);font-size:13px;outline:none}
-.cari-list-head input:focus{border-color:var(--blue);background:var(--bg2)}
-.cari-add-btn{width:32px;height:32px;border-radius:8px;border:none;background:var(--blue);color:#fff;font-size:18px;line-height:1;cursor:pointer;flex-shrink:0}
+.cari-list-head input{flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);font-size:13px;outline:none;transition:border-color var(--t),box-shadow var(--t)}
+.cari-list-head input:focus{border-color:var(--blue);background:var(--bg2);box-shadow:0 0 0 3px var(--blue-l)}
+.cari-add-btn{width:32px;height:32px;border-radius:8px;border:none;background:var(--blue);color:#fff;font-size:18px;line-height:1;cursor:pointer;flex-shrink:0;transition:transform var(--t),box-shadow var(--t),background var(--t)}
+.cari-add-btn:hover{box-shadow:0 4px 12px -2px rgba(67,56,202,.5);transform:translateY(-1px)}
+.cari-add-btn:active{transform:translateY(0) scale(.94)}
 .cari-items{flex:1;overflow:auto}
-.cari-item{padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.stoktanim-tbl{white-space:nowrap}
+.stoktanim-tbl td:nth-child(2){white-space:normal}
+.cari-item{padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;flex-direction:column;gap:2px;border-left:3px solid transparent;transition:background var(--t),border-color var(--t)}
 .cari-item:hover{background:var(--bg3)}
-.cari-item.sel{background:var(--blue-l)}
+.cari-item.sel{background:var(--blue-l);border-left-color:var(--blue)}
 .cari-item-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .cari-item-ad{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cari-item-tip{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.03em}
 .cari-item-bakiye{font-size:12px;font-weight:700;white-space:nowrap}
-.bakiye-pos{color:#dc2626}
-.bakiye-neg{color:#16a34a}
+.bakiye-pos{color:var(--red)}
+.bakiye-neg{color:var(--green)}
 .bakiye-zero{color:var(--text3)}
 .cari-empty{padding:30px 16px;text-align:center;color:var(--text3);font-size:12px}
 .liste-daha-fazla{padding:12px;text-align:center;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;border-top:1px solid var(--border)}
@@ -81,7 +120,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 
 .cari-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px;flex-wrap:wrap}
 .cari-detail-head h2{margin:0 0 3px;font-size:19px}
-.cari-detail-head .tip-badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:20px;background:var(--bg3);color:var(--text2);text-transform:uppercase;letter-spacing:.03em}
+.cari-detail-head .tip-badge{display:inline-block;font-size:10px;padding:3px 9px;border-radius:20px;background:var(--bg3);color:var(--text2);text-transform:uppercase;letter-spacing:.03em;font-weight:700}
 .cari-bakiye-box{text-align:right}
 .cari-bakiye-box .num{font-size:22px;font-weight:800}
 .cari-bakiye-box .lbl{font-size:10px;color:var(--text3);text-transform:uppercase}
@@ -92,12 +131,13 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 .cari-info-item .v{font-size:13px;font-weight:500;word-break:break-word}
 
 .btnrow{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
-.btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);font-size:12px;cursor:pointer;color:var(--text)}
+.btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);font-size:12px;cursor:pointer;color:var(--text);transition:background var(--t),border-color var(--t),transform var(--t),box-shadow var(--t)}
 .btn:hover{background:var(--bg3)}
-.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff}
-.btn-primary:hover{opacity:.9;background:var(--blue)}
-.btn-danger{color:#dc2626;border-color:#fecaca}
-.btn-danger:hover{background:#fef2f2}
+.btn:active{transform:scale(.96)}
+.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 1px 2px rgba(67,56,202,.15)}
+.btn-primary:hover{background:#372ea8;border-color:#372ea8;box-shadow:0 4px 14px -3px rgba(67,56,202,.5)}
+.btn-danger{color:var(--red);border-color:#f3c9c9}
+.btn-danger:hover{background:var(--red-l);border-color:var(--red)}
 
 .hareket-form{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;background:var(--bg3);border-radius:10px;padding:12px;margin-bottom:16px}
 .hareket-form .fld{display:flex;flex-direction:column;gap:3px}
@@ -110,18 +150,23 @@ table.hareket-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 table.hareket-tbl th{text-align:left;padding:7px 8px;color:var(--text3);font-weight:600;font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border)}
 table.hareket-tbl td{padding:8px 8px;border-bottom:1px solid var(--border)}
 table.hareket-tbl tr:hover td{background:var(--bg3)}
-.hk-borc{color:#dc2626;font-weight:600}
-.hk-alacak{color:#16a34a;font-weight:600}
-.hk-sil{color:var(--text3);cursor:pointer;font-size:14px}
-.hk-sil:hover{color:#dc2626}
+table.hareket-tbl tr.hk-row{cursor:pointer}
+.hk-borc{color:var(--red);font-weight:700;background:var(--red-l);padding:2px 8px;border-radius:20px;font-size:11.5px;white-space:nowrap}
+.hk-alacak{color:var(--green);font-weight:700;background:var(--green-l);padding:2px 8px;border-radius:20px;font-size:11.5px;white-space:nowrap}
+.hk-sil{color:var(--text3);cursor:pointer;font-size:14px;transition:color var(--t),transform var(--t);display:inline-block}
+.hk-sil:hover{color:var(--red);transform:scale(1.12)}
 
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
-.modal-box{background:var(--bg2);border-radius:14px;padding:22px;width:100%;max-width:380px;max-height:90vh;overflow:auto}
+.modal-overlay{position:fixed;inset:0;background:rgba(16,18,30,.45);backdrop-filter:blur(1.5px);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;animation:fincanOverlayIn .15s var(--ease)}
+.modal-box{background:var(--bg2);border-radius:14px;padding:22px;width:100%;max-width:380px;max-height:90vh;overflow:auto;box-shadow:var(--shadow-md);animation:fincanModalIn .18s var(--ease)}
 .modal-box h3{margin:0 0 14px;font-size:16px}
 .modal-box .fld{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
 .modal-box label{font-size:10px;color:var(--text3);text-transform:uppercase}
-.modal-box input,.modal-box select,.modal-box textarea{padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg3);outline:none;font-family:inherit}
-.modal-box input:focus,.modal-box select:focus,.modal-box textarea:focus{border-color:var(--blue);background:var(--bg2)}
+.modal-box input,.modal-box select,.modal-box textarea{padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg3);outline:none;font-family:inherit;transition:border-color var(--t),background var(--t),box-shadow var(--t)}
+.modal-box input:focus,.modal-box select:focus,.modal-box textarea:focus{border-color:var(--blue);background:var(--bg2);box-shadow:0 0 0 3px var(--blue-l)}
+/* Modal dışındaki (finans-panel, rapor-filtre vb.) .fld alanları için de aynı geçiş */
+.fld input,.fld select,.fld textarea{padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg3);outline:none;font-family:inherit;transition:border-color var(--t),background var(--t),box-shadow var(--t)}
+.fld input:focus,.fld select:focus,.fld textarea:focus{border-color:var(--blue);background:var(--bg2);box-shadow:0 0 0 3px var(--blue-l)}
+.fld label{font-size:10px;color:var(--text3);text-transform:uppercase}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 
 @media (max-width:640px){
@@ -179,7 +224,8 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
 /* ── FİNANS / RAPOR MODÜLLERİ ── */
 .finans-panel{padding:20px;overflow-y:auto;width:100%}
 .finans-kartlar{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px}
-.finans-kart{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.finans-kart{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;transition:box-shadow var(--t),transform var(--t)}
+.finans-kart:hover{box-shadow:var(--shadow-sm);transform:translateY(-1px)}
 .finans-kart .lbl{font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-bottom:6px}
 .finans-kart .num{font-size:19px;font-weight:800}
 .finans-kart.pos .num{color:var(--green)}
@@ -204,8 +250,9 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
 .fiyat-gecmis-satir:hover{background:var(--bg3)}
 .fiyat-gecmis-satir.oneri-aktif{background:var(--bg3)}
 .islemler-panel{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;padding:10px;background:var(--bg3);border-radius:10px}
-.islem-btn{padding:7px 12px;border:1px solid var(--border);background:var(--bg2);border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;color:var(--text)}
-.islem-btn:hover{background:var(--blue-l);border-color:var(--blue)}
+.islem-btn{padding:7px 12px;border:1px solid var(--border);background:var(--bg2);border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;color:var(--text);transition:background var(--t),border-color var(--t),transform var(--t)}
+.islem-btn:hover{background:var(--blue-l);border-color:var(--blue);color:var(--blue)}
+.islem-btn:active{transform:scale(.96)}
 </style>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
@@ -892,9 +939,30 @@ function hareketTabloCiz(hareketler, cariId){
       title="Sürükleyerek sütun sırasını değiştir" style="cursor:grab">${HK_SUTUNLAR[k].baslik}</th>`).join("") + "<th></th>";
   const govde = hareketler.length===0
     ? `<tr><td colspan="${sira.length+1}" style="text-align:center;color:var(--text3);padding:20px">Henüz hareket yok</td></tr>`
-    : hareketler.map(h => "<tr>" + sira.map(k => `<td>${HK_SUTUNLAR[k].render(h)}</td>`).join("") +
-        `<td><span class="hk-sil" onclick="hareketSil('${h.id}','${cariId}')" title="Sil">🗑</span></td></tr>`).join("");
+    : hareketler.map(h => `<tr class="hk-row" data-aciklama="${(h.aciklama||"").replace(/"/g,"&quot;")}" onclick="cariHareketSatirTiklandi(event,this)" title="İlgili işlemi açmak için tıklayın">` +
+        sira.map(k => `<td>${HK_SUTUNLAR[k].render(h)}</td>`).join("") +
+        `<td><span class="hk-sil" onclick="event.stopPropagation();hareketSil('${h.id}','${cariId}')" title="Sil">🗑</span></td></tr>`).join("");
   return `<table class="hareket-tbl"><thead><tr>${basliklar}</tr></thead><tbody>${govde}</tbody></table>`;
+}
+
+// Cari hareket satırına tıklayınca, aciklama alanındaki önekten (SATIS:, ALIS:,
+// ALISIADE:, TAHSILAT:, ODEME:) hangi işlemden geldiğini bulup o işlemin
+// detayını açar. Silme ikonuna tıklamalar (event.stopPropagation ile) hariçtir.
+function cariHareketSatirTiklandi(e, tr){
+  if(e.target.closest(".hk-sil")) return;
+  cariHareketIslemeGit(tr.dataset.aciklama);
+}
+
+function cariHareketIslemeGit(aciklama){
+  if(!aciklama) return;
+  const m = aciklama.match(/^(SATIS|ALISIADE|ALIS|TAHSILAT|ODEME):([a-zA-Z0-9_]+)/);
+  if(!m) return;
+  const tip = m[1], id = m[2];
+  if(tip === "SATIS"){ modulAc("satis"); satisAc(id); }
+  else if(tip === "ALISIADE"){ modulAc("alis"); alisAltModulAc("iade"); alisIadeAc(id); }
+  else if(tip === "ALIS"){ modulAc("alis"); alisAltModulAc("giris"); alisAc(id); }
+  else if(tip === "TAHSILAT"){ modulAc("tahsilat"); tahsilatAc(id); }
+  else if(tip === "ODEME"){ modulAc("odeme"); odemeAc(id); }
 }
 
 let _hkDragKol = null;
@@ -2793,16 +2861,33 @@ function stokTanimListesiCiz(liste){
   if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı ürün tanımı yok. "+" ile ekleyin ya da Excel\'den içe aktarın.</div>'; return; }
   _stokTanimSonGosterilenListe = liste;
   const gosterilecek = liste.slice(0, _stokTanimRenderLimit);
-  el.innerHTML = gosterilecek.map(k=>`
-    <div class="cari-item" onclick="stokTanimModalAc('${k.id}')">
-      <div class="cari-item-top">
-        <span class="cari-item-ad">${k.stokAdi}</span>
-        <span class="cari-item-bakiye">${paraFormat(k.satisFiyati)}</span>
-      </div>
-      <span class="cari-item-tip">${k.stokKodu ? k.stokKodu+' · ' : ''}${k.ambalajMiktari||''} ${k.ambalajBirimi||k.birim1||''}</span>
-    </div>`).join("") + (liste.length > _stokTanimRenderLimit
+  el.innerHTML = `
+    <table class="hareket-tbl stoktanim-tbl">
+      <thead>
+        <tr>
+          <th>Stok Kodu</th>
+          <th>Stok Adı</th>
+          <th>Birimi</th>
+          <th>2. Birim Miktarı / Birimi</th>
+          <th>Alış Fiyatı</th>
+          <th>Satış Fiyatı</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${gosterilecek.map(k=>`
+          <tr class="hk-row" onclick="stokTanimModalAc('${k.id}')" title="Düzenlemek için tıklayın">
+            <td>${k.stokKodu||"—"}</td>
+            <td>${k.stokAdi}</td>
+            <td>${k.birim1||"—"}</td>
+            <td>${k.ambalajMiktari ? (k.ambalajMiktari+' '+(k.ambalajBirimi||"")) : "—"}</td>
+            <td>${paraFormat(k.alisFiyati)}</td>
+            <td>${paraFormat(k.satisFiyati)}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>
+    ${liste.length > _stokTanimRenderLimit
       ? `<div class="liste-daha-fazla" onclick="stokTanimDahaFazlaGoster()">+ ${liste.length - _stokTanimRenderLimit} kayıt daha göster</div>`
-      : "");
+      : ""}`;
 }
 
 function stokTanimDahaFazlaGoster(){
