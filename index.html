@@ -344,6 +344,31 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
           <div class="lbl">Stok Birim Tanımları</div>
           <div class="desc">Adet, Kg, Litre, Kutu vb.</div>
         </div>
+        <div class="modtile" onclick="stokTanimAltAc('marka')">
+          <span class="ic">🏭</span>
+          <div class="lbl">Marka Tanımları</div>
+          <div class="desc">2 haneli marka kodu ve adı</div>
+        </div>
+        <div class="modtile" onclick="stokTanimAltAc('urunGrubu')">
+          <span class="ic">🗂️</span>
+          <div class="lbl">Ürün Grubu Tanımları</div>
+          <div class="desc">Ürünleri gruplandırma</div>
+        </div>
+        <div class="modtile" onclick="stokTanimAltAc('altUrunGrubu')">
+          <span class="ic">📁</span>
+          <div class="lbl">Alt Ürün Grubu Tanımları</div>
+          <div class="desc">Ürün grubunun alt kırılımı</div>
+        </div>
+        <div class="modtile" onclick="stokTanimAltAc('ebat')">
+          <span class="ic">📐</span>
+          <div class="lbl">Ebat Tanımları</div>
+          <div class="desc">Ürün ölçü/boyut tanımları</div>
+        </div>
+        <div class="modtile" onclick="stokTanimAltAc('renk')">
+          <span class="ic">🎨</span>
+          <div class="lbl">Renk Tanımları</div>
+          <div class="desc">Ürün renk tanımları</div>
+        </div>
       </div>
     </div>
 
@@ -394,6 +419,63 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
         <button class="btn btn-primary" onclick="birimEkle()">+ Ekle</button>
       </div>
       <div id="ayarlar-birim-liste" style="margin-top:12px"></div>
+    </div>
+
+    <!-- KADEME 3: Marka / Ürün Grubu / Alt Ürün Grubu / Ebat / Renk Tanımları -->
+    <div id="stok-marka-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('tanimlar')">← Geri</button>
+      <div class="rapor-baslik" style="margin-top:10px">Marka Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Marka kodu 2 karakter olmalı — Stok Kodu'nun ilk 2 hanesiyle eşleşecek şekilde tanımlamanız önerilir (örn. "AR" → Arçelik).</p>
+      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="width:90px"><label>Kod (2 hane)</label><input id="marka-yeni-kod" type="text" maxlength="2" placeholder="AR" style="text-transform:uppercase"></div>
+        <div style="flex:1"><label>Marka Adı</label><input id="marka-yeni-ad" type="text" placeholder="Örn. Arçelik"></div>
+        <button class="btn btn-primary" onclick="markaEkleUI()">+ Ekle</button>
+      </div>
+      <div id="marka-liste" style="margin-top:12px"></div>
+    </div>
+
+    <div id="stok-urunGrubu-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('tanimlar')">← Geri</button>
+      <div class="rapor-baslik" style="margin-top:10px">Ürün Grubu Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Ürünleri gruplamak için kullanılan üst kategoriler.</p>
+      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="flex:1"><label>Yeni Ürün Grubu Adı</label><input id="tanim-urunGrubu-yeni-ad" type="text" placeholder="Örn. Mutfak Gereçleri"></div>
+        <button class="btn btn-primary" onclick="tanimEkle('urunGrubu')">+ Ekle</button>
+      </div>
+      <div id="tanimliste-urunGrubu" style="margin-top:12px"></div>
+    </div>
+
+    <div id="stok-altUrunGrubu-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('tanimlar')">← Geri</button>
+      <div class="rapor-baslik" style="margin-top:10px">Alt Ürün Grubu Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Ürün grubunun altındaki daha detaylı alt kategoriler.</p>
+      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="flex:1"><label>Yeni Alt Ürün Grubu Adı</label><input id="tanim-altUrunGrubu-yeni-ad" type="text" placeholder="Örn. Tencere"></div>
+        <button class="btn btn-primary" onclick="tanimEkle('altUrunGrubu')">+ Ekle</button>
+      </div>
+      <div id="tanimliste-altUrunGrubu" style="margin-top:12px"></div>
+    </div>
+
+    <div id="stok-ebat-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('tanimlar')">← Geri</button>
+      <div class="rapor-baslik" style="margin-top:10px">Ebat Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Ürün ölçü/boyut tanımları (örn. Küçük, Orta, 25 cm).</p>
+      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="flex:1"><label>Yeni Ebat Adı</label><input id="tanim-ebat-yeni-ad" type="text" placeholder="Örn. 25 cm"></div>
+        <button class="btn btn-primary" onclick="tanimEkle('ebat')">+ Ekle</button>
+      </div>
+      <div id="tanimliste-ebat" style="margin-top:12px"></div>
+    </div>
+
+    <div id="stok-renk-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('tanimlar')">← Geri</button>
+      <div class="rapor-baslik" style="margin-top:10px">Renk Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Ürün renk tanımları.</p>
+      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="flex:1"><label>Yeni Renk Adı</label><input id="tanim-renk-yeni-ad" type="text" placeholder="Örn. Kırmızı"></div>
+        <button class="btn btn-primary" onclick="tanimEkle('renk')">+ Ekle</button>
+      </div>
+      <div id="tanimliste-renk" style="margin-top:12px"></div>
     </div>
 
     <!-- KADEME 3: Stok Giriş / Çıkış / Toplu Hareket (içerik JS ile dolduruluyor) -->
@@ -500,20 +582,45 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
     </div>
   </div>
   <div class="modview" id="mod-satis">
-    <div class="cari-list-panel">
-      <div class="belge-tipi-sekmeler">
-        <button class="belge-tab active" data-tip="Fatura" onclick="satisBelgeTipiDegistir('Fatura')">Fatura</button>
-        <button class="belge-tab" data-tip="Teklif" onclick="satisBelgeTipiDegistir('Teklif')">Teklif</button>
-        <button class="belge-tab" data-tip="Sipariş" onclick="satisBelgeTipiDegistir('Sipariş')">Sipariş</button>
+    <div id="satis-secim" class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Satış — Hangisini açmak istersin?</div>
+      <div class="modgrid" style="margin-top:14px">
+        <div class="modtile" onclick="satisAltModulAc('Fatura')">
+          <span class="ic">🧾</span>
+          <div class="lbl">Fatura</div>
+          <div class="desc">Kesilen satış faturaları</div>
+        </div>
+        <div class="modtile" onclick="satisAltModulAc('Teklif')">
+          <span class="ic">📝</span>
+          <div class="lbl">Teklif</div>
+          <div class="desc">Müşteriye verilen teklifler</div>
+        </div>
+        <div class="modtile" onclick="satisAltModulAc('Sipariş')">
+          <span class="ic">📦</span>
+          <div class="lbl">Sipariş</div>
+          <div class="desc">Müşteri siparişleri</div>
+        </div>
       </div>
-      <div class="cari-list-head">
-        <input id="satis-ara" placeholder="Satış ara (müşteri)..." oninput="satisAramaFiltrele(this.value)">
-        <button class="cari-add-btn" onclick="satisModalAc()" title="Yeni ekle">+</button>
-      </div>
-      <div class="cari-items" id="satis-items"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
-    <div class="cari-detail-panel" id="satis-detail-panel">
-      <div class="cari-detail-empty"><span class="ic">📤</span><p>Detayları görmek için soldan bir satış seçin</p></div>
+
+    <div id="satis-view" style="display:none;height:100%;flex-direction:row">
+      <div class="cari-list-panel">
+        <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="satisAnaSecimeDon()">← Satış seçimine dön</button>
+        <div class="belge-tipi-sekmeler">
+          <button class="belge-tab active" data-tip="Fatura" onclick="satisBelgeTipiDegistir('Fatura')">Fatura</button>
+          <button class="belge-tab" data-tip="Teklif" onclick="satisBelgeTipiDegistir('Teklif')">Teklif</button>
+          <button class="belge-tab" data-tip="Sipariş" onclick="satisBelgeTipiDegistir('Sipariş')">Sipariş</button>
+        </div>
+        <div class="cari-list-head">
+          <input id="satis-ara" placeholder="Satış ara (müşteri)..." oninput="satisAramaFiltrele(this.value)">
+          <button class="cari-add-btn" onclick="satisModalAc()" title="Yeni ekle">+</button>
+        </div>
+        <div class="cari-items" id="satis-items"><div class="cari-empty">Yükleniyor...</div></div>
+      </div>
+      <div class="cari-detail-panel" id="satis-detail-panel">
+        <div class="cari-detail-empty"><span class="ic">📤</span><p>Detayları görmek için soldan bir satış seçin</p></div>
+        <div id="satis-son-faturalar"></div>
+      </div>
     </div>
   </div>
   <div class="modview" id="mod-finans">
@@ -663,7 +770,7 @@ modulAc = function(id){
   _origModulAc(id);
   try{
     if(id === "cari" && !_cariYuklendi){ cariListesiYukle(); }
-    if(id === "satis" && !_satisYuklendi){ satisListesiYukle(); }
+    if(id === "satis"){ satisAnaSecimeDon(); }
     if(id === "alis"){ alisAnaSecimeDon(); }
     if(id === "tahsilat" && !_tahsilatYuklendi){ tahsilatListesiYukle(); }
     if(id === "odeme" && !_odemeYuklendi){ odemeListesiYukle(); }
@@ -1067,19 +1174,57 @@ let _yeniSatisKalemleri = [];
 function satisListesiYukle(){
   _satisYuklendi = true;
   const onbellek = onbellekOku("satisListesi", 60000);
-  if(onbellek){ _satisListe = onbellek; satisListesiCiz(_satisListe); }
+  if(onbellek){ _satisListe = onbellek; satisListesiCiz(_satisListe); satisSonFaturalarGoster(); }
   else document.getElementById("satis-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getSatisListesi").then(res=>{
     if(!res.ok){ if(!onbellek) document.getElementById("satis-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _satisListe = res.satislar;
     onbellekYaz("satisListesi", res.satislar);
     satisListesiCiz(_satisListe);
+    satisSonFaturalarGoster();
   }).catch(err=>{
     if(!onbellek) document.getElementById("satis-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
 }
 
 let _satisAktifBelgeTipi = "Fatura";
+
+// ── Satış: 2 kademeli seçim (Fatura / Teklif / Sipariş) ──
+function satisAnaSecimeDon(){
+  document.getElementById("satis-secim").style.display = "block";
+  document.getElementById("satis-view").style.display = "none";
+}
+function satisAltModulAc(tip){
+  document.getElementById("satis-secim").style.display = "none";
+  document.getElementById("satis-view").style.display = "flex";
+  document.getElementById("mod-satis").classList.remove("detay-acik");
+  document.getElementById("satis-detail-panel").innerHTML =
+    '<div class="cari-detail-empty"><span class="ic">📤</span><p>Detayları görmek için soldan bir satış seçin</p></div><div id="satis-son-faturalar"></div>';
+  _satisSecili = null;
+  satisBelgeTipiDegistir(tip);
+  if(!_satisYuklendi) satisListesiYukle();
+}
+
+// Fatura sekmesi açıkken, sayfanın altında son kesilen faturaları listeler.
+function satisSonFaturalarGoster(){
+  const el = document.getElementById("satis-son-faturalar");
+  if(!el) return;
+  if(_satisAktifBelgeTipi !== "Fatura"){ el.innerHTML = ""; return; }
+  const faturalar = (_satisListe||[]).filter(s=>(s.belgeTipi||"Fatura")==="Fatura").slice(0,5);
+  if(faturalar.length===0){ el.innerHTML = ""; return; }
+  el.innerHTML = `
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);text-align:left">
+      <div class="rapor-baslik" style="margin:0 0 10px;font-size:13px">Son Kesilen Faturalar</div>
+      ${faturalar.map(s=>`
+        <div class="cari-item" style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px" onclick="satisAc('${s.id}')">
+          <div class="cari-item-top">
+            <span class="cari-item-ad">${s.cariAd}</span>
+            <span class="cari-item-bakiye">${paraFormat(s.toplamTutar)}</span>
+          </div>
+          <span class="cari-item-tip">${tarihGoster(s.tarih)} · ${s.odemeTipi}</span>
+        </div>`).join("")}
+    </div>`;
+}
 
 function satisListesiCiz(liste){
   const el = document.getElementById("satis-items");
@@ -1099,6 +1244,7 @@ function satisBelgeTipiDegistir(tip){
   _satisAktifBelgeTipi = tip;
   document.querySelectorAll(".belge-tab").forEach(b=>b.classList.toggle("active", b.dataset.tip===tip));
   satisListesiCiz(_satisListe);
+  satisSonFaturalarGoster();
 }
 
 function satisAramaFiltrele(deger){
@@ -1241,11 +1387,15 @@ function satisModalAc(onCariId, onBelgeTipi){
           <option value="Sipariş" ${belgeTipiBaslangic==='Sipariş'?'selected':''}>Sipariş</option>
         </select>
       </div>
-      <div class="fld"><label>Müşteri (Cari)</label>
-        <select id="sm-cari" onchange="satisCariSecimiDegisti()">
-          <option value="">— Cari seçme (peşin / serbest müşteri) —</option>
-          ${_cariListe.map(c=>`<option value="${c.id}" ${onCariId===c.id?'selected':''}>${c.ad}</option>`).join("")}
-        </select>
+      <div class="fld" style="position:relative"><label>Müşteri (Cari)</label>
+        <input id="sm-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest müşteri)..." autocomplete="off"
+               value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
+               oninput="smCariAramaDegisti(this.value)"
+               onfocus="smCariOneriGoster()"
+               onblur="setTimeout(()=>smCariOneriKapat(),200)"
+               onkeydown="oneriKlavyeYonet(event,'sm-cari-oneri')">
+        <input type="hidden" id="sm-cari" value="${onCariId||''}">
+        <div id="sm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <div class="fld" id="sm-serbest-ad-fld"><label>Müşteri Adı (cari seçilmediyse)</label><input id="sm-serbest-ad" type="text" placeholder="Peşin Müşteri"></div>
       <div class="fld"><label>Tarih</label><input id="sm-tarih" type="date" value="${bugun}"></div>
@@ -1311,6 +1461,42 @@ function satisCariSecimiDegisti(){
   document.getElementById("sm-serbest-ad-fld").style.display = cariSecili ? "none" : "flex";
 }
 
+function smCariAramaDegisti(){
+  document.getElementById("sm-cari").value = "";
+  satisCariSecimiDegisti();
+  smCariOneriGoster();
+}
+function smCariOneriGoster(){
+  const kutu = document.getElementById("sm-cari-oneri");
+  if(!kutu) return;
+  const q = (document.getElementById("sm-cari-arama").value || "").trim().toLocaleLowerCase('tr');
+  if(q.length < 1){ kutu.style.display = "none"; return; }
+  const eslesenler = (_cariListe || []).filter(c =>
+    (c.ad||"").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").toLocaleLowerCase('tr').includes(q)
+  ).slice(0, 8);
+  if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
+  kutu.innerHTML = eslesenler.map((c,i)=>`
+    <div class="fiyat-gecmis-satir" onclick="smCariSec(${i})" data-oneri-idx="${i}">
+      <span>${c.ad}</span><b>${c.cariKodu||''}</b>
+    </div>`).join("");
+  kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+  kutu.style.display = "block";
+}
+function smCariOneriKapat(){
+  const kutu = document.getElementById("sm-cari-oneri");
+  if(kutu) kutu.style.display = "none";
+}
+function smCariSec(i){
+  const kutu = document.getElementById("sm-cari-oneri");
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const c = eslesenler[i];
+  if(!c) return;
+  document.getElementById("sm-cari").value = c.id;
+  document.getElementById("sm-cari-arama").value = c.ad;
+  kutu.style.display = "none";
+  satisCariSecimiDegisti();
+}
+
 function satisKalemEkleUI(){
   _yeniSatisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20});
   satisKalemlerCiz();
@@ -1359,7 +1545,7 @@ function urunOneriGoster(idx){
   if(q.length < 1){ kutu.style.display="none"; return; }
   _urunOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q)
+      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`
@@ -1704,7 +1890,7 @@ function alisUrunOneriGoster(idx){
   if(q.length < 1){ kutu.style.display="none"; return; }
   _alisUrunOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q)
+      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`
@@ -1995,7 +2181,7 @@ function alisIadeUrunOneriGoster(idx){
   if(q.length<1){ kutu.style.display="none"; return; }
   _aimOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q)
+      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`
@@ -2738,6 +2924,138 @@ function birimSilOnay(id){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
+// ── Ürün Grubu / Alt Ürün Grubu / Ebat / Renk Tanımlama (ortak, "tip" parametreli) ──
+let _tanimListeCache = { urunGrubu:[], altUrunGrubu:[], ebat:[], renk:[] };
+let _tanimListeYuklendi = { urunGrubu:false, altUrunGrubu:false, ebat:false, renk:false };
+
+function tanimListesiYukle(tip){
+  const el = document.getElementById("tanimliste-"+tip);
+  if(el) el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getBasitTanimListesi", {tip}).then(res=>{
+    if(!res.ok){ if(el) el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _tanimListeCache[tip] = res.kalemler;
+    _tanimListeYuklendi[tip] = true;
+    tanimListesiCiz(tip);
+  }).catch(err=>{ if(el) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+function tanimListesiCiz(tip){
+  const el = document.getElementById("tanimliste-"+tip);
+  if(!el) return;
+  const liste = _tanimListeCache[tip] || [];
+  if(liste.length===0){ el.innerHTML = '<div class="cari-empty">Henüz kayıt yok.</div>'; return; }
+  el.innerHTML = liste.map(k=>`
+    <div class="satis-kalem-satir" style="justify-content:space-between" id="tanim-${tip}-satir-${k.id}">
+      <span style="flex:1" id="tanim-${tip}-metin-${k.id}">${k.ad}</span>
+      <span class="hk-sil" onclick="tanimDuzenleAc('${tip}','${k.id}')" title="Düzenle">✏️</span>
+      <span class="hk-sil" onclick="tanimSilOnay('${tip}','${k.id}')" title="Sil">🗑</span>
+    </div>`).join("");
+}
+function tanimEkle(tip){
+  const input = document.getElementById("tanim-"+tip+"-yeni-ad");
+  const ad = input.value.trim();
+  if(!ad){ alert("Ad girin"); return; }
+  cariApi("saveBasitTanim", {tip, ad}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    input.value = "";
+    tanimListesiYukle(tip);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+function tanimDuzenleAc(tip, id){
+  const k = (_tanimListeCache[tip]||[]).find(x=>x.id===id);
+  if(!k) return;
+  const el = document.getElementById("tanim-"+tip+"-metin-"+id);
+  if(!el) return;
+  el.outerHTML = `<span style="flex:1;display:flex;gap:6px">
+    <input id="tanim-${tip}-duzenle-${id}" type="text" value="${k.ad}" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2)">
+    <button class="btn btn-primary" style="padding:4px 10px" onclick="tanimDuzenleKaydet('${tip}','${id}')">Kaydet</button>
+    <button class="btn" style="padding:4px 10px" onclick="tanimListesiCiz('${tip}')">Vazgeç</button>
+  </span>`;
+}
+function tanimDuzenleKaydet(tip, id){
+  const input = document.getElementById("tanim-"+tip+"-duzenle-"+id);
+  const ad = input.value.trim();
+  if(!ad){ alert("Ad girin"); return; }
+  cariApi("saveBasitTanim", {tip, id, ad}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    tanimListesiYukle(tip);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+function tanimSilOnay(tip, id){
+  if(!confirm("Bu kaydı silmek istediğinize emin misiniz?")) return;
+  cariApi("silBasitTanim", {tip, id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    tanimListesiYukle(tip);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ── Marka Tanımlama (KOD + AD) ──
+let _markaListe = [];
+let _markaYuklendi = false;
+function markaListesiYukle(){
+  const el = document.getElementById("marka-liste");
+  if(el) el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getMarkaListesi").then(res=>{
+    if(!res.ok){ if(el) el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _markaListe = res.markalar;
+    _markaYuklendi = true;
+    markaListesiCiz();
+  }).catch(err=>{ if(el) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+function markaListesiCiz(){
+  const el = document.getElementById("marka-liste");
+  if(!el) return;
+  if(_markaListe.length===0){ el.innerHTML = '<div class="cari-empty">Henüz marka tanımlanmadı.</div>'; return; }
+  el.innerHTML = _markaListe.map(m=>`
+    <div class="satis-kalem-satir" style="justify-content:space-between" id="marka-satir-${m.id}">
+      <span style="width:34px;font-weight:700;color:var(--blue)">${m.kod}</span>
+      <span style="flex:1" id="marka-metin-${m.id}">${m.ad}</span>
+      <span class="hk-sil" onclick="markaDuzenleAc('${m.id}')" title="Düzenle">✏️</span>
+      <span class="hk-sil" onclick="markaSilOnay('${m.id}')" title="Sil">🗑</span>
+    </div>`).join("");
+}
+function markaEkleUI(){
+  const kodInput = document.getElementById("marka-yeni-kod");
+  const adInput = document.getElementById("marka-yeni-ad");
+  const kod = kodInput.value.trim();
+  const ad = adInput.value.trim();
+  if(!ad){ alert("Marka adı girin"); return; }
+  if(kod.length!==2){ alert("Marka kodu tam 2 karakter olmalı"); return; }
+  cariApi("saveMarka", {kod, ad}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    kodInput.value = ""; adInput.value = "";
+    markaListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+function markaDuzenleAc(id){
+  const m = _markaListe.find(x=>x.id===id);
+  if(!m) return;
+  const el = document.getElementById("marka-metin-"+id);
+  if(!el) return;
+  el.outerHTML = `<span style="flex:1;display:flex;gap:6px">
+    <input id="marka-duzenle-kod-${id}" type="text" maxlength="2" value="${m.kod}" style="width:46px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);text-transform:uppercase">
+    <input id="marka-duzenle-ad-${id}" type="text" value="${m.ad}" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2)">
+    <button class="btn btn-primary" style="padding:4px 10px" onclick="markaDuzenleKaydet('${id}')">Kaydet</button>
+    <button class="btn" style="padding:4px 10px" onclick="markaListesiCiz()">Vazgeç</button>
+  </span>`;
+}
+function markaDuzenleKaydet(id){
+  const kod = document.getElementById("marka-duzenle-kod-"+id).value.trim();
+  const ad = document.getElementById("marka-duzenle-ad-"+id).value.trim();
+  if(!ad){ alert("Marka adı girin"); return; }
+  if(kod.length!==2){ alert("Marka kodu tam 2 karakter olmalı"); return; }
+  cariApi("saveMarka", {id, kod, ad}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    markaListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+function markaSilOnay(id){
+  if(!confirm("Bu markayı silmek istediğinize emin misiniz?")) return;
+  cariApi("silMarka", {id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    markaListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
 function ayarlarListesiCiz(){
   const el = document.getElementById("ayarlar-kisayol-liste");
   const satirlar = [
@@ -2785,8 +3103,9 @@ function kisayollariVarsayilanaDondur(){
 <script>
 // Tüm Stok alt panelleri — bir tanesi gösterilirken diğerleri gizlenir.
 const STOK_PANELLER = ["stok-secim","stok-islemler-secim","stok-tanimlar-secim","stok-raporlar-secim",
-  "stok-panel-view","stok-tanim-view","stok-birim-view","stok-giris-view","stok-cikis-view","stok-toplu-view",
-  "stok-hareket-rapor-view"];
+  "stok-panel-view","stok-tanim-view","stok-birim-view","stok-marka-view","stok-urunGrubu-view",
+  "stok-altUrunGrubu-view","stok-ebat-view","stok-renk-view",
+  "stok-giris-view","stok-cikis-view","stok-toplu-view","stok-hareket-rapor-view"];
 
 function stokPaneliGoster(id){
   STOK_PANELLER.forEach(p=>{
@@ -2816,6 +3135,12 @@ function stokTanimAltAc(hangisi){
   } else if(hangisi === "birim"){
     stokPaneliGoster("stok-birim-view");
     birimListesiYukle();
+  } else if(hangisi === "marka"){
+    stokPaneliGoster("stok-marka-view");
+    markaListesiYukle();
+  } else if(["urunGrubu","altUrunGrubu","ebat","renk"].includes(hangisi)){
+    stokPaneliGoster("stok-"+hangisi+"-view");
+    tanimListesiYukle(hangisi);
   }
 }
 
@@ -2865,6 +3190,7 @@ function stokTanimListesiCiz(liste){
     <table class="hareket-tbl stoktanim-tbl">
       <thead>
         <tr>
+          <th>Marka</th>
           <th>Stok Kodu</th>
           <th>Stok Adı</th>
           <th>Birimi</th>
@@ -2876,6 +3202,7 @@ function stokTanimListesiCiz(liste){
       <tbody>
         ${gosterilecek.map(k=>`
           <tr class="hk-row" onclick="stokTanimModalAc('${k.id}')" title="Düzenlemek için tıklayın">
+            <td>${k.markaKodu ? `<span class="tip-badge">${k.markaKodu}</span>` : "—"}</td>
             <td>${k.stokKodu||"—"}</td>
             <td>${k.stokAdi}</td>
             <td>${k.birim1||"—"}</td>
@@ -2905,15 +3232,19 @@ function stokTanimAramaFiltrele(deger){
 
 function stokTanimModalAc(editId){
   if(_birimListe.length===0) birimListesiYukle();
+  if(!_markaYuklendi) markaListesiYukle();
+  ["urunGrubu","altUrunGrubu","ebat","renk"].forEach(tip=>{ if(!_tanimListeYuklendi[tip]) tanimListesiYukle(tip); });
   const k = editId ? _stokTanimListe.find(x=>x.id===editId) : null;
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "stoktanim-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  const secenekHtml = (liste, seciliId) => '<option value="">— Seçiniz —</option>' +
+    (liste||[]).map(x=>`<option value="${x.id}" ${seciliId===x.id?'selected':''}>${x.kod?x.kod+' — ':''}${x.ad}</option>`).join("");
   overlay.innerHTML = `
     <div class="modal-box modal-box-wide">
       <h3>${k ? 'Stok Tanımını Düzenle' : 'Yeni Stok Tanımı'}</h3>
-      <div class="fld"><label>Stok Kodu</label><input id="st-stokkodu" type="text" value="${k?k.stokKodu:''}" placeholder="İsteğe bağlı"></div>
+      <div class="fld"><label>Stok Kodu</label><input id="st-stokkodu" type="text" value="${k?k.stokKodu:''}" placeholder="İsteğe bağlı (ilk 2 hane marka kodu olarak kullanılır)"></div>
       <div class="fld"><label>Stok Adı *</label><input id="st-stokadi" type="text" value="${k?k.stokAdi:''}"></div>
       <div class="fld"><label>1. Birim</label>
         <input id="st-birim1" list="birim-datalist" type="text" value="${k?k.birim1:'adet'}" placeholder="adet, m2, kg...">
@@ -2925,6 +3256,11 @@ function stokTanimModalAc(editId){
       <div class="fld"><label>Alış İskontosu (%)</label><input id="st-aliskonto" type="number" min="0" step="0.01" value="${k?k.alisIskontosu:''}"></div>
       <div class="fld"><label>Satış Fiyatı</label><input id="st-satisfiyat" type="number" min="0" step="0.01" value="${k?k.satisFiyati:''}"></div>
       <div class="fld"><label>Satış İskontosu (%)</label><input id="st-satisiskonto" type="number" min="0" step="0.01" value="${k?k.satisIskontosu:''}"></div>
+      <div class="fld"><label>Marka</label><select id="st-marka">${secenekHtml(_markaListe, k?k.markaId:'')}</select></div>
+      <div class="fld"><label>Ürün Grubu</label><select id="st-urungrubu">${secenekHtml(_tanimListeCache.urunGrubu, k?k.urunGrubuId:'')}</select></div>
+      <div class="fld"><label>Alt Ürün Grubu</label><select id="st-alturungrubu">${secenekHtml(_tanimListeCache.altUrunGrubu, k?k.altUrunGrubuId:'')}</select></div>
+      <div class="fld"><label>Ebat</label><select id="st-ebat">${secenekHtml(_tanimListeCache.ebat, k?k.ebatId:'')}</select></div>
+      <div class="fld"><label>Renk</label><select id="st-renk">${secenekHtml(_tanimListeCache.renk, k?k.renkId:'')}</select></div>
       ${k ? `<div class="btnrow"><button class="btn btn-danger" onclick="stokTanimSilOnay('${k.id}')">🗑 Sil</button></div>` : ''}
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('stoktanim-modal-overlay').remove()">İptal</button>
@@ -2949,6 +3285,11 @@ function stokTanimKaydet(id){
     alisIskontosu: document.getElementById("st-aliskonto").value,
     satisFiyati: document.getElementById("st-satisfiyat").value,
     satisIskontosu: document.getElementById("st-satisiskonto").value,
+    markaId: document.getElementById("st-marka").value,
+    urunGrubuId: document.getElementById("st-urungrubu").value,
+    altUrunGrubuId: document.getElementById("st-alturungrubu").value,
+    ebatId: document.getElementById("st-ebat").value,
+    renkId: document.getElementById("st-renk").value,
   };
   cariApi("saveStokTanim", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
@@ -3150,7 +3491,7 @@ function stokHareketUrunOneriGoster(mod, idx){
   if(q.length < 1){ kutu.style.display="none"; return; }
   _shOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q)
+      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`
