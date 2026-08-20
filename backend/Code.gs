@@ -26,6 +26,11 @@ const SHEETS = {
   posHareketleri: "PosHareketleri",
   bankaHesapHareketleri: "BankaHesapHareketleri",
   stokHareketleri: "StokHareketleri",
+  markalar: "Markalar",
+  urunGruplari: "UrunGruplari",
+  altUrunGruplari: "AltUrunGruplari",
+  ebatlar: "Ebatlar",
+  renkler: "Renkler",
 };
 
 // ── YARDIMCI FONKSİYONLAR ──
@@ -198,6 +203,12 @@ function handleRequest(e) {
       case "getStokHareketListesi": result = getStokHareketListesi(body); break;
       case "stokHareketTopluEkle":  result = stokHareketTopluEkle(body); break;
       case "silStokHareket":        result = silStokHareket(body); break;
+      case "getBasitTanimListesi": result = getBasitTanimListesi(body.tip); break;
+      case "saveBasitTanim":       result = saveBasitTanim(body); break;
+      case "silBasitTanim":        result = silBasitTanim(body); break;
+      case "getMarkaListesi": result = getMarkaListesi(); break;
+      case "saveMarka":       result = saveMarka(body); break;
+      case "silMarka":        result = silMarka(body); break;
       default: result = { error: "Bilinmeyen işlem: " + action };
     }
     return jsonResponse(result);
@@ -1659,12 +1670,28 @@ function silKrediKarti(body) {
 // Eski Stok Paneli'nden tamamen bağımsız çalışır. Excel'den toplu içe aktarma destekler.
 // ════════════════════════════════════════════════
 
-const STOK_TANIM_BASLIKLAR = ["ID","STOK_KODU","STOK_ADI","BIRIM1","AMBALAJ_MIKTARI","AMBALAJ_BIRIMI","ALIS_FIYATI","ALIS_ISKONTOSU","SATIS_FIYATI","SATIS_ISKONTOSU","KAYIT_TARIHI"];
+const STOK_TANIM_BASLIKLAR = ["ID","STOK_KODU","STOK_ADI","BIRIM1","AMBALAJ_MIKTARI","AMBALAJ_BIRIMI","ALIS_FIYATI","ALIS_ISKONTOSU","SATIS_FIYATI","SATIS_ISKONTOSU","KAYIT_TARIHI","MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID"];
+
+// Eskiden 11 sütunlu oluşturulmuş StokTanimlari sayfalarına, sona 5 yeni
+// tanım sütunu ekler (yalnızca eksikse — getOrCreateSheet zaten var olan
+// sayfalara başlık eklemediği için bu göç adımı gerekli).
+function ensureStokTanimEkColonlari(sheet) {
+  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID"];
+  eklenecek.forEach((baslik, idx) => {
+    const kolonNo = 12 + idx;
+    const mevcut = sheet.getRange(1, kolonNo).getValue();
+    if (String(mevcut || "") !== baslik) {
+      sheet.getRange(1, kolonNo).setValue(baslik).setFontWeight("bold").setBackground("#e8edf5");
+    }
+  });
+}
 
 function stokTanimSatiriNesneYap(row) {
+  const stokKodu = String(row[1] || "");
   return {
     id: String(row[0] || ""),
-    stokKodu: String(row[1] || ""),
+    stokKodu: stokKodu,
+    markaKodu: stokKodu.trim().slice(0, 2), // stok kodunun ilk 2 hanesi = marka hanesi
     stokAdi: String(row[2] || ""),
     birim1: String(row[3] || ""),
     ambalajMiktari: parseFloat(row[4]) || 0,
@@ -1674,6 +1701,11 @@ function stokTanimSatiriNesneYap(row) {
     satisFiyati: parseFloat(row[8]) || 0,
     satisIskontosu: parseFloat(row[9]) || 0,
     kayitTarihi: hucreTarihStr(row[10]),
+    markaId: String(row[11] || ""),
+    urunGrubuId: String(row[12] || ""),
+    altUrunGrubuId: String(row[13] || ""),
+    ebatId: String(row[14] || ""),
+    renkId: String(row[15] || ""),
   };
 }
 
@@ -1681,6 +1713,7 @@ function getStokTanimListesi() {
   return cacheOkuVeyaHesapla("stokTanimListesi", 180, function () {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  ensureStokTanimEkColonlari(sheet);
   const data = sheet.getDataRange().getValues();
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
@@ -1692,12 +1725,14 @@ function getStokTanimListesi() {
 }
 
 // body: { id (varsa güncelleme), stokKodu, stokAdi, birim1, ambalajMiktari, ambalajBirimi,
-//         alisFiyati, alisIskontosu, satisFiyati, satisIskontosu }
+//         alisFiyati, alisIskontosu, satisFiyati, satisIskontosu,
+//         markaId, urunGrubuId, altUrunGrubuId, ebatId, renkId }
 function saveStokTanim(body) {
   const stokAdi = String(body.stokAdi || "").trim();
   if (!stokAdi) return { ok: false, hata: "Stok adı gerekli" };
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  ensureStokTanimEkColonlari(sheet);
   const data = sheet.getDataRange().getValues();
 
   let id = String(body.id || "").trim();
@@ -1721,6 +1756,11 @@ function saveStokTanim(body) {
     parseFloat(body.satisFiyati) || 0,
     parseFloat(body.satisIskontosu) || 0,
     satirIdx > 0 ? data[satirIdx - 1][10] : Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"),
+    String(body.markaId || ""),
+    String(body.urunGrubuId || ""),
+    String(body.altUrunGrubuId || ""),
+    String(body.ebatId || ""),
+    String(body.renkId || ""),
   ];
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);
@@ -1751,6 +1791,7 @@ function saveStokTanimTopluce(body) {
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  ensureStokTanimEkColonlari(sheet);
   const data = sheet.getDataRange().getValues();
 
   // Mevcut kayıtları STOK_KODU'na göre satır numarasıyla eşle (upsert için)
@@ -1780,6 +1821,11 @@ function saveStokTanimTopluce(body) {
       parseFloat(k.satisFiyati) || 0,
       parseFloat(k.satisIskontosu) || 0,
       kayitTarihi,
+      String(k.markaId || ""),
+      String(k.urunGrubuId || ""),
+      String(k.altUrunGrubuId || ""),
+      String(k.ebatId || ""),
+      String(k.renkId || ""),
     ];
 
     if (stokKodu && kodSatirMap[stokKodu]) {
@@ -1973,6 +2019,142 @@ function silBirim(body) {
     if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["birimListesi"]); return { ok: true }; }
   }
   return { ok: false, hata: "Birim bulunamadı" };
+}
+
+// ════════════════════════════════════════════════
+// STOK TANIMLARI İÇİN EK TANIM LİSTELERİ (Stok > Tanımlar altında —
+// Ürün Grubu, Alt Ürün Grubu, Ebat, Renk. Birim'le aynı [ID, AD] şemasını
+// kullanır; tek bir "tip" parametresiyle 4 listeyi birden yönetir.
+// Marka ayrı tutulur çünkü ayrıca bir KOD alanı gerektirir.)
+// ════════════════════════════════════════════════
+const BASIT_TANIM_SHEET_ADI = {
+  urunGrubu: SHEETS.urunGruplari,
+  altUrunGrubu: SHEETS.altUrunGruplari,
+  ebat: SHEETS.ebatlar,
+  renk: SHEETS.renkler,
+};
+const BASIT_TANIM_CACHE_ANAHTARI = {
+  urunGrubu: "urunGrubuListesi",
+  altUrunGrubu: "altUrunGrubuListesi",
+  ebat: "ebatListesi",
+  renk: "renkListesi",
+};
+
+function getBasitTanimListesi(tip) {
+  const sheetAdi = BASIT_TANIM_SHEET_ADI[tip];
+  if (!sheetAdi) return { ok: false, hata: "Geçersiz tanım tipi" };
+  return cacheOkuVeyaHesapla(BASIT_TANIM_CACHE_ANAHTARI[tip], 300, function () {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = getOrCreateSheet(ss, sheetAdi, BIRIM_BASLIKLAR);
+    const data = sheet.getDataRange().getValues();
+    const sonuc = [];
+    for (let i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      sonuc.push({ id: String(data[i][0]), ad: String(data[i][1] || "") });
+    }
+    return { ok: true, kalemler: sonuc };
+  });
+}
+
+// body: { tip, id (varsa güncelleme), ad }
+function saveBasitTanim(body) {
+  const tip = String(body.tip || "");
+  const sheetAdi = BASIT_TANIM_SHEET_ADI[tip];
+  if (!sheetAdi) return { ok: false, hata: "Geçersiz tanım tipi" };
+  const ad = String(body.ad || "").trim();
+  if (!ad) return { ok: false, hata: "Ad gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, sheetAdi, BIRIM_BASLIKLAR);
+  let id = String(body.id || "").trim();
+  if (id) {
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === id) {
+        sheet.getRange(i + 1, 1, 1, 2).setValues([[id, ad]]);
+        cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]);
+        return { ok: true, id: id };
+      }
+    }
+  }
+  id = tip.slice(0, 3) + "_" + Date.now();
+  sheet.appendRow([id, ad]);
+  cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]);
+  return { ok: true, id: id };
+}
+
+// body: { tip, id }
+function silBasitTanim(body) {
+  const tip = String(body.tip || "");
+  const sheetAdi = BASIT_TANIM_SHEET_ADI[tip];
+  if (!sheetAdi) return { ok: false, hata: "Geçersiz tanım tipi" };
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, sheetAdi, BIRIM_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]); return { ok: true }; }
+  }
+  return { ok: false, hata: "Kayıt bulunamadı" };
+}
+
+// ════════════════════════════════════════════════
+// MARKA TANIMLARI (Stok > Tanımlar > Marka Tanımları — Birim'den farklı
+// olarak 2 haneli bir KOD alanı da tutar. Bu kod, ürünün Stok Kodu'nun
+// ilk 2 hanesiyle EŞLEŞMESİ ÖNERİLEN bir referans kaydıdır — Stok Kodu
+// serbest metin olarak kalır, otomatik senkronize edilmez.)
+// ════════════════════════════════════════════════
+const MARKA_BASLIKLAR = ["ID", "KOD", "AD"];
+
+function getMarkaListesi() {
+  return cacheOkuVeyaHesapla("markaListesi", 300, function () {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = getOrCreateSheet(ss, SHEETS.markalar, MARKA_BASLIKLAR);
+    const data = sheet.getDataRange().getValues();
+    const sonuc = [];
+    for (let i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      sonuc.push({ id: String(data[i][0]), kod: String(data[i][1] || ""), ad: String(data[i][2] || "") });
+    }
+    return { ok: true, markalar: sonuc };
+  });
+}
+
+// body: { id (varsa güncelleme), kod, ad }
+function saveMarka(body) {
+  const ad = String(body.ad || "").trim();
+  if (!ad) return { ok: false, hata: "Marka adı gerekli" };
+  const kod = String(body.kod || "").trim().toUpperCase().slice(0, 2);
+  if (kod.length !== 2) return { ok: false, hata: "Marka kodu 2 karakter olmalı" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.markalar, MARKA_BASLIKLAR);
+  let id = String(body.id || "").trim();
+  if (id) {
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === id) {
+        sheet.getRange(i + 1, 1, 1, 3).setValues([[id, kod, ad]]);
+        cacheTemizle(["markaListesi"]);
+        return { ok: true, id: id };
+      }
+    }
+  }
+  id = "mrk_" + Date.now();
+  sheet.appendRow([id, kod, ad]);
+  cacheTemizle(["markaListesi"]);
+  return { ok: true, id: id };
+}
+
+function silMarka(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.markalar, MARKA_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["markaListesi"]); return { ok: true }; }
+  }
+  return { ok: false, hata: "Marka bulunamadı" };
 }
 
 // ════════════════════════════════════════════════
