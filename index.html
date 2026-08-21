@@ -387,6 +387,11 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
           <div class="lbl">Stok Bazlı Sipariş Raporu</div>
           <div class="desc">Ürün bazlı sipariş raporunu aç</div>
         </div>
+        <div class="modtile" onclick="stokRaporAltAc('kritik')">
+          <span class="ic">⚠️</span>
+          <div class="lbl">Kritik Stok Uyarıları</div>
+          <div class="desc">Minimum seviyenin altındaki ürünler</div>
+        </div>
       </div>
     </div>
 
@@ -498,6 +503,13 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
         <button class="btn" onclick="stokHareketRaporuTemizle()">Tümü</button>
       </div>
       <div id="shr-icerik"><div class="cari-empty">Yükleniyor...</div></div>
+    </div>
+
+    <div id="stok-kritik-rapor-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('raporlar')">← Geri</button>
+      <div class="rapor-baslik" style="margin-top:10px">Kritik Stok Uyarıları</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Minimum Stok Miktarı tanımlanmış ve güncel stoğu bu seviyenin altında/eşit olan ürünler. Güncel stok, Stok Hareket defterindeki (Giriş - Çıkış) toplamıdır.</p>
+      <div id="skr-icerik"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
   </div>
 
@@ -654,6 +666,8 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
           <option value="urunBazliHareket">Ürün Bazlı Hareket Raporu</option>
           <option value="urunBazliSiparis">Ürün Bazlı Sipariş Raporu</option>
           <option value="urunBazliFatura">Ürün Bazlı Fatura Raporu</option>
+          <option value="karZarar">Kâr/Zarar Raporu</option>
+          <option value="vadesiGecenler">Vadesi Geçmiş Alacaklar</option>
         </select>
       </div>
       <div id="mr-icerik"><div class="cari-empty">Yükleniyor...</div></div>
@@ -1045,6 +1059,7 @@ const HK_SUTUNLAR = {
   tarih:    { baslik:"Tarih",     render: h => tarihGoster(h.tarih) },
   tip:      { baslik:"Tip",       render: h => `<span class="${h.tip==='Borç'?'hk-borc':'hk-alacak'}">${h.tip}</span>` },
   tutar:    { baslik:"Tutar",     render: h => paraFormat(h.tutar) },
+  vade:     { baslik:"Vade",      render: h => { if(!h.vade) return "—"; const gecti = h.tip==='Borç' && h.vade < new Date().toISOString().slice(0,10); return gecti ? `<span class="hk-borc">${tarihGoster(h.vade)}</span>` : tarihGoster(h.vade); } },
   aciklama: { baslik:"Açıklama",  render: h => hkAciklamaGoster(h.aciklama) },
   bakiye:   { baslik:"Bakiye",    render: h => `<span class="${bakiyeSinifi(h.bakiyeSonrasi)}">${paraFormat(h.bakiyeSonrasi)}</span>` },
 };
@@ -1150,6 +1165,7 @@ function cariModalAc(editId){
       <div class="fld"><label>Telefon</label><input id="cm-telefon" type="text" value="${c?c.telefon:''}"></div>
       <div class="fld"><label>Adres</label><input id="cm-adres" type="text" value="${c?c.adres:''}"></div>
       <div class="fld"><label>Vergi No</label><input id="cm-vergino" type="text" value="${c?c.vergiNo:''}"></div>
+      <div class="fld"><label>Genel İskonto Oranı (%)</label><input id="cm-iskonto" type="number" min="0" max="100" step="0.01" value="${c?(c.iskontoOrani||''):''}" placeholder="0 = iskonto yok"></div>
       <div class="fld"><label>Not</label><textarea id="cm-not" rows="2">${c?c.not:''}</textarea></div>
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('cari-modal-overlay').remove()">İptal</button>
@@ -1171,6 +1187,7 @@ function cariKaydet(id){
     telefon: document.getElementById("cm-telefon").value,
     adres: document.getElementById("cm-adres").value,
     vergiNo: document.getElementById("cm-vergino").value,
+    iskontoOrani: document.getElementById("cm-iskonto").value,
     not: document.getElementById("cm-not").value,
   };
   cariApi("saveCari", body).then(res=>{
@@ -1433,6 +1450,10 @@ function satisModalAc(onCariId, onBelgeTipi){
         <label>Havale — Banka / Hesap</label>
         <select id="sm-banka-hesap"></select>
       </div>
+      <div class="fld" id="sm-vade-fld" style="display:none">
+        <label>Vade Tarihi (son ödeme tarihi)</label>
+        <input id="sm-vade" type="date">
+      </div>
       <div class="fld"><label>Açıklama</label><input id="sm-aciklama" type="text" placeholder="İsteğe bağlı"></div>
 
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
@@ -1459,10 +1480,11 @@ function satisModalAc(onCariId, onBelgeTipi){
   satisBankaSecenekleriYukle();
 }
 
-// Ödeme Tipi "Havale" seçildiğinde banka/hesap seçim alanını gösterir.
+// Ödeme Tipi "Havale" seçildiğinde banka/hesap, "Açık Hesap" seçildiğinde vade tarihi alanını gösterir.
 function satisOdemeTipiDegisti(){
-  const havale = document.getElementById("sm-odeme").value === "Havale";
-  document.getElementById("sm-banka-fld").style.display = havale ? "flex" : "none";
+  const tip = document.getElementById("sm-odeme").value;
+  document.getElementById("sm-banka-fld").style.display = (tip === "Havale") ? "flex" : "none";
+  document.getElementById("sm-vade-fld").style.display = (tip === "Açık Hesap") ? "flex" : "none";
 }
 
 function satisBankaSecenekleriYukle(){
@@ -1516,6 +1538,12 @@ function smCariSec(i){
   document.getElementById("sm-cari-arama").value = c.ad;
   kutu.style.display = "none";
   satisCariSecimiDegisti();
+  // Carinin genel iskonto oranı varsa, henüz elle değiştirilmemiş kalemlere otomatik uygula.
+  if(c.iskontoOrani > 0){
+    _yeniSatisKalemleri.forEach(k=>{ if(!k.iskontoYuzde) k.iskontoYuzde = c.iskontoOrani; });
+    satisKalemlerCiz();
+    satisToplamGuncelle();
+  }
 }
 
 function satisKalemEkleUI(){
@@ -1566,7 +1594,7 @@ function urunOneriGoster(idx){
   if(q.length < 1){ kutu.style.display="none"; return; }
   _urunOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q)
+      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q) || (s.barkod||"").toLocaleLowerCase('tr').includes(q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`
@@ -1637,6 +1665,7 @@ function satisKaydet(){
     odemeTipi: odemeTipi,
     dipIskontoYuzde: parseFloat(document.getElementById("sm-dip-iskonto").value) || 0,
     bankaHesapId: bankaHesapId,
+    vade: odemeTipi === "Açık Hesap" ? document.getElementById("sm-vade").value : "",
     aciklama: document.getElementById("sm-aciklama").value,
     kalemler,
   };
@@ -1911,7 +1940,7 @@ function alisUrunOneriGoster(idx){
   if(q.length < 1){ kutu.style.display="none"; return; }
   _alisUrunOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q)
+      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q) || (s.barkod||"").toLocaleLowerCase('tr').includes(q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`
@@ -2202,7 +2231,7 @@ function alisIadeUrunOneriGoster(idx){
   if(q.length<1){ kutu.style.display="none"; return; }
   _aimOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q)
+      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q) || (s.barkod||"").toLocaleLowerCase('tr').includes(q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`
@@ -2823,8 +2852,43 @@ function muhasebeRaporuYukle(){
   const bitis = document.getElementById("rapor-bitis").value;
   const el = document.getElementById("mr-icerik");
   el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+
+  if(tip === "vadesiGecenler"){
+    cariApi("vadesiGecmisAlacaklar").then(res=>{
+      if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+      if(res.hareketler.length===0){ el.innerHTML = '<div class="cari-empty">Vadesi geçmiş alacak yok.</div>'; return; }
+      el.innerHTML = `
+        <table class="rapor-tbl">
+          <thead><tr><th>Cari</th><th>Vade Tarihi</th><th>Gecikme (gün)</th><th>Tutar</th><th>Açıklama</th></tr></thead>
+          <tbody>
+            ${res.hareketler.map(h=>`
+              <tr><td>${h.cariAd}</td><td class="hk-borc">${tarihGoster(h.vade)}</td><td>${h.gecikenGunSayisi}</td><td>${paraFormat(h.tutar)}</td><td>${hkAciklamaGoster(h.aciklama)}</td></tr>`).join("")}
+          </tbody>
+        </table>`;
+    }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+    return;
+  }
+
   cariApi("getMuhasebeRaporu", {tip, baslangic, bitis}).then(res=>{
     if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(tip === "karZarar"){
+      if(res.satirlar.length===0){ el.innerHTML = '<div class="cari-empty">Bu aralıkta satış yok.</div>'; return; }
+      el.innerHTML = `
+        <div class="finans-kartlar">
+          <div class="finans-kart"><div class="lbl">Toplam Satış</div><div class="num">${paraFormat(res.toplamSatis)}</div></div>
+          <div class="finans-kart"><div class="lbl">Toplam Maliyet</div><div class="num">${paraFormat(res.toplamMaliyet)}</div></div>
+          <div class="finans-kart"><div class="lbl">Kâr</div><div class="num">${paraFormat(res.toplamKar)}</div></div>
+        </div>
+        ${res.eslesmeyenSayisi>0 ? `<p style="color:var(--text3);font-size:12px;margin:0 0 10px">⚠️ ${res.eslesmeyenSayisi} kalemin Stok Tanımları'nda eşleşen alış fiyatı bulunamadı — bu kalemlerin maliyeti 0 kabul edildi (kâr olduğundan yüksek görünebilir). Ürün adının Stok Tanımları'ndaki adla birebir aynı olduğundan emin olun.</p>` : ""}
+        <table class="rapor-tbl">
+          <thead><tr><th>Ürün</th><th>Miktar</th><th>Satış Tutarı</th><th>Maliyet</th><th>Kâr</th></tr></thead>
+          <tbody>
+            ${res.satirlar.map(s=>`
+              <tr><td>${s.urunAdi}${s.maliyetBilinmiyor?' ⚠️':''}</td><td>${s.miktar}</td><td>${paraFormat(s.satisTutari)}</td><td>${paraFormat(s.maliyet)}</td><td>${paraFormat(s.kar)}</td></tr>`).join("")}
+          </tbody>
+        </table>`;
+      return;
+    }
     if(res.satirlar.length===0){ el.innerHTML = '<div class="cari-empty">Bu aralıkta kayıt yok.</div>'; return; }
     if(tip === "alisFatura" || tip === "satisFatura"){
       el.innerHTML = `
@@ -3365,7 +3429,7 @@ function kisayollariVarsayilanaDondur(){
 const STOK_PANELLER = ["stok-secim","stok-islemler-secim","stok-tanimlar-secim","stok-raporlar-secim",
   "stok-panel-view","stok-tanim-view","stok-birim-view","stok-marka-view","stok-urunGrubu-view",
   "stok-altUrunGrubu-view","stok-ebat-view","stok-renk-view",
-  "stok-giris-view","stok-cikis-view","stok-toplu-view","stok-hareket-rapor-view"];
+  "stok-giris-view","stok-cikis-view","stok-toplu-view","stok-hareket-rapor-view","stok-kritik-rapor-view"];
 
 function stokPaneliGoster(id){
   STOK_PANELLER.forEach(p=>{
@@ -3416,7 +3480,33 @@ function stokRaporAltAc(hangisi){
     const sel = document.getElementById("mr-tip-secim");
     if(sel) sel.value = "urunBazliSiparis";
     muhasebeRaporuYukle();
+  } else if(hangisi === "kritik"){
+    stokPaneliGoster("stok-kritik-rapor-view");
+    stokKritikRaporuYukle();
   }
+}
+
+function stokKritikRaporuYukle(){
+  const el = document.getElementById("skr-icerik");
+  el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getKritikStokListesi").then(res=>{
+    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(res.kalemler.length===0){ el.innerHTML = '<div class="cari-empty">Kritik seviyede ürün yok. 🎉</div>'; return; }
+    el.innerHTML = `
+      <table class="rapor-tbl">
+        <thead><tr><th>Ürün</th><th>Birim</th><th>Güncel Stok</th><th>Min. Stok</th><th>Eksik</th></tr></thead>
+        <tbody>
+          ${res.kalemler.map(k=>`
+            <tr>
+              <td>${k.markaKodu?`<span class="tip-badge">${k.markaKodu}</span> `:''}${k.stokAdi}</td>
+              <td>${k.birim1||'—'}</td>
+              <td class="hk-borc">${k.guncelStok}</td>
+              <td>${k.minStok}</td>
+              <td class="hk-borc">${Math.max(0, k.minStok - k.guncelStok)}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
+  }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
 }
 
 // ── STOK TANIMLAMA MODÜLÜ ──
@@ -3457,6 +3547,7 @@ function stokTanimListesiCiz(liste){
           <th>2. Birim Miktarı / Birimi</th>
           <th>Alış Fiyatı</th>
           <th>Satış Fiyatı</th>
+          <th>Güncel Stok</th>
         </tr>
       </thead>
       <tbody>
@@ -3469,6 +3560,7 @@ function stokTanimListesiCiz(liste){
             <td>${k.ambalajMiktari ? (k.ambalajMiktari+' '+(k.ambalajBirimi||"")) : "—"}</td>
             <td>${paraFormat(k.alisFiyati)}</td>
             <td>${paraFormat(k.satisFiyati)}</td>
+            <td>${k.minStok>0 && k.guncelStok<=k.minStok ? `<span class="hk-borc">${k.guncelStok} ⚠️</span>` : (k.guncelStok||0)}</td>
           </tr>`).join("")}
       </tbody>
     </table>
@@ -3521,6 +3613,8 @@ function stokTanimModalAc(editId){
       <div class="fld"><label>Alt Ürün Grubu</label><select id="st-alturungrubu">${secenekHtml(_tanimListeCache.altUrunGrubu, k?k.altUrunGrubuId:'')}</select></div>
       <div class="fld"><label>Ebat</label><select id="st-ebat">${secenekHtml(_tanimListeCache.ebat, k?k.ebatId:'')}</select></div>
       <div class="fld"><label>Renk</label><select id="st-renk">${secenekHtml(_tanimListeCache.renk, k?k.renkId:'')}</select></div>
+      <div class="fld"><label>Barkod</label><input id="st-barkod" type="text" value="${k?k.barkod||'':''}" placeholder="İsteğe bağlı"></div>
+      <div class="fld"><label>Minimum Stok Miktarı</label><input id="st-minstok" type="number" min="0" step="1" value="${k?k.minStok||'':''}" placeholder="0 = uyarı kapalı"></div>
       ${k ? `<div class="btnrow"><button class="btn btn-danger" onclick="stokTanimSilOnay('${k.id}')">🗑 Sil</button></div>` : ''}
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('stoktanim-modal-overlay').remove()">İptal</button>
@@ -3550,6 +3644,8 @@ function stokTanimKaydet(id){
     altUrunGrubuId: document.getElementById("st-alturungrubu").value,
     ebatId: document.getElementById("st-ebat").value,
     renkId: document.getElementById("st-renk").value,
+    barkod: document.getElementById("st-barkod").value,
+    minStok: document.getElementById("st-minstok").value,
   };
   cariApi("saveStokTanim", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
@@ -3751,7 +3847,7 @@ function stokHareketUrunOneriGoster(mod, idx){
   if(q.length < 1){ kutu.style.display="none"; return; }
   _shOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q)
+      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q) || (s.barkod||"").toLocaleLowerCase('tr').includes(q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`
