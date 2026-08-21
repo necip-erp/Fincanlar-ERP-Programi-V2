@@ -75,6 +75,24 @@ function ensureCariKoduColonu(sheet) {
   }
 }
 
+// Carinin bu ürünler/satışlar için otomatik uygulanacak genel iskonto oranı (%).
+// Satış fişine bu cari seçilince her kalemin iskonto alanına varsayılan olarak yazılır.
+function ensureCariIskontoColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 10).getValue();
+  if (String(mevcutBaslik || "") !== "ISKONTO_ORANI") {
+    sheet.getRange(1, 10).setValue("ISKONTO_ORANI").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
+// Bir cari hareketin vade tarihi (özellikle Açık Hesap satışlarında "ne zamana
+// kadar ödenmeli" bilgisini tutar). "Vadesi Geçmiş Alacaklar" raporunda kullanılır.
+function ensureCariHareketVadeColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 8).getValue();
+  if (String(mevcutBaslik || "") !== "VADE") {
+    sheet.getRange(1, 8).setValue("VADE").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
 // Google E-Tablo, "2026-08-18" veya "18/08/2026 10:30" gibi tarih benzeri
 // metinleri hücreye yazılırken kendiliğinden GERÇEK bir Date değerine
 // çevirebiliyor. getValues() ile bu hücre geri okunduğunda artık bir metin
@@ -291,6 +309,8 @@ function handleRequest(e) {
       case "markaSiraGuncelle":     result = markaSiraGuncelle(body); break;
       case "getAciklamaSablonlari":  result = getAciklamaSablonlari(); break;
       case "saveAciklamaSablonlari": result = saveAciklamaSablonlari(body); break;
+      case "getKritikStokListesi": result = getKritikStokListesi(); break;
+      case "vadesiGecmisAlacaklar": result = vadesiGecmisAlacaklar(); break;
       default: result = { error: "Bilinmeyen işlem: " + action };
     }
     return jsonResponse(result);
@@ -307,9 +327,10 @@ function handleRequest(e) {
 function getCariListesi() {
   return cacheOkuVeyaHesapla("cariListesi", 180, function () {
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU"]);
+  const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
   ensureCariKoduColonu(hSheet);
-  const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
+  ensureCariIskontoColonu(hSheet);
+  const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
 
   const hData = hSheet.getDataRange().getValues();
   const hkData = hkSheet.getDataRange().getValues();
@@ -341,6 +362,7 @@ function getCariListesi() {
       not: String(row[6] || ""),
       tarih: hucreTarihStr(row[7]),
       cariKodu: String(row[8] || ""),
+      iskontoOrani: parseFloat(row[9]) || 0,
       bakiye: bakiyeMap[id] || 0,
     });
   }
@@ -352,9 +374,11 @@ function getCariListesi() {
 function getCariDetay(cariId) {
   if (!cariId) return { ok: false, hata: "cariId gerekli" };
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU"]);
+  const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
   ensureCariKoduColonu(hSheet);
-  const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
+  ensureCariIskontoColonu(hSheet);
+  const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
+  ensureCariHareketVadeColonu(hkSheet);
 
   const hData = hSheet.getDataRange().getValues();
   let cari = null;
@@ -364,7 +388,7 @@ function getCariDetay(cariId) {
         id: String(hData[i][0]), tip: String(hData[i][1] || ""), ad: String(hData[i][2] || ""),
         telefon: String(hData[i][3] || ""), adres: String(hData[i][4] || ""),
         vergiNo: String(hData[i][5] || ""), not: String(hData[i][6] || ""), tarih: String(hData[i][7] || ""),
-        cariKodu: String(hData[i][8] || ""),
+        cariKodu: String(hData[i][8] || ""), iskontoOrani: parseFloat(hData[i][9]) || 0,
       };
       break;
     }
@@ -380,6 +404,7 @@ function getCariDetay(cariId) {
       id: String(row[0]), cariId: String(row[1]), tarih: hucreTarihStr(row[2]),
       tip: String(row[3] || ""), tutar: parseFloat(row[4]) || 0,
       aciklama: String(row[5] || ""), kayitTarihi: hucreTarihStr(row[6]),
+      vade: hucreTarihStr(row[7]),
     });
   }
   // Tarihe göre sırala (eskiden yeniye), kümülatif bakiyeyi hesapla
@@ -400,8 +425,9 @@ function saveCari(body) {
   if (!ad) return { ok: false, hata: "Cari adı gerekli" };
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU"]);
+  const sheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
   ensureCariKoduColonu(sheet);
+  ensureCariIskontoColonu(sheet);
   const data = sheet.getDataRange().getValues();
 
   let id = String(body.id || "").trim();
@@ -423,6 +449,7 @@ function saveCari(body) {
     String(body.not || ""),
     satirIdx > 0 ? data[satirIdx - 1][7] : Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"),
     String(body.cariKodu || (satirIdx > 0 ? (data[satirIdx - 1][8] || "") : "")),
+    parseFloat(body.iskontoOrani) || 0,
   ];
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);
@@ -453,7 +480,7 @@ function silCari(body) {
   return { ok: false, hata: "Cari bulunamadı" };
 }
 
-// body: { cariId, tarih, tip (Borç/Alacak), tutar, aciklama }
+// body: { cariId, tarih, tip (Borç/Alacak), tutar, aciklama, vade (opsiyonel — Açık Hesap satışlarında son ödeme tarihi) }
 function cariHareketEkle(body) {
   const cariId = String(body.cariId || "").trim();
   const tip = String(body.tip || "").trim();
@@ -463,14 +490,67 @@ function cariHareketEkle(body) {
   if (tutar <= 0) return { ok: false, hata: "Tutar sıfırdan büyük olmalı" };
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
+  const sheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
+  ensureCariHareketVadeColonu(sheet);
   const id = "hk_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   sheet.appendRow([id, cariId, tarih, tip, tutar, String(body.aciklama || ""),
-    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), String(body.vade || "")]);
 
   cacheTemizle(["cariListesi"]); // bakiye değişti, liste önbelleği bayatladı
   return { ok: true, id: id };
+}
+
+// Vadesi bugünden önce olan, hâlâ ödenmemiş (Borç tipi) hareketleri listeler.
+// Basitlik için: cari o hareketten SONRA aynı tutarda toptan kapatılmış olsa bile
+// bu hareket "geciken" olarak görünmeye devam eder — asıl referans cari bakiyesidir,
+// bu yüzden cari bakiyesi 0 veya negatifse (borcu kalmamışsa) o carinin hareketleri listeye dahil edilmez.
+function vadesiGecmisAlacaklar() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
+  ensureCariHareketVadeColonu(hkSheet);
+  const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
+
+  const hData = hSheet.getDataRange().getValues();
+  const cariAdMap = {};
+  const bakiyeMap = {};
+  for (let i = 1; i < hData.length; i++) {
+    if (!hData[i][0]) continue;
+    cariAdMap[String(hData[i][0])] = String(hData[i][2] || "");
+  }
+
+  const hkData = hkSheet.getDataRange().getValues();
+  // Önce her carinin güncel bakiyesini hesapla (borcu kapanmışsa vade uyarısı gösterilmesin)
+  for (let i = 1; i < hkData.length; i++) {
+    const row = hkData[i];
+    const cariId = String(row[1] || "");
+    if (!cariId) continue;
+    const tip = String(row[3] || "");
+    const tutar = parseFloat(row[4]) || 0;
+    if (!bakiyeMap[cariId]) bakiyeMap[cariId] = 0;
+    bakiyeMap[cariId] += (tip === "Borç") ? tutar : -tutar;
+  }
+
+  const bugun = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd");
+  const sonuc = [];
+  for (let i = 1; i < hkData.length; i++) {
+    const row = hkData[i];
+    const cariId = String(row[1] || "");
+    if (!cariId) continue;
+    const tip = String(row[3] || "");
+    const vade = hucreTarihStr(row[7]);
+    if (tip !== "Borç" || !vade) continue;
+    if (vade >= bugun) continue; // henüz vadesi gelmemiş
+    if ((bakiyeMap[cariId] || 0) <= 0) continue; // carinin borcu kalmamış
+    sonuc.push({
+      id: String(row[0]), cariId: cariId, cariAd: cariAdMap[cariId] || "",
+      tarih: hucreTarihStr(row[2]), tutar: parseFloat(row[4]) || 0,
+      aciklama: String(row[5] || ""), vade: vade,
+      gecikenGunSayisi: Math.round((new Date(bugun) - new Date(vade)) / 86400000),
+    });
+  }
+  sonuc.sort((a, b) => a.vade < b.vade ? -1 : 1);
+  return { ok: true, hareketler: sonuc };
 }
 
 // body: { id }
@@ -694,6 +774,7 @@ function saveSatis(body) {
       tip: "Borç",
       tutar: toplamTutar,
       aciklama: cariHareketAciklamaOlustur("SATIS", id, "satis_" + String(body.belgeTipi || "Fatura"), body.aciklama),
+      vade: String(body.odemeTipi || "") === "Açık Hesap" ? String(body.vade || "") : "",
     });
   }
 
@@ -1504,6 +1585,75 @@ function getMuhasebeRaporu(body) {
     return { ok: true, tip: tip, satirlar: satirlar, toplam: toplam };
   }
 
+  if (tip === "karZarar") {
+    const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+    ensureSatisBelgeTipiColonu(sSheet);
+    const sData = sSheet.getDataRange().getValues();
+    const satisBelgeTipi = {}, satisTarih = {};
+    for (let i = 1; i < sData.length; i++) {
+      const id = String(sData[i][0] || "");
+      if (!id) continue;
+      satisBelgeTipi[id] = String(sData[i][8] || "") || "Fatura";
+      satisTarih[id] = String(sData[i][1] || "");
+    }
+
+    // Ürün adı → alış fiyatı eşleşmesi (Satış Kalemleri stokTanimId TUTMUYOR,
+    // sadece serbest metin ürün adı var; bu yüzden isim eşleşmesi kullanılıyor —
+    // stok tanımında olmayan/adı farklı yazılan ürünler maliyetsiz sayılır).
+    const stokListe = getStokTanimListesi().kalemler;
+    const alisFiyatHaritasi = {};
+    stokListe.forEach(s => { alisFiyatHaritasi[s.stokAdi.trim().toLocaleLowerCase('tr')] = s.alisFiyati; });
+
+    const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
+      ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI"]);
+    ensureSatisKalemVergiKolonlari(kSheet);
+    const kData = kSheet.getDataRange().getValues();
+
+    const urunMap = {}; // urunAdi -> {satisTutari, maliyet, miktar}
+    let toplamSatis = 0, toplamMaliyet = 0, eslesmeyenSayisi = 0;
+    for (let i = 1; i < kData.length; i++) {
+      const row = kData[i];
+      const satisId = String(row[1] || "");
+      if (!satisId) continue;
+      if (satisBelgeTipi[satisId] !== "Fatura") continue; // sadece kesilmiş faturalar
+      const tarih = satisTarih[satisId] || "";
+      if (!araligaDahilMi(tarih)) continue;
+
+      const urunAdi = String(row[2] || "").trim();
+      const miktar = parseFloat(row[3]) || 0;
+      const birimFiyat = parseFloat(row[5]) || 0;
+      const iskontoYuzde = parseFloat(row[7]) || 0;
+      const satirSatisTutari = miktar * birimFiyat * (1 - iskontoYuzde / 100);
+
+      const alisFiyati = alisFiyatHaritasi[urunAdi.toLocaleLowerCase('tr')];
+      const maliyetBilinmiyor = (alisFiyati === undefined);
+      if (maliyetBilinmiyor) eslesmeyenSayisi++;
+      const satirMaliyet = maliyetBilinmiyor ? 0 : (alisFiyati * miktar);
+
+      toplamSatis += satirSatisTutari;
+      toplamMaliyet += satirMaliyet;
+
+      if (!urunMap[urunAdi]) urunMap[urunAdi] = { urunAdi, miktar: 0, satisTutari: 0, maliyet: 0, maliyetBilinmiyor: false };
+      urunMap[urunAdi].miktar += miktar;
+      urunMap[urunAdi].satisTutari += satirSatisTutari;
+      urunMap[urunAdi].maliyet += satirMaliyet;
+      if (maliyetBilinmiyor) urunMap[urunAdi].maliyetBilinmiyor = true;
+    }
+
+    const satirlar = Object.values(urunMap).map(u => ({
+      urunAdi: u.urunAdi, miktar: u.miktar, satisTutari: u.satisTutari, maliyet: u.maliyet,
+      kar: u.satisTutari - u.maliyet, maliyetBilinmiyor: u.maliyetBilinmiyor,
+    }));
+    satirlar.sort((a, b) => b.kar - a.kar);
+
+    return {
+      ok: true, tip: tip, satirlar: satirlar,
+      toplamSatis: toplamSatis, toplamMaliyet: toplamMaliyet, toplamKar: toplamSatis - toplamMaliyet,
+      eslesmeyenSayisi: eslesmeyenSayisi,
+    };
+  }
+
   if (tip === "urunBazliHareket" || tip === "urunBazliSiparis" || tip === "urunBazliFatura") {
     const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
       ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
@@ -1752,13 +1902,13 @@ function silKrediKarti(body) {
 // Eski Stok Paneli'nden tamamen bağımsız çalışır. Excel'den toplu içe aktarma destekler.
 // ════════════════════════════════════════════════
 
-const STOK_TANIM_BASLIKLAR = ["ID","STOK_KODU","STOK_ADI","BIRIM1","AMBALAJ_MIKTARI","AMBALAJ_BIRIMI","ALIS_FIYATI","ALIS_ISKONTOSU","SATIS_FIYATI","SATIS_ISKONTOSU","KAYIT_TARIHI","MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID"];
+const STOK_TANIM_BASLIKLAR = ["ID","STOK_KODU","STOK_ADI","BIRIM1","AMBALAJ_MIKTARI","AMBALAJ_BIRIMI","ALIS_FIYATI","ALIS_ISKONTOSU","SATIS_FIYATI","SATIS_ISKONTOSU","KAYIT_TARIHI","MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD"];
 
-// Eskiden 11 sütunlu oluşturulmuş StokTanimlari sayfalarına, sona 5 yeni
+// Eskiden 11 sütunlu oluşturulmuş StokTanimlari sayfalarına, sona 7 yeni
 // tanım sütunu ekler (yalnızca eksikse — getOrCreateSheet zaten var olan
 // sayfalara başlık eklemediği için bu göç adımı gerekli).
 function ensureStokTanimEkColonlari(sheet) {
-  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID"];
+  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD"];
   eklenecek.forEach((baslik, idx) => {
     const kolonNo = 12 + idx;
     const mevcut = sheet.getRange(1, kolonNo).getValue();
@@ -1788,7 +1938,31 @@ function stokTanimSatiriNesneYap(row) {
     altUrunGrubuId: String(row[13] || ""),
     ebatId: String(row[14] || ""),
     renkId: String(row[15] || ""),
+    minStok: parseFloat(row[16]) || 0,
+    barkod: String(row[17] || ""),
   };
+}
+
+// Bir ürünün StokHareketleri defterindeki Giriş-Çıkış toplamından güncel stok
+// miktarını hesaplar. Tüm ürünler için tek seferde (map olarak) hesaplanır —
+// getStokTanimListesi her çağrıldığında tek tek sorgu atmamak için.
+function stokGuncelMiktarHaritasi() {
+  return cacheOkuVeyaHesapla("stokGuncelMiktarHaritasi", 60, function () {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+    const data = sheet.getDataRange().getValues();
+    const harita = {};
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const stokTanimId = String(row[2] || "");
+      if (!stokTanimId) continue;
+      const miktar = parseFloat(row[7]) || 0;
+      const hareketTipi = String(row[6] || "");
+      if (!harita[stokTanimId]) harita[stokTanimId] = 0;
+      harita[stokTanimId] += (hareketTipi === "Giriş") ? miktar : -miktar;
+    }
+    return harita;
+  });
 }
 
 function getStokTanimListesi() {
@@ -1797,18 +1971,33 @@ function getStokTanimListesi() {
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   ensureStokTanimEkColonlari(sheet);
   const data = sheet.getDataRange().getValues();
+  const guncelMiktarHaritasi = stokGuncelMiktarHaritasi();
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
-    sonuc.push(stokTanimSatiriNesneYap(data[i]));
+    const nesne = stokTanimSatiriNesneYap(data[i]);
+    nesne.guncelStok = guncelMiktarHaritasi[nesne.id] || 0;
+    sonuc.push(nesne);
   }
   return { ok: true, kalemler: sonuc };
   });
 }
 
+// Minimum stok tanımlanmış (minStok > 0) VE güncel stok bu seviyenin altında/eşit
+// olan ürünleri listeler. Not: "güncel stok" burada yalnızca Stok Hareket
+// defterindeki (Stok > İşlemler) manuel giriş/çıkış kayıtlarının toplamıdır;
+// Satış/Alış faturalarından otomatik düşülmez (Stok Hareket Raporu'ndaki
+// notla aynı sınırlama).
+function getKritikStokListesi() {
+  const tumListe = getStokTanimListesi().kalemler;
+  const sonuc = tumListe.filter(k => k.minStok > 0 && k.guncelStok <= k.minStok);
+  sonuc.sort((a, b) => (a.guncelStok - a.minStok) - (b.guncelStok - b.minStok));
+  return { ok: true, kalemler: sonuc };
+}
+
 // body: { id (varsa güncelleme), stokKodu, stokAdi, birim1, ambalajMiktari, ambalajBirimi,
 //         alisFiyati, alisIskontosu, satisFiyati, satisIskontosu,
-//         markaId, urunGrubuId, altUrunGrubuId, ebatId, renkId }
+//         markaId, urunGrubuId, altUrunGrubuId, ebatId, renkId, minStok, barkod }
 function saveStokTanim(body) {
   const stokAdi = String(body.stokAdi || "").trim();
   if (!stokAdi) return { ok: false, hata: "Stok adı gerekli" };
@@ -1843,6 +2032,8 @@ function saveStokTanim(body) {
     String(body.altUrunGrubuId || ""),
     String(body.ebatId || ""),
     String(body.renkId || ""),
+    parseFloat(body.minStok) || 0,
+    String(body.barkod || ""),
   ];
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);
