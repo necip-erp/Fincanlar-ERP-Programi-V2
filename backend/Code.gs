@@ -31,6 +31,7 @@ const SHEETS = {
   altUrunGruplari: "AltUrunGruplari",
   ebatlar: "Ebatlar",
   renkler: "Renkler",
+  aciklamaSablonlari: "AciklamaSablonlari",
 };
 
 // ── YARDIMCI FONKSİYONLAR ──
@@ -94,6 +95,82 @@ function hucreTarihStr(deger) {
       : Utilities.formatDate(deger, "Europe/Istanbul", "yyyy-MM-dd HH:mm");
   }
   return String(deger || "");
+}
+
+// ════════════════════════════════════════════════
+// AÇIKLAMA ŞABLONLARI (Ayarlar > Açıklama Şablonları — cari harekete otomatik
+// düşen açıklamanın işlem türüne/yöntemine göre nasıl yazılacağını belirler.
+// Kullanıcı özelleştirmezse ACIKLAMA_SABLON_VARSAYILAN'daki metin kullanılır.
+// ════════════════════════════════════════════════
+const ACIKLAMA_SABLON_VARSAYILAN = {
+  "satis_Fatura": "Satış Faturası",
+  "satis_Teklif": "Satış Teklifi",
+  "satis_Sipariş": "Satış Siparişi",
+  "alis": "Alış Faturası",
+  "alisiade": "Alış İadesi",
+  "tahsilat_Nakit": "Nakit Tahsilat",
+  "tahsilat_Havale/EFT": "Havale/EFT Tahsilat",
+  "tahsilat_Kredi Kartı": "Kredi Kartı Tahsilat",
+  "tahsilat_Çek": "Çek Tahsilat",
+  "odeme_Nakit": "Nakit Ödeme",
+  "odeme_Havale/EFT": "Havale/EFT Ödeme",
+  "odeme_Kredi Kartı": "Kredi Kartı Ödeme",
+  "odeme_Çek": "Çek Ödeme",
+};
+
+function aciklamaSablonlariHaritasi() {
+  return cacheOkuVeyaHesapla("aciklamaSablonlari", 300, function () {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = getOrCreateSheet(ss, SHEETS.aciklamaSablonlari, ["ANAHTAR", "METIN"]);
+    const data = sheet.getDataRange().getValues();
+    const harita = {};
+    for (let i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      harita[String(data[i][0])] = String(data[i][1] || "");
+    }
+    return harita;
+  });
+}
+
+function aciklamaSablonuAl(anahtar) {
+  const harita = aciklamaSablonlariHaritasi();
+  const kayitli = harita[anahtar];
+  return (kayitli !== undefined && kayitli !== "") ? kayitli : (ACIKLAMA_SABLON_VARSAYILAN[anahtar] || anahtar);
+}
+
+// Cari harekete/POS-banka hareketine düşen açıklamayı oluşturur:
+// "SATIS:st_123 | Satış Faturası - müşteri notu" gibi. Baştaki "PREFIX:id"
+// kısmı değişmez — hem işlem silinince ilgili hareketi bulmak, hem de Cari
+// Hareketler'de bir satıra tıklayınca doğru kaydı açmak için kullanılıyor.
+function cariHareketAciklamaOlustur(prefix, id, sablonAnahtari, kullaniciNotu) {
+  let s = prefix + ":" + id + " | " + aciklamaSablonuAl(sablonAnahtari);
+  if (kullaniciNotu) s += " - " + kullaniciNotu;
+  return s;
+}
+
+function getAciklamaSablonlari() {
+  const sonuc = {};
+  Object.keys(ACIKLAMA_SABLON_VARSAYILAN).forEach(a => { sonuc[a] = aciklamaSablonuAl(a); });
+  return { ok: true, sablonlar: sonuc };
+}
+
+// body: { sablonlar: { anahtar: metin, ... } }
+function saveAciklamaSablonlari(body) {
+  const sablonlar = body.sablonlar || {};
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.aciklamaSablonlari, ["ANAHTAR", "METIN"]);
+  const data = sheet.getDataRange().getValues();
+  Object.keys(sablonlar).forEach(anahtar => {
+    if (!ACIKLAMA_SABLON_VARSAYILAN.hasOwnProperty(anahtar)) return; // bilinmeyen anahtarları yok say
+    const metin = String(sablonlar[anahtar] || "").trim();
+    let bulundu = false;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === anahtar) { sheet.getRange(i + 1, 2).setValue(metin); bulundu = true; break; }
+    }
+    if (!bulundu) { sheet.appendRow([anahtar, metin]); data.push([anahtar, metin]); }
+  });
+  cacheTemizle(["aciklamaSablonlari"]);
+  return { ok: true };
 }
 
 function getOrCreateSheet(ss, name, headers) {
@@ -209,6 +286,11 @@ function handleRequest(e) {
       case "getMarkaListesi": result = getMarkaListesi(); break;
       case "saveMarka":       result = saveMarka(body); break;
       case "silMarka":        result = silMarka(body); break;
+      case "birimSiraGuncelle":     result = birimSiraGuncelle(body); break;
+      case "basitTanimSiraGuncelle": result = basitTanimSiraGuncelle(body); break;
+      case "markaSiraGuncelle":     result = markaSiraGuncelle(body); break;
+      case "getAciklamaSablonlari":  result = getAciklamaSablonlari(); break;
+      case "saveAciklamaSablonlari": result = saveAciklamaSablonlari(body); break;
       default: result = { error: "Bilinmeyen işlem: " + action };
     }
     return jsonResponse(result);
@@ -611,7 +693,7 @@ function saveSatis(body) {
       tarih: tarih,
       tip: "Borç",
       tutar: toplamTutar,
-      aciklama: "SATIS:" + id + (body.aciklama ? " - " + body.aciklama : ""),
+      aciklama: cariHareketAciklamaOlustur("SATIS", id, "satis_" + String(body.belgeTipi || "Fatura"), body.aciklama),
     });
   }
 
@@ -619,7 +701,7 @@ function saveSatis(body) {
   // (satış tutarı doğrudan banka hesabına havale ile ödenmiş demektir).
   if (String(body.odemeTipi || "") === "Havale" && bankaHesapId) {
     bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", toplamTutar,
-      "SATIS:" + id + (body.aciklama ? " - " + body.aciklama : ""));
+      cariHareketAciklamaOlustur("SATIS", id, "satis_" + String(body.belgeTipi || "Fatura"), body.aciklama));
   }
 
   return { ok: true, id: id, toplamTutar: toplamTutar };
@@ -789,7 +871,7 @@ function saveAlis(body) {
       tarih: tarih,
       tip: "Alacak",
       tutar: toplamTutar,
-      aciklama: "ALIS:" + id + (body.aciklama ? " - " + body.aciklama : ""),
+      aciklama: cariHareketAciklamaOlustur("ALIS", id, "alis", body.aciklama),
     });
   }
 
@@ -954,7 +1036,7 @@ function saveAlisIade(body) {
       tarih: tarih,
       tip: "Borç",
       tutar: toplamTutar,
-      aciklama: "ALISIADE:" + id + (body.aciklama ? " - " + body.aciklama : ""),
+      aciklama: cariHareketAciklamaOlustur("ALISIADE", id, "alisiade", body.aciklama),
     });
   }
 
@@ -1071,18 +1153,18 @@ function saveTahsilat(body) {
 
   cariHareketEkle({
     cariId: cariId, tarih: tarih, tip: "Alacak", tutar: tutar,
-    aciklama: "TAHSILAT:" + id + (body.aciklama ? " - " + body.aciklama : ""),
+    aciklama: cariHareketAciklamaOlustur("TAHSILAT", id, "tahsilat_" + yontem, body.aciklama),
   });
 
   // Kredi Kartı ile tahsilat yapıldıysa ve bir POS hesabı seçildiyse,
   // o POS hesabına BORÇ kaydı düşülür (POS/banka bize bu tutarı ödeyecek).
   if (yontem === "Kredi Kartı" && posHesapId) {
-    posHareketEkle(posHesapId, tarih, "Borç", tutar, "TAHSILAT:" + id + (body.aciklama ? " - " + body.aciklama : ""));
+    posHareketEkle(posHesapId, tarih, "Borç", tutar, cariHareketAciklamaOlustur("TAHSILAT", id, "tahsilat_" + yontem, body.aciklama));
   }
 
   // Havale/EFT ile tahsilat yapıldıysa ve bir banka hesabı seçildiyse, o hesaba GİRİŞ kaydı düşülür.
   if (yontem === "Havale/EFT" && bankaHesapId) {
-    bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", tutar, "TAHSILAT:" + id + (body.aciklama ? " - " + body.aciklama : ""));
+    bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", tutar, cariHareketAciklamaOlustur("TAHSILAT", id, "tahsilat_" + yontem, body.aciklama));
   }
 
   return { ok: true, id: id };
@@ -1199,18 +1281,18 @@ function saveOdeme(body) {
 
   cariHareketEkle({
     cariId: cariId, tarih: tarih, tip: "Borç", tutar: tutar,
-    aciklama: "ODEME:" + id + (body.aciklama ? " - " + body.aciklama : ""),
+    aciklama: cariHareketAciklamaOlustur("ODEME", id, "odeme_" + yontem, body.aciklama),
   });
 
   // Kredi Kartı ile ödeme yapıldıysa ve bir POS hesabı seçildiyse, o hesaba
   // Alacak kaydı düşülür (Tahsilat'ın tam tersi yönde — kartla ödeme yaptık).
   if (yontem === "Kredi Kartı" && posHesapId) {
-    posHareketEkle(posHesapId, tarih, "Alacak", tutar, "ODEME:" + id + (body.aciklama ? " - " + body.aciklama : ""));
+    posHareketEkle(posHesapId, tarih, "Alacak", tutar, cariHareketAciklamaOlustur("ODEME", id, "odeme_" + yontem, body.aciklama));
   }
 
   // Havale/EFT ile ödeme yapıldıysa ve bir banka hesabı seçildiyse, o hesaptan Çıkış kaydı düşülür.
   if (yontem === "Havale/EFT" && bankaHesapId) {
-    bankaHesapHareketEkle(bankaHesapId, tarih, "Çıkış", tutar, "ODEME:" + id + (body.aciklama ? " - " + body.aciklama : ""));
+    bankaHesapHareketEkle(bankaHesapId, tarih, "Çıkış", tutar, cariHareketAciklamaOlustur("ODEME", id, "odeme_" + yontem, body.aciklama));
   }
 
   return { ok: true, id: id };
@@ -1970,7 +2052,16 @@ function getStokHareketListesi(body) {
 // alanı serbest metin olarak kalır ama kullanıcı arayüzde buradaki
 // tanımlı birimlerden seçim yapabilir.)
 // ════════════════════════════════════════════════
-const BIRIM_BASLIKLAR = ["ID", "AD"];
+const BIRIM_BASLIKLAR = ["ID", "AD", "SIRA"];
+
+// Bir listeyi SIRA alanına göre artan sırada döndürür; SIRA boş/0 olan eski
+// kayıtlar sheet'teki doğal sırasında en sona düşer (Array.sort kararlıdır).
+function siraliDizile(liste) {
+  return liste
+    .map((k, idx) => ({ k: k, s: k.sira > 0 ? k.sira : 1000000 + idx }))
+    .sort((a, b) => a.s - b.s)
+    .map(x => x.k);
+}
 
 function getBirimListesi() {
   return cacheOkuVeyaHesapla("birimListesi", 300, function () {
@@ -1980,9 +2071,9 @@ function getBirimListesi() {
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
-    sonuc.push({ id: String(data[i][0]), ad: String(data[i][1] || "") });
+    sonuc.push({ id: String(data[i][0]), ad: String(data[i][1] || ""), sira: parseFloat(data[i][2]) || 0 });
   }
-  return { ok: true, birimler: sonuc };
+  return { ok: true, birimler: siraliDizile(sonuc) };
   });
 }
 
@@ -2003,10 +2094,28 @@ function saveBirim(body) {
       }
     }
   }
+  const ss2Data = sheet.getDataRange().getValues();
+  const maxSira = ss2Data.slice(1).reduce((m, r) => Math.max(m, parseFloat(r[2]) || 0), 0);
   id = "bir_" + Date.now();
-  sheet.appendRow([id, ad]);
+  sheet.appendRow([id, ad, maxSira + 1]);
   cacheTemizle(["birimListesi"]);
   return { ok: true, id: id };
+}
+
+// body: { tip: "birim", sirali: [id1, id2, ...] } — verilen sırayla SIRA alanını 1..n olarak yeniden yazar.
+function birimSiraGuncelle(body) {
+  const sirali = Array.isArray(body.sirali) ? body.sirali : [];
+  if (sirali.length === 0) return { ok: false, hata: "sirali gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.birimTanimlari, BIRIM_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  sirali.forEach((id, idx) => {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(id)) { sheet.getRange(i + 1, 3).setValue(idx + 1); break; }
+    }
+  });
+  cacheTemizle(["birimListesi"]);
+  return { ok: true };
 }
 
 function silBirim(body) {
@@ -2023,9 +2132,11 @@ function silBirim(body) {
 
 // ════════════════════════════════════════════════
 // STOK TANIMLARI İÇİN EK TANIM LİSTELERİ (Stok > Tanımlar altında —
-// Ürün Grubu, Alt Ürün Grubu, Ebat, Renk. Birim'le aynı [ID, AD] şemasını
-// kullanır; tek bir "tip" parametresiyle 4 listeyi birden yönetir.
-// Marka ayrı tutulur çünkü ayrıca bir KOD alanı gerektirir.)
+// Ürün Grubu, Alt Ürün Grubu, Ebat, Renk. Tek bir "tip" parametresiyle 4
+// listeyi birden yönetir. Şema: [ID, AD, UST_ID, SIRA] — UST_ID sadece
+// Alt Ürün Grubu için kullanılır (hangi Ürün Grubuna bağlı olduğu),
+// diğerlerinde boş kalır. Marka ayrı tutulur çünkü ayrıca bir KOD
+// alanı gerektirir.)
 // ════════════════════════════════════════════════
 const BASIT_TANIM_SHEET_ADI = {
   urunGrubu: SHEETS.urunGruplari,
@@ -2039,45 +2150,48 @@ const BASIT_TANIM_CACHE_ANAHTARI = {
   ebat: "ebatListesi",
   renk: "renkListesi",
 };
+const BASIT_TANIM_BASLIKLAR = ["ID", "AD", "UST_ID", "SIRA"];
 
 function getBasitTanimListesi(tip) {
   const sheetAdi = BASIT_TANIM_SHEET_ADI[tip];
   if (!sheetAdi) return { ok: false, hata: "Geçersiz tanım tipi" };
   return cacheOkuVeyaHesapla(BASIT_TANIM_CACHE_ANAHTARI[tip], 300, function () {
     const ss = SpreadsheetApp.openById(SHEET_ID);
-    const sheet = getOrCreateSheet(ss, sheetAdi, BIRIM_BASLIKLAR);
+    const sheet = getOrCreateSheet(ss, sheetAdi, BASIT_TANIM_BASLIKLAR);
     const data = sheet.getDataRange().getValues();
     const sonuc = [];
     for (let i = 1; i < data.length; i++) {
       if (!data[i][0]) continue;
-      sonuc.push({ id: String(data[i][0]), ad: String(data[i][1] || "") });
+      sonuc.push({ id: String(data[i][0]), ad: String(data[i][1] || ""), ustId: String(data[i][2] || ""), sira: parseFloat(data[i][3]) || 0 });
     }
-    return { ok: true, kalemler: sonuc };
+    return { ok: true, kalemler: siraliDizile(sonuc) };
   });
 }
 
-// body: { tip, id (varsa güncelleme), ad }
+// body: { tip, id (varsa güncelleme), ad, ustId (yalnızca altUrunGrubu için: bağlı olduğu Ürün Grubu id'si) }
 function saveBasitTanim(body) {
   const tip = String(body.tip || "");
   const sheetAdi = BASIT_TANIM_SHEET_ADI[tip];
   if (!sheetAdi) return { ok: false, hata: "Geçersiz tanım tipi" };
   const ad = String(body.ad || "").trim();
   if (!ad) return { ok: false, hata: "Ad gerekli" };
+  const ustId = String(body.ustId || "");
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = getOrCreateSheet(ss, sheetAdi, BIRIM_BASLIKLAR);
+  const sheet = getOrCreateSheet(ss, sheetAdi, BASIT_TANIM_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
   let id = String(body.id || "").trim();
   if (id) {
-    const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === id) {
-        sheet.getRange(i + 1, 1, 1, 2).setValues([[id, ad]]);
+        sheet.getRange(i + 1, 1, 1, 3).setValues([[id, ad, ustId]]);
         cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]);
         return { ok: true, id: id };
       }
     }
   }
+  const maxSira = data.slice(1).reduce((m, r) => Math.max(m, parseFloat(r[3]) || 0), 0);
   id = tip.slice(0, 3) + "_" + Date.now();
-  sheet.appendRow([id, ad]);
+  sheet.appendRow([id, ad, ustId, maxSira + 1]);
   cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]);
   return { ok: true, id: id };
 }
@@ -2090,12 +2204,31 @@ function silBasitTanim(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = getOrCreateSheet(ss, sheetAdi, BIRIM_BASLIKLAR);
+  const sheet = getOrCreateSheet(ss, sheetAdi, BASIT_TANIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]); return { ok: true }; }
   }
   return { ok: false, hata: "Kayıt bulunamadı" };
+}
+
+// body: { tip, sirali: [id1, id2, ...] }
+function basitTanimSiraGuncelle(body) {
+  const tip = String(body.tip || "");
+  const sheetAdi = BASIT_TANIM_SHEET_ADI[tip];
+  if (!sheetAdi) return { ok: false, hata: "Geçersiz tanım tipi" };
+  const sirali = Array.isArray(body.sirali) ? body.sirali : [];
+  if (sirali.length === 0) return { ok: false, hata: "sirali gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, sheetAdi, BASIT_TANIM_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  sirali.forEach((id, idx) => {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(id)) { sheet.getRange(i + 1, 4).setValue(idx + 1); break; }
+    }
+  });
+  cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]);
+  return { ok: true };
 }
 
 // ════════════════════════════════════════════════
@@ -2104,7 +2237,7 @@ function silBasitTanim(body) {
 // ilk 2 hanesiyle EŞLEŞMESİ ÖNERİLEN bir referans kaydıdır — Stok Kodu
 // serbest metin olarak kalır, otomatik senkronize edilmez.)
 // ════════════════════════════════════════════════
-const MARKA_BASLIKLAR = ["ID", "KOD", "AD"];
+const MARKA_BASLIKLAR = ["ID", "KOD", "AD", "SIRA"];
 
 function getMarkaListesi() {
   return cacheOkuVeyaHesapla("markaListesi", 300, function () {
@@ -2114,9 +2247,9 @@ function getMarkaListesi() {
     const sonuc = [];
     for (let i = 1; i < data.length; i++) {
       if (!data[i][0]) continue;
-      sonuc.push({ id: String(data[i][0]), kod: String(data[i][1] || ""), ad: String(data[i][2] || "") });
+      sonuc.push({ id: String(data[i][0]), kod: String(data[i][1] || ""), ad: String(data[i][2] || ""), sira: parseFloat(data[i][3]) || 0 });
     }
-    return { ok: true, markalar: sonuc };
+    return { ok: true, markalar: siraliDizile(sonuc) };
   });
 }
 
@@ -2128,9 +2261,9 @@ function saveMarka(body) {
   if (kod.length !== 2) return { ok: false, hata: "Marka kodu 2 karakter olmalı" };
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.markalar, MARKA_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
   let id = String(body.id || "").trim();
   if (id) {
-    const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === id) {
         sheet.getRange(i + 1, 1, 1, 3).setValues([[id, kod, ad]]);
@@ -2139,8 +2272,9 @@ function saveMarka(body) {
       }
     }
   }
+  const maxSira = data.slice(1).reduce((m, r) => Math.max(m, parseFloat(r[3]) || 0), 0);
   id = "mrk_" + Date.now();
-  sheet.appendRow([id, kod, ad]);
+  sheet.appendRow([id, kod, ad, maxSira + 1]);
   cacheTemizle(["markaListesi"]);
   return { ok: true, id: id };
 }
@@ -2155,6 +2289,22 @@ function silMarka(body) {
     if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["markaListesi"]); return { ok: true }; }
   }
   return { ok: false, hata: "Marka bulunamadı" };
+}
+
+// body: { sirali: [id1, id2, ...] }
+function markaSiraGuncelle(body) {
+  const sirali = Array.isArray(body.sirali) ? body.sirali : [];
+  if (sirali.length === 0) return { ok: false, hata: "sirali gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.markalar, MARKA_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  sirali.forEach((id, idx) => {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(id)) { sheet.getRange(i + 1, 4).setValue(idx + 1); break; }
+    }
+  });
+  cacheTemizle(["markaListesi"]);
+  return { ok: true };
 }
 
 // ════════════════════════════════════════════════
