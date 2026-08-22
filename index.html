@@ -24,6 +24,8 @@
 
   --green:#15803d; --green-l:#e3f6e9;
   --red:#b91c1c;   --red-l:#fbe9e9;
+  --violet:#6d28d9; --violet-l:#efe9fc;
+  --teal:#0f766e;   --teal-l:#e1f5f2;
 
   --r:10px; --r-sm:7px; --r-lg:16px;
   --shadow-sm:0 1px 2px rgba(20,22,30,.05), 0 1px 1px rgba(20,22,30,.04);
@@ -58,26 +60,29 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 .searchwrap input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--border);border-radius:20px;background:var(--bg3);font-size:14px;color:var(--text);outline:none;transition:border-color var(--t),background var(--t),box-shadow var(--t)}
 .searchwrap input:focus{border-color:var(--blue);background:var(--bg2);box-shadow:0 0 0 3px var(--blue-l)}
 .searchwrap .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;pointer-events:none}
-.homebtn{margin-left:auto;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text2);font-size:12px;cursor:pointer;display:none;transition:background var(--t),border-color var(--t)}
-.homebtn:hover{background:var(--border)}
+.homebtn{margin-left:auto;padding:6px 14px;border:1px solid var(--border);border-radius:20px;background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;display:none;transition:background var(--t),border-color var(--t),color var(--t)}
+.homebtn:hover{background:var(--blue-l);border-color:var(--blue);color:var(--blue)}
 .homebtn.show{display:inline-block}
 
 /* ── ANA ALAN ── */
 .main{flex:1;overflow:auto;position:relative}
 
 /* Karşılama ekranı — modül ikonları */
-#home{max-width:900px;margin:0 auto;padding:40px 20px}
-#home h1{font-size:20px;margin:0 0 4px;text-align:center}
-#home p.sub{color:var(--text3);text-align:center;margin:0 0 32px;font-size:13px}
-.modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
-.modtile{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
+#home{max-width:960px;margin:0 auto;padding:56px 20px 40px}
+#home .greet-ic{font-size:34px;display:block;text-align:center;margin-bottom:10px;animation:fincanFadeIn .4s var(--ease)}
+#home h1{font-size:26px;font-weight:800;margin:0 0 6px;text-align:center;letter-spacing:-.02em}
+#home p.sub{color:var(--text3);text-align:center;margin:0 0 40px;font-size:14px}
+.modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
+.modtile{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:24px 16px 28px;text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
 .modtile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--blue),var(--amber));transform:scaleX(0);transform-origin:left;transition:transform .22s var(--ease)}
-.modtile:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:transparent}
+.modtile:hover{transform:translateY(-4px);box-shadow:var(--shadow-md);border-color:transparent}
 .modtile:hover::before{transform:scaleX(1)}
-.modtile .ic{font-size:30px;margin-bottom:10px;display:block;transition:transform .18s var(--ease)}
-.modtile:hover .ic{transform:scale(1.08)}
-.modtile .lbl{font-weight:700;font-size:13px}
-.modtile .desc{color:var(--text3);font-size:10px;margin-top:3px}
+.modtile::after{content:"→";position:absolute;right:14px;bottom:10px;font-size:13px;color:var(--text3);opacity:0;transform:translateX(-4px);transition:opacity .18s var(--ease),transform .18s var(--ease)}
+.modtile:hover::after{opacity:1;transform:translateX(0)}
+.modtile .ic{font-size:22px;width:50px;height:50px;display:flex;align-items:center;justify-content:center;border-radius:14px;background:var(--blue-l);margin:0 auto 12px;transition:transform .2s var(--ease)}
+.modtile:hover .ic{transform:scale(1.08) rotate(-4deg)}
+.modtile .lbl{font-weight:700;font-size:14px}
+.modtile .desc{color:var(--text3);font-size:11px;margin-top:4px;line-height:1.4}
 
 /* Modül içerik alanı */
 .modview{position:absolute;inset:0;display:none;flex-direction:column}
@@ -196,6 +201,24 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
 #mod-tahsilat{flex-direction:row}
 #mod-odeme{flex-direction:row}
 .modal-box-wide{max-width:560px}
+.rehber-box{width:100%;max-width:720px;height:min(600px,85vh);display:flex;flex-direction:column;background:var(--bg2);border-radius:16px;box-shadow:var(--shadow-md);animation:fincanModalIn .18s var(--ease);overflow:hidden}
+.rehber-head{display:flex;align-items:center;gap:10px;padding:16px 18px 12px;border-bottom:1px solid var(--border)}
+.rehber-head h3{margin:0;font-size:15px;flex-shrink:0}
+.rehber-head input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:20px;background:var(--bg3);font-size:13px;outline:none;transition:border-color var(--t),box-shadow var(--t)}
+.rehber-head input:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-l);background:var(--bg2)}
+.rehber-kapat{background:none;border:none;font-size:18px;color:var(--text3);cursor:pointer;padding:4px;line-height:1;transition:color var(--t)}
+.rehber-kapat:hover{color:var(--text)}
+.rehber-tbl-wrap{flex:1;overflow:auto}
+table.rehber-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+table.rehber-tbl th{position:sticky;top:0;background:var(--bg2);text-align:left;padding:8px 12px;color:var(--text3);font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
+table.rehber-tbl th:hover{color:var(--text)}
+table.rehber-tbl th .ok{opacity:.5;margin-left:3px}
+table.rehber-tbl td{padding:8px 12px;border-bottom:1px solid var(--border)}
+table.rehber-tbl tr{cursor:pointer;transition:background var(--t)}
+table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(--blue-l)}
+.rehber-alt{padding:10px 18px;border-top:1px solid var(--border);color:var(--text3);font-size:11px}
+.rehber-ac-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--bg3);border:1px solid var(--border);border-radius:6px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;transition:background var(--t),border-color var(--t)}
+.rehber-ac-btn:hover{background:var(--blue-l);border-color:var(--blue)}
 .modal-box-xwide{max-width:920px}
 .satis-kalem-basliklar{display:flex;gap:6px;margin-bottom:4px;font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:700}
 .satis-kalem-basliklar>span{padding:0 9px}
@@ -272,7 +295,8 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
 
 <div class="main">
   <div id="home">
-    <h1>Hoş geldin</h1>
+    <span class="greet-ic" id="greet-ic">👋</span>
+    <h1 id="greet-baslik">Hoş geldin</h1>
     <p class="sub">Bir modül seç, ya da yukarıdan ürün ara</p>
     <div class="modgrid" id="modgrid"></div>
   </div>
@@ -697,16 +721,29 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
 
 <script>
 const MODULLER = [
-  {id:"stok",     ic:"📦", lbl:"Stok",      desc:"Stok listesi ve takip"},
-  {id:"cari",     ic:"👥", lbl:"Cari",      desc:"Müşteri / tedarikçi"},
-  {id:"tahsilat", ic:"💰", lbl:"Tahsilat",  desc:"Gelen ödemeler"},
-  {id:"odeme",    ic:"💳", lbl:"Ödeme",     desc:"Giden ödemeler"},
-  {id:"alis",     ic:"📥", lbl:"Alış",      desc:"Satın alma"},
-  {id:"satis",    ic:"📤", lbl:"Satış",     desc:"Satış işlemleri"},
-  {id:"finans",   ic:"📊", lbl:"Finans",    desc:"Genel finans durumu"},
-  {id:"rapor",    ic:"📈", lbl:"Rapor",     desc:"Raporlar"},
-  {id:"ayarlar",  ic:"⚙️", lbl:"Ayarlar",   desc:"Kısayollar ve düzen"},
+  {id:"stok",     ic:"📦", lbl:"Stok",      desc:"Stok listesi ve takip",   renk:"blue"},
+  {id:"cari",     ic:"👥", lbl:"Cari",      desc:"Müşteri / tedarikçi",     renk:"amber"},
+  {id:"tahsilat", ic:"💰", lbl:"Tahsilat",  desc:"Gelen ödemeler",          renk:"green"},
+  {id:"odeme",    ic:"💳", lbl:"Ödeme",     desc:"Giden ödemeler",          renk:"red"},
+  {id:"alis",     ic:"📥", lbl:"Alış",      desc:"Satın alma",              renk:"violet"},
+  {id:"satis",    ic:"📤", lbl:"Satış",     desc:"Satış işlemleri",         renk:"teal"},
+  {id:"finans",   ic:"📊", lbl:"Finans",    desc:"Genel finans durumu",     renk:"amber"},
+  {id:"rapor",    ic:"📈", lbl:"Rapor",     desc:"Raporlar",                renk:"teal"},
+  {id:"ayarlar",  ic:"⚙️", lbl:"Ayarlar",   desc:"Kısayollar ve düzen",     renk:"neutral"},
 ];
+
+// Saate göre karşılama mesajı — sabah/gündüz/akşam/gece için ayrı emoji + metin.
+(function(){
+  const saat = new Date().getHours();
+  let ic = "👋", metin = "Hoş geldin";
+  if(saat >= 5 && saat < 12){ ic = "☀️"; metin = "Günaydın"; }
+  else if(saat >= 12 && saat < 18){ ic = "👋"; metin = "İyi günler"; }
+  else if(saat >= 18 && saat < 22){ ic = "🌇"; metin = "İyi akşamlar"; }
+  else { ic = "🌙"; metin = "İyi geceler"; }
+  const icEl = document.getElementById("greet-ic"), baslikEl = document.getElementById("greet-baslik");
+  if(icEl) icEl.textContent = ic;
+  if(baslikEl) baslikEl.textContent = metin;
+})();
 
 // ── Modül sırası (sürükle-bırak ile değiştirilebilir, localStorage'da saklanır) ──
 function modulSirasiniAl(){
@@ -728,17 +765,21 @@ function modulSirasiniKaydet(idListesi){
 let _surukleneId = null;
 function modgridCiz(){
   const sirali = modulSirasiniAl();
-  document.getElementById("modgrid").innerHTML = sirali.map(m=>`
+  document.getElementById("modgrid").innerHTML = sirali.map(m=>{
+    const renkli = m.renk && m.renk !== "neutral";
+    const icStil = renkli ? `background:var(--${m.renk}-l);color:var(--${m.renk})` : "";
+    return `
     <div class="modtile" draggable="true" data-id="${m.id}"
          onclick="modulAcYeniSekme('${m.id}')"
          ondragstart="_surukleneId='${m.id}'; this.classList.add('surukleniyor')"
          ondragend="this.classList.remove('surukleniyor')"
          ondragover="event.preventDefault()"
          ondrop="modulSiraDegistir('${m.id}')">
-      <span class="ic">${m.ic}</span>
+      <span class="ic" style="${icStil}">${m.ic}</span>
       <div class="lbl">${m.lbl}</div>
       <div class="desc">${m.desc}</div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 function modulSiraDegistir(hedefId){
   if(!_surukleneId || _surukleneId === hedefId) return;
@@ -879,6 +920,147 @@ function tarihGoster(deger){
   if(!m) return s;
   const gun = m[1] && m[2] && m[3] ? `${m[3]}/${m[2]}/${m[1]}` : s;
   return m[4] && m[5] ? `${gun} ${m[4]}:${m[5]}` : gun;
+}
+
+// ══════════════ CARİ / STOK REHBERİ (Wolvox tarzı büyük seçim penceresi) ══════════════
+// Küçük öneri kutularının yanına eklenen "🔍" butonuyla açılır: sütunlu, sıralanabilir,
+// arama kutulu büyük bir liste penceresi. Satır çift tıklanınca ya da ok tuşlarıyla
+// gezinip Enter'a basınca seçilen callback fonksiyonuna kaydı iletir.
+let _rehberState = { tip:null, satirlar:[], filtreli:[], siraAlan:null, siraYon:1, aktifIdx:-1, callback:null };
+
+function rehberAc(tip, callback){
+  _rehberState = { tip, satirlar:[], filtreli:[], siraAlan:null, siraYon:1, aktifIdx:-1, callback };
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "rehber-modal-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) rehberKapat(); };
+  const baslik = tip==='cari' ? 'Cari Rehberi' : 'Stok Rehberi';
+  overlay.innerHTML = `
+    <div class="rehber-box" onclick="event.stopPropagation()">
+      <div class="rehber-head">
+        <h3>${baslik}</h3>
+        <input id="rehber-ara" type="text" placeholder="Ara..." autocomplete="off" oninput="rehberFiltrele(this.value)" onkeydown="rehberKlavye(event)">
+        <button class="rehber-kapat" onclick="rehberKapat()" title="Kapat">✕</button>
+      </div>
+      <div class="rehber-tbl-wrap" id="rehber-tbl-wrap"><div class="cari-empty">Yükleniyor...</div></div>
+      <div class="rehber-alt">Çift tıklayarak ya da ok tuşlarıyla seçip Enter'a basarak seçin · Esc ile kapatın · Sütun başlığına tıklayarak sıralayın</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(()=>{ const el = document.getElementById("rehber-ara"); if(el) el.focus(); }, 50);
+
+  if(tip==='cari'){
+    if(_cariYuklendi && _cariListe.length){ rehberVeriGeldi(_cariListe); }
+    else cariApi("getCariListesi").then(res=>{ if(res.ok){ _cariListe=res.cariler; _cariYuklendi=true; rehberVeriGeldi(res.cariler); } });
+  } else {
+    if(_stokTanimYuklendi && _stokTanimListe.length){ rehberVeriGeldi(_stokTanimListe); }
+    else cariApi("getStokTanimListesi").then(res=>{ if(res.ok){ _stokTanimListe=res.kalemler; _stokTanimYuklendi=true; rehberVeriGeldi(res.kalemler); } });
+  }
+}
+
+function rehberVeriGeldi(satirlar){
+  _rehberState.satirlar = satirlar;
+  _rehberState.filtreli = satirlar;
+  rehberTabloCiz();
+}
+
+function rehberKapat(){
+  const el = document.getElementById("rehber-modal-overlay");
+  if(el) el.remove();
+}
+
+function rehberFiltrele(deger){
+  const q = deger.trim().toLocaleLowerCase('tr');
+  const tip = _rehberState.tip;
+  let filtreli = _rehberState.satirlar;
+  if(q){
+    filtreli = filtreli.filter(k=>{
+      if(tip==='cari') return (k.ad||"").toLocaleLowerCase('tr').includes(q) || (k.cariKodu||"").toLocaleLowerCase('tr').includes(q);
+      return (k.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (k.stokKodu||"").toLocaleLowerCase('tr').includes(q) ||
+             (k.markaKodu||"").toLocaleLowerCase('tr').includes(q) || (k.barkod||"").toLocaleLowerCase('tr').includes(q);
+    });
+  }
+  _rehberState.filtreli = filtreli;
+  _rehberState.aktifIdx = filtreli.length ? 0 : -1;
+  rehberTabloCiz();
+}
+
+function rehberSirala(alan){
+  if(_rehberState.siraAlan === alan) _rehberState.siraYon *= -1;
+  else { _rehberState.siraAlan = alan; _rehberState.siraYon = 1; }
+  _rehberState.filtreli = _rehberState.filtreli.slice().sort((a,b)=>{
+    let av = a[alan], bv = b[alan];
+    if(typeof av === "string") av = av.toLocaleLowerCase('tr');
+    if(typeof bv === "string") bv = bv.toLocaleLowerCase('tr');
+    if(av < bv) return -1*_rehberState.siraYon;
+    if(av > bv) return 1*_rehberState.siraYon;
+    return 0;
+  });
+  rehberTabloCiz();
+}
+
+function rehberTabloCiz(){
+  const wrap = document.getElementById("rehber-tbl-wrap");
+  if(!wrap) return;
+  const tip = _rehberState.tip;
+  const liste = _rehberState.filtreli;
+  const okIsareti = (alan) => _rehberState.siraAlan===alan ? `<span class="ok">${_rehberState.siraYon===1?'▲':'▼'}</span>` : '';
+
+  if(tip==='cari'){
+    wrap.innerHTML = `
+      <table class="rehber-tbl">
+        <thead><tr>
+          <th onclick="rehberSirala('cariKodu')">Kod${okIsareti('cariKodu')}</th>
+          <th onclick="rehberSirala('ad')">Ad${okIsareti('ad')}</th>
+          <th onclick="rehberSirala('tip')">Tip${okIsareti('tip')}</th>
+          <th onclick="rehberSirala('bakiye')">Bakiye${okIsareti('bakiye')}</th>
+        </tr></thead>
+        <tbody>
+          ${liste.length===0 ? '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
+          liste.map((c,i)=>`<tr class="${i===_rehberState.aktifIdx?'rehber-aktif':''}" onclick="rehberSecReal(${i})" ondblclick="rehberSecReal(${i})">
+            <td>${c.cariKodu||'—'}</td><td>${c.ad}</td><td>${c.tip}</td><td class="${bakiyeSinifi(c.bakiye)}">${paraFormat(c.bakiye)}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`;
+  } else {
+    wrap.innerHTML = `
+      <table class="rehber-tbl">
+        <thead><tr>
+          <th onclick="rehberSirala('markaKodu')">Marka${okIsareti('markaKodu')}</th>
+          <th onclick="rehberSirala('stokKodu')">Kod${okIsareti('stokKodu')}</th>
+          <th onclick="rehberSirala('stokAdi')">Ad${okIsareti('stokAdi')}</th>
+          <th onclick="rehberSirala('birim1')">Birim${okIsareti('birim1')}</th>
+          <th onclick="rehberSirala('guncelStok')">Güncel Stok${okIsareti('guncelStok')}</th>
+          <th onclick="rehberSirala('satisFiyati')">Satış Fiyatı${okIsareti('satisFiyati')}</th>
+        </tr></thead>
+        <tbody>
+          ${liste.length===0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
+          liste.map((s,i)=>`<tr class="${i===_rehberState.aktifIdx?'rehber-aktif':''}" onclick="rehberSecReal(${i})" ondblclick="rehberSecReal(${i})">
+            <td>${s.markaKodu?`<span class="tip-badge">${s.markaKodu}</span>`:'—'}</td><td>${s.stokKodu||'—'}</td><td>${s.stokAdi}</td><td>${s.birim1||'—'}</td>
+            <td>${s.minStok>0 && s.guncelStok<=s.minStok?`<span class="hk-borc">${s.guncelStok}</span>`:(s.guncelStok||0)}</td><td>${paraFormat(s.satisFiyati)}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`;
+  }
+}
+
+function rehberSecReal(idx){
+  const item = _rehberState.filtreli[idx];
+  if(!item) return;
+  const cb = _rehberState.callback;
+  rehberKapat();
+  if(cb) cb(item);
+}
+
+function rehberKlavye(e){
+  const liste = _rehberState.filtreli;
+  if(e.key === "ArrowDown"){ e.preventDefault(); _rehberState.aktifIdx = Math.min(_rehberState.aktifIdx+1, liste.length-1); rehberTabloCiz(); rehberAktifSatiriGoster(); }
+  else if(e.key === "ArrowUp"){ e.preventDefault(); _rehberState.aktifIdx = Math.max(_rehberState.aktifIdx-1, 0); rehberTabloCiz(); rehberAktifSatiriGoster(); }
+  else if(e.key === "Enter"){ e.preventDefault(); if(_rehberState.aktifIdx>=0) rehberSecReal(_rehberState.aktifIdx); }
+  else if(e.key === "Escape"){ rehberKapat(); }
+}
+function rehberAktifSatiriGoster(){
+  const el = document.querySelector(".rehber-aktif");
+  if(el) el.scrollIntoView({block:"nearest"});
 }
 
 // ── Açılan öneri/arama kutularında ok tuşlarıyla gezinme (genel yardımcı) ──
@@ -1426,12 +1608,13 @@ function satisModalAc(onCariId, onBelgeTipi){
         </select>
       </div>
       <div class="fld" style="position:relative"><label>Müşteri (Cari)</label>
-        <input id="sm-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest müşteri)..." autocomplete="off"
+        <input id="sm-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest müşteri)..." autocomplete="off" style="padding-right:34px"
                value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
                oninput="smCariAramaDegisti(this.value)"
                onfocus="smCariOneriGoster()"
                onblur="setTimeout(()=>smCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'sm-cari-oneri')">
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('sm-cari').value=c.id; document.getElementById('sm-cari-arama').value=c.ad; satisCariSecimiDegisti(); if(c.iskontoOrani>0){ _yeniSatisKalemleri.forEach(k=>{ if(!k.iskontoYuzde) k.iskontoYuzde=c.iskontoOrani; }); satisKalemlerCiz(); satisToplamGuncelle(); } })">🔍</button>
         <input type="hidden" id="sm-cari" value="${onCariId||''}">
         <div id="sm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
@@ -1566,11 +1749,12 @@ function satisKalemlerCiz(){
   el.innerHTML = _yeniSatisKalemleri.map((k,idx)=>`
     <div class="satis-kalem-satir">
       <div style="flex:1;position:relative">
-        <input class="satis-kalem-urun" style="width:100%" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
+        <input class="satis-kalem-urun" style="width:100%;padding-right:32px" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
                oninput="satisKalemAlanDegisti(${idx},'urunAdi',this.value); urunOneriGoster(${idx})"
                onblur="setTimeout(()=>urunOneriKapat(${idx}),200)"
                onfocus="urunOneriGoster(${idx})"
                onkeydown="oneriKlavyeYonet(event,'urun-oneri-${idx}')">
+        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniSatisKalemleri[${idx}].urunAdi=s.stokAdi; _yeniSatisKalemleri[${idx}].birim=s.birim1||'adet'; if(s.satisFiyati) _yeniSatisKalemleri[${idx}].birimFiyat=s.satisFiyati; if(s.satisIskontosu) _yeniSatisKalemleri[${idx}].iskontoYuzde=s.satisIskontosu; satisKalemlerCiz(); })">🔍</button>
         <div id="urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="satisKalemAlanDegisti(${idx},'miktar',this.value)">
@@ -1820,11 +2004,12 @@ function alisModalAc(){
       <h3>Yeni Alış</h3>
       <div class="fld" style="position:relative">
         <label>Tedarikçi (Cari)</label>
-        <input id="am-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off"
+        <input id="am-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off" style="padding-right:34px"
                oninput="amCariAramaDegisti(this.value)"
                onfocus="amCariOneriGoster()"
                onblur="setTimeout(()=>amCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'am-cari-oneri')">
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('am-cari').value=c.id; document.getElementById('am-cari-arama').value=c.ad; alisCariSecimiDegisti(); })">🔍</button>
         <input type="hidden" id="am-cari" value="">
         <div id="am-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
@@ -2115,11 +2300,12 @@ function alisIadeModalAc(){
       <h3>Yeni İade</h3>
       <div class="fld" style="position:relative">
         <label>Tedarikçi (Cari)</label>
-        <input id="aim-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off"
+        <input id="aim-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off" style="padding-right:34px"
                oninput="aimCariAramaDegisti(this.value)"
                onfocus="aimCariOneriGoster()"
                onblur="setTimeout(()=>aimCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'aim-cari-oneri')">
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('aim-cari').value=c.id; document.getElementById('aim-cari-arama').value=c.ad; aimCariSecimiDegisti(); })">🔍</button>
         <input type="hidden" id="aim-cari" value="">
         <div id="aim-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
@@ -2376,12 +2562,13 @@ function tahsilatModalAc(onCariId){
     <div class="modal-box">
       <h3>Yeni Tahsilat</h3>
       <div class="fld" style="position:relative"><label>Müşteri (Cari) *</label>
-        <input id="tm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off"
+        <input id="tm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" style="padding-right:34px"
                value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
                oninput="tmCariAramaDegisti()"
                onfocus="tmCariOneriGoster()"
                onblur="setTimeout(()=>tmCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'tm-cari-oneri')">
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('tm-cari').value=c.id; document.getElementById('tm-cari-arama').value=c.ad; })">🔍</button>
         <input type="hidden" id="tm-cari" value="${onCariId||''}">
         <div id="tm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
@@ -2603,12 +2790,13 @@ function odemeModalAc(onCariId){
     <div class="modal-box">
       <h3>Yeni Ödeme</h3>
       <div class="fld" style="position:relative"><label>Tedarikçi (Cari)</label>
-        <input id="om-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off"
+        <input id="om-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off" style="padding-right:34px"
                value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
                oninput="omCariAramaDegisti()"
                onfocus="omCariOneriGoster()"
                onblur="setTimeout(()=>omCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'om-cari-oneri')">
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('om-cari').value=c.id; document.getElementById('om-cari-arama').value=c.ad; })">🔍</button>
         <input type="hidden" id="om-cari" value="${onCariId||''}">
         <div id="om-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
