@@ -1456,8 +1456,14 @@ function satisListesiCiz(liste){
         <span class="cari-item-ad">${s.cariAd}</span>
         <span class="cari-item-bakiye">${paraFormat(s.toplamTutar)}</span>
       </div>
-      <span class="cari-item-tip">${tarihGoster(s.tarih)} · ${s.odemeTipi}</span>
+      <span class="cari-item-tip">${tarihGoster(s.tarih)} · ${s.odemeTipi}${s.siparisDurumu ? ` · <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}</span>
     </div>`).join("");
+}
+
+function siparisDurumSinifi(durum){
+  if(durum === "Tamamlandı") return "hk-alacak";
+  if(durum === "Kısmen Faturalandı") return "tip-badge";
+  return "hk-borc";
 }
 
 function satisBelgeTipiDegistir(tip){
@@ -1494,30 +1500,35 @@ function satisListeyeDon(){
 function satisDetayCiz(res){
   const s = res.satis, kalemler = res.kalemler;
   const panel = document.getElementById("satis-detail-panel");
+  const siparis = s.belgeTipi === "Sipariş";
   panel.innerHTML = `
     <button class="cari-back-btn" onclick="satisListeyeDon()">← Listeye dön</button>
     <div class="cari-detail-head">
       <div>
         <h2>${s.cariAd}</h2>
         <span class="tip-badge">${s.belgeTipi||'Fatura'} · ${tarihGoster(s.tarih)} · ${s.odemeTipi}</span>
+        ${siparis ? ` <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}
       </div>
       <div class="cari-bakiye-box">
         <div class="num">${paraFormat(s.toplamTutar)}</div>
         <div class="lbl">Toplam Tutar</div>
       </div>
     </div>
+    ${s.kaynakSiparisId ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Kaynak</div><div class="v">Sipariş'ten aktarıldı</div></div></div>` : ""}
     ${s.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${s.aciklama}</div></div></div>` : ""}
     <div class="btnrow">
+      ${siparis && s.siparisDurumu !== "Tamamlandı" ? `<button class="btn btn-primary" onclick="siparisFaturaModalAc('${s.id}')">🧾 Fatura Oluştur</button>` : ''}
       <button class="btn btn-primary" onclick="satisFisYazdir('${s.id}')">🖨 Yazdır</button>
       <button class="btn btn-danger" onclick="satisSilOnay('${s.id}')">🗑 Satışı Sil</button>
     </div>
     <table class="hareket-tbl">
-      <thead><tr><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th></tr></thead>
+      <thead><tr><th>Ürün</th><th>Miktar</th>${siparis?'<th>Faturalanan</th><th>Kalan</th>':''}<th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th></tr></thead>
       <tbody>
         ${kalemler.map(k=>`
           <tr>
             <td>${k.urunAdi}</td>
             <td>${k.miktar}</td>
+            ${siparis?`<td>${k.faturalananMiktar||0}</td><td class="${k.kalanMiktar>0?'hk-borc':'hk-alacak'}">${k.kalanMiktar}</td>`:''}
             <td>${k.birim}</td>
             <td>${paraFormat(k.birimFiyat)}</td>
             <td>${k.iskontoYuzde||0}</td>
@@ -1535,6 +1546,74 @@ function satisDetayCiz(res){
       <tr class="genel"><td>Genel Toplam</td><td>${paraFormat(s.toplamlar.genelToplam)}</td></tr>
     </table>` : ""}
   `;
+}
+
+// ── Siparişten kısmi/ürün-miktar bazlı Fatura oluşturma ──
+let _siparisFaturaState = { siparisId:null, kalemler:[] };
+
+function siparisFaturaModalAc(siparisId){
+  cariApi("getSatisDetay", {satisId:siparisId}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    const s = res.satis, kalemler = res.kalemler.filter(k=>k.kalanMiktar>0);
+    if(kalemler.length===0){ alert("Bu siparişte aktarılacak kalan miktar yok."); return; }
+    _siparisFaturaState = { siparisId, kalemler: kalemler.map(k=>({...k, aktarilacak: k.kalanMiktar})) };
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.id = "siparis-fatura-modal-overlay";
+    overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+    const bugun = new Date().toISOString().slice(0,10);
+    overlay.innerHTML = `
+      <div class="modal-box modal-box-wide">
+        <h3>Siparişten Fatura Oluştur</h3>
+        <p style="color:var(--text3);font-size:13px;margin:0 0 14px">${s.cariAd} — aktarmak istediğin ürünler için miktar gir (0 = aktarma). Kalan miktarlar siparişte açık kalmaya devam eder.</p>
+        <div id="sf-kalemler"></div>
+        <div class="fld" style="margin-top:10px"><label>Fatura Tarihi</label><input id="sf-tarih" type="date" value="${bugun}"></div>
+        <div class="fld"><label>Ödeme Tipi</label>
+          <select id="sf-odeme">
+            <option value="Peşin">Peşin</option>
+            <option value="Havale">Havale</option>
+            <option value="Kredi Kartı">Kredi Kartı</option>
+            <option value="Açık Hesap">Açık Hesap</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="btn" onclick="document.getElementById('siparis-fatura-modal-overlay').remove()">İptal</button>
+          <button class="btn btn-primary" onclick="siparisFaturaKaydet()">Fatura Oluştur</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    siparisFaturaKalemlerCiz();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+function siparisFaturaKalemlerCiz(){
+  const el = document.getElementById("sf-kalemler");
+  if(!el) return;
+  el.innerHTML = _siparisFaturaState.kalemler.map((k,idx)=>`
+    <div class="satis-kalem-satir" style="align-items:center">
+      <span style="flex:1">${k.urunAdi} <span style="color:var(--text3);font-size:11px">(kalan: ${k.kalanMiktar} ${k.birim})</span></span>
+      <input type="number" min="0" max="${k.kalanMiktar}" step="1" value="${k.aktarilacak}" style="max-width:90px"
+             oninput="_siparisFaturaState.kalemler[${idx}].aktarilacak = Math.min(parseFloat(this.value)||0, ${k.kalanMiktar})">
+    </div>`).join("");
+}
+
+function siparisFaturaKaydet(){
+  const kalemler = _siparisFaturaState.kalemler
+    .filter(k => (parseFloat(k.aktarilacak)||0) > 0)
+    .map(k => ({ kalemId: k.id, aktarilanMiktar: k.aktarilacak }));
+  if(kalemler.length===0){ alert("En az bir üründe aktarılacak miktar girin"); return; }
+  cariApi("siparistenFaturaOlustur", {
+    siparisId: _siparisFaturaState.siparisId,
+    tarih: document.getElementById("sf-tarih").value,
+    odemeTipi: document.getElementById("sf-odeme").value,
+    kalemler,
+  }).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    document.getElementById("siparis-fatura-modal-overlay").remove();
+    alert("Fatura oluşturuldu.");
+    satisListesiYukle();
+    satisAc(res.faturaId);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
 // Satış fişi tasarımı: Fatura/Teklif/Sipariş için yazdırılabilir görünüm.
@@ -2100,11 +2179,12 @@ function alisKalemlerCiz(){
   el.innerHTML = _yeniAlisKalemleri.map((k,idx)=>`
     <div class="satis-kalem-satir">
       <div style="flex:1;position:relative">
-        <input class="satis-kalem-urun" style="width:100%" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
+        <input class="satis-kalem-urun" style="width:100%;padding-right:32px" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
                oninput="alisKalemAlanDegisti(${idx},'urunAdi',this.value); alisUrunOneriGoster(${idx})"
                onblur="setTimeout(()=>alisUrunOneriKapat(${idx}),200)"
                onfocus="alisUrunOneriGoster(${idx})"
                onkeydown="oneriKlavyeYonet(event,'alis-urun-oneri-${idx}')">
+        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniAlisKalemleri[${idx}].urunAdi=s.stokAdi; _yeniAlisKalemleri[${idx}].birim=s.birim1||'adet'; if(s.alisFiyati) _yeniAlisKalemleri[${idx}].birimFiyat=s.alisFiyati; alisKalemlerCiz(); })">🔍</button>
         <div id="alis-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="alisKalemAlanDegisti(${idx},'miktar',this.value)">
@@ -2393,11 +2473,12 @@ function alisIadeKalemlerCiz(){
   el.innerHTML = _yeniAlisIadeKalemleri.map((k,idx)=>`
     <div class="satis-kalem-satir">
       <div style="flex:1;position:relative">
-        <input class="satis-kalem-urun" style="width:100%" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
+        <input class="satis-kalem-urun" style="width:100%;padding-right:32px" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
                oninput="alisIadeKalemAlanDegisti(${idx},'urunAdi',this.value); alisIadeUrunOneriGoster(${idx})"
                onblur="setTimeout(()=>alisIadeUrunOneriKapat(${idx}),200)"
                onfocus="alisIadeUrunOneriGoster(${idx})"
                onkeydown="oneriKlavyeYonet(event,'aim-urun-oneri-${idx}')">
+        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniAlisIadeKalemleri[${idx}].urunAdi=s.stokAdi; _yeniAlisIadeKalemleri[${idx}].birim=s.birim1||'adet'; if(s.alisFiyati) _yeniAlisIadeKalemleri[${idx}].birimFiyat=s.alisFiyati; alisIadeKalemlerCiz(); })">🔍</button>
         <div id="aim-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="alisIadeKalemAlanDegisti(${idx},'miktar',this.value)">
@@ -4007,11 +4088,12 @@ function stokHareketKalemlerCiz(mod){
   el.innerHTML = kalemler.map((k,idx)=>`
     <div class="satis-kalem-satir">
       <div style="flex:1;position:relative">
-        <input class="satis-kalem-urun" style="width:100%" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
+        <input class="satis-kalem-urun" style="width:100%;padding-right:32px" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
                oninput="stokHareketAlanDegisti('${mod}',${idx},'urunAdi',this.value); stokHareketUrunOneriGoster('${mod}',${idx})"
                onblur="setTimeout(()=>stokHareketUrunOneriKapat('${mod}',${idx}),200)"
                onfocus="stokHareketUrunOneriGoster('${mod}',${idx})"
                onkeydown="oneriKlavyeYonet(event,'sh-${mod}-oneri-${idx}')">
+        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _stokHareketKalemleri['${mod}'][${idx}].urunAdi=s.stokAdi; _stokHareketKalemleri['${mod}'][${idx}].stokTanimId=s.id; _stokHareketKalemleri['${mod}'][${idx}].stokKodu=s.stokKodu; _stokHareketKalemleri['${mod}'][${idx}].birim=s.birim1||'adet'; stokHareketKalemlerCiz('${mod}'); })">🔍</button>
         <div id="sh-${mod}-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="stokHareketAlanDegisti('${mod}',${idx},'miktar',this.value)">
