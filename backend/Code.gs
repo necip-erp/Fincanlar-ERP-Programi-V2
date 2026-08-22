@@ -262,6 +262,7 @@ function handleRequest(e) {
       case "getAlisListesi":  result = getAlisListesi(); break;
       case "getAlisDetay":    result = getAlisDetay(body.alisId); break;
       case "saveAlis":        result = saveAlis(body); break;
+      case "siparistenFaturaOlustur": result = siparistenFaturaOlustur(body); break;
       case "silAlis":         result = silAlis(body); break;
       case "getAlisIadeListesi": result = getAlisIadeListesi(); break;
       case "getAlisIadeDetay":   result = getAlisIadeDetay(body.iadeId); break;
@@ -591,6 +592,13 @@ function ensureSatisBelgeTipiColonu(sheet) {
   if (String(h11 || "") !== "BANKA_HESAP_ID") {
     sheet.getRange(1, 11).setValue("BANKA_HESAP_ID").setFontWeight("bold").setBackground("#e8edf5");
   }
+  // Bir Fatura, bir Sipariş'ten (kısmen ya da tamamen) oluşturulduysa kaynak
+  // sipariş id'sini burada tutuyoruz — Sipariş'in "ne kadarı faturalandı"
+  // durumunu hesaplamak için kullanılır.
+  const h12 = sheet.getRange(1, 12).getValue();
+  if (String(h12 || "") !== "KAYNAK_SIPARIS_ID") {
+    sheet.getRange(1, 12).setValue("KAYNAK_SIPARIS_ID").setFontWeight("bold").setBackground("#e8edf5");
+  }
 }
 
 // SatisKalemleri sayfası daha önce ISKONTO_YUZDE / KDV_ORANI sütunları olmadan
@@ -603,6 +611,12 @@ function ensureSatisKalemVergiKolonlari(sheet) {
   const h9 = sheet.getRange(1, 9).getValue();
   if (String(h9 || "") !== "KDV_ORANI") {
     sheet.getRange(1, 9).setValue("KDV_ORANI").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  // Bir Sipariş kaleminden şimdiye kadar Fatura'ya aktarılmış toplam miktarı
+  // tutar (sadece belgeTipi=Sipariş olan satışların kalemlerinde anlamlıdır).
+  const h10 = sheet.getRange(1, 10).getValue();
+  if (String(h10 || "") !== "FATURALANAN_MIKTAR") {
+    sheet.getRange(1, 10).setValue("FATURALANAN_MIKTAR").setFontWeight("bold").setBackground("#e8edf5");
   }
 }
 
@@ -626,11 +640,44 @@ function getSatisListesi() {
   ensureSatisBelgeTipiColonu(sSheet);
   const data = sSheet.getDataRange().getValues();
 
+  // Sipariş satırları için durum hesaplanacaksa kalemleri de topluca okuyoruz
+  // (her satış için ayrı ayrı sorgu atmamak için tek seferde).
+  const siparisIdleri = new Set();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][8] || "") === "Sipariş") siparisIdleri.add(String(data[i][0]));
+  }
+  let siparisDurumHaritasi = {};
+  if (siparisIdleri.size > 0) {
+    const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
+      ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI"]);
+    ensureSatisKalemVergiKolonlari(kSheet);
+    const kData = kSheet.getDataRange().getValues();
+    const toplamMap = {}, faturalananMap = {};
+    for (let i = 1; i < kData.length; i++) {
+      const row = kData[i];
+      const satisId = String(row[1] || "");
+      if (!siparisIdleri.has(satisId)) continue;
+      toplamMap[satisId] = (toplamMap[satisId] || 0) + 1;
+      const miktar = parseFloat(row[3]) || 0;
+      const faturalanan = parseFloat(row[9]) || 0;
+      if (!faturalananMap[satisId]) faturalananMap[satisId] = { tam: 0, hic: 0, toplamKalem: 0 };
+      faturalananMap[satisId].toplamKalem++;
+      if (faturalanan >= miktar && miktar > 0) faturalananMap[satisId].tam++;
+      if (faturalanan <= 0) faturalananMap[satisId].hic++;
+    }
+    siparisIdleri.forEach(sid => {
+      const f = faturalananMap[sid];
+      if (!f || f.toplamKalem === 0) { siparisDurumHaritasi[sid] = "Bekliyor"; return; }
+      siparisDurumHaritasi[sid] = (f.tam === f.toplamKalem) ? "Tamamlandı" : (f.hic === f.toplamKalem ? "Bekliyor" : "Kısmen Faturalandı");
+    });
+  }
+
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const id = String(row[0] || "");
     if (!id) continue;
+    const belgeTipi = String(row[8] || "") || "Fatura";
     sonuc.push({
       id: id,
       tarih: hucreTarihStr(row[1]),
@@ -640,7 +687,8 @@ function getSatisListesi() {
       odemeTipi: String(row[5] || ""),
       aciklama: String(row[6] || ""),
       kayitTarihi: hucreTarihStr(row[7]),
-      belgeTipi: String(row[8] || "") || "Fatura",
+      belgeTipi: belgeTipi,
+      siparisDurumu: belgeTipi === "Sipariş" ? (siparisDurumHaritasi[id] || "Bekliyor") : "",
     });
   }
   sonuc.reverse(); // ID zaman damgalı olduğundan ekleme sırası = kronolojik; en yeni en üstte
@@ -668,6 +716,7 @@ function getSatisDetay(satisId) {
         odemeTipi: String(data[i][5] || ""), aciklama: String(data[i][6] || ""), kayitTarihi: String(data[i][7] || ""),
         belgeTipi: String(data[i][8] || "") || "Fatura",
         dipIskontoYuzde: parseFloat(data[i][9]) || 0, bankaHesapId: String(data[i][10] || ""),
+        kaynakSiparisId: String(data[i][11] || ""),
       };
       break;
     }
@@ -685,6 +734,7 @@ function getSatisDetay(satisId) {
     const birimFiyat = parseFloat(row[5]) || 0;
     const iskontoYuzde = parseFloat(row[7]) || 0;
     const kdvOrani = parseFloat(row[8]) || 0;
+    const faturalananMiktar = parseFloat(row[9]) || 0;
     const h = satisKalemHesapla(miktar, birimFiyat, iskontoYuzde, kdvOrani);
     brutToplam += h.brut; iskontoToplam += h.iskontoTutari; kdvToplam += h.kdvTutari; araToplamKalem += h.araToplam;
     kalemler.push({
@@ -692,7 +742,13 @@ function getSatisDetay(satisId) {
       miktar: miktar, birim: String(row[4] || ""), birimFiyat: birimFiyat,
       tutar: parseFloat(row[6]) || 0, iskontoYuzde: iskontoYuzde, kdvOrani: kdvOrani,
       iskontoTutari: h.iskontoTutari, kdvTutari: h.kdvTutari, kalemGenelToplam: h.genelToplam,
+      faturalananMiktar: faturalananMiktar, kalanMiktar: Math.max(0, miktar - faturalananMiktar),
     });
+  }
+  if (satis.belgeTipi === "Sipariş") {
+    const tumuFaturalandi = kalemler.length > 0 && kalemler.every(k => k.kalanMiktar <= 0);
+    const hicFaturalanmadi = kalemler.every(k => k.faturalananMiktar <= 0);
+    satis.siparisDurumu = tumuFaturalandi ? "Tamamlandı" : (hicFaturalanmadi ? "Bekliyor" : "Kısmen Faturalandı");
   }
   const dipIskontoTutari = araToplamKalem * ((satis.dipIskontoYuzde || 0) / 100);
   const araToplam = brutToplam - iskontoToplam - dipIskontoTutari;
@@ -754,7 +810,7 @@ function saveSatis(body) {
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   const bankaHesapId = String(body.bankaHesapId || "").trim();
-  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, String(body.belgeTipi || "Fatura"), dipIskontoYuzde, bankaHesapId]);
+  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, String(body.belgeTipi || "Fatura"), dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || "")]);
 
   kalemler.forEach((k, idx) => {
     const kId = "sk_" + Date.now() + "_" + idx;
@@ -762,7 +818,7 @@ function saveSatis(body) {
     const birimFiyat = parseFloat(k.birimFiyat) || 0;
     const iskontoYuzde = parseFloat(k.iskontoYuzde) || 0;
     const kdvOrani = k.kdvOrani === undefined ? 20 : (parseFloat(k.kdvOrani) || 0);
-    kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, iskontoYuzde, kdvOrani]);
+    kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, iskontoYuzde, kdvOrani, 0]);
   });
 
   // Cari seçildiyse, tutar kadar otomatik Borç hareketi ekle (müşteri bize borçlanır).
@@ -788,7 +844,92 @@ function saveSatis(body) {
   return { ok: true, id: id, toplamTutar: toplamTutar };
 }
 
-// body: { id }
+// ════════════════════════════════════════════════
+// SİPARİŞTEN KISMİ/ÜRÜN-MİKTAR BAZLI FATURA OLUŞTURMA
+// Bir Sipariş'in kalemlerinden istenen ürün + istenen miktar kadarı seçilip
+// yeni bir Fatura'ya aktarılır. Aktarılmayan (kalan) miktarlar sipariş
+// kaleminde durmaya devam eder — sipariş, tamamı faturalanana kadar
+// "Bekliyor" / "Kısmen Faturalandı" durumunda görünür (getSatisListesi/
+// getSatisDetay bu durumu FATURALANAN_MIKTAR'a bakarak hesaplar).
+// ════════════════════════════════════════════════
+
+// body: { siparisId, tarih, odemeTipi, bankaHesapId, vade, aciklama,
+//         kalemler: [{kalemId, aktarilanMiktar}, ...] }
+function siparistenFaturaOlustur(body) {
+  const siparisId = String(body.siparisId || "").trim();
+  if (!siparisId) return { ok: false, hata: "siparisId gerekli" };
+  const istekKalemleri = Array.isArray(body.kalemler) ? body.kalemler : [];
+  if (istekKalemleri.length === 0) return { ok: false, hata: "Aktarılacak en az bir ürün seçmelisiniz" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  ensureSatisBelgeTipiColonu(sSheet);
+  const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
+    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI"]);
+  ensureSatisKalemVergiKolonlari(kSheet);
+
+  const sData = sSheet.getDataRange().getValues();
+  let siparis = null;
+  for (let i = 1; i < sData.length; i++) {
+    if (String(sData[i][0]) === siparisId) {
+      siparis = { cariId: String(sData[i][2] || ""), cariAd: String(sData[i][3] || ""), belgeTipi: String(sData[i][8] || "") || "Fatura" };
+      break;
+    }
+  }
+  if (!siparis) return { ok: false, hata: "Sipariş bulunamadı" };
+  if (siparis.belgeTipi !== "Sipariş") return { ok: false, hata: "Bu kayıt bir Sipariş değil" };
+
+  const kData = kSheet.getDataRange().getValues();
+  const kalemSatirIdx = {}; // kalemId -> sheet satır no (1-indexed)
+  const kalemBilgi = {};    // kalemId -> {urunAdi, birim, birimFiyat, iskontoYuzde, kdvOrani, miktar, faturalananMiktar}
+  for (let i = 1; i < kData.length; i++) {
+    const row = kData[i];
+    if (String(row[1]) !== siparisId) continue;
+    const kId = String(row[0]);
+    kalemSatirIdx[kId] = i + 1;
+    kalemBilgi[kId] = {
+      urunAdi: String(row[2] || ""), miktar: parseFloat(row[3]) || 0, birim: String(row[4] || ""),
+      birimFiyat: parseFloat(row[5]) || 0, iskontoYuzde: parseFloat(row[7]) || 0, kdvOrani: parseFloat(row[8]) || 0,
+      faturalananMiktar: parseFloat(row[9]) || 0,
+    };
+  }
+
+  const yeniFaturaKalemleri = [];
+  const guncellenecekler = []; // {satirIdx, yeniFaturalananMiktar}
+  for (const istek of istekKalemleri) {
+    const kId = String(istek.kalemId || "");
+    const aktarilan = parseFloat(istek.aktarilanMiktar) || 0;
+    const bilgi = kalemBilgi[kId];
+    if (!bilgi) return { ok: false, hata: "Sipariş kalemi bulunamadı: " + kId };
+    if (aktarilan <= 0) continue;
+    const kalan = bilgi.miktar - bilgi.faturalananMiktar;
+    if (aktarilan > kalan + 0.0001) {
+      return { ok: false, hata: "'" + bilgi.urunAdi + "' için aktarılan miktar (" + aktarilan + "), kalan miktardan (" + kalan + ") fazla olamaz" };
+    }
+    yeniFaturaKalemleri.push({
+      urunAdi: bilgi.urunAdi, miktar: aktarilan, birim: bilgi.birim,
+      birimFiyat: bilgi.birimFiyat, iskontoYuzde: bilgi.iskontoYuzde, kdvOrani: bilgi.kdvOrani,
+    });
+    guncellenecekler.push({ satirIdx: kalemSatirIdx[kId], yeniFaturalananMiktar: bilgi.faturalananMiktar + aktarilan });
+  }
+  if (yeniFaturaKalemleri.length === 0) return { ok: false, hata: "Aktarılacak geçerli bir miktar girilmedi" };
+
+  const faturaSonuc = saveSatis({
+    cariId: siparis.cariId, cariAd: siparis.cariAd,
+    tarih: body.tarih, odemeTipi: body.odemeTipi, bankaHesapId: body.bankaHesapId, vade: body.vade,
+    aciklama: String(body.aciklama || ("Sipariş #" + siparisId.slice(-6) + "'den aktarıldı")),
+    belgeTipi: "Fatura", kaynakSiparisId: siparisId,
+    kalemler: yeniFaturaKalemleri,
+  });
+  if (!faturaSonuc.ok) return faturaSonuc;
+
+  // Sipariş kalemlerindeki FATURALANAN_MIKTAR'ı güncelle.
+  guncellenecekler.forEach(g => { kSheet.getRange(g.satirIdx, 10).setValue(g.yeniFaturalananMiktar); });
+  cacheTemizle(["stokTanimListesi"]); // güncel stok hesaplamaları vb. için (dolaylı etkisi olmasa da güvenli taraf)
+
+  return { ok: true, faturaId: faturaSonuc.id, toplamTutar: faturaSonuc.toplamTutar };
+}// body: { id }
 function silSatis(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
@@ -799,10 +940,12 @@ function silSatis(body) {
   const data = sSheet.getDataRange().getValues();
 
   let cariId = "";
+  let kaynakSiparisId = "";
   let bulundu = false;
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === id) {
       cariId = String(data[i][2] || "");
+      kaynakSiparisId = String(data[i][11] || "");
       sSheet.deleteRow(i + 1);
       bulundu = true;
       break;
@@ -810,12 +953,32 @@ function silSatis(body) {
   }
   if (!bulundu) return { ok: false, hata: "Satış bulunamadı" };
 
-  // Kalemlerini sil
+  // Kalemlerini sil (silmeden önce kaynak sipariş varsa geri almak için okuyoruz)
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
     ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
   const kData = kSheet.getDataRange().getValues();
+  const silinenKalemler = []; // {urunAdi, miktar} — kaynak sipariş varsa faturalanan miktarı geri almak için
   for (let i = kData.length - 1; i >= 1; i--) {
-    if (String(kData[i][1]) === id) kSheet.deleteRow(i + 1);
+    if (String(kData[i][1]) === id) {
+      if (kaynakSiparisId) silinenKalemler.push({ urunAdi: String(kData[i][2] || ""), miktar: parseFloat(kData[i][3]) || 0 });
+      kSheet.deleteRow(i + 1);
+    }
+  }
+
+  // Bu fatura bir Sipariş'ten (kısmen) oluşturulmuşsa, o siparişin kalemlerindeki
+  // FATURALANAN_MIKTAR'ı geri al (ürün adı eşleştirmesiyle) — sipariş yeniden
+  // "Bekliyor/Kısmen Faturalandı" durumuna dönsün.
+  if (kaynakSiparisId && silinenKalemler.length > 0) {
+    const kData2 = kSheet.getDataRange().getValues();
+    silinenKalemler.forEach(silinen => {
+      for (let i = 1; i < kData2.length; i++) {
+        if (String(kData2[i][1]) === kaynakSiparisId && String(kData2[i][2] || "") === silinen.urunAdi) {
+          const mevcutFaturalanan = parseFloat(kData2[i][9]) || 0;
+          kSheet.getRange(i + 1, 10).setValue(Math.max(0, mevcutFaturalanan - silinen.miktar));
+          break;
+        }
+      }
+    });
   }
 
   // Cariye eklenmiş olan otomatik Borç hareketini bul ve geri al
