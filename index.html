@@ -1182,6 +1182,7 @@ function cariListeyeDon(){
 function cariDetayCiz(res){
   const c = res.cari, hareketler = res.hareketler, bakiye = res.bakiye;
   const panel = document.getElementById("cari-detail-panel");
+  _cariSiparislerAcik = false; // farklı bir cari açıldığında sipariş bölümü kapalı başlasın
   panel.innerHTML = `
     <button class="cari-back-btn" onclick="cariListeyeDon()">← Listeye dön</button>
     <div class="cari-detail-head">
@@ -1202,7 +1203,10 @@ function cariDetayCiz(res){
       <button class="islem-btn" onclick="satisModalAc('${c.id}','Fatura')">📤 Satış Faturası</button>
       <button class="islem-btn" onclick="tahsilatModalAcOnCari('${c.id}')">💰 Tahsilat</button>
       <button class="islem-btn" onclick="odemeModalAcOnCari('${c.id}')">💸 Ödeme</button>
+      <button class="islem-btn" onclick="cariSiparisleriGosterGizle('${c.id}')" id="cari-siparis-toggle-btn">📦 Siparişler</button>
     </div>
+
+    <div id="cari-siparisler-alani" style="display:none;margin:-4px 0 16px"></div>
 
     <div class="cari-info-grid">
       <div class="cari-info-item"><div class="k">Cari Kodu</div><div class="v">${c.cariKodu||"—"}</div></div>
@@ -1288,6 +1292,34 @@ function cariHareketIslemeGit(aciklama){
   else if(tip === "ALIS"){ modulAc("alis"); alisAltModulAc("giris"); alisAc(id); }
   else if(tip === "TAHSILAT"){ modulAc("tahsilat"); tahsilatAc(id); }
   else if(tip === "ODEME"){ modulAc("odeme"); odemeAc(id); }
+}
+
+// Cari detayındaki "📦 Siparişler" butonuyla açılıp kapanan, bu cariye ait
+// TÜM siparişleri (durumlarıyla birlikte) gösteren bölüm.
+let _cariSiparislerAcik = false;
+function cariSiparisleriGosterGizle(cariId){
+  _cariSiparislerAcik = !_cariSiparislerAcik;
+  const el = document.getElementById("cari-siparisler-alani");
+  if(!el) return;
+  if(!_cariSiparislerAcik){ el.style.display = "none"; return; }
+  el.style.display = "block";
+  el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getCariSiparisListesi", {cariId}).then(res=>{
+    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(res.siparisler.length===0){ el.innerHTML = '<div class="cari-empty">Bu müşteriye ait sipariş yok.</div>'; return; }
+    el.innerHTML = `
+      <table class="hareket-tbl">
+        <thead><tr><th>Tarih</th><th>Tutar</th><th>Durum</th></tr></thead>
+        <tbody>
+          ${res.siparisler.map(s=>`
+            <tr class="hk-row" onclick="modulAc('satis');satisAc('${s.id}')" title="Siparişi açmak için tıklayın">
+              <td>${tarihGoster(s.tarih)}</td>
+              <td>${paraFormat(s.toplamTutar)}</td>
+              <td><span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span></td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
+  }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
 }
 
 let _hkDragKol = null;
@@ -1461,9 +1493,20 @@ function satisListesiCiz(liste){
 }
 
 function siparisDurumSinifi(durum){
-  if(durum === "Tamamlandı") return "hk-alacak";
+  if(durum === "Muhasebelendi") return "hk-alacak";
   if(durum === "Kısmen Faturalandı") return "tip-badge";
-  return "hk-borc";
+  if(durum === "Teslim Edildi") return "hk-alacak";
+  if(durum === "Onaylandı") return "tip-badge";
+  return "hk-borc"; // Beklemede, Haber Verecek
+}
+
+function siparisDurumKaydet(id){
+  const durum = document.getElementById("sd-siparis-durumu").value;
+  cariApi("siparisDurumGuncelle", {id, durum}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    satisListesiYukle();
+    satisAc(id);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
 function satisBelgeTipiDegistir(tip){
@@ -1514,10 +1557,21 @@ function satisDetayCiz(res){
         <div class="lbl">Toplam Tutar</div>
       </div>
     </div>
+    ${siparis ? `
+    <div class="fld" style="flex-direction:row;align-items:center;gap:8px;max-width:340px;margin-bottom:14px">
+      <label style="min-width:110px;text-transform:none;font-size:12px;color:var(--text2)">Sipariş Durumu</label>
+      <select id="sd-siparis-durumu" ${s.siparisDurumu==='Muhasebelendi'||s.siparisDurumu==='Kısmen Faturalandı'?'disabled title="Bu sipariş faturalandığı için durum otomatik gösteriliyor"':''}>
+        <option value="Beklemede" ${s.siparisManuelDurum==='Beklemede'?'selected':''}>Beklemede</option>
+        <option value="Onaylandı" ${s.siparisManuelDurum==='Onaylandı'?'selected':''}>Onaylandı</option>
+        <option value="Teslim Edildi" ${s.siparisManuelDurum==='Teslim Edildi'?'selected':''}>Teslim Edildi</option>
+        <option value="Haber Verecek" ${s.siparisManuelDurum==='Haber Verecek'?'selected':''}>Haber Verecek</option>
+      </select>
+      ${s.siparisDurumu!=='Muhasebelendi'&&s.siparisDurumu!=='Kısmen Faturalandı' ? `<button class="btn" style="padding:6px 12px" onclick="siparisDurumKaydet('${s.id}')">Güncelle</button>` : ''}
+    </div>` : ''}
     ${s.kaynakSiparisId ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Kaynak</div><div class="v">Sipariş'ten aktarıldı</div></div></div>` : ""}
     ${s.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${s.aciklama}</div></div></div>` : ""}
     <div class="btnrow">
-      ${siparis && s.siparisDurumu !== "Tamamlandı" ? `<button class="btn btn-primary" onclick="siparisFaturaModalAc('${s.id}')">🧾 Fatura Oluştur</button>` : ''}
+      ${siparis && s.siparisDurumu !== "Muhasebelendi" ? `<button class="btn btn-primary" onclick="siparisFaturaModalAc('${s.id}')">🧾 Fatura Oluştur</button>` : ''}
       <button class="btn btn-primary" onclick="satisFisYazdir('${s.id}')">🖨 Yazdır</button>
       <button class="btn btn-danger" onclick="satisSilOnay('${s.id}')">🗑 Satışı Sil</button>
     </div>
@@ -1680,10 +1734,19 @@ function satisModalAc(onCariId, onBelgeTipi){
     <div class="modal-box modal-box-xwide">
       <h3>Yeni ${belgeTipiBaslangic}</h3>
       <div class="fld"><label>Belge Tipi</label>
-        <select id="sm-belgetipi">
+        <select id="sm-belgetipi" onchange="satisModalBelgeTipiDegisti()">
           <option value="Fatura" ${belgeTipiBaslangic==='Fatura'?'selected':''}>Fatura</option>
           <option value="Teklif" ${belgeTipiBaslangic==='Teklif'?'selected':''}>Teklif</option>
           <option value="Sipariş" ${belgeTipiBaslangic==='Sipariş'?'selected':''}>Sipariş</option>
+        </select>
+      </div>
+      <div class="fld" id="sm-siparis-durum-fld" style="display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
+        <label>Sipariş Durumu</label>
+        <select id="sm-siparis-durumu">
+          <option value="Beklemede">Beklemede</option>
+          <option value="Onaylandı">Onaylandı</option>
+          <option value="Teslim Edildi">Teslim Edildi</option>
+          <option value="Haber Verecek">Haber Verecek</option>
         </select>
       </div>
       <div class="fld" style="position:relative"><label>Müşteri (Cari)</label>
@@ -1913,6 +1976,11 @@ function satisToplamGuncelle(){
     <div class="satis-toplam-satir genel"><span>Genel Toplam</span><b>${paraFormat(genelToplam)}</b></div>`;
 }
 
+function satisModalBelgeTipiDegisti(){
+  const tip = document.getElementById("sm-belgetipi").value;
+  document.getElementById("sm-siparis-durum-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
+}
+
 function satisKaydet(){
   const cariId = document.getElementById("sm-cari").value;
   const serbestAd = document.getElementById("sm-serbest-ad").value.trim();
@@ -1920,16 +1988,18 @@ function satisKaydet(){
   if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
   const odemeTipi = document.getElementById("sm-odeme").value;
   const bankaHesapId = odemeTipi === "Havale" ? document.getElementById("sm-banka-hesap").value : "";
+  const belgeTipi = document.getElementById("sm-belgetipi").value;
   const body = {
     cariId: cariId || undefined,
     cariAd: !cariId ? serbestAd : undefined,
-    belgeTipi: document.getElementById("sm-belgetipi").value,
+    belgeTipi: belgeTipi,
     tarih: document.getElementById("sm-tarih").value,
     odemeTipi: odemeTipi,
     dipIskontoYuzde: parseFloat(document.getElementById("sm-dip-iskonto").value) || 0,
     bankaHesapId: bankaHesapId,
     vade: odemeTipi === "Açık Hesap" ? document.getElementById("sm-vade").value : "",
     aciklama: document.getElementById("sm-aciklama").value,
+    siparisDurumu: belgeTipi === "Sipariş" ? document.getElementById("sm-siparis-durumu").value : undefined,
     kalemler,
   };
   cariApi("saveSatis", body).then(res=>{
