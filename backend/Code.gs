@@ -263,6 +263,8 @@ function handleRequest(e) {
       case "getAlisDetay":    result = getAlisDetay(body.alisId); break;
       case "saveAlis":        result = saveAlis(body); break;
       case "siparistenFaturaOlustur": result = siparistenFaturaOlustur(body); break;
+      case "siparisDurumGuncelle": result = siparisDurumGuncelle(body); break;
+      case "getCariSiparisListesi": result = getCariSiparisListesi(body.cariId); break;
       case "silAlis":         result = silAlis(body); break;
       case "getAlisIadeListesi": result = getAlisIadeListesi(); break;
       case "getAlisIadeDetay":   result = getAlisIadeDetay(body.iadeId); break;
@@ -579,6 +581,20 @@ function cariHareketSil(body) {
 // Satislar sayfası daha önce BELGE_TIPI sütunu olmadan oluşturulmuş olabilir;
 // 9. sütunun (I) başlığını garanti altına alıyoruz. Eski kayıtlarda bu alan
 // boş kalır, okurken "Fatura" varsayılır (geriye dönük uyumluluk).
+// Sipariş için kullanıcının elle seçebileceği takip durumları. Faturalanma
+// durumu (Muhasebelendi/Kısmen Faturalandı) bunlardan ayrı ve otomatiktir —
+// bkz. siparisDurumHesapla().
+const SIPARIS_DURUM_SECENEKLERI = ["Beklemede", "Onaylandı", "Teslim Edildi", "Haber Verecek"];
+
+// Bir siparişin listede/detayda gösterilecek nihai durumunu hesaplar:
+// hiç faturalanmadıysa kullanıcının elle seçtiği durumu, kısmen faturalandıysa
+// "Kısmen Faturalandı", tamamı faturalandıysa "Muhasebelendi" döner.
+function siparisDurumHesapla(elleSecilenDurum, tamamiFaturalandiMi, hicFaturalanmadiMi) {
+  if (tamamiFaturalandiMi) return "Muhasebelendi";
+  if (!hicFaturalanmadiMi) return "Kısmen Faturalandı";
+  return elleSecilenDurum || "Beklemede";
+}
+
 function ensureSatisBelgeTipiColonu(sheet) {
   const mevcutBaslik = sheet.getRange(1, 9).getValue();
   if (String(mevcutBaslik || "") !== "BELGE_TIPI") {
@@ -598,6 +614,14 @@ function ensureSatisBelgeTipiColonu(sheet) {
   const h12 = sheet.getRange(1, 12).getValue();
   if (String(h12 || "") !== "KAYNAK_SIPARIS_ID") {
     sheet.getRange(1, 12).setValue("KAYNAK_SIPARIS_ID").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  // Sadece belgeTipi=Sipariş için anlamlı: kullanıcının elle seçtiği takip durumu
+  // (Beklemede/Onaylandı/Teslim Edildi/Haber Verecek). Faturalanma durumu
+  // (Muhasebelendi/Kısmen Faturalandı) bundan AYRI ve otomatik hesaplanır —
+  // sipariş hiç faturalanmadıysa listede bu elle seçilen durum gösterilir.
+  const h13 = sheet.getRange(1, 13).getValue();
+  if (String(h13 || "") !== "SIPARIS_DURUMU") {
+    sheet.getRange(1, 13).setValue("SIPARIS_DURUMU").setFontWeight("bold").setBackground("#e8edf5");
   }
 }
 
@@ -646,18 +670,17 @@ function getSatisListesi() {
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][8] || "") === "Sipariş") siparisIdleri.add(String(data[i][0]));
   }
-  let siparisDurumHaritasi = {};
+  let faturalanmaHaritasi = {};
   if (siparisIdleri.size > 0) {
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
       ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI"]);
     ensureSatisKalemVergiKolonlari(kSheet);
     const kData = kSheet.getDataRange().getValues();
-    const toplamMap = {}, faturalananMap = {};
+    const faturalananMap = {};
     for (let i = 1; i < kData.length; i++) {
       const row = kData[i];
       const satisId = String(row[1] || "");
       if (!siparisIdleri.has(satisId)) continue;
-      toplamMap[satisId] = (toplamMap[satisId] || 0) + 1;
       const miktar = parseFloat(row[3]) || 0;
       const faturalanan = parseFloat(row[9]) || 0;
       if (!faturalananMap[satisId]) faturalananMap[satisId] = { tam: 0, hic: 0, toplamKalem: 0 };
@@ -667,8 +690,9 @@ function getSatisListesi() {
     }
     siparisIdleri.forEach(sid => {
       const f = faturalananMap[sid];
-      if (!f || f.toplamKalem === 0) { siparisDurumHaritasi[sid] = "Bekliyor"; return; }
-      siparisDurumHaritasi[sid] = (f.tam === f.toplamKalem) ? "Tamamlandı" : (f.hic === f.toplamKalem ? "Bekliyor" : "Kısmen Faturalandı");
+      faturalanmaHaritasi[sid] = !f || f.toplamKalem === 0
+        ? { tamamiFaturalandi: false, hicFaturalanmadi: true }
+        : { tamamiFaturalandi: f.tam === f.toplamKalem, hicFaturalanmadi: f.hic === f.toplamKalem };
     });
   }
 
@@ -678,6 +702,8 @@ function getSatisListesi() {
     const id = String(row[0] || "");
     if (!id) continue;
     const belgeTipi = String(row[8] || "") || "Fatura";
+    const elleSecilenDurum = String(row[12] || "");
+    const f = faturalanmaHaritasi[id];
     sonuc.push({
       id: id,
       tarih: hucreTarihStr(row[1]),
@@ -688,7 +714,8 @@ function getSatisListesi() {
       aciklama: String(row[6] || ""),
       kayitTarihi: hucreTarihStr(row[7]),
       belgeTipi: belgeTipi,
-      siparisDurumu: belgeTipi === "Sipariş" ? (siparisDurumHaritasi[id] || "Bekliyor") : "",
+      siparisManuelDurum: elleSecilenDurum || "Beklemede",
+      siparisDurumu: belgeTipi === "Sipariş" ? siparisDurumHesapla(elleSecilenDurum, f && f.tamamiFaturalandi, f ? f.hicFaturalanmadi : true) : "",
     });
   }
   sonuc.reverse(); // ID zaman damgalı olduğundan ekleme sırası = kronolojik; en yeni en üstte
@@ -717,6 +744,7 @@ function getSatisDetay(satisId) {
         belgeTipi: String(data[i][8] || "") || "Fatura",
         dipIskontoYuzde: parseFloat(data[i][9]) || 0, bankaHesapId: String(data[i][10] || ""),
         kaynakSiparisId: String(data[i][11] || ""),
+        siparisManuelDurum: String(data[i][12] || "") || "Beklemede",
       };
       break;
     }
@@ -748,7 +776,7 @@ function getSatisDetay(satisId) {
   if (satis.belgeTipi === "Sipariş") {
     const tumuFaturalandi = kalemler.length > 0 && kalemler.every(k => k.kalanMiktar <= 0);
     const hicFaturalanmadi = kalemler.every(k => k.faturalananMiktar <= 0);
-    satis.siparisDurumu = tumuFaturalandi ? "Tamamlandı" : (hicFaturalanmadi ? "Bekliyor" : "Kısmen Faturalandı");
+    satis.siparisDurumu = siparisDurumHesapla(satis.siparisManuelDurum, tumuFaturalandi, hicFaturalanmadi);
   }
   const dipIskontoTutari = araToplamKalem * ((satis.dipIskontoYuzde || 0) / 100);
   const araToplam = brutToplam - iskontoToplam - dipIskontoTutari;
@@ -810,7 +838,12 @@ function saveSatis(body) {
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   const bankaHesapId = String(body.bankaHesapId || "").trim();
-  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, String(body.belgeTipi || "Fatura"), dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || "")]);
+  const belgeTipi = String(body.belgeTipi || "Fatura");
+  let siparisDurumu = "";
+  if (belgeTipi === "Sipariş") {
+    siparisDurumu = SIPARIS_DURUM_SECENEKLERI.includes(body.siparisDurumu) ? body.siparisDurumu : "Beklemede";
+  }
+  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu]);
 
   kalemler.forEach((k, idx) => {
     const kId = "sk_" + Date.now() + "_" + idx;
@@ -821,24 +854,29 @@ function saveSatis(body) {
     kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, iskontoYuzde, kdvOrani, 0]);
   });
 
-  // Cari seçildiyse, tutar kadar otomatik Borç hareketi ekle (müşteri bize borçlanır).
-  // "SATIS:<id>" işaretini açıklamaya koyuyoruz ki satış silinince bu hareket bulunup geri alınabilsin.
-  if (cariId) {
-    cariHareketEkle({
-      cariId: cariId,
-      tarih: tarih,
-      tip: "Borç",
-      tutar: toplamTutar,
-      aciklama: cariHareketAciklamaOlustur("SATIS", id, "satis_" + String(body.belgeTipi || "Fatura"), body.aciklama),
-      vade: String(body.odemeTipi || "") === "Açık Hesap" ? String(body.vade || "") : "",
-    });
-  }
+  // Cari harekete/banka hareketine SADECE FATURA yansır — Teklif ve Sipariş henüz
+  // gerçekleşmiş bir satış değildir, cariye borç yazılmaz. Sipariş faturalandığında
+  // (siparistenFaturaOlustur ile) oluşturulan Fatura zaten kendi Borç hareketini yaratır.
+  if (belgeTipi === "Fatura") {
+    // Cari seçildiyse, tutar kadar otomatik Borç hareketi ekle (müşteri bize borçlanır).
+    // "SATIS:<id>" işaretini açıklamaya koyuyoruz ki satış silinince bu hareket bulunup geri alınabilsin.
+    if (cariId) {
+      cariHareketEkle({
+        cariId: cariId,
+        tarih: tarih,
+        tip: "Borç",
+        tutar: toplamTutar,
+        aciklama: cariHareketAciklamaOlustur("SATIS", id, "satis_" + belgeTipi, body.aciklama),
+        vade: String(body.odemeTipi || "") === "Açık Hesap" ? String(body.vade || "") : "",
+      });
+    }
 
-  // Ödeme Tipi "Havale" ise ve bir banka hesabı seçildiyse, o hesaba GİRİŞ kaydı düşülür
-  // (satış tutarı doğrudan banka hesabına havale ile ödenmiş demektir).
-  if (String(body.odemeTipi || "") === "Havale" && bankaHesapId) {
-    bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", toplamTutar,
-      cariHareketAciklamaOlustur("SATIS", id, "satis_" + String(body.belgeTipi || "Fatura"), body.aciklama));
+    // Ödeme Tipi "Havale" ise ve bir banka hesabı seçildiyse, o hesaba GİRİŞ kaydı düşülür
+    // (satış tutarı doğrudan banka hesabına havale ile ödenmiş demektir).
+    if (String(body.odemeTipi || "") === "Havale" && bankaHesapId) {
+      bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", toplamTutar,
+        cariHareketAciklamaOlustur("SATIS", id, "satis_" + belgeTipi, body.aciklama));
+    }
   }
 
   return { ok: true, id: id, toplamTutar: toplamTutar };
@@ -929,6 +967,40 @@ function siparistenFaturaOlustur(body) {
   cacheTemizle(["stokTanimListesi"]); // güncel stok hesaplamaları vb. için (dolaylı etkisi olmasa da güvenli taraf)
 
   return { ok: true, faturaId: faturaSonuc.id, toplamTutar: faturaSonuc.toplamTutar };
+}
+
+// body: { id, durum } — Sipariş'in elle takip edilen durumunu günceller
+// (Beklemede/Onaylandı/Teslim Edildi/Haber Verecek). Faturalanma durumu
+// (Muhasebelendi/Kısmen Faturalandı) bundan bağımsız, otomatik hesaplanır.
+function siparisDurumGuncelle(body) {
+  const id = String(body.id || "").trim();
+  const durum = String(body.durum || "");
+  if (!id) return { ok: false, hata: "id gerekli" };
+  if (!SIPARIS_DURUM_SECENEKLERI.includes(durum)) return { ok: false, hata: "Geçersiz durum" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  ensureSatisBelgeTipiColonu(sSheet);
+  const data = sSheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) {
+      if (String(data[i][8] || "") !== "Sipariş") return { ok: false, hata: "Bu kayıt bir Sipariş değil" };
+      sSheet.getRange(i + 1, 13).setValue(durum);
+      return { ok: true };
+    }
+  }
+  return { ok: false, hata: "Sipariş bulunamadı" };
+}
+
+// Bir carinin tüm siparişlerini (durumlarıyla birlikte) döner — Cari detayındaki
+// "Siparişler" bölümü için.
+function getCariSiparisListesi(cariId) {
+  if (!cariId) return { ok: false, hata: "cariId gerekli" };
+  const res = getSatisListesi();
+  if (!res.ok) return res;
+  const siparisler = res.satislar.filter(s => s.cariId === String(cariId) && s.belgeTipi === "Sipariş");
+  return { ok: true, siparisler: siparisler };
 }// body: { id }
 function silSatis(body) {
   const id = String(body.id || "").trim();
