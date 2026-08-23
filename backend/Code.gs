@@ -1987,10 +1987,16 @@ function getBekleyenAlisFaturalari() {
 
   const sonuc = Object.values(gruplar).map(f => {
     f.kalemSayisi = f.kalemler.length;
+    // Genel toplam = fatura tutarı (KDV dahil). Kaynak veride miktar olmadığından
+    // birim fiyatlar üzerinden hesaplanıyor — gerçek fatura toplamı miktarla çarpılınca değişebilir.
     f.netToplam = f.kalemler.reduce((t, k) => t + k.netFiyat, 0);
+    f.genelToplam = f.kalemler.reduce((t, k) => t + (k.netFiyat + k.nakliyePayi) * (1 + k.kdvOrani / 100), 0);
+    // "gg/AA/yyyy" → sıralanabilir "yyyy-AA-gg" anahtarı.
+    const parcalar = String(f.tarih || "").split("/");
+    f.tarihSirala = parcalar.length === 3 ? `${parcalar[2]}-${parcalar[1].padStart(2,"0")}-${parcalar[0].padStart(2,"0")}` : "";
     return f;
   });
-  sonuc.sort((a, b) => (b.tarih || "").localeCompare(a.tarih || ""));
+  sonuc.sort((a, b) => (b.tarihSirala || "").localeCompare(a.tarihSirala || ""));
 
   return { ok: true, faturalar: sonuc };
 }

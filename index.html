@@ -2699,19 +2699,34 @@ function alisBekleyenListesiYukle(){
 function alisBekleyenListesiCiz(){
   const el = document.getElementById("alis-bekleyen-list");
   if(_alisBekleyenListe.length === 0){ el.innerHTML = '<div class="cari-empty">Onay bekleyen fatura yok 🎉</div>'; return; }
-  el.innerHTML = _alisBekleyenListe.map(f=>`
+  el.innerHTML = _alisBekleyenListe.map((f,fi)=>`
     <div class="cari-item" style="cursor:default">
       <div class="cari-item-top">
         <span class="cari-item-ad">${f.tedarikci || "(Tedarikçi belirtilmemiş)"}</span>
-        <span class="cari-item-bakiye">${paraFormat(f.netToplam)}</span>
+        <span class="cari-item-bakiye">${paraFormat(f.genelToplam)}</span>
       </div>
-      <span class="cari-item-tip">Fatura No: ${f.faturaNo} · ${tarihGoster(f.tarih)} · ${f.kalemSayisi} kalem</span>
+      <span class="cari-item-tip">Fatura No: ${f.faturaNo} · ${tarihGoster(f.tarih)} · Toplam ${f.kalemSayisi} Kalem</span>
+      <div style="margin-top:6px">
+        <span style="font-size:12px;color:var(--accent);cursor:pointer;font-weight:600" onclick="alisBekleyenKalemGosterGizle(${fi})" id="bfk-toggle-${fi}">▾ Ürünleri göster</span>
+      </div>
+      <div id="bfk-kalemler-${fi}" style="display:none;margin-top:8px">
+        <table class="hk-tablo"><thead><tr><th>Ürün</th><th>Birim Fiyat</th><th>İsk.</th><th>Net Fiyat</th><th>KDV</th></tr></thead>
+        <tbody>${f.kalemler.map(k=>`<tr><td>${k.urunAdi}</td><td>${paraFormat(k.birimFiyat)}</td><td>%${k.iskonto}</td><td>${paraFormat(k.netFiyat)}</td><td>%${k.kdvOrani}</td></tr>`).join("")}</tbody></table>
+      </div>
       <div class="btnrow" style="margin-top:8px">
         ${f.faturaLink ? `<a class="btn" href="${f.faturaLink}" target="_blank" style="text-decoration:none">📄 Faturayı Gör</a>` : ""}
         <button class="btn btn-primary" onclick="alisBekleyenOnayModalAc('${f.faturaNo}')">✅ İncele ve Onayla</button>
         <button class="btn btn-danger" onclick="alisBekleyenReddet('${f.faturaNo}')">✖ Reddet</button>
       </div>
     </div>`).join("");
+}
+
+function alisBekleyenKalemGosterGizle(fi){
+  const kutu = document.getElementById(`bfk-kalemler-${fi}`);
+  const toggle = document.getElementById(`bfk-toggle-${fi}`);
+  const acik = kutu.style.display !== "none";
+  kutu.style.display = acik ? "none" : "block";
+  toggle.textContent = acik ? "▾ Ürünleri göster" : "▴ Ürünleri gizle";
 }
 
 function alisBekleyenReddet(faturaNo){
