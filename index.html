@@ -608,6 +608,11 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
           <div class="lbl">İade</div>
           <div class="desc">Tedarikçiye yapılan iade kayıtları</div>
         </div>
+        <div class="modtile" onclick="alisAltModulAc('bekleyen')">
+          <span class="ic">📨</span>
+          <div class="lbl">Bekleyen Faturalar</div>
+          <div class="desc">Gelen e-Fatura'lardan onay bekleyenler</div>
+        </div>
       </div>
     </div>
 
@@ -636,6 +641,18 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
       </div>
       <div class="cari-detail-panel" id="alisiade-detail-panel">
         <div class="cari-detail-empty"><span class="ic">↩️</span><p>Detayları görmek için soldan bir iade seçin</p></div>
+      </div>
+    </div>
+
+    <div id="alis-bekleyen-view" style="display:none;height:100%;flex-direction:column;overflow:auto">
+      <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0;flex-shrink:0" onclick="alisAnaSecimeDon()">← Alış seçimine dön</button>
+      <div style="padding:14px">
+        <div class="rapor-baslik" style="margin-top:0">📨 Onay Bekleyen Faturalar</div>
+        <p style="font-size:12.5px;color:var(--text3);margin:4px 0 14px">
+          fincanlaryapi@gmail.com hesabına gelen e-Faturalardan otomatik çekilen fiyat/tedarikçi bilgileri — miktarları girip
+          onayladığında gerçek bir Alış kaydı oluşur ve tedarikçi cari hesabına borç işlenir.
+        </p>
+        <div id="alis-bekleyen-list"><div class="cari-empty">Yükleniyor...</div></div>
       </div>
     </div>
   </div>
@@ -2073,17 +2090,22 @@ function alisAnaSecimeDon(){
   document.getElementById("alis-secim").style.display = "block";
   document.getElementById("alis-giris-view").style.display = "none";
   document.getElementById("alis-iade-view").style.display = "none";
+  document.getElementById("alis-bekleyen-view").style.display = "none";
 }
 function alisAltModulAc(hangisi){
   document.getElementById("alis-secim").style.display = "none";
+  document.getElementById("alis-giris-view").style.display = "none";
+  document.getElementById("alis-iade-view").style.display = "none";
+  document.getElementById("alis-bekleyen-view").style.display = "none";
   if(hangisi === "giris"){
     document.getElementById("alis-giris-view").style.display = "flex";
-    document.getElementById("alis-iade-view").style.display = "none";
     if(!_alisYuklendi) alisListesiYukle();
   } else if(hangisi === "iade"){
     document.getElementById("alis-iade-view").style.display = "flex";
-    document.getElementById("alis-giris-view").style.display = "none";
     if(!_alisIadeYuklendi) alisIadeListesiYukle();
+  } else if(hangisi === "bekleyen"){
+    document.getElementById("alis-bekleyen-view").style.display = "flex";
+    alisBekleyenListesiYukle();
   }
 }
 
@@ -2659,6 +2681,163 @@ function alisIadeKaydet(){
     alisIadeListesiYukle();
     if(cariId) cariListesiYukle();
     alisIadeAc(res.id);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ── Bekleyen Alış Faturaları (e-Fatura otomasyonundan gelen, onay bekleyen) ──
+let _alisBekleyenListe = [];
+
+function alisBekleyenListesiYukle(){
+  document.getElementById("alis-bekleyen-list").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getBekleyenAlisFaturalari").then(res=>{
+    if(!res.ok){ document.getElementById("alis-bekleyen-list").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||"bilinmiyor")+'</div>'; return; }
+    _alisBekleyenListe = res.faturalar;
+    alisBekleyenListesiCiz();
+  }).catch(err=>{ document.getElementById("alis-bekleyen-list").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+
+function alisBekleyenListesiCiz(){
+  const el = document.getElementById("alis-bekleyen-list");
+  if(_alisBekleyenListe.length === 0){ el.innerHTML = '<div class="cari-empty">Onay bekleyen fatura yok 🎉</div>'; return; }
+  el.innerHTML = _alisBekleyenListe.map(f=>`
+    <div class="cari-item" style="cursor:default">
+      <div class="cari-item-top">
+        <span class="cari-item-ad">${f.tedarikci || "(Tedarikçi belirtilmemiş)"}</span>
+        <span class="cari-item-bakiye">${paraFormat(f.netToplam)}</span>
+      </div>
+      <span class="cari-item-tip">Fatura No: ${f.faturaNo} · ${tarihGoster(f.tarih)} · ${f.kalemSayisi} kalem</span>
+      <div class="btnrow" style="margin-top:8px">
+        ${f.faturaLink ? `<a class="btn" href="${f.faturaLink}" target="_blank" style="text-decoration:none">📄 Faturayı Gör</a>` : ""}
+        <button class="btn btn-primary" onclick="alisBekleyenOnayModalAc('${f.faturaNo}')">✅ İncele ve Onayla</button>
+        <button class="btn btn-danger" onclick="alisBekleyenReddet('${f.faturaNo}')">✖ Reddet</button>
+      </div>
+    </div>`).join("");
+}
+
+function alisBekleyenReddet(faturaNo){
+  if(!confirm("Bu faturayı reddetmek istediğinize emin misiniz? Reddedilen faturalar bir daha bu listede görünmez.")) return;
+  cariApi("reddetAlisFaturasi", {faturaNo}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    alisBekleyenListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+function alisBekleyenOnayModalAc(faturaNo){
+  const f = _alisBekleyenListe.find(x=>x.faturaNo===faturaNo);
+  if(!f) return;
+  if(!_cariYuklendi) cariListesiYukle();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "bfm-modal-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  // FATURA_TARIHI "dd/MM/yyyy" formatında geliyor → date input için yyyy-MM-dd'ye çeviriyoruz.
+  let tarihISO = new Date().toISOString().slice(0,10);
+  const parcalar = String(f.tarih||"").split("/");
+  if(parcalar.length===3) tarihISO = `${parcalar[2]}-${parcalar[1]}-${parcalar[0]}`;
+  overlay.innerHTML = `
+    <div class="modal-box modal-box-wide">
+      <h3>Faturayı Onayla — ${f.faturaNo}</h3>
+      <p style="font-size:12px;color:var(--text3);margin:-6px 0 10px">Kaynak fatura miktar bilgisi içermiyor — aşağıdaki miktarları elle girmelisin.</p>
+      <div class="fld" style="position:relative">
+        <label>Tedarikçi (Cari)</label>
+        <input id="bfm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" value="${f.tedarikci||''}" style="padding-right:34px"
+               oninput="bfmCariAramaDegisti()"
+               onfocus="bfmCariOneriGoster()"
+               onblur="setTimeout(()=>bfmCariOneriKapat(),200)"
+               onkeydown="oneriKlavyeYonet(event,'bfm-cari-oneri')">
+        <input type="hidden" id="bfm-cari" value="">
+        <div id="bfm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+      </div>
+      <div class="fld"><label>Tarih</label><input id="bfm-tarih" type="date" value="${tarihISO}"></div>
+      <div class="fld"><label>Ödeme Tipi</label>
+        <select id="bfm-odeme">
+          <option value="Veresiye">Veresiye</option>
+          <option value="Peşin">Peşin</option>
+        </select>
+      </div>
+      <div class="fld"><label>Açıklama</label><input id="bfm-aciklama" type="text" value="Fatura No: ${f.faturaNo}"></div>
+
+      <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri — Miktar Girin</label>
+      <table class="hk-tablo" style="margin-top:8px"><thead><tr><th>Ürün</th><th style="width:90px">Miktar</th><th style="width:80px">Birim</th><th style="width:110px">Birim Fiyat</th></tr></thead>
+      <tbody id="bfm-kalemler">
+        ${f.kalemler.map((k,i)=>`
+        <tr>
+          <td>${k.urunAdi}</td>
+          <td><input id="bfm-miktar-${i}" type="number" min="0" step="0.01" placeholder="0" style="width:80px"></td>
+          <td><select id="bfm-birim-${i}"><option value="adet">adet</option><option value="m2">m²</option><option value="paket">paket</option><option value="kg">kg</option></select></td>
+          <td><input id="bfm-fiyat-${i}" type="number" min="0" step="0.01" value="${k.netFiyat}" style="width:100px"></td>
+        </tr>`).join("")}
+      </tbody></table>
+
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('bfm-modal-overlay').remove()">İptal</button>
+        <button class="btn btn-primary" onclick="alisBekleyenOnayla('${faturaNo}')">Onayla ve Alış Oluştur</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  window._bfmAktifFatura = f;
+}
+
+function bfmCariAramaDegisti(){ document.getElementById("bfm-cari").value = ""; bfmCariOneriGoster(); }
+function bfmCariOneriGoster(){
+  const kutu = document.getElementById("bfm-cari-oneri");
+  if(!kutu) return;
+  const q = (document.getElementById("bfm-cari-arama").value || "").trim().toLocaleLowerCase('tr');
+  if(q.length < 1){ kutu.style.display = "none"; return; }
+  const eslesenler = (_cariListe || []).filter(c =>
+    (c.ad||"").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").toLocaleLowerCase('tr').includes(q)
+  ).slice(0, 8);
+  if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
+  kutu.innerHTML = eslesenler.map((c,i)=>`
+    <div class="fiyat-gecmis-satir" onclick="bfmCariSec(${i})" data-oneri-idx="${i}">
+      <span>${c.ad}</span><b>${c.cariKodu||''}</b>
+    </div>`).join("");
+  kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+  kutu.style.display = "block";
+}
+function bfmCariOneriKapat(){ const kutu = document.getElementById("bfm-cari-oneri"); if(kutu) kutu.style.display = "none"; }
+function bfmCariSec(i){
+  const kutu = document.getElementById("bfm-cari-oneri");
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const c = eslesenler[i];
+  if(!c) return;
+  document.getElementById("bfm-cari").value = c.id;
+  document.getElementById("bfm-cari-arama").value = c.ad;
+  kutu.style.display = "none";
+}
+
+function alisBekleyenOnayla(faturaNo){
+  const f = window._bfmAktifFatura;
+  if(!f) return;
+  const kalemler = [];
+  for(let i=0; i<f.kalemler.length; i++){
+    const miktar = parseFloat(document.getElementById(`bfm-miktar-${i}`).value) || 0;
+    if(miktar <= 0) continue; // Miktarı boş bırakılan satırlar alışa dahil edilmez.
+    kalemler.push({
+      urunAdi: f.kalemler[i].urunAdi,
+      miktar: miktar,
+      birim: document.getElementById(`bfm-birim-${i}`).value,
+      birimFiyat: parseFloat(document.getElementById(`bfm-fiyat-${i}`).value) || 0,
+    });
+  }
+  if(kalemler.length === 0){ alert("En az bir kaleme miktar girmelisiniz"); return; }
+  const cariId = document.getElementById("bfm-cari").value;
+  const serbestAd = document.getElementById("bfm-cari-arama").value.trim();
+  const body = {
+    faturaNo,
+    cariId: cariId || undefined,
+    cariAd: !cariId ? serbestAd : undefined,
+    tarih: document.getElementById("bfm-tarih").value,
+    odemeTipi: document.getElementById("bfm-odeme").value,
+    aciklama: document.getElementById("bfm-aciklama").value,
+    kalemler,
+  };
+  cariApi("onaylaAlisFaturasi", body).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    document.getElementById("bfm-modal-overlay").remove();
+    alisBekleyenListesiYukle();
+    _alisYuklendi = false; // Alış listesi bir sonraki açılışta yenilensin.
+    if(cariId) cariListesiYukle();
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 </script>

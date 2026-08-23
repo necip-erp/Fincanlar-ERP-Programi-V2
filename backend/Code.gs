@@ -34,6 +34,7 @@ const SHEETS = {
   aciklamaSablonlari: "AciklamaSablonlari",
   cekSenetler: "CekSenetler",
   cekSenetHareketleri: "CekSenetHareketleri",
+  alisFaturaDurum: "AlisFaturaDurum",
 };
 
 // ── YARDIMCI FONKSİYONLAR ──
@@ -328,7 +329,9 @@ function handleRequest(e) {
       case "getKritikStokListesi": result = getKritikStokListesi(); break;
       case "vadesiGecmisAlacaklar": result = vadesiGecmisAlacaklar(); break;
       case "getCekSenetListesi": result = getCekSenetListesi(); break;
-      case "getFaturaFiyatOrnek": result = getFaturaFiyatOrnek(); break;
+      case "getBekleyenAlisFaturalari": result = getBekleyenAlisFaturalari(); break;
+      case "onaylaAlisFaturasi": result = onaylaAlisFaturasi(body); break;
+      case "reddetAlisFaturasi": result = reddetAlisFaturasi(body); break;
       case "getCekSenetDetay":   result = getCekSenetDetay(body.id); break;
       case "saveCekSenet":       result = saveCekSenet(body); break;
       case "silCekSenet":        result = silCekSenet(body); break;
@@ -1915,12 +1918,126 @@ function cekSenetDurumGuncelle(body) {
   return { ok: true };
 }
 
-function getFaturaFiyatOrnek() {
-  const ss = SpreadsheetApp.openById("19t4MsvudC8X7knZ_dymBm5fghcbZcpAMwOmUXZxDPPQ");
-  const sh = ss.getSheetByName("FATURAFIYAT");
-  if (!sh) return { ok: false, hata: "sayfa yok" };
-  const data = sh.getDataRange().getValues();
-  return { ok: true, headers: data[0], ornekSatirlar: data.slice(1, 6), toplamSatir: data.length - 1 };
+// ════════════════════════════════════════════════
+// BEKLEYEN ALIŞ FATURALARI (fincanlaryapi@gmail.com hesabındaki e-Fatura/fiyat
+// otomasyonunun beslediği FATURAFIYAT sayfasından — stok-panel'in "Faturalar"
+// sayfasıyla AYNI kaynak). Bu sayfa sadece fiyat/tedarikçi/fatura bilgisi taşır,
+// MİKTAR bilgisi yoktur — o yüzden onay ekranında kullanıcı miktarları girer.
+// Onaylanan fatura mevcut saveAlis() ile gerçek bir Alış kaydına dönüşür ve
+// cariye borç hareketi düşer; AlisFaturaDurum sayfasında FATURA_NO bazında
+// Onaylandı/Reddedildi olarak işaretlenip bekleyen listeden düşer.
+// ════════════════════════════════════════════════
+const DIS_FIYAT_SHEET_ID  = "19t4MsvudC8X7knZ_dymBm5fghcbZcpAMwOmUXZxDPPQ";
+const DIS_FIYAT_SHEET_ADI = "FATURAFIYAT";
+const ALIS_FATURA_DURUM_BASLIKLAR = ["FATURA_NO","DURUM","ALIS_ID","ACIKLAMA","ISLEM_TARIHI"];
+
+function getBekleyenAlisFaturalari() {
+  let disData;
+  try {
+    const disSs = SpreadsheetApp.openById(DIS_FIYAT_SHEET_ID);
+    const disSh = disSs.getSheetByName(DIS_FIYAT_SHEET_ADI);
+    if (!disSh) return { ok: false, hata: "FATURAFIYAT sayfası bulunamadı" };
+    disData = disSh.getDataRange().getValues();
+  } catch (e) {
+    return { ok: false, hata: "Fatura kaynağına erişilemedi: " + e.message };
+  }
+  if (disData.length < 2) return { ok: true, faturalar: [] };
+
+  const h = disData[0];
+  const col = {
+    kod: h.indexOf("STOK_KODU"), ad: h.indexOf("STOK_ADI"), fiy: h.indexOf("BIRIM_FIYAT"),
+    isk: h.indexOf("ISKONTO"), net: h.indexOf("NET_FIYAT"), nak: h.indexOf("NAKLIYE_PAYI"),
+    kdv: h.indexOf("KDV_ORANI"), fno: h.indexOf("FATURA_NO"), ftar: h.indexOf("FATURA_TARIHI"),
+    ted: h.indexOf("TEDARIKCI"), lnk: h.indexOf("FATURA_LINK"), edm: h.indexOf("EDM_LINK"),
+  };
+
+  // İşlenmiş (onaylanmış/reddedilmiş) fatura numaralarını oku.
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
+  const durumData = durumSheet.getDataRange().getValues();
+  const islenmis = {};
+  for (let i = 1; i < durumData.length; i++) {
+    const fno = String(durumData[i][0] || "");
+    if (fno) islenmis[fno] = String(durumData[i][1] || "");
+  }
+
+  // FATURA_NO bazında grupla.
+  const gruplar = {};
+  for (let i = 1; i < disData.length; i++) {
+    const row = disData[i];
+    const fno = String(row[col.fno] || "").trim();
+    if (!fno) continue;
+    if (islenmis[fno]) continue; // Onaylanmış/reddedilmiş faturalar bekleyen listede görünmez.
+
+    if (!gruplar[fno]) {
+      gruplar[fno] = {
+        faturaNo: fno, tedarikci: String(row[col.ted] || ""), tarih: String(row[col.ftar] || ""),
+        faturaLink: col.lnk >= 0 ? String(row[col.lnk] || "") : "",
+        edmLink: col.edm >= 0 ? String(row[col.edm] || "") : "",
+        kalemler: [],
+      };
+    }
+    gruplar[fno].kalemler.push({
+      stokKodu: String(row[col.kod] || ""), urunAdi: String(row[col.ad] || ""),
+      birimFiyat: parseFloat(row[col.fiy]) || 0, iskonto: parseFloat(row[col.isk]) || 0,
+      netFiyat: parseFloat(row[col.net]) || 0, nakliyePayi: parseFloat(row[col.nak]) || 0,
+      kdvOrani: parseFloat(row[col.kdv]) || 0,
+    });
+  }
+
+  const sonuc = Object.values(gruplar).map(f => {
+    f.kalemSayisi = f.kalemler.length;
+    f.netToplam = f.kalemler.reduce((t, k) => t + k.netFiyat, 0);
+    return f;
+  });
+  sonuc.sort((a, b) => (b.tarih || "").localeCompare(a.tarih || ""));
+
+  return { ok: true, faturalar: sonuc };
+}
+
+// body: { faturaNo, cariId, cariAd, tarih, odemeTipi, aciklama, kalemler: [{urunAdi,miktar,birim,birimFiyat}] }
+// Kullanıcının onay ekranında miktarları girdiği satırlarla gerçek bir Alış kaydı oluşturur
+// (mevcut saveAlis mantığıyla — cari borç hareketi dahil) ve faturayı Onaylandı olarak işaretler.
+function onaylaAlisFaturasi(body) {
+  const faturaNo = String(body.faturaNo || "").trim();
+  if (!faturaNo) return { ok: false, hata: "faturaNo gerekli" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
+  const durumData = durumSheet.getDataRange().getValues();
+  for (let i = 1; i < durumData.length; i++) {
+    if (String(durumData[i][0]) === faturaNo) return { ok: false, hata: "Bu fatura zaten işlenmiş (" + durumData[i][1] + ")" };
+  }
+
+  const alisSonuc = saveAlis({
+    cariId: body.cariId, cariAd: body.cariAd, tarih: body.tarih, odemeTipi: body.odemeTipi,
+    aciklama: (String(body.aciklama || "").trim() || ("Fatura No: " + faturaNo)),
+    kalemler: body.kalemler,
+  });
+  if (!alisSonuc.ok) return alisSonuc;
+
+  durumSheet.appendRow([faturaNo, "Onaylandı", alisSonuc.id, String(body.aciklama || ""),
+    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+
+  return { ok: true, alisId: alisSonuc.id, toplamTutar: alisSonuc.toplamTutar };
+}
+
+// body: { faturaNo, aciklama }
+function reddetAlisFaturasi(body) {
+  const faturaNo = String(body.faturaNo || "").trim();
+  if (!faturaNo) return { ok: false, hata: "faturaNo gerekli" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
+  const durumData = durumSheet.getDataRange().getValues();
+  for (let i = 1; i < durumData.length; i++) {
+    if (String(durumData[i][0]) === faturaNo) return { ok: false, hata: "Bu fatura zaten işlenmiş (" + durumData[i][1] + ")" };
+  }
+
+  durumSheet.appendRow([faturaNo, "Reddedildi", "", String(body.aciklama || ""),
+    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+
+  return { ok: true };
 }
 
 function getFinansOzet() {
