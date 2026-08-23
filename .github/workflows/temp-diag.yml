@@ -1,5 +1,8 @@
 name: Temp Diagnostic
-on: workflow_dispatch
+on:
+  push:
+    paths:
+      - '.github/workflows/temp-diag.yml'
 jobs:
   diag:
     runs-on: ubuntu-latest
