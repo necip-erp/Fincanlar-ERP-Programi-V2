@@ -2046,6 +2046,17 @@ function reddetAlisFaturasi(body) {
   return { ok: true };
 }
 
+// GEÇİCİ: FATURAFIYAT'ı dolduran ayrı script'in kaynak kodunu okumak için.
+// Bir kereye mahsus, script editöründen manuel çalıştırılıp yetki onaylanmalı.
+function kodOkuTest() {
+  const scriptId = "191WL_xFbyRiNN12ufBw0D76NNM8lofDPbht0zWIlaFFe-0GYNh_ZAn6r";
+  const token = ScriptApp.getOAuthToken();
+  const url = "https://script.googleapis.com/v1/projects/" + scriptId + "/content";
+  const res = UrlFetchApp.fetch(url, { headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true });
+  Logger.log(res.getResponseCode());
+  Logger.log(res.getContentText());
+}
+
 function getFinansOzet() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
 
