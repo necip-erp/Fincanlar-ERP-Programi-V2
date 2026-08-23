@@ -329,6 +329,7 @@ function handleRequest(e) {
       case "getKritikStokListesi": result = getKritikStokListesi(); break;
       case "vadesiGecmisAlacaklar": result = vadesiGecmisAlacaklar(); break;
       case "getCekSenetListesi": result = getCekSenetListesi(); break;
+      case "getDisScriptKodu": result = getDisScriptKodu(); break;
       case "getBekleyenAlisFaturalari": result = getBekleyenAlisFaturalari(); break;
       case "onaylaAlisFaturasi": result = onaylaAlisFaturasi(body); break;
       case "reddetAlisFaturasi": result = reddetAlisFaturasi(body); break;
@@ -2047,14 +2048,18 @@ function reddetAlisFaturasi(body) {
 }
 
 // GEÇİCİ: FATURAFIYAT'ı dolduran ayrı script'in kaynak kodunu okumak için.
-// Bir kereye mahsus, script editöründen manuel çalıştırılıp yetki onaylanmalı.
-function kodOkuTest() {
+function getDisScriptKodu() {
   const scriptId = "191WL_xFbyRiNN12ufBw0D76NNM8lofDPbht0zWIlaFFe-0GYNh_ZAn6r";
-  const token = ScriptApp.getOAuthToken();
-  const url = "https://script.googleapis.com/v1/projects/" + scriptId + "/content";
-  const res = UrlFetchApp.fetch(url, { headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true });
-  Logger.log(res.getResponseCode());
-  Logger.log(res.getContentText());
+  try {
+    const token = ScriptApp.getOAuthToken();
+    const url = "https://script.googleapis.com/v1/projects/" + scriptId + "/content";
+    const res = UrlFetchApp.fetch(url, { headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true });
+    const kod = res.getResponseCode();
+    if (kod !== 200) return { ok: false, hata: "HTTP " + kod, detay: res.getContentText() };
+    return { ok: true, icerik: JSON.parse(res.getContentText()) };
+  } catch (e) {
+    return { ok: false, hata: e.message };
+  }
 }
 
 function getFinansOzet() {
