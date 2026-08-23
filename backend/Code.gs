@@ -86,6 +86,15 @@ function ensureCariIskontoColonu(sheet) {
   }
 }
 
+// Wolvox referanslı: carinin açık hesap borcu bu tutarı aşınca Satış ekranında uyarı
+// gösterilir (0 veya boş = limitsiz, kontrol yapılmaz).
+function ensureCariKrediLimitiColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 11).getValue();
+  if (String(mevcutBaslik || "") !== "KREDI_LIMITI") {
+    sheet.getRange(1, 11).setValue("KREDI_LIMITI").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
 // Bir cari hareketin vade tarihi (özellikle Açık Hesap satışlarında "ne zamana
 // kadar ödenmeli" bilgisini tutar). "Vadesi Geçmiş Alacaklar" raporunda kullanılır.
 function ensureCariHareketVadeColonu(sheet) {
@@ -343,6 +352,7 @@ function getCariListesi() {
   const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
   ensureCariKoduColonu(hSheet);
   ensureCariIskontoColonu(hSheet);
+  ensureCariKrediLimitiColonu(hSheet);
   const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
 
   const hData = hSheet.getDataRange().getValues();
@@ -376,6 +386,7 @@ function getCariListesi() {
       tarih: hucreTarihStr(row[7]),
       cariKodu: String(row[8] || ""),
       iskontoOrani: parseFloat(row[9]) || 0,
+      krediLimiti: parseFloat(row[10]) || 0,
       bakiye: bakiyeMap[id] || 0,
     });
   }
@@ -390,6 +401,7 @@ function getCariDetay(cariId) {
   const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
   ensureCariKoduColonu(hSheet);
   ensureCariIskontoColonu(hSheet);
+  ensureCariKrediLimitiColonu(hSheet);
   const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
   ensureCariHareketVadeColonu(hkSheet);
 
@@ -402,6 +414,7 @@ function getCariDetay(cariId) {
         telefon: String(hData[i][3] || ""), adres: String(hData[i][4] || ""),
         vergiNo: String(hData[i][5] || ""), not: String(hData[i][6] || ""), tarih: String(hData[i][7] || ""),
         cariKodu: String(hData[i][8] || ""), iskontoOrani: parseFloat(hData[i][9]) || 0,
+        krediLimiti: parseFloat(hData[i][10]) || 0,
       };
       break;
     }
@@ -441,6 +454,7 @@ function saveCari(body) {
   const sheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
   ensureCariKoduColonu(sheet);
   ensureCariIskontoColonu(sheet);
+  ensureCariKrediLimitiColonu(sheet);
   const data = sheet.getDataRange().getValues();
 
   let id = String(body.id || "").trim();
@@ -463,6 +477,7 @@ function saveCari(body) {
     satirIdx > 0 ? data[satirIdx - 1][7] : Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"),
     String(body.cariKodu || (satirIdx > 0 ? (data[satirIdx - 1][8] || "") : "")),
     parseFloat(body.iskontoOrani) || 0,
+    parseFloat(body.krediLimiti) || 0,
   ];
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);

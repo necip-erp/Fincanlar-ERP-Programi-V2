@@ -157,6 +157,7 @@ table.hareket-tbl td{padding:8px 8px;border-bottom:1px solid var(--border)}
 table.hareket-tbl tr:hover td{background:var(--bg3)}
 table.hareket-tbl tr.hk-row{cursor:pointer}
 .hk-borc{color:var(--red);font-weight:700;background:var(--red-l);padding:2px 8px;border-radius:20px;font-size:11.5px;white-space:nowrap}
+.uyari-kutu{background:var(--red-l);color:var(--red);font-weight:700;font-size:13px;padding:10px 14px;border-radius:10px;margin:0 16px 12px}
 .hk-alacak{color:var(--green);font-weight:700;background:var(--green-l);padding:2px 8px;border-radius:20px;font-size:11.5px;white-space:nowrap}
 .hk-sil{color:var(--text3);cursor:pointer;font-size:14px;transition:color var(--t),transform var(--t);display:inline-block}
 .hk-sil:hover{color:var(--red);transform:scale(1.12)}
@@ -1164,7 +1165,7 @@ function cariListesiCiz(liste){
         <span class="cari-item-ad">${c.ad}</span>
         <span class="cari-item-bakiye ${bakiyeSinifi(c.bakiye)}">${paraFormat(c.bakiye)}</span>
       </div>
-      <span class="cari-item-tip">${c.tip}${c.cariKodu?' · '+c.cariKodu:''}</span>
+      <span class="cari-item-tip">${c.tip}${c.cariKodu?' · '+c.cariKodu:''}${(c.krediLimiti>0 && c.bakiye>c.krediLimiti)?' · <span class="hk-borc">⚠️ Limit aşıldı</span>':''}</span>
     </div>`).join("") + (liste.length > _cariRenderLimit
       ? `<div class="liste-daha-fazla" onclick="cariDahaFazlaGoster()">+ ${liste.length - _cariRenderLimit} kayıt daha göster</div>`
       : "");
@@ -1217,6 +1218,7 @@ function cariDetayCiz(res){
         <div class="lbl">${bakiye>0?'Bize borçlu':bakiye<0?'Biz borçluyuz':'Bakiye sıfır'}</div>
       </div>
     </div>
+    ${(c.krediLimiti>0 && bakiye>c.krediLimiti) ? `<div class="uyari-kutu">⚠️ Kredi limiti aşıldı: ${paraFormat(bakiye)} / ${paraFormat(c.krediLimiti)}</div>` : ""}
 
     <div class="islemler-panel">
       <span style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700;width:100%;margin-bottom:2px">İşlemler</span>
@@ -1403,6 +1405,7 @@ function cariModalAc(editId){
       <div class="fld"><label>Adres</label><input id="cm-adres" type="text" value="${c?c.adres:''}"></div>
       <div class="fld"><label>Vergi No</label><input id="cm-vergino" type="text" value="${c?c.vergiNo:''}"></div>
       <div class="fld"><label>Genel İskonto Oranı (%)</label><input id="cm-iskonto" type="number" min="0" max="100" step="0.01" value="${c?(c.iskontoOrani||''):''}" placeholder="0 = iskonto yok"></div>
+      <div class="fld"><label>Kredi Limiti (₺)</label><input id="cm-kredilimiti" type="number" min="0" step="0.01" value="${c?(c.krediLimiti||''):''}" placeholder="0 = limitsiz"></div>
       <div class="fld"><label>Not</label><textarea id="cm-not" rows="2">${c?c.not:''}</textarea></div>
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('cari-modal-overlay').remove()">İptal</button>
@@ -1425,6 +1428,7 @@ function cariKaydet(id){
     adres: document.getElementById("cm-adres").value,
     vergiNo: document.getElementById("cm-vergino").value,
     iskontoOrani: document.getElementById("cm-iskonto").value,
+    krediLimiti: document.getElementById("cm-kredilimiti").value,
     not: document.getElementById("cm-not").value,
   };
   cariApi("saveCari", body).then(res=>{
@@ -2004,14 +2008,33 @@ function satisModalBelgeTipiDegisti(){
   document.getElementById("sm-siparis-durum-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
 }
 
+function satisGenelToplamHesapla(){
+  let brutT=0, iskT=0, kdvT=0;
+  _yeniSatisKalemleri.forEach(k=>{ const h=satisKalemHesaplaJS(k); brutT+=h.brut; iskT+=h.iskTutar; kdvT+=h.kdvTutar; });
+  const araToplamKalem = brutT - iskT;
+  const dipIskontoYuzde = parseFloat((document.getElementById("sm-dip-iskonto")||{}).value) || 0;
+  const araToplam = araToplamKalem - (araToplamKalem * (dipIskontoYuzde/100));
+  return araToplam + kdvT;
+}
+
 function satisKaydet(){
   const cariId = document.getElementById("sm-cari").value;
   const serbestAd = document.getElementById("sm-serbest-ad").value.trim();
   const kalemler = _yeniSatisKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
   if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
   const odemeTipi = document.getElementById("sm-odeme").value;
-  const bankaHesapId = odemeTipi === "Havale" ? document.getElementById("sm-banka-hesap").value : "";
   const belgeTipi = document.getElementById("sm-belgetipi").value;
+  // Wolvox referanslı kredi limiti uyarısı: açık hesap (vadeli) fatura, cariyi limitin üzerine taşıyorsa onay iste.
+  if(odemeTipi === "Açık Hesap" && belgeTipi === "Fatura" && cariId){
+    const c = _cariListe.find(x=>x.id===cariId);
+    if(c && c.krediLimiti > 0){
+      const yeniBakiye = (c.bakiye||0) + satisGenelToplamHesapla();
+      if(yeniBakiye > c.krediLimiti){
+        if(!confirm(`⚠️ Kredi limiti aşılacak!\n\n${c.ad}\nMevcut bakiye: ${paraFormat(c.bakiye||0)}\nBu satıştan sonra: ${paraFormat(yeniBakiye)}\nKredi limiti: ${paraFormat(c.krediLimiti)}\n\nYine de devam edilsin mi?`)) return;
+      }
+    }
+  }
+  const bankaHesapId = odemeTipi === "Havale" ? document.getElementById("sm-banka-hesap").value : "";
   const body = {
     cariId: cariId || undefined,
     cariAd: !cariId ? serbestAd : undefined,
