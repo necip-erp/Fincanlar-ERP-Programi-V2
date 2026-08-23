@@ -328,6 +328,7 @@ function handleRequest(e) {
       case "getKritikStokListesi": result = getKritikStokListesi(); break;
       case "vadesiGecmisAlacaklar": result = vadesiGecmisAlacaklar(); break;
       case "getCekSenetListesi": result = getCekSenetListesi(); break;
+      case "getFaturaFiyatOrnek": result = getFaturaFiyatOrnek(); break;
       case "getCekSenetDetay":   result = getCekSenetDetay(body.id); break;
       case "saveCekSenet":       result = saveCekSenet(body); break;
       case "silCekSenet":        result = silCekSenet(body); break;
@@ -1912,6 +1913,14 @@ function cekSenetDurumGuncelle(body) {
     String(body.aciklama || ""), Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
 
   return { ok: true };
+}
+
+function getFaturaFiyatOrnek() {
+  const ss = SpreadsheetApp.openById("19t4MsvudC8X7knZ_dymBm5fghcbZcpAMwOmUXZxDPPQ");
+  const sh = ss.getSheetByName("FATURAFIYAT");
+  if (!sh) return { ok: false, hata: "sayfa yok" };
+  const data = sh.getDataRange().getValues();
+  return { ok: true, headers: data[0], ornekSatirlar: data.slice(1, 6), toplamSatir: data.length - 1 };
 }
 
 function getFinansOzet() {
