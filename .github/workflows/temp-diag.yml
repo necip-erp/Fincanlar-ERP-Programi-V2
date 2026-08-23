@@ -6,7 +6,15 @@ on:
 jobs:
   diag:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Call endpoint
+      - uses: actions/checkout@v4
+      - name: Call endpoint and save
         run: |
-          curl -s "https://script.google.com/macros/s/AKfycbxlsbGdDPP42Cxm11jkDG7W9XK_SelXOrmKBxhK9PxUtZSXifFERC2yCkrUhamFJaqFPA/exec?payload=%7B%22action%22%3A%22getFaturaFiyatOrnek%22%7D"
+          curl -s "https://script.google.com/macros/s/AKfycbxlsbGdDPP42Cxm11jkDG7W9XK_SelXOrmKBxhK9PxUtZSXifFERC2yCkrUhamFJaqFPA/exec?payload=%7B%22action%22%3A%22getFaturaFiyatOrnek%22%7D" -o diag-output.txt
+          git config user.email "diag@bot.local"
+          git config user.name "diag-bot"
+          git add diag-output.txt
+          git commit -m "diag output" || echo "no changes"
+          git push
