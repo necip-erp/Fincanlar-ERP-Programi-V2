@@ -1,0 +1,9 @@
+name: Temp Diagnostic
+on: workflow_dispatch
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call endpoint
+        run: |
+          curl -s "https://script.google.com/macros/s/AKfycbxlsbGdDPP42Cxm11jkDG7W9XK_SelXOrmKBxhK9PxUtZSXifFERC2yCkrUhamFJaqFPA/exec?payload=%7B%22action%22%3A%22getFaturaFiyatOrnek%22%7D"
