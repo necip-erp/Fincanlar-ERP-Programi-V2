@@ -32,6 +32,8 @@ const SHEETS = {
   ebatlar: "Ebatlar",
   renkler: "Renkler",
   aciklamaSablonlari: "AciklamaSablonlari",
+  cekSenetler: "CekSenetler",
+  cekSenetHareketleri: "CekSenetHareketleri",
 };
 
 // ── YARDIMCI FONKSİYONLAR ──
@@ -134,6 +136,8 @@ const ACIKLAMA_SABLON_VARSAYILAN = {
   "odeme_Havale/EFT": "Havale/EFT Ödeme",
   "odeme_Kredi Kartı": "Kredi Kartı Ödeme",
   "odeme_Çek": "Çek Ödeme",
+  "cek_alinan": "Alınan Çek/Senet",
+  "cek_verilen": "Verilen Çek/Senet",
 };
 
 function aciklamaSablonlariHaritasi() {
@@ -314,6 +318,12 @@ function handleRequest(e) {
       case "saveAciklamaSablonlari": result = saveAciklamaSablonlari(body); break;
       case "getKritikStokListesi": result = getKritikStokListesi(); break;
       case "vadesiGecmisAlacaklar": result = vadesiGecmisAlacaklar(); break;
+      case "getCekSenetListesi": result = getCekSenetListesi(); break;
+      case "getCekSenetDetay":   result = getCekSenetDetay(body.id); break;
+      case "saveCekSenet":       result = saveCekSenet(body); break;
+      case "silCekSenet":        result = silCekSenet(body); break;
+      case "cekSenetIslemYap":   result = cekSenetIslemYap(body); break;
+      case "cekSenetDurumGuncelle": result = cekSenetDurumGuncelle(body); break;
       default: result = { error: "Bilinmeyen işlem: " + action };
     }
     return jsonResponse(result);
@@ -1659,6 +1669,235 @@ function silOdeme(body) {
 // ════════════════════════════════════════════════
 // FİNANS MODÜLÜ — genel özet (tüm zamanlar)
 // ════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════
+// ÇEK/SENET MODÜLÜ (Wolvox referanslı)
+// Alınan (müşteriden aldığımız) veya Verilen (tedarikçiye verdiğimiz) çek/
+// senetlerin vade takibi. Kayıt oluşturulunca cari hareketine hemen Alacak/
+// Borç yazılır (Tahsilat/Ödeme mantığıyla aynı) — çek "elde var" sayılır.
+// Sonradan tahsil/ödeme (kısmi de olabilir), ciro veya karşılıksız
+// işaretlenerek DURUM ve KALAN_TUTAR güncellenir. Kısmi işlemler
+// CekSenetHareketleri defterine ayrıca düşer. CEK:<id> önekiyle ilişkili
+// cari hareketi geri alınabilir.
+// ════════════════════════════════════════════════
+const CEK_SENET_BASLIKLAR = ["ID","TIP","CARI_ID","CARI_AD","TUTAR","KALAN_TUTAR","SERI_NO","BANKA_ADI","DUZENLENME_TARIHI","VADE","DURUM","ACIKLAMA","KAYIT_TARIHI"];
+const CEK_SENET_HAREKET_BASLIKLAR = ["ID","CEK_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI"];
+
+function getCekSenetListesi() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const bugun = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd");
+
+  const sonuc = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const id = String(row[0] || "");
+    if (!id) continue;
+    const vade = hucreTarihStr(row[9]);
+    const durum = String(row[10] || "Portföyde");
+    sonuc.push({
+      id: id, tip: String(row[1] || ""), cariId: String(row[2] || ""), cariAd: String(row[3] || ""),
+      tutar: parseFloat(row[4]) || 0, kalanTutar: parseFloat(row[5]) || 0,
+      seriNo: String(row[6] || ""), bankaAdi: String(row[7] || ""),
+      duzenlenmeTarihi: hucreTarihStr(row[8]), vade: vade, durum: durum,
+      aciklama: String(row[11] || ""), kayitTarihi: hucreTarihStr(row[12]),
+      gecikmis: durum === "Portföyde" && !!vade && vade < bugun,
+    });
+  }
+  // Portföydekiler vadeye göre (en yakın vade önce), kapananlar en sona.
+  sonuc.sort((a, b) => {
+    const aAcik = a.durum === "Portföyde", bAcik = b.durum === "Portföyde";
+    if (aAcik !== bAcik) return aAcik ? -1 : 1;
+    return (a.vade || "9999") < (b.vade || "9999") ? -1 : 1;
+  });
+  return { ok: true, cekSenetler: sonuc };
+}
+
+function getCekSenetDetay(id) {
+  const cekId = String(id || "");
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  let cek = null;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === cekId) {
+      const row = data[i];
+      cek = {
+        id: String(row[0]), tip: String(row[1] || ""), cariId: String(row[2] || ""), cariAd: String(row[3] || ""),
+        tutar: parseFloat(row[4]) || 0, kalanTutar: parseFloat(row[5]) || 0,
+        seriNo: String(row[6] || ""), bankaAdi: String(row[7] || ""),
+        duzenlenmeTarihi: hucreTarihStr(row[8]), vade: hucreTarihStr(row[9]), durum: String(row[10] || ""),
+        aciklama: String(row[11] || ""), kayitTarihi: hucreTarihStr(row[12]),
+      };
+      break;
+    }
+  }
+  if (!cek) return { ok: false, hata: "Çek/senet bulunamadı" };
+
+  const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
+  const hData = hSheet.getDataRange().getValues();
+  const hareketler = [];
+  for (let i = 1; i < hData.length; i++) {
+    const row = hData[i];
+    if (String(row[1]) !== cekId) continue;
+    hareketler.push({
+      id: String(row[0]), tarih: hucreTarihStr(row[2]), tip: String(row[3] || ""),
+      tutar: parseFloat(row[4]) || 0, aciklama: String(row[5] || ""), kayitTarihi: hucreTarihStr(row[6]),
+    });
+  }
+  hareketler.reverse();
+  return { ok: true, cek: cek, hareketler: hareketler };
+}
+
+// body: { cariId, tip (Alınan/Verilen), tutar, seriNo, bankaAdi, duzenlenmeTarihi, vade, aciklama }
+function saveCekSenet(body) {
+  const cariId = String(body.cariId || "").trim();
+  const tutar = parseFloat(body.tutar) || 0;
+  const tip = String(body.tip || "Alınan");
+  if (!cariId) return { ok: false, hata: "Cari seçimi gerekli" };
+  if (tutar <= 0) return { ok: false, hata: "Tutar sıfırdan büyük olmalı" };
+  if (tip !== "Alınan" && tip !== "Verilen") return { ok: false, hata: "Geçersiz tip" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const cSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
+    ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU"]);
+  const cData = cSheet.getDataRange().getValues();
+  let cariAd = "";
+  for (let i = 1; i < cData.length; i++) {
+    if (String(cData[i][0]) === cariId) { cariAd = String(cData[i][2] || ""); break; }
+  }
+  if (!cariAd) return { ok: false, hata: "Cari bulunamadı" };
+
+  const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
+  const id = "cs_" + Date.now();
+  const duzenlenmeTarihi = String(body.duzenlenmeTarihi || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
+  const vade = String(body.vade || "");
+  const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+  sheet.appendRow([id, tip, cariId, cariAd, tutar, tutar, String(body.seriNo || ""), String(body.bankaAdi || ""),
+    duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi]);
+
+  // Alınan çek: müşteriden aldık → borcu kapanır (Alacak). Verilen çek: tedarikçiye borcumuzu kapattık (Borç).
+  cariHareketEkle({
+    cariId: cariId, tarih: duzenlenmeTarihi, tip: tip === "Alınan" ? "Alacak" : "Borç", tutar: tutar,
+    aciklama: cariHareketAciklamaOlustur("CEK", id, tip === "Alınan" ? "cek_alinan" : "cek_verilen", body.aciklama),
+    vade: vade,
+  });
+
+  return { ok: true, id: id };
+}
+
+// body: { id } — henüz hiç tahsilat/ödeme işlenmemiş bir çek/senedi tamamen siler.
+function silCekSenet(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+
+  let cariId = "";
+  let bulundu = false;
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === id) {
+      cariId = String(data[i][2] || "");
+      sheet.deleteRow(i + 1);
+      bulundu = true;
+      break;
+    }
+  }
+  if (!bulundu) return { ok: false, hata: "Çek/senet bulunamadı" };
+
+  if (cariId) {
+    const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler,
+      ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
+    const hkData = hkSheet.getDataRange().getValues();
+    for (let i = hkData.length - 1; i >= 1; i--) {
+      if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("CEK:" + id) === 0) {
+        hkSheet.deleteRow(i + 1);
+        cacheTemizle(["cariListesi"]);
+        break;
+      }
+    }
+  }
+
+  // Kısmi tahsilat/ödeme geçmişini de temizle.
+  const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
+  const hData = hSheet.getDataRange().getValues();
+  for (let i = hData.length - 1; i >= 1; i--) {
+    if (String(hData[i][1]) === id) hSheet.deleteRow(i + 1);
+  }
+
+  return { ok: true };
+}
+
+// body: { id, tarih, tutar, aciklama } — kısmi veya tam tahsilat/ödeme.
+// Alınan çekte "Tahsilat", Verilen çekte "Ödeme" hareketi olarak CekSenetHareketleri'ne düşer.
+// Kalan tutar sıfırlanınca durum otomatik "Tahsil Edildi" / "Ödendi" olur.
+function cekSenetIslemYap(body) {
+  const id = String(body.id || "").trim();
+  const tutar = parseFloat(body.tutar) || 0;
+  if (!id) return { ok: false, hata: "id gerekli" };
+  if (tutar <= 0) return { ok: false, hata: "Tutar sıfırdan büyük olmalı" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  let rowIdx = -1, tip = "", kalanTutar = 0, durum = "";
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) {
+      rowIdx = i + 1; tip = String(data[i][1] || "");
+      kalanTutar = parseFloat(data[i][5]) || 0; durum = String(data[i][10] || "");
+      break;
+    }
+  }
+  if (rowIdx === -1) return { ok: false, hata: "Çek/senet bulunamadı" };
+  if (durum !== "Portföyde") return { ok: false, hata: "Bu çek/senet zaten kapatılmış (" + durum + ")" };
+  if (tutar > kalanTutar + 0.01) return { ok: false, hata: "Tutar kalan tutardan (" + kalanTutar + ") büyük olamaz" };
+
+  const yeniKalan = Math.round((kalanTutar - tutar) * 100) / 100;
+  const yeniDurum = yeniKalan <= 0.01 ? (tip === "Alınan" ? "Tahsil Edildi" : "Ödendi") : "Portföyde";
+  sheet.getRange(rowIdx, 6).setValue(yeniKalan);   // KALAN_TUTAR
+  sheet.getRange(rowIdx, 11).setValue(yeniDurum);  // DURUM
+
+  const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
+  const hId = "csh_" + Date.now();
+  const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
+  hSheet.appendRow([hId, id, tarih, tip === "Alınan" ? "Tahsilat" : "Ödeme", tutar, String(body.aciklama || ""),
+    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+
+  return { ok: true, kalanTutar: yeniKalan, durum: yeniDurum };
+}
+
+// body: { id, durum ("Karşılıksız" veya "Ciro Edildi"), aciklama }
+// Portföydeki bir çek/senedi tahsil/ödeme yapılmadan kapatır (ör. karşılıksız çıktı ya
+// da başka bir tedarikçiye ciro edildi). Cari bakiyesine dokunmaz — o hareket zaten
+// kayıt anında düşmüştü; sadece durum bilgisini günceller.
+function cekSenetDurumGuncelle(body) {
+  const id = String(body.id || "").trim();
+  const durum = String(body.durum || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  if (durum !== "Karşılıksız" && durum !== "Ciro Edildi") return { ok: false, hata: "Geçersiz durum" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  let rowIdx = -1, mevcutDurum = "";
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) { rowIdx = i + 1; mevcutDurum = String(data[i][10] || ""); break; }
+  }
+  if (rowIdx === -1) return { ok: false, hata: "Çek/senet bulunamadı" };
+  if (mevcutDurum !== "Portföyde") return { ok: false, hata: "Bu çek/senet zaten kapatılmış (" + mevcutDurum + ")" };
+
+  sheet.getRange(rowIdx, 11).setValue(durum);
+
+  const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
+  const hId = "csh_" + Date.now();
+  hSheet.appendRow([hId, id, Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"), durum, 0,
+    String(body.aciklama || ""), Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+
+  return { ok: true };
+}
 
 function getFinansOzet() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
