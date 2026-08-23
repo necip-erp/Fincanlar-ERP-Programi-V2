@@ -1,1 +1,1 @@
-{"error":"Bilinmeyen işlem: kodOku"}
+{"error":"Bilinmeyen işlem: getDisScriptKodu"}
