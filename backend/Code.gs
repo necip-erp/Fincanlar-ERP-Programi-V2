@@ -96,6 +96,15 @@ function ensureCariKrediLimitiColonu(sheet) {
   }
 }
 
+// Stok kodu, Alış/Satış/Sipariş kalemleri arasındaki ana bağlantı — ürün adı yerine
+// stok koduyla eşleştirme yapılabilmesi için AlisKalemleri'ne bu kolonu ekler.
+function ensureAlisKalemStokKoduColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 8).getValue();
+  if (String(mevcutBaslik || "") !== "STOK_KODU") {
+    sheet.getRange(1, 8).setValue("STOK_KODU").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
 // Bir cari hareketin vade tarihi (özellikle Açık Hesap satışlarında "ne zamana
 // kadar ödenmeli" bilgisini tutar). "Vadesi Geçmiş Alacaklar" raporunda kullanılır.
 function ensureCariHareketVadeColonu(sheet) {
@@ -1136,7 +1145,8 @@ function getAlisDetay(alisId) {
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const kSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
-    ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
+    ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
+  ensureAlisKalemStokKoduColonu(kSheet);
 
   const data = aSheet.getDataRange().getValues();
   let alis = null;
@@ -1161,12 +1171,16 @@ function getAlisDetay(alisId) {
       id: String(row[0]), alisId: String(row[1]), urunAdi: String(row[2] || ""),
       miktar: parseFloat(row[3]) || 0, birim: String(row[4] || ""),
       birimFiyat: parseFloat(row[5]) || 0, tutar: parseFloat(row[6]) || 0,
+      stokKodu: String(row[7] || ""),
     });
   }
   return { ok: true, alis: alis, kalemler: kalemler };
 }
 
-// body: { cariId (opsiyonel), cariAd, tarih, odemeTipi, aciklama, kalemler: [{urunAdi,miktar,birim,birimFiyat}] }
+// body: { cariId (opsiyonel), cariAd, tarih, odemeTipi, aciklama,
+//         kalemler: [{urunAdi,miktar,birim,birimFiyat,stokKodu (opsiyonel),
+//                     stokKartiOlustur (opsiyonel, true ise stokKodu StokTanimlari'nda
+//                     yoksa otomatik yeni bir stok kartı oluşturulur)}] }
 function saveAlis(body) {
   const kalemler = Array.isArray(body.kalemler) ? body.kalemler : [];
   if (kalemler.length === 0) return { ok: false, hata: "En az bir ürün kalemi eklemelisiniz" };
@@ -1180,7 +1194,23 @@ function saveAlis(body) {
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const kSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
-    ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
+    ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
+  ensureAlisKalemStokKoduColonu(kSheet);
+
+  // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
+  // otomatik, minimal bir stok kartı oluşturulur (stok kodu + ürün adı ile).
+  const olusturulacaklar = kalemler.filter(k => k.stokKartiOlustur && String(k.stokKodu || "").trim());
+  if (olusturulacaklar.length > 0) {
+    const mevcutStoklar = getStokTanimListesi().kalemler;
+    const mevcutKoduSeti = {};
+    mevcutStoklar.forEach(s => { if (s.stokKodu) mevcutKoduSeti[s.stokKodu] = true; });
+    olusturulacaklar.forEach(k => {
+      const kod = String(k.stokKodu).trim();
+      if (mevcutKoduSeti[kod]) return; // aradan başka bir kalem zaten oluşturmuş olabilir
+      saveStokTanim({ stokKodu: kod, stokAdi: String(k.urunAdi).trim(), birim1: String(k.birim || "adet") });
+      mevcutKoduSeti[kod] = true;
+    });
+  }
 
   const cariId = String(body.cariId || "").trim();
   let cariAd = String(body.cariAd || "").trim();
@@ -1206,7 +1236,7 @@ function saveAlis(body) {
     const kId = "ak_" + Date.now() + "_" + idx;
     const miktar = parseFloat(k.miktar) || 0;
     const birimFiyat = parseFloat(k.birimFiyat) || 0;
-    kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat]);
+    kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, String(k.stokKodu || "").trim()]);
   });
 
   // Cari seçildiyse, tutar kadar otomatik Alacak hareketi ekle (biz tedarikçiye borçlanırız).
@@ -1246,7 +1276,7 @@ function silAlis(body) {
   if (!bulundu) return { ok: false, hata: "Alış bulunamadı" };
 
   const kSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
-    ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
+    ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
   const kData = kSheet.getDataRange().getValues();
   for (let i = kData.length - 1; i >= 1; i--) {
     if (String(kData[i][1]) === id) kSheet.deleteRow(i + 1);
@@ -1961,6 +1991,11 @@ function getBekleyenAlisFaturalari() {
     if (fno) islenmis[fno] = String(durumData[i][1] || "");
   }
 
+  // Stok kodu StokTanimlari'nda kayıtlı mı diye kontrol için hazır kod seti.
+  const stokTanimSonuc = getStokTanimListesi();
+  const stokKoduSeti = {};
+  (stokTanimSonuc.kalemler || []).forEach(s => { if (s.stokKodu) stokKoduSeti[s.stokKodu] = true; });
+
   // FATURA_NO bazında grupla.
   const gruplar = {};
   for (let i = 1; i < disData.length; i++) {
@@ -1979,6 +2014,7 @@ function getBekleyenAlisFaturalari() {
     }
     gruplar[fno].kalemler.push({
       stokKodu: String(row[col.kod] || ""), urunAdi: String(row[col.ad] || ""),
+      stokVarMi: !!stokKoduSeti[String(row[col.kod] || "")],
       miktar: col.mik >= 0 ? (parseFloat(row[col.mik]) || 0) : 0,
       birimFiyat: parseFloat(row[col.fiy]) || 0, iskonto: parseFloat(row[col.isk]) || 0,
       netFiyat: parseFloat(row[col.net]) || 0, nakliyePayi: parseFloat(row[col.nak]) || 0,
@@ -2323,7 +2359,7 @@ function getMuhasebeRaporu(body) {
         if (id) alisTarih[id] = String(aData[i][1] || "");
       }
       const akSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
-        ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
+        ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
       const akData = akSheet.getDataRange().getValues();
       for (let i = 1; i < akData.length; i++) {
         const row = akData[i];
