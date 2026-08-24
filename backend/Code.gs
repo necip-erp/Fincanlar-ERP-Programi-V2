@@ -330,6 +330,7 @@ function handleRequest(e) {
       case "vadesiGecmisAlacaklar": result = vadesiGecmisAlacaklar(); break;
       case "getCekSenetListesi": result = getCekSenetListesi(); break;
       case "getDisScriptKodu": result = getDisScriptKodu(); break;
+      case "kimHesap": result = kimHesap(); break;
       case "getBekleyenAlisFaturalari": result = getBekleyenAlisFaturalari(); break;
       case "onaylaAlisFaturasi": result = onaylaAlisFaturasi(body); break;
       case "reddetAlisFaturasi": result = reddetAlisFaturasi(body); break;
@@ -2060,6 +2061,13 @@ function getDisScriptKodu() {
   } catch (e) {
     return { ok: false, hata: e.message };
   }
+}
+
+function kimHesap() {
+  let etkin = "", efektif = "";
+  try { etkin = Session.getActiveUser().getEmail(); } catch(e) { etkin = "hata: " + e.message; }
+  try { efektif = Session.getEffectiveUser().getEmail(); } catch(e) { efektif = "hata: " + e.message; }
+  return { ok: true, activeUser: etkin, effectiveUser: efektif };
 }
 
 function getFinansOzet() {
