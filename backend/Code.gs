@@ -1945,7 +1945,7 @@ function getBekleyenAlisFaturalari() {
 
   const h = disData[0];
   const col = {
-    kod: h.indexOf("STOK_KODU"), ad: h.indexOf("STOK_ADI"), fiy: h.indexOf("BIRIM_FIYAT"),
+    kod: h.indexOf("STOK_KODU"), ad: h.indexOf("STOK_ADI"), mik: h.indexOf("MIKTAR"), fiy: h.indexOf("BIRIM_FIYAT"),
     isk: h.indexOf("ISKONTO"), net: h.indexOf("NET_FIYAT"), nak: h.indexOf("NAKLIYE_PAYI"),
     kdv: h.indexOf("KDV_ORANI"), fno: h.indexOf("FATURA_NO"), ftar: h.indexOf("FATURA_TARIHI"),
     ted: h.indexOf("TEDARIKCI"), lnk: h.indexOf("FATURA_LINK"), edm: h.indexOf("EDM_LINK"),
@@ -1979,6 +1979,7 @@ function getBekleyenAlisFaturalari() {
     }
     gruplar[fno].kalemler.push({
       stokKodu: String(row[col.kod] || ""), urunAdi: String(row[col.ad] || ""),
+      miktar: col.mik >= 0 ? (parseFloat(row[col.mik]) || 0) : 0,
       birimFiyat: parseFloat(row[col.fiy]) || 0, iskonto: parseFloat(row[col.isk]) || 0,
       netFiyat: parseFloat(row[col.net]) || 0, nakliyePayi: parseFloat(row[col.nak]) || 0,
       kdvOrani: parseFloat(row[col.kdv]) || 0,
@@ -1990,7 +1991,7 @@ function getBekleyenAlisFaturalari() {
     // Genel toplam = fatura tutarı (KDV dahil). Kaynak veride miktar olmadığından
     // birim fiyatlar üzerinden hesaplanıyor — gerçek fatura toplamı miktarla çarpılınca değişebilir.
     f.netToplam = f.kalemler.reduce((t, k) => t + k.netFiyat, 0);
-    f.genelToplam = f.kalemler.reduce((t, k) => t + (k.netFiyat + k.nakliyePayi) * (1 + k.kdvOrani / 100), 0);
+    f.genelToplam = f.kalemler.reduce((t, k) => t + (k.netFiyat + k.nakliyePayi) * (1 + k.kdvOrani / 100) * (k.miktar > 0 ? k.miktar : 1), 0);
     // "gg/AA/yyyy" → sıralanabilir "yyyy-AA-gg" anahtarı.
     const parcalar = String(f.tarih || "").split("/");
     f.tarihSirala = parcalar.length === 3 ? `${parcalar[2]}-${parcalar[1].padStart(2,"0")}-${parcalar[0].padStart(2,"0")}` : "";
