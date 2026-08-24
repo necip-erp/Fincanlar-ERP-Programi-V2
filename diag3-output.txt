@@ -1,0 +1,1 @@
+{"ok":true,"activeUser":"","effectiveUser":"hata: Specified permissions are not sufficient to call Session.getEffectiveUser. Required permissions: https://www.googleapis.com/auth/userinfo.email"}
