@@ -329,8 +329,6 @@ function handleRequest(e) {
       case "getKritikStokListesi": result = getKritikStokListesi(); break;
       case "vadesiGecmisAlacaklar": result = vadesiGecmisAlacaklar(); break;
       case "getCekSenetListesi": result = getCekSenetListesi(); break;
-      case "getDisScriptKodu": result = getDisScriptKodu(); break;
-      case "kimHesap": result = kimHesap(); break;
       case "getBekleyenAlisFaturalari": result = getBekleyenAlisFaturalari(); break;
       case "onaylaAlisFaturasi": result = onaylaAlisFaturasi(body); break;
       case "reddetAlisFaturasi": result = reddetAlisFaturasi(body); break;
@@ -2046,28 +2044,6 @@ function reddetAlisFaturasi(body) {
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
 
   return { ok: true };
-}
-
-// GEÇİCİ: FATURAFIYAT'ı dolduran ayrı script'in kaynak kodunu okumak için.
-function getDisScriptKodu() {
-  const scriptId = "191WL_xFbyRiNN12ufBw0D76NNM8lofDPbht0zWIlaFFe-0GYNh_ZAn6r";
-  try {
-    const token = ScriptApp.getOAuthToken();
-    const url = "https://script.googleapis.com/v1/projects/" + scriptId + "/content";
-    const res = UrlFetchApp.fetch(url, { headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true });
-    const kod = res.getResponseCode();
-    if (kod !== 200) return { ok: false, hata: "HTTP " + kod, detay: res.getContentText() };
-    return { ok: true, icerik: JSON.parse(res.getContentText()) };
-  } catch (e) {
-    return { ok: false, hata: e.message };
-  }
-}
-
-function kimHesap() {
-  let etkin = "", efektif = "";
-  try { etkin = Session.getActiveUser().getEmail(); } catch(e) { etkin = "hata: " + e.message; }
-  try { efektif = Session.getEffectiveUser().getEmail(); } catch(e) { efektif = "hata: " + e.message; }
-  return { ok: true, activeUser: etkin, effectiveUser: efektif };
 }
 
 function getFinansOzet() {
