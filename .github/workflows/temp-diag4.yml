@@ -19,3 +19,4 @@ jobs:
           git commit -m "diag4 output" || echo "no changes"
           git push
 # retrigger Mon Aug 24 09:24:25 UTC 2026
+# check-final Mon Aug 24 09:40:05 UTC 2026
