@@ -740,6 +740,11 @@ function ensureSatisKalemVergiKolonlari(sheet) {
   if (String(h10 || "") !== "FATURALANAN_MIKTAR") {
     sheet.getRange(1, 10).setValue("FATURALANAN_MIKTAR").setFontWeight("bold").setBackground("#e8edf5");
   }
+  // Stok kodu, Alış/Satış/Sipariş kalemleri arasındaki ana bağlantı.
+  const h11 = sheet.getRange(1, 11).getValue();
+  if (String(h11 || "") !== "STOK_KODU") {
+    sheet.getRange(1, 11).setValue("STOK_KODU").setFontWeight("bold").setBackground("#e8edf5");
+  }
 }
 
 // Bir satış kaleminin (miktar, birim fiyat, iskonto %, kdv %) üzerinden
@@ -772,7 +777,7 @@ function getSatisListesi() {
   let faturalanmaHaritasi = {};
   if (siparisIdleri.size > 0) {
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
-      ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI"]);
+      ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
     ensureSatisKalemVergiKolonlari(kSheet);
     const kData = kSheet.getDataRange().getValues();
     const faturalananMap = {};
@@ -830,7 +835,7 @@ function getSatisDetay(satisId) {
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   ensureSatisBelgeTipiColonu(sSheet);
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
-    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI"]);
+    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
   ensureSatisKalemVergiKolonlari(kSheet);
 
   const data = sSheet.getDataRange().getValues();
@@ -871,6 +876,7 @@ function getSatisDetay(satisId) {
       tutar: parseFloat(row[6]) || 0, iskontoYuzde: iskontoYuzde, kdvOrani: kdvOrani,
       iskontoTutari: h.iskontoTutari, kdvTutari: h.kdvTutari, kalemGenelToplam: h.genelToplam,
       faturalananMiktar: faturalananMiktar, kalanMiktar: Math.max(0, miktar - faturalananMiktar),
+      stokKodu: String(row[10] || ""),
     });
   }
   if (satis.belgeTipi === "Sipariş") {
@@ -904,7 +910,7 @@ function saveSatis(body) {
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   ensureSatisBelgeTipiColonu(sSheet);
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
-    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI"]);
+    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
   ensureSatisKalemVergiKolonlari(kSheet);
 
   const cariId = String(body.cariId || "").trim();
@@ -946,13 +952,28 @@ function saveSatis(body) {
   }
   sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu]);
 
+  // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
+  // otomatik, minimal bir stok kartı oluşturulur (Alış modülündeki mantığın aynısı).
+  const olusturulacaklar = kalemler.filter(k => k.stokKartiOlustur && String(k.stokKodu || "").trim());
+  if (olusturulacaklar.length > 0) {
+    const mevcutStoklar = getStokTanimListesi().kalemler;
+    const mevcutKoduSeti = {};
+    mevcutStoklar.forEach(s => { if (s.stokKodu) mevcutKoduSeti[s.stokKodu] = true; });
+    olusturulacaklar.forEach(k => {
+      const kod = String(k.stokKodu).trim();
+      if (mevcutKoduSeti[kod]) return;
+      saveStokTanim({ stokKodu: kod, stokAdi: String(k.urunAdi).trim(), birim1: String(k.birim || "adet") });
+      mevcutKoduSeti[kod] = true;
+    });
+  }
+
   kalemler.forEach((k, idx) => {
     const kId = "sk_" + Date.now() + "_" + idx;
     const miktar = parseFloat(k.miktar) || 0;
     const birimFiyat = parseFloat(k.birimFiyat) || 0;
     const iskontoYuzde = parseFloat(k.iskontoYuzde) || 0;
     const kdvOrani = k.kdvOrani === undefined ? 20 : (parseFloat(k.kdvOrani) || 0);
-    kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, iskontoYuzde, kdvOrani, 0]);
+    kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, iskontoYuzde, kdvOrani, 0, String(k.stokKodu || "").trim()]);
   });
 
   // Cari harekete/banka hareketine SADECE FATURA yansır — Teklif ve Sipariş henüz
@@ -1006,7 +1027,7 @@ function siparistenFaturaOlustur(body) {
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   ensureSatisBelgeTipiColonu(sSheet);
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
-    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI"]);
+    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
   ensureSatisKalemVergiKolonlari(kSheet);
 
   const sData = sSheet.getDataRange().getValues();
@@ -1037,7 +1058,7 @@ function siparistenFaturaOlustur(body) {
     kalemBilgi[kId] = {
       urunAdi: String(row[2] || ""), miktar: parseFloat(row[3]) || 0, birim: String(row[4] || ""),
       birimFiyat: parseFloat(row[5]) || 0, iskontoYuzde: parseFloat(row[7]) || 0, kdvOrani: parseFloat(row[8]) || 0,
-      faturalananMiktar: parseFloat(row[9]) || 0,
+      faturalananMiktar: parseFloat(row[9]) || 0, stokKodu: String(row[10] || ""),
     };
   }
 
@@ -1056,6 +1077,7 @@ function siparistenFaturaOlustur(body) {
     yeniFaturaKalemleri.push({
       urunAdi: bilgi.urunAdi, miktar: aktarilan, birim: bilgi.birim,
       birimFiyat: bilgi.birimFiyat, iskontoYuzde: bilgi.iskontoYuzde, kdvOrani: bilgi.kdvOrani,
+      stokKodu: bilgi.stokKodu,
     });
     guncellenecekler.push({ satirIdx: kalemSatirIdx[kId], yeniFaturalananMiktar: bilgi.faturalananMiktar + aktarilan });
   }
@@ -1136,7 +1158,7 @@ function silSatis(body) {
 
   // Kalemlerini sil (silmeden önce kaynak sipariş varsa geri almak için okuyoruz)
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
-    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
+    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
   const kData = kSheet.getDataRange().getValues();
   const silinenKalemler = []; // {urunAdi, miktar} — kaynak sipariş varsa faturalanan miktarı geri almak için
   for (let i = kData.length - 1; i >= 1; i--) {
@@ -2252,7 +2274,7 @@ function getRaporOzet(body) {
   }
 
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
-    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
+    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
   const kData = kSheet.getDataRange().getValues();
   const urunMap = {};
   for (let i = 1; i < kData.length; i++) {
@@ -2348,7 +2370,7 @@ function getMuhasebeRaporu(body) {
     stokListe.forEach(s => { alisFiyatHaritasi[s.stokAdi.trim().toLocaleLowerCase('tr')] = s.alisFiyati; });
 
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
-      ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI"]);
+      ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
     ensureSatisKalemVergiKolonlari(kSheet);
     const kData = kSheet.getDataRange().getValues();
 
@@ -2410,7 +2432,7 @@ function getMuhasebeRaporu(body) {
     }
 
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
-      ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI"]);
+      ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
     const kData = kSheet.getDataRange().getValues();
     const urunMap = {};
     function urunEkle(urunAdi, miktar, tutar, yon) {
@@ -3350,7 +3372,7 @@ function getUrunFiyatGecmisi(urunAdi) {
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
-    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
+    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
 
   // Satış ID -> {tarih, cariAd} eşlemesi (tek geçişte)
   const sData = sSheet.getDataRange().getValues();

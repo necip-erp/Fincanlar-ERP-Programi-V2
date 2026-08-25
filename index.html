@@ -1634,10 +1634,11 @@ function satisDetayCiz(res){
       <button class="btn btn-danger" onclick="satisSilOnay('${s.id}')">🗑 Satışı Sil</button>
     </div>
     <table class="hareket-tbl">
-      <thead><tr><th>Ürün</th><th>Miktar</th>${siparis?'<th>Faturalanan</th><th>Kalan</th>':''}<th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th></tr></thead>
+      <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th>${siparis?'<th>Faturalanan</th><th>Kalan</th>':''}<th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th></tr></thead>
       <tbody>
         ${kalemler.map(k=>`
           <tr>
+            <td>${k.stokKodu||'—'}</td>
             <td>${k.urunAdi}</td>
             <td>${k.miktar}</td>
             ${siparis?`<td>${k.faturalananMiktar||0}</td><td class="${k.kalanMiktar>0?'hk-borc':'hk-alacak'}">${k.kalanMiktar}</td>`:''}
@@ -1703,7 +1704,7 @@ function siparisFaturaKalemlerCiz(){
   if(!el) return;
   el.innerHTML = _siparisFaturaState.kalemler.map((k,idx)=>`
     <div class="satis-kalem-satir" style="align-items:center">
-      <span style="flex:1">${k.urunAdi} <span style="color:var(--text3);font-size:11px">(kalan: ${k.kalanMiktar} ${k.birim})</span></span>
+      <span style="flex:1">${k.stokKodu?`<b>${k.stokKodu}</b> · `:''}${k.urunAdi} <span style="color:var(--text3);font-size:11px">(kalan: ${k.kalanMiktar} ${k.birim})</span></span>
       <input type="number" min="0" max="${k.kalanMiktar}" step="1" value="${k.aktarilacak}" style="max-width:90px"
              oninput="_siparisFaturaState.kalemler[${idx}].aktarilacak = Math.min(parseFloat(this.value)||0, ${k.kalanMiktar})">
     </div>`).join("");
@@ -1780,7 +1781,7 @@ function satisSilOnay(id){
 // "İşlemler" panelinden ön-doldurulmuş şekilde açılır — Faz 2)
 function satisModalAc(onCariId, onBelgeTipi){
   if(!_siparisDurumlari.length) siparisDurumlariYukle();
-  _yeniSatisKalemleri = [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20}];
+  _yeniSatisKalemleri = [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""}];
   if(!_cariYuklendi) cariListesiYukle();
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
   const overlay = document.createElement("div");
@@ -1928,7 +1929,7 @@ function smCariSec(i){
 }
 
 function satisKalemEkleUI(){
-  _yeniSatisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20});
+  _yeniSatisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""});
   satisKalemlerCiz();
 }
 
@@ -1946,13 +1947,14 @@ function satisKalemlerCiz(){
   const el = document.getElementById("sm-kalemler");
   el.innerHTML = _yeniSatisKalemleri.map((k,idx)=>`
     <div class="satis-kalem-satir">
+      <input class="satis-kalem-birim" style="max-width:100px" type="text" placeholder="Stok Kodu" value="${k.stokKodu||''}" oninput="satisKalemAlanDegisti(${idx},'stokKodu',this.value)">
       <div style="flex:1;position:relative">
         <input class="satis-kalem-urun" style="width:100%;padding-right:32px" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
                oninput="satisKalemAlanDegisti(${idx},'urunAdi',this.value); urunOneriGoster(${idx})"
                onblur="setTimeout(()=>urunOneriKapat(${idx}),200)"
                onfocus="urunOneriGoster(${idx})"
                onkeydown="oneriKlavyeYonet(event,'urun-oneri-${idx}')">
-        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniSatisKalemleri[${idx}].urunAdi=s.stokAdi; _yeniSatisKalemleri[${idx}].birim=s.birim1||'adet'; if(s.satisFiyati) _yeniSatisKalemleri[${idx}].birimFiyat=s.satisFiyati; if(s.satisIskontosu) _yeniSatisKalemleri[${idx}].iskontoYuzde=s.satisIskontosu; satisKalemlerCiz(); })">🔍</button>
+        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniSatisKalemleri[${idx}].urunAdi=s.stokAdi; _yeniSatisKalemleri[${idx}].stokKodu=s.stokKodu||''; _yeniSatisKalemleri[${idx}].birim=s.birim1||'adet'; if(s.satisFiyati) _yeniSatisKalemleri[${idx}].birimFiyat=s.satisFiyati; if(s.satisIskontosu) _yeniSatisKalemleri[${idx}].iskontoYuzde=s.satisIskontosu; satisKalemlerCiz(); })">🔍</button>
         <div id="urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="satisKalemAlanDegisti(${idx},'miktar',this.value)">
@@ -1998,6 +2000,7 @@ function urunOneriSec(idx, oneriIdx){
   const s = eslesenler[oneriIdx];
   if(!s) return;
   _yeniSatisKalemleri[idx].urunAdi = s.stokAdi;
+  _yeniSatisKalemleri[idx].stokKodu = s.stokKodu || "";
   _yeniSatisKalemleri[idx].birim = s.birim1 || "adet";
   if(s.satisFiyati) _yeniSatisKalemleri[idx].birimFiyat = s.satisFiyati;
   if(s.satisIskontosu) _yeniSatisKalemleri[idx].iskontoYuzde = s.satisIskontosu;
