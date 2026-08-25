@@ -756,6 +756,19 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
         <button class="btn btn-primary" onclick="aciklamaSablonlariKaydet()">Kaydet</button>
       </div>
     </div>
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Sipariş Durumları</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">
+        Sipariş ekranında görünen durumları ve sırasını burada yönetirsin. "Faturaya aktarılabilir" işaretli
+        bir durumdaki sipariş fatura oluşturmaya izin verir; işaretsiz durumlarda (ör. Beklemede) "Fatura Oluştur"
+        engellenir.
+      </p>
+      <div id="ayarlar-siparis-durum-liste"><div class="cari-empty">Yükleniyor...</div></div>
+      <div class="modal-actions" style="justify-content:flex-start;margin-top:16px">
+        <button class="btn" onclick="siparisDurumSatirEkle()">+ Yeni Durum</button>
+        <button class="btn btn-primary" onclick="siparisDurumlariKaydet()">Kaydet</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1569,6 +1582,7 @@ function satisAramaFiltrele(deger){
 }
 
 function satisAc(id){
+  if(!_siparisDurumlari.length) siparisDurumlariYukle();
   _satisSecili = id;
   document.getElementById("mod-satis").classList.add("detay-acik");
   const panel = document.getElementById("satis-detail-panel");
@@ -1607,10 +1621,7 @@ function satisDetayCiz(res){
     <div class="fld" style="flex-direction:row;align-items:center;gap:8px;max-width:340px;margin-bottom:14px">
       <label style="min-width:110px;text-transform:none;font-size:12px;color:var(--text2)">Sipariş Durumu</label>
       <select id="sd-siparis-durumu" ${s.siparisDurumu==='Muhasebelendi'||s.siparisDurumu==='Kısmen Faturalandı'?'disabled title="Bu sipariş faturalandığı için durum otomatik gösteriliyor"':''}>
-        <option value="Beklemede" ${s.siparisManuelDurum==='Beklemede'?'selected':''}>Beklemede</option>
-        <option value="Onaylandı" ${s.siparisManuelDurum==='Onaylandı'?'selected':''}>Onaylandı</option>
-        <option value="Teslim Edildi" ${s.siparisManuelDurum==='Teslim Edildi'?'selected':''}>Teslim Edildi</option>
-        <option value="Haber Verecek" ${s.siparisManuelDurum==='Haber Verecek'?'selected':''}>Haber Verecek</option>
+        ${siparisDurumSecenekleriHTML(s.siparisManuelDurum)}
       </select>
       ${s.siparisDurumu!=='Muhasebelendi'&&s.siparisDurumu!=='Kısmen Faturalandı' ? `<button class="btn" style="padding:6px 12px" onclick="siparisDurumKaydet('${s.id}')">Güncelle</button>` : ''}
     </div>` : ''}
@@ -1767,6 +1778,7 @@ function satisSilOnay(id){
 // ── Yeni satış modal ── (onCariId ve onBelgeTipi verilirse, Cari sayfasındaki
 // "İşlemler" panelinden ön-doldurulmuş şekilde açılır — Faz 2)
 function satisModalAc(onCariId, onBelgeTipi){
+  if(!_siparisDurumlari.length) siparisDurumlariYukle();
   _yeniSatisKalemleri = [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20}];
   if(!_cariYuklendi) cariListesiYukle();
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
@@ -1789,10 +1801,7 @@ function satisModalAc(onCariId, onBelgeTipi){
       <div class="fld" id="sm-siparis-durum-fld" style="display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
         <label>Sipariş Durumu</label>
         <select id="sm-siparis-durumu">
-          <option value="Beklemede">Beklemede</option>
-          <option value="Onaylandı">Onaylandı</option>
-          <option value="Teslim Edildi">Teslim Edildi</option>
-          <option value="Haber Verecek">Haber Verecek</option>
+          ${siparisDurumSecenekleriHTML(_siparisDurumlari.length ? _siparisDurumlari[0].ad : "Beklemede")}
         </select>
       </div>
       <div class="fld" style="position:relative"><label>Müşteri (Cari)</label>
@@ -3938,6 +3947,7 @@ function ayarlarYukle(){
   _ayarlarTaslak = Object.assign({}, kisayollariAl());
   ayarlarListesiCiz();
   aciklamaSablonlariYukle();
+  siparisDurumlariYukle();
 }
 
 // ── Açıklama Şablonları ──
@@ -3987,6 +3997,84 @@ function aciklamaSablonlariKaydet(){
     alert("Açıklama şablonları kaydedildi.");
     aciklamaSablonlariYukle();
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ── Sipariş Durumları ──
+// Sipariş belge tipinin durum listesi ve sırası + hangi durumların faturaya
+// aktarıma izin verdiği burada tanımlanır. Sipariş formundaki ve sipariş
+// detayındaki durum seçim kutuları bu listeden dinamik doldurulur.
+let _siparisDurumlari = [];
+function siparisDurumlariYukle(){
+  const el = document.getElementById("ayarlar-siparis-durum-liste");
+  if(el) el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getSiparisDurumlari").then(res=>{
+    if(!res.ok){ if(el) el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _siparisDurumlari = res.durumlar;
+    siparisDurumlariCiz();
+  }).catch(err=>{ if(el) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+function siparisDurumlariCiz(){
+  const el = document.getElementById("ayarlar-siparis-durum-liste");
+  if(!el) return;
+  el.innerHTML = _siparisDurumlari.map((d,i)=>`
+    <div class="fld" style="flex-direction:row;gap:8px;align-items:center;margin-bottom:8px" data-siparis-durum-satir="${i}">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <button class="btn" style="padding:2px 8px;font-size:11px" onclick="siparisDurumSatirTasi(${i},-1)" ${i===0?'disabled':''}>▲</button>
+        <button class="btn" style="padding:2px 8px;font-size:11px" onclick="siparisDurumSatirTasi(${i},1)" ${i===_siparisDurumlari.length-1?'disabled':''}>▼</button>
+      </div>
+      <input type="text" data-durum-ad value="${d.ad}" style="flex:1">
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);white-space:nowrap;text-transform:none">
+        <input type="checkbox" data-durum-aktarilabilir ${d.aktarilabilir?'checked':''} style="width:auto"> Faturaya aktarılabilir
+      </label>
+      <button class="btn btn-danger" style="padding:6px 10px" onclick="siparisDurumSatirSil(${i})">🗑</button>
+    </div>`).join("");
+}
+function siparisDurumSatirEkle(){
+  _siparisDurumlariGuncelDegerleriOku();
+  _siparisDurumlari.push({ad:"Yeni Durum", aktarilabilir:false});
+  siparisDurumlariCiz();
+}
+function siparisDurumSatirSil(i){
+  if(_siparisDurumlari.length<=1){ alert("En az bir durum tanımlı olmalı"); return; }
+  _siparisDurumlariGuncelDegerleriOku();
+  _siparisDurumlari.splice(i,1);
+  siparisDurumlariCiz();
+}
+function siparisDurumSatirTasi(i, yon){
+  _siparisDurumlariGuncelDegerleriOku();
+  const j = i+yon;
+  if(j<0 || j>=_siparisDurumlari.length) return;
+  const tmp = _siparisDurumlari[i];
+  _siparisDurumlari[i] = _siparisDurumlari[j];
+  _siparisDurumlari[j] = tmp;
+  siparisDurumlariCiz();
+}
+// Ekrandaki inputlardan (kullanıcı henüz kaydetmeden yaptığı ad/checkbox değişiklikleri
+// dahil) güncel değerleri _siparisDurumlari dizisine geri okur — sıralama/ekleme/silme
+// öncesi çağrılır ki elle yapılan değişiklikler kaybolmasın.
+function _siparisDurumlariGuncelDegerleriOku(){
+  document.querySelectorAll("[data-siparis-durum-satir]").forEach(satir=>{
+    const i = parseInt(satir.dataset.siparisDurumSatir);
+    if(!_siparisDurumlari[i]) return;
+    _siparisDurumlari[i].ad = satir.querySelector("[data-durum-ad]").value.trim() || _siparisDurumlari[i].ad;
+    _siparisDurumlari[i].aktarilabilir = satir.querySelector("[data-durum-aktarilabilir]").checked;
+  });
+}
+function siparisDurumlariKaydet(){
+  _siparisDurumlariGuncelDegerleriOku();
+  const durumlar = _siparisDurumlari.map(d=>({ad:d.ad.trim(), aktarilabilir:!!d.aktarilabilir})).filter(d=>d.ad);
+  if(durumlar.length===0){ alert("En az bir durum tanımlı olmalı"); return; }
+  cariApi("saveSiparisDurumlari", {durumlar}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    alert("Sipariş durumları kaydedildi.");
+    siparisDurumlariYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+// İki yerde hardcoded 4 seçenekli <select> vardı (satisModalAc, satisDetayCiz) —
+// artık bu fonksiyon çağrılarak _siparisDurumlari'nden dinamik <option> üretilir.
+function siparisDurumSecenekleriHTML(seciliDurum){
+  const liste = _siparisDurumlari.length ? _siparisDurumlari : [{ad:"Beklemede"},{ad:"Onaylandı"},{ad:"Teslim Edildi"},{ad:"Haber Verecek"}];
+  return liste.map(d=>`<option value="${d.ad}" ${d.ad===seciliDurum?'selected':''}>${d.ad}</option>`).join("");
 }
 
 // ── Birim Tanımlama ──
