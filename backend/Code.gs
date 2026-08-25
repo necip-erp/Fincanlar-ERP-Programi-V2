@@ -696,6 +696,7 @@ function satisKalemHesapla(miktar, birimFiyat, iskontoYuzde, kdvOrani) {
 
 // Tüm satışların özet listesini döner (en yeni en üstte).
 function getSatisListesi() {
+  return cacheOkuVeyaHesapla("satisListesi", 60, function () {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
@@ -758,6 +759,7 @@ function getSatisListesi() {
   }
   sonuc.reverse(); // ID zaman damgalı olduğundan ekleme sırası = kronolojik; en yeni en üstte
   return { ok: true, satislar: sonuc };
+  });
 }
 
 // Tek bir satışı + ürün kalemlerini döner.
@@ -917,6 +919,7 @@ function saveSatis(body) {
     }
   }
 
+  cacheTemizle(["satisListesi"]);
   return { ok: true, id: id, toplamTutar: toplamTutar };
 }
 
@@ -949,12 +952,15 @@ function siparistenFaturaOlustur(body) {
   let siparis = null;
   for (let i = 1; i < sData.length; i++) {
     if (String(sData[i][0]) === siparisId) {
-      siparis = { cariId: String(sData[i][2] || ""), cariAd: String(sData[i][3] || ""), belgeTipi: String(sData[i][8] || "") || "Fatura" };
+      siparis = { cariId: String(sData[i][2] || ""), cariAd: String(sData[i][3] || ""), belgeTipi: String(sData[i][8] || "") || "Fatura", durum: String(sData[i][12] || "") || "Beklemede" };
       break;
     }
   }
   if (!siparis) return { ok: false, hata: "Sipariş bulunamadı" };
   if (siparis.belgeTipi !== "Sipariş") return { ok: false, hata: "Bu kayıt bir Sipariş değil" };
+  if (siparis.durum !== "Onaylandı" && siparis.durum !== "Teslim Edildi") {
+    return { ok: false, hata: "Sipariş durumu \"Onaylandı\" veya \"Teslim Edildi\" olmadan faturaya aktarılamaz (mevcut durum: " + siparis.durum + ")" };
+  }
 
   const kData = kSheet.getDataRange().getValues();
   const kalemSatirIdx = {}; // kalemId -> sheet satır no (1-indexed)
@@ -1002,7 +1008,7 @@ function siparistenFaturaOlustur(body) {
 
   // Sipariş kalemlerindeki FATURALANAN_MIKTAR'ı güncelle.
   guncellenecekler.forEach(g => { kSheet.getRange(g.satirIdx, 10).setValue(g.yeniFaturalananMiktar); });
-  cacheTemizle(["stokTanimListesi"]); // güncel stok hesaplamaları vb. için (dolaylı etkisi olmasa da güvenli taraf)
+  cacheTemizle(["stokTanimListesi", "satisListesi"]); // güncel stok hesaplamaları vb. için (dolaylı etkisi olmasa da güvenli taraf)
 
   return { ok: true, faturaId: faturaSonuc.id, toplamTutar: faturaSonuc.toplamTutar };
 }
@@ -1025,6 +1031,7 @@ function siparisDurumGuncelle(body) {
     if (String(data[i][0]) === id) {
       if (String(data[i][8] || "") !== "Sipariş") return { ok: false, hata: "Bu kayıt bir Sipariş değil" };
       sSheet.getRange(i + 1, 13).setValue(durum);
+      cacheTemizle(["satisListesi"]);
       return { ok: true };
     }
   }
@@ -1108,6 +1115,7 @@ function silSatis(body) {
   // Bu satışla ilişkili bir Havale banka hareketi varsa geri al.
   bankaHesapHareketSilByAciklamaOnPrefix("SATIS:" + id);
 
+  cacheTemizle(["satisListesi"]);
   return { ok: true };
 }
 
