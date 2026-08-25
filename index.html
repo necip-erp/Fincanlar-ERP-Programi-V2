@@ -1341,7 +1341,7 @@ function cariHareketSatirTiklandi(e, tr){
 
 function cariHareketIslemeGit(aciklama){
   if(!aciklama) return;
-  const m = aciklama.match(/^(SATIS|ALISIADE|ALIS|TAHSILAT|ODEME):([a-zA-Z0-9_]+)/);
+  const m = aciklama.match(/^(SATIS|ALISIADE|ALIS|TAHSILAT|ODEME|CEK):([a-zA-Z0-9_]+)/);
   if(!m) return;
   const tip = m[1], id = m[2];
   if(tip === "SATIS"){ modulAc("satis"); satisAc(id); }
@@ -1349,6 +1349,7 @@ function cariHareketIslemeGit(aciklama){
   else if(tip === "ALIS"){ modulAc("alis"); alisAltModulAc("giris"); alisAc(id); }
   else if(tip === "TAHSILAT"){ modulAc("tahsilat"); tahsilatAc(id); }
   else if(tip === "ODEME"){ modulAc("odeme"); odemeAc(id); }
+  else if(tip === "CEK"){ modulAc("ceksenet"); cekSenetAc(id); }
 }
 
 // Cari detayındaki "📦 Siparişler" butonuyla açılıp kapanan, bu cariye ait
@@ -2969,6 +2970,7 @@ function tahsilatAc(id){
     </div>
     ${t.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${t.aciklama}</div></div></div>` : ""}
     <div class="btnrow">
+      <button class="btn" onclick="tahsilatModalAc(null,'${t.id}')">✏️ Düzenle</button>
       <button class="btn btn-danger" onclick="tahsilatSilOnay('${t.id}')">🗑 Tahsilatı Sil</button>
     </div>
   `;
@@ -2991,36 +2993,39 @@ function tahsilatSilOnay(id){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
-function tahsilatModalAc(onCariId){
+function tahsilatModalAc(onCariId, editId){
   if(!_cariYuklendi) cariListesiYukle();
   if(!_bankaYapisiYuklendi) bankaYapisiYukle();
+  const t = editId ? _tahsilatListe.find(x=>x.id===editId) : null;
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "tahsilat-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   const bugun = new Date().toISOString().slice(0,10);
+  const baslangicCariId = t ? t.cariId : onCariId;
   overlay.innerHTML = `
     <div class="modal-box">
-      <h3>Yeni Tahsilat</h3>
+      <h3>${t?'Tahsilatı Düzenle':'Yeni Tahsilat'}</h3>
+      <input type="hidden" id="tm-edit-id" value="${editId||''}">
       <div class="fld" style="position:relative"><label>Müşteri (Cari) *</label>
         <input id="tm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" style="padding-right:34px"
-               value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
+               value="${baslangicCariId ? (_cariListe.find(c=>c.id===baslangicCariId)||{}).ad||'' : ''}"
                oninput="tmCariAramaDegisti()"
                onfocus="tmCariOneriGoster()"
                onblur="setTimeout(()=>tmCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'tm-cari-oneri')">
         <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('tm-cari').value=c.id; document.getElementById('tm-cari-arama').value=c.ad; })">🔍</button>
-        <input type="hidden" id="tm-cari" value="${onCariId||''}">
+        <input type="hidden" id="tm-cari" value="${baslangicCariId||''}">
         <div id="tm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
-      <div class="fld"><label>Tutar</label><input id="tm-tutar" type="number" min="0" step="0.01" placeholder="0,00"></div>
-      <div class="fld"><label>Tarih</label><input id="tm-tarih" type="date" value="${bugun}"></div>
+      <div class="fld"><label>Tutar</label><input id="tm-tutar" type="number" min="0" step="0.01" placeholder="0,00" value="${t?t.tutar:''}"></div>
+      <div class="fld"><label>Tarih</label><input id="tm-tarih" type="date" value="${t?t.tarih:bugun}"></div>
       <div class="fld"><label>Yöntem</label>
         <select id="tm-yontem" onchange="tahsilatYontemDegisti()">
-          <option value="Nakit">Nakit</option>
-          <option value="Havale/EFT">Havale/EFT</option>
-          <option value="Kredi Kartı">Kredi Kartı</option>
-          <option value="Çek">Çek</option>
+          <option value="Nakit" ${t&&t.yontem==='Nakit'?'selected':''}>Nakit</option>
+          <option value="Havale/EFT" ${t&&t.yontem==='Havale/EFT'?'selected':''}>Havale/EFT</option>
+          <option value="Kredi Kartı" ${t&&t.yontem==='Kredi Kartı'?'selected':''}>Kredi Kartı</option>
+          <option value="Çek" ${t&&t.yontem==='Çek'?'selected':''}>Çek</option>
         </select>
       </div>
       <div class="fld" id="tm-pos-fld" style="display:none"><label>POS Hesabı</label>
@@ -3029,7 +3034,7 @@ function tahsilatModalAc(onCariId){
       <div class="fld" id="tm-banka-fld" style="display:none"><label>Banka / Hesap</label>
         <select id="tm-banka-hesap"></select>
       </div>
-      <div class="fld"><label>Açıklama</label><input id="tm-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+      <div class="fld"><label>Açıklama</label><input id="tm-aciklama" type="text" placeholder="İsteğe bağlı" value="${t?(t.aciklama||''):''}"></div>
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('tahsilat-modal-overlay').remove()">İptal</button>
         <button class="btn btn-primary" onclick="tahsilatKaydet()">Kaydet</button>
@@ -3038,6 +3043,13 @@ function tahsilatModalAc(onCariId){
   document.body.appendChild(overlay);
   tahsilatBankaSecenekleriYukle();
   tahsilatPosSecenekleriYukle();
+  if(t){
+    setTimeout(()=>{
+      tahsilatYontemDegisti();
+      if(t.posHesapId) document.getElementById("tm-pos").value = t.posHesapId;
+      if(t.bankaHesapId) document.getElementById("tm-banka-hesap").value = t.bankaHesapId;
+    }, 300); // banka/pos seçenekleri yüklensin diye
+  }
 }
 
 // tm-pos, paylaşılan _bankaYapisi önbelleğine güvenmek yerine (ilk açılışta henüz
@@ -3117,6 +3129,7 @@ function tahsilatKaydet(){
   if(!cariId){ alert("Lütfen müşteri seçin"); return; }
   const tutar = parseFloat(document.getElementById("tm-tutar").value) || 0;
   if(tutar <= 0){ alert("Tutar sıfırdan büyük olmalı"); return; }
+  const editId = document.getElementById("tm-edit-id").value;
   const body = {
     cariId,
     tutar,
@@ -3126,12 +3139,13 @@ function tahsilatKaydet(){
     posHesapId: document.getElementById("tm-pos") ? document.getElementById("tm-pos").value : "",
     bankaHesapId: document.getElementById("tm-banka-hesap") ? document.getElementById("tm-banka-hesap").value : "",
   };
-  cariApi("saveTahsilat", body).then(res=>{
+  if(editId) body.id = editId;
+  cariApi(editId ? "guncelleTahsilat" : "saveTahsilat", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("tahsilat-modal-overlay").remove();
     tahsilatListesiYukle();
     cariListesiYukle();
-    tahsilatAc(res.id);
+    tahsilatAc(res.id || editId);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 </script>

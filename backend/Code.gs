@@ -35,6 +35,7 @@ const SHEETS = {
   cekSenetler: "CekSenetler",
   cekSenetHareketleri: "CekSenetHareketleri",
   alisFaturaDurum: "AlisFaturaDurum",
+  siparisDurumlari: "SiparisDurumlari",
 };
 
 // ── YARDIMCI FONKSİYONLAR ──
@@ -295,6 +296,7 @@ function handleRequest(e) {
       case "silAlisIade":        result = silAlisIade(body); break;
       case "getTahsilatListesi": result = getTahsilatListesi(); break;
       case "saveTahsilat":       result = saveTahsilat(body); break;
+      case "guncelleTahsilat":   result = guncelleTahsilat(body); break;
       case "silTahsilat":        result = silTahsilat(body); break;
       case "getOdemeListesi": result = getOdemeListesi(); break;
       case "saveOdeme":       result = saveOdeme(body); break;
@@ -339,6 +341,8 @@ function handleRequest(e) {
       case "vadesiGecmisAlacaklar": result = vadesiGecmisAlacaklar(); break;
       case "getCekSenetListesi": result = getCekSenetListesi(); break;
       case "getBekleyenAlisFaturalari": result = getBekleyenAlisFaturalari(); break;
+      case "getSiparisDurumlari": result = getSiparisDurumlari(); break;
+      case "saveSiparisDurumlari": result = saveSiparisDurumlari(body); break;
       case "onaylaAlisFaturasi": result = onaylaAlisFaturasi(body); break;
       case "reddetAlisFaturasi": result = reddetAlisFaturasi(body); break;
       case "getCekSenetDetay":   result = getCekSenetDetay(body.id); break;
@@ -622,7 +626,63 @@ function cariHareketSil(body) {
 // Sipariş için kullanıcının elle seçebileceği takip durumları. Faturalanma
 // durumu (Muhasebelendi/Kısmen Faturalandı) bunlardan ayrı ve otomatiktir —
 // bkz. siparisDurumHesapla().
-const SIPARIS_DURUM_SECENEKLERI = ["Beklemede", "Onaylandı", "Teslim Edildi", "Haber Verecek"];
+// Sipariş durumları artık sabit değil — Ayarlar > Sipariş Durumları'ndan tanımlanır
+// (SiparisDurumlari sayfası). Bu dizi sadece sayfa hiç oluşturulmamışsa ilk kurulumda
+// kullanılan varsayılan settir. "aktarilabilir": bu durumdaki bir sipariş faturaya
+// aktarılabilir mi (siparistenFaturaOlustur bunu kontrol eder).
+const SIPARIS_DURUM_VARSAYILAN = [
+  { ad: "Beklemede", aktarilabilir: false },
+  { ad: "Onaylandı", aktarilabilir: true },
+  { ad: "Teslim Edildi", aktarilabilir: true },
+  { ad: "Haber Verecek", aktarilabilir: false },
+];
+const SIPARIS_DURUM_BASLIKLAR = ["SIRA", "AD", "AKTARILABILIR"];
+
+function getSiparisDurumlari() {
+  return cacheOkuVeyaHesapla("siparisDurumlari", 300, function () {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = getOrCreateSheet(ss, SHEETS.siparisDurumlari, SIPARIS_DURUM_BASLIKLAR);
+    let data = sheet.getDataRange().getValues();
+    if (data.length < 2) {
+      SIPARIS_DURUM_VARSAYILAN.forEach((d, i) => sheet.appendRow([i + 1, d.ad, d.aktarilabilir]));
+      data = sheet.getDataRange().getValues();
+    }
+    const durumlar = [];
+    for (let i = 1; i < data.length; i++) {
+      const ad = String(data[i][1] || "").trim();
+      if (!ad) continue;
+      durumlar.push({
+        sira: parseFloat(data[i][0]) || i,
+        ad: ad,
+        aktarilabilir: data[i][2] === true || String(data[i][2]).toUpperCase() === "TRUE",
+      });
+    }
+    durumlar.sort((a, b) => a.sira - b.sira);
+    return { ok: true, durumlar: durumlar };
+  });
+}
+
+// body: { durumlar: [{ad, aktarilabilir}, ...] } — sıra, dizideki sıraya göre yeniden yazılır.
+function saveSiparisDurumlari(body) {
+  const durumlar = Array.isArray(body.durumlar) ? body.durumlar : [];
+  if (durumlar.length === 0) return { ok: false, hata: "En az bir durum tanımlı olmalı" };
+  const adSeti = new Set();
+  for (const d of durumlar) {
+    const ad = String(d.ad || "").trim();
+    if (!ad) return { ok: false, hata: "Boş isimli durum olamaz" };
+    if (adSeti.has(ad)) return { ok: false, hata: "Aynı isimde birden fazla durum olamaz: " + ad };
+    adSeti.add(ad);
+  }
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.siparisDurumlari, SIPARIS_DURUM_BASLIKLAR);
+  sheet.clearContents();
+  sheet.appendRow(SIPARIS_DURUM_BASLIKLAR);
+  durumlar.forEach((d, i) => sheet.appendRow([i + 1, String(d.ad).trim(), !!d.aktarilabilir]));
+
+  cacheTemizle(["siparisDurumlari"]);
+  return { ok: true };
+}
 
 // Bir siparişin listede/detayda gösterilecek nihai durumunu hesaplar:
 // hiç faturalanmadıysa kullanıcının elle seçtiği durumu, kısmen faturalandıysa
@@ -881,7 +941,8 @@ function saveSatis(body) {
   const belgeTipi = String(body.belgeTipi || "Fatura");
   let siparisDurumu = "";
   if (belgeTipi === "Sipariş") {
-    siparisDurumu = SIPARIS_DURUM_SECENEKLERI.includes(body.siparisDurumu) ? body.siparisDurumu : "Beklemede";
+    const durumAdlari = getSiparisDurumlari().durumlar.map(d => d.ad);
+    siparisDurumu = durumAdlari.includes(body.siparisDurumu) ? body.siparisDurumu : (durumAdlari[0] || "Beklemede");
   }
   sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu]);
 
@@ -958,8 +1019,11 @@ function siparistenFaturaOlustur(body) {
   }
   if (!siparis) return { ok: false, hata: "Sipariş bulunamadı" };
   if (siparis.belgeTipi !== "Sipariş") return { ok: false, hata: "Bu kayıt bir Sipariş değil" };
-  if (siparis.durum !== "Onaylandı" && siparis.durum !== "Teslim Edildi") {
-    return { ok: false, hata: "Sipariş durumu \"Onaylandı\" veya \"Teslim Edildi\" olmadan faturaya aktarılamaz (mevcut durum: " + siparis.durum + ")" };
+  const durumTanimlari = getSiparisDurumlari().durumlar;
+  const aktifDurumBilgi = durumTanimlari.find(d => d.ad === siparis.durum);
+  if (!aktifDurumBilgi || !aktifDurumBilgi.aktarilabilir) {
+    const aktarilabilirler = durumTanimlari.filter(d => d.aktarilabilir).map(d => d.ad).join(", ") || "(hiçbiri işaretli değil — Ayarlar > Sipariş Durumları'ndan işaretleyin)";
+    return { ok: false, hata: "Sipariş durumu \"" + siparis.durum + "\" faturaya aktarıma izin vermiyor. Uygun durum(lar): " + aktarilabilirler };
   }
 
   const kData = kSheet.getDataRange().getValues();
@@ -1020,7 +1084,7 @@ function siparisDurumGuncelle(body) {
   const id = String(body.id || "").trim();
   const durum = String(body.durum || "");
   if (!id) return { ok: false, hata: "id gerekli" };
-  if (!SIPARIS_DURUM_SECENEKLERI.includes(durum)) return { ok: false, hata: "Geçersiz durum" };
+  if (!getSiparisDurumlari().durumlar.map(d => d.ad).includes(durum)) return { ok: false, hata: "Geçersiz durum" };
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
@@ -1554,6 +1618,18 @@ function saveTahsilat(body) {
 }
 
 // body: { id }
+// body: { id, cariId, tarih, yontem, tutar, aciklama, posHesapId, bankaHesapId }
+// Var olan tahsilatı (ve cariye/POS'a/bankaya düşen bağlantılı hareketlerini) silip
+// aynı id yerine güncellenmiş verilerle yeniden oluşturur — silTahsilat zaten tüm
+// bağlantılı kayıtları temizlediği için en güvenli "düzenleme" yolu budur.
+function guncelleTahsilat(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const silSonuc = silTahsilat({ id });
+  if (!silSonuc.ok) return silSonuc;
+  return saveTahsilat(body);
+}
+
 function silTahsilat(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
