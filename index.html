@@ -2758,13 +2758,21 @@ function alisBekleyenListesiCiz(){
   if(liste.length === 0){ el.innerHTML = `<div class="cari-empty">${_alisBekleyenListe.length===0?'Onay bekleyen fatura yok 🎉':'Aramayla eşleşen fatura yok'}</div>`; return; }
   el.innerHTML = liste.map((f)=>{
     const fi = _alisBekleyenListe.indexOf(f);
+    const islendi = f.durum && f.durum !== "Bekliyor";
+    const durumRenk = f.durum === "Onaylandı" ? "var(--green)" : f.durum === "Reddedildi" ? "var(--red)" : "var(--text3)";
     return `
-    <div class="cari-item" style="cursor:default">
+    <div class="cari-item" style="cursor:default;${islendi?'opacity:.75':''}">
       <div class="cari-item-top">
         <span class="cari-item-ad">${f.tedarikci || "(Tedarikçi belirtilmemiş)"}</span>
         <span class="cari-item-bakiye">${paraFormat(f.genelToplam)}</span>
       </div>
-      <span class="cari-item-tip">Fatura No: ${f.faturaNo} · ${tarihGoster(f.tarih)} · Toplam ${f.kalemSayisi} Kalem</span>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:4px">
+        <span style="font-size:14px;font-weight:700">Fatura No: ${f.faturaNo}</span>
+        <span style="font-size:14px;font-weight:700">${tarihGoster(f.tarih)}</span>
+        <span style="font-size:12px;color:var(--text3)">Toplam ${f.kalemSayisi} Kalem</span>
+        <span style="font-size:11.5px;font-weight:700;color:${durumRenk};background:${islendi?(f.durum==='Onaylandı'?'var(--green-l)':'#fde8e8'):'var(--bg3)'};padding:2px 9px;border-radius:20px">${islendi ? (f.durum==='Onaylandı'?'✓ İşlendi':'✖ Reddedildi') : 'Bekliyor'}</span>
+        ${f.eslesenCariAd ? `<span style="font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-l,#eef2ff);padding:2px 9px;border-radius:20px">Cari: ${f.eslesenCariAd}</span>` : ``}
+      </div>
       <div style="margin-top:6px">
         <span style="font-size:12px;color:var(--accent);cursor:pointer;font-weight:600" onclick="alisBekleyenKalemGosterGizle(${fi})" id="bfk-toggle-${fi}">▾ Ürünleri göster</span>
       </div>
@@ -2774,8 +2782,9 @@ function alisBekleyenListesiCiz(){
       </div>
       <div class="btnrow" style="margin-top:8px">
         ${f.faturaLink ? `<a class="btn" href="${f.faturaLink}" target="_blank" style="text-decoration:none">📄 Faturayı Gör</a>` : ""}
+        ${islendi ? `` : `
         <button class="btn btn-primary" onclick="alisBekleyenOnayModalAc('${f.faturaNo}')">✅ İncele ve Onayla</button>
-        <button class="btn btn-danger" onclick="alisBekleyenReddet('${f.faturaNo}')">✖ Reddet</button>
+        <button class="btn btn-danger" onclick="alisBekleyenReddet('${f.faturaNo}')">✖ Reddet</button>`}
       </div>
     </div>`;
   }).join("");
@@ -2790,7 +2799,7 @@ function alisBekleyenKalemGosterGizle(fi){
 }
 
 function alisBekleyenReddet(faturaNo){
-  if(!confirm("Bu faturayı reddetmek istediğinize emin misiniz? Reddedilen faturalar bir daha bu listede görünmez.")) return;
+  if(!confirm("Bu faturayı reddetmek istediğinize emin misiniz? Reddedilen fatura listede \"Reddedildi\" olarak görünmeye devam eder ama tekrar işlenemez.")) return;
   cariApi("reddetAlisFaturasi", {faturaNo}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     alisBekleyenListesiYukle();
@@ -2860,6 +2869,13 @@ function alisBekleyenOnayModalAc(faturaNo){
           <td>%${k.kdvOrani}</td>
         </tr>`).join("")}
       </tbody></table>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase">Fatura Tutarı (KDV Dahil)</div>
+          <div style="font-size:20px;font-weight:700">${paraFormat(f.genelToplam)}</div>
+        </div>
       </div>
 
       <div class="modal-actions">
