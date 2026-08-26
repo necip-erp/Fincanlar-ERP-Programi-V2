@@ -26,6 +26,7 @@ const SHEETS = {
   posHareketleri: "PosHareketleri",
   bankaHesapHareketleri: "BankaHesapHareketleri",
   stokHareketleri: "StokHareketleri",
+  seriTanimlari: "SeriTanimlari",
   markalar: "Markalar",
   urunGruplari: "UrunGruplari",
   altUrunGruplari: "AltUrunGruplari",
@@ -326,6 +327,10 @@ function handleRequest(e) {
       case "getStokHareketListesi": result = getStokHareketListesi(body); break;
       case "stokHareketTopluEkle":  result = stokHareketTopluEkle(body); break;
       case "silStokHareket":        result = silStokHareket(body); break;
+      case "getSeriTanimlari": result = getSeriTanimlari(); break;
+      case "saveSeriTanim":    result = saveSeriTanim(body); break;
+      case "silSeriTanim":     result = silSeriTanim(body); break;
+      case "seriSonrakiNoUret": result = seriSonrakiNoUret(body); break;
       case "getBasitTanimListesi": result = getBasitTanimListesi(body.tip); break;
       case "saveBasitTanim":       result = saveBasitTanim(body); break;
       case "silBasitTanim":        result = silBasitTanim(body); break;
@@ -2935,7 +2940,19 @@ function saveStokTanimTopluce(body) {
 // gösterdiği "güncel stok" rakamını otomatik güncellemez, sadece kendi
 // hareket geçmişini/raporunu tutar.
 // ════════════════════════════════════════════════
-const STOK_HAREKET_BASLIKLAR = ["ID","TARIH","STOK_TANIM_ID","STOK_KODU","STOK_ADI","BIRIM","HAREKET_TIPI","MIKTAR","ACIKLAMA","KAYIT_TARIHI"];
+const STOK_HAREKET_BASLIKLAR = ["ID","TARIH","STOK_TANIM_ID","STOK_KODU","STOK_ADI","BIRIM","HAREKET_TIPI","MIKTAR","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI","BELGE_NO"];
+
+// Sheet daha önce BELGE_TIPI/BELGE_NO kolonları olmadan oluşturulmuş olabilir; başlıkları tamamlar.
+function ensureStokHareketBelgeColonlari(sheet) {
+  const h11 = sheet.getRange(1, 11).getValue();
+  if (String(h11 || "") !== "BELGE_TIPI") {
+    sheet.getRange(1, 11).setValue("BELGE_TIPI").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  const h12 = sheet.getRange(1, 12).getValue();
+  if (String(h12 || "") !== "BELGE_NO") {
+    sheet.getRange(1, 12).setValue("BELGE_NO").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
 
 function stokHareketSatiriNesneYap(row) {
   return {
@@ -2949,6 +2966,8 @@ function stokHareketSatiriNesneYap(row) {
     miktar: parseFloat(row[7]) || 0,
     aciklama: String(row[8] || ""),
     kayitTarihi: hucreTarihStr(row[9]),
+    belgeTipi: String(row[10] || ""),
+    belgeNo: String(row[11] || ""),
   };
 }
 
@@ -2963,6 +2982,7 @@ function stokHareketTopluEkle(body) {
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+  ensureStokHareketBelgeColonlari(sheet);
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
 
   const satirlar = [];
@@ -2983,6 +3003,8 @@ function stokHareketTopluEkle(body) {
       miktar,
       String(k.aciklama || body.genelAciklama || ""),
       kayitTarihi,
+      String(k.belgeTipi || body.genelBelgeTipi || ""),
+      String(k.belgeNo || body.genelBelgeNo || ""),
     ]);
     eklenen++;
   });
@@ -2992,6 +3014,104 @@ function stokHareketTopluEkle(body) {
   }
   cacheTemizle(["stokHareketListesi"]);
   return { ok: true, eklenen: eklenen, atlanan: atlanan };
+}
+
+// ════════════════════════════════════════════════
+// SERİ TANIMLAMA (Ayarlar > Seri Tanımlama) — Sipariş No, Teklif No, Satış/Alış
+// Fatura No, Cari No gibi belge numaralarının otomatik/takipli üretimi için.
+// Her seri: Ad + Prefix + Sonraki No + Basamak Sayısı. "Sonraki No'yu Kullan"
+// çağrıldığında GÜNCEL numara formatlanıp döndürülür ve sayaç 1 artırılır.
+// ════════════════════════════════════════════════
+const SERI_BASLIKLAR = ["ID","AD","PREFIX","SONRAKI_NO","BASAMAK"];
+
+function seriFormatla(prefix, no, basamak) {
+  const b = parseInt(basamak) || 4;
+  let s = String(parseInt(no) || 1);
+  while (s.length < b) s = "0" + s;
+  return String(prefix || "") + s;
+}
+
+function getSeriTanimlari() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR);
+  let data = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    // İlk kurulumda sık kullanılan varsayılan seriler otomatik oluşturulur.
+    const varsayilanlar = [
+      ["sr_" + Date.now() + "_1", "Sipariş No", "SIP-", 1, 4],
+      ["sr_" + (Date.now() + 1) + "_2", "Teklif No", "TEK-", 1, 4],
+      ["sr_" + (Date.now() + 2) + "_3", "Satış Fatura No", "SF-", 1, 4],
+      ["sr_" + (Date.now() + 3) + "_4", "Alış Fatura No", "AF-", 1, 4],
+      ["sr_" + (Date.now() + 4) + "_5", "Cari No", "M-", 1, 4],
+    ];
+    sheet.getRange(2, 1, varsayilanlar.length, SERI_BASLIKLAR.length).setValues(varsayilanlar);
+    data = sheet.getDataRange().getValues();
+  }
+  const seriler = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0]) continue;
+    const prefix = String(row[2] || "");
+    const sonrakiNo = parseInt(row[3]) || 1;
+    const basamak = parseInt(row[4]) || 4;
+    seriler.push({
+      id: String(row[0]), ad: String(row[1] || ""), prefix: prefix,
+      sonrakiNo: sonrakiNo, basamak: basamak,
+      onizleme: seriFormatla(prefix, sonrakiNo, basamak),
+    });
+  }
+  return { ok: true, seriler: seriler };
+}
+
+// body: { id?, ad, prefix, sonrakiNo, basamak }
+function saveSeriTanim(body) {
+  const ad = String(body.ad || "").trim();
+  if (!ad) return { ok: false, hata: "Seri adı gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  let id = String(body.id || "").trim();
+  let satirIdx = -1;
+  if (id) {
+    for (let i = 1; i < data.length; i++) { if (String(data[i][0]) === id) { satirIdx = i + 1; break; } }
+  }
+  if (!id) id = "sr_" + Date.now();
+  const satir = [id, ad, String(body.prefix || ""), parseInt(body.sonrakiNo) || 1, parseInt(body.basamak) || 4];
+  if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
+  else sheet.appendRow(satir);
+  return { ok: true, id: id };
+}
+
+function silSeriTanim(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); return { ok: true }; }
+  }
+  return { ok: false, hata: "Kayıt bulunamadı" };
+}
+
+// body: { id } — seçilen serinin güncel numarasını formatlar, sayacı 1 artırır, formatlı numarayı döner.
+function seriSonrakiNoUret(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) {
+      const prefix = String(data[i][2] || "");
+      const sonrakiNo = parseInt(data[i][3]) || 1;
+      const basamak = parseInt(data[i][4]) || 4;
+      const no = seriFormatla(prefix, sonrakiNo, basamak);
+      sheet.getRange(i + 1, 4).setValue(sonrakiNo + 1);
+      return { ok: true, no: no };
+    }
+  }
+  return { ok: false, hata: "Seri bulunamadı" };
 }
 
 function silStokHareket(body) {
@@ -3019,6 +3139,7 @@ function getStokHareketListesi(body) {
   const tumListe = cacheOkuVeyaHesapla("stokHareketListesi", 120, function () {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const sheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+    ensureStokHareketBelgeColonlari(sheet);
     const data = sheet.getDataRange().getValues();
     const sonuc = [];
     for (let i = 1; i < data.length; i++) {
