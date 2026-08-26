@@ -2318,7 +2318,7 @@ function getMuhasebeRaporu(body) {
     let toplam = 0;
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      if (!row[0] || !araligaDahilMi(String(row[1] || ""))) continue;
+      if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
       const tutar = parseFloat(row[4]) || 0;
       toplam += tutar;
       satirlar.push({ id: String(row[0]), tarih: hucreTarihStr(row[1]), cariAd: String(row[3] || ""),
@@ -2337,7 +2337,7 @@ function getMuhasebeRaporu(body) {
     let toplam = 0;
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      if (!row[0] || !araligaDahilMi(String(row[1] || ""))) continue;
+      if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
       const belgeTipi = String(row[8] || "") || "Fatura";
       if (belgeTipi !== "Fatura") continue;
       const tutar = parseFloat(row[4]) || 0;
@@ -2428,7 +2428,7 @@ function getMuhasebeRaporu(body) {
       const id = String(sData[i][0] || "");
       if (!id) continue;
       satisBelgeTipi[id] = String(sData[i][8] || "") || "Fatura";
-      satisTarih[id] = String(sData[i][1] || "");
+      satisTarih[id] = hucreTarihStr(sData[i][1]);
     }
 
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
@@ -2451,10 +2451,13 @@ function getMuhasebeRaporu(body) {
       if (!urunAdi) continue;
       if (tip === "urunBazliSiparis" && belgeTipi !== "Sipariş") continue;
       if (tip === "urunBazliFatura" && belgeTipi !== "Fatura") continue;
+      // Fiili stok hareketi raporu (urunBazliHareket) sadece kesilmiş Faturaları
+      // çıkış sayar — Teklif ve Sipariş henüz malın stoktan çıktığı anlamına gelmez.
+      if (tip === "urunBazliHareket" && belgeTipi !== "Fatura") continue;
       urunEkle(urunAdi, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
     }
 
-    // Ürün Bazlı Hareket Raporu ayrıca alış (giriş) hareketlerini de kapsar.
+    // Ürün Bazlı Hareket Raporu ayrıca alış (giriş) ve alış iadesi (giriş azaltan) hareketlerini de kapsar.
     if (tip === "urunBazliHareket") {
       const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
         ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
@@ -2462,7 +2465,7 @@ function getMuhasebeRaporu(body) {
       const alisTarih = {};
       for (let i = 1; i < aData.length; i++) {
         const id = String(aData[i][0] || "");
-        if (id) alisTarih[id] = String(aData[i][1] || "");
+        if (id) alisTarih[id] = hucreTarihStr(aData[i][1]);
       }
       const akSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
         ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
@@ -2475,6 +2478,28 @@ function getMuhasebeRaporu(body) {
         const urunAdi = String(row[2] || "");
         if (!urunAdi) continue;
         urunEkle(urunAdi, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "giris");
+      }
+
+      // Alış İadeleri: tedarikçiye geri verilen mal, girişten düşülür (çıkış olarak sayılır).
+      const iaSheet = getOrCreateSheet(ss, SHEETS.alisIadeler,
+        ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
+      const iaData = iaSheet.getDataRange().getValues();
+      const iadeTarih = {};
+      for (let i = 1; i < iaData.length; i++) {
+        const id = String(iaData[i][0] || "");
+        if (id) iadeTarih[id] = hucreTarihStr(iaData[i][1]);
+      }
+      const ikSheet = getOrCreateSheet(ss, SHEETS.alisIadeKalemleri,
+        ["ID","IADE_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
+      const ikData = ikSheet.getDataRange().getValues();
+      for (let i = 1; i < ikData.length; i++) {
+        const row = ikData[i];
+        const iadeId = String(row[1] || "");
+        const tarih = iadeTarih[iadeId] || "";
+        if (!tarih || !araligaDahilMi(tarih)) continue;
+        const urunAdi = String(row[2] || "");
+        if (!urunAdi) continue;
+        urunEkle(urunAdi, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
       }
     }
 
