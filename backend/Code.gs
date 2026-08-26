@@ -27,6 +27,7 @@ const SHEETS = {
   bankaHesapHareketleri: "BankaHesapHareketleri",
   stokHareketleri: "StokHareketleri",
   seriTanimlari: "SeriTanimlari",
+  tedarikciCariEslesme: "TedarikciCariEslesme",
   markalar: "Markalar",
   urunGruplari: "UrunGruplari",
   altUrunGruplari: "AltUrunGruplari",
@@ -2072,6 +2073,41 @@ const DIS_FIYAT_SHEET_ID  = "19t4MsvudC8X7knZ_dymBm5fghcbZcpAMwOmUXZxDPPQ";
 const DIS_FIYAT_SHEET_ADI = "FATURAFIYAT";
 const ALIS_FATURA_DURUM_BASLIKLAR = ["FATURA_NO","DURUM","ALIS_ID","ACIKLAMA","ISLEM_TARIHI"];
 
+// ════════════════════════════════════════════════
+// TEDARİKÇİ → CARİ EŞLEŞTİRME HAFIZASI — bekleyen (e-fatura) alış faturasındaki
+// TEDARIKCI adı bir kere bir cariye onaylanınca burada hatırlanır; sonraki
+// faturalarda aynı tedarikçi geldiğinde cari otomatik seçili gelir (yine de
+// kullanıcı Onayla'ya basmadan işlenmez).
+// ════════════════════════════════════════════════
+const TEDARIKCI_ESLESME_BASLIKLAR = ["TEDARIKCI","CARI_ID","GUNCELLEME_TARIHI"];
+
+function tedarikciCariEslesmeOku(ss) {
+  const sheet = getOrCreateSheet(ss, SHEETS.tedarikciCariEslesme, TEDARIKCI_ESLESME_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const map = {};
+  for (let i = 1; i < data.length; i++) {
+    const ted = String(data[i][0] || "").trim().toLocaleLowerCase('tr');
+    if (ted) map[ted] = String(data[i][1] || "");
+  }
+  return map;
+}
+
+function tedarikciCariEslesmeKaydet(ss, tedarikci, cariId) {
+  const t = String(tedarikci || "").trim();
+  if (!t || !cariId) return;
+  const sheet = getOrCreateSheet(ss, SHEETS.tedarikciCariEslesme, TEDARIKCI_ESLESME_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const key = t.toLocaleLowerCase('tr');
+  const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0] || "").trim().toLocaleLowerCase('tr') === key) {
+      sheet.getRange(i + 1, 2, 1, 2).setValues([[cariId, simdi]]);
+      return;
+    }
+  }
+  sheet.appendRow([t, cariId, simdi]);
+}
+
 function getBekleyenAlisFaturalari() {
   let disData;
   try {
@@ -2107,6 +2143,12 @@ function getBekleyenAlisFaturalari() {
   const stokKoduSeti = {};
   (stokTanimSonuc.kalemler || []).forEach(s => { if (s.stokKodu) stokKoduSeti[s.stokKodu] = true; });
 
+  // Daha önce bu tedarikçi bir cariye eşlenmiş mi? Eşlenmişse onay ekranında otomatik seçili gelsin.
+  const eslesmeMap = tedarikciCariEslesmeOku(ss);
+  const cariListeSonuc = getCariListesi();
+  const cariByIdMap = {};
+  if (cariListeSonuc.ok) cariListeSonuc.cariler.forEach(c => { cariByIdMap[c.id] = c; });
+
   // FATURA_NO bazında grupla.
   const gruplar = {};
   for (let i = 1; i < disData.length; i++) {
@@ -2135,6 +2177,9 @@ function getBekleyenAlisFaturalari() {
 
   const sonuc = Object.values(gruplar).map(f => {
     f.kalemSayisi = f.kalemler.length;
+    const eslesenCariId = eslesmeMap[String(f.tedarikci || "").trim().toLocaleLowerCase('tr')] || "";
+    f.eslesenCariId = eslesenCariId;
+    f.eslesenCariAd = eslesenCariId && cariByIdMap[eslesenCariId] ? cariByIdMap[eslesenCariId].ad : "";
     // Genel toplam = fatura tutarı (KDV dahil). Kaynak veride miktar olmadığından
     // birim fiyatlar üzerinden hesaplanıyor — gerçek fatura toplamı miktarla çarpılınca değişebilir.
     f.netToplam = f.kalemler.reduce((t, k) => t + k.netFiyat, 0);
@@ -2172,6 +2217,12 @@ function onaylaAlisFaturasi(body) {
 
   durumSheet.appendRow([faturaNo, "Onaylandı", alisSonuc.id, String(body.aciklama || ""),
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+
+  // Gerçek bir cari seçilerek onaylandıysa, aynı tedarikçiden gelecek sonraki faturalar
+  // için bu eşleşmeyi hatırla (bir sonraki onay ekranında otomatik seçili gelsin).
+  if (body.cariId && body.tedarikci) {
+    tedarikciCariEslesmeKaydet(ss, body.tedarikci, String(body.cariId).trim());
+  }
 
   return { ok: true, alisId: alisSonuc.id, toplamTutar: alisSonuc.toplamTutar };
 }
