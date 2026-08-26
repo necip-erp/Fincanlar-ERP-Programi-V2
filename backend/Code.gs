@@ -2458,6 +2458,7 @@ function getMuhasebeRaporu(body) {
     }
 
     // Ürün Bazlı Hareket Raporu ayrıca alış (giriş) ve alış iadesi (giriş azaltan) hareketlerini de kapsar.
+    let diagAlisKayitSayisi = null, diagAlisKalemSayisi = null;
     if (tip === "urunBazliHareket") {
       const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
         ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
@@ -2470,6 +2471,8 @@ function getMuhasebeRaporu(body) {
       const akSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
         ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
       const akData = akSheet.getDataRange().getValues();
+      diagAlisKayitSayisi = aData.length - 1;
+      diagAlisKalemSayisi = akData.length - 1;
       for (let i = 1; i < akData.length; i++) {
         const row = akData[i];
         const alisId = String(row[1] || "");
@@ -2504,7 +2507,19 @@ function getMuhasebeRaporu(body) {
     }
 
     const satirlar = Object.values(urunMap).sort((a, b) => b.tutar - a.tutar);
-    return { ok: true, tip: tip, satirlar: satirlar, toplam: satirlar.reduce((t, s) => t + s.tutar, 0) };
+    const sonuc = { ok: true, tip: tip, satirlar: satirlar, toplam: satirlar.reduce((t, s) => t + s.tutar, 0) };
+    // GEÇİCİ TEŞHİS: rapor beklenmedik şekilde boş geldiğinde ham veri sayılarını görmek için.
+    if (tip === "urunBazliHareket" && satirlar.length === 0) {
+      sonuc.diag = {
+        satisKayitSayisi: sData.length - 1,
+        satisKalemSayisi: kData.length - 1,
+        alisKayitSayisi: diagAlisKayitSayisi,
+        alisKalemSayisi: diagAlisKalemSayisi,
+        ornekSatisKalemSatisId: kData.length > 1 ? String(kData[1][1] || "") : null,
+        ornekSatisIdListesi: sData.slice(1, 4).map(r => String(r[0] || "")),
+      };
+    }
+    return sonuc;
   }
 
   return { ok: false, hata: "Bilinmeyen rapor tipi" };
