@@ -1395,6 +1395,14 @@ function silAlis(body) {
     }
   }
 
+  // Bu alış bir "bekleyen e-fatura" onayından oluşmuşsa (ALIS_ID eşleşmesiyle), o faturanın
+  // "Onaylandı" durum kaydını da sil — fatura tekrar "Bekliyor" durumuna dönsün ve yeniden işlenebilsin.
+  const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
+  const durumData = durumSheet.getDataRange().getValues();
+  for (let i = durumData.length - 1; i >= 1; i--) {
+    if (String(durumData[i][2] || "") === id) { durumSheet.deleteRow(i + 1); break; }
+  }
+
   return { ok: true };
 }
 
