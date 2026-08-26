@@ -251,7 +251,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 }
 
 /* ── FİNANS / RAPOR MODÜLLERİ ── */
-.finans-panel{padding:20px;overflow-y:auto;width:100%}
+.finans-panel{padding:20px;overflow-y:auto;width:100%;flex-shrink:0}
 .finans-kartlar{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px}
 .finans-kart{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;transition:box-shadow var(--t),transform var(--t)}
 .finans-kart:hover{box-shadow:var(--shadow-sm);transform:translateY(-1px)}
@@ -2818,13 +2818,14 @@ function alisBekleyenOnayModalAc(faturaNo){
       <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1.6fr;gap:10px;align-items:end">
         <div class="fld" style="position:relative;margin:0">
           <label>Bu fatura hangi cariye işlensin? *</label>
-          <input id="bfm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" value="${f.tedarikci||''}" style="padding-right:34px"
+          <input id="bfm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" value="${f.eslesenCariAd||f.tedarikci||''}" style="padding-right:34px"
                  oninput="bfmCariAramaDegisti()"
                  onfocus="bfmCariOneriGoster()"
                  onblur="setTimeout(()=>bfmCariOneriKapat(),200)"
                  onkeydown="oneriKlavyeYonet(event,'bfm-cari-oneri')">
-          <input type="hidden" id="bfm-cari" value="">
+          <input type="hidden" id="bfm-cari" value="${f.eslesenCariId||''}">
           <div id="bfm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+          ${f.eslesenCariAd ? `<div style="font-size:11px;color:var(--green);margin-top:3px">✓ Daha önce "${f.tedarikci}" bu cariye işlenmiş, otomatik seçildi.</div>` : ``}
         </div>
         <div class="fld" style="margin:0"><label>Tarih</label><input id="bfm-tarih" type="date" value="${tarihISO}"></div>
         <div class="fld" style="margin:0"><label>Ödeme Tipi</label>
@@ -2923,6 +2924,7 @@ function alisBekleyenOnayla(faturaNo){
     faturaNo,
     cariId: cariId || undefined,
     cariAd: !cariId ? serbestAd : undefined,
+    tedarikci: f.tedarikci || undefined,
     tarih: document.getElementById("bfm-tarih").value,
     odemeTipi: document.getElementById("bfm-odeme").value,
     aciklama: document.getElementById("bfm-aciklama").value,
