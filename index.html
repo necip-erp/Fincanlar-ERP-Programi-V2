@@ -3800,7 +3800,11 @@ function muhasebeRaporuYukle(){
         </table>`;
       return;
     }
-    if(res.satirlar.length===0){ el.innerHTML = '<div class="cari-empty">Bu aralıkta kayıt yok.</div>'; return; }
+    if(res.satirlar.length===0){
+      const diagHtml = res.diag ? `<pre style="font-size:11px;text-align:left;background:#f4f4f4;padding:8px;border-radius:6px;margin-top:10px;overflow:auto">${JSON.stringify(res.diag,null,2)}</pre>` : '';
+      el.innerHTML = '<div class="cari-empty">Bu aralıkta kayıt yok.</div>' + diagHtml;
+      return;
+    }
     if(tip === "alisFatura" || tip === "satisFatura"){
       el.innerHTML = `
         <table class="rapor-tbl">
