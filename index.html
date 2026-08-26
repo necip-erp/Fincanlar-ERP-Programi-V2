@@ -52,6 +52,9 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 
 /* ── ÜST ÇUBUK ── */
 .topbar{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);box-shadow:var(--shadow-sm);flex-shrink:0;position:relative;z-index:2}
+.sayfa-baslik{font-size:13px;font-weight:700;color:var(--text2);padding:4px 12px;background:var(--bg3);border-radius:20px;white-space:nowrap;display:none}
+.sayfa-baslik.show{display:inline-block}
+.tarih-vurgu{font-weight:800;font-size:1.08em;color:var(--text)}
 .brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;cursor:pointer;user-select:none;transition:opacity var(--t)}
 .brand:hover{opacity:.7}
 .brand img{width:26px;height:26px;transition:transform var(--t)}
@@ -164,7 +167,6 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
 
 .modal-overlay{position:fixed;inset:0;background:rgba(16,18,30,.45);backdrop-filter:blur(1.5px);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;animation:fincanOverlayIn .15s var(--ease)}
 .modal-box{background:var(--bg2);border-radius:14px;padding:22px;width:100%;max-width:380px;max-height:90vh;overflow:auto;box-shadow:var(--shadow-md);animation:fincanModalIn .18s var(--ease)}
-.modal-box-xwide{max-width:1000px}
 .modal-box h3{margin:0 0 14px;font-size:16px}
 .modal-box .fld{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
 .modal-box label{font-size:10px;color:var(--text3);text-transform:uppercase}
@@ -225,16 +227,18 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .rehber-alt{padding:10px 18px;border-top:1px solid var(--border);color:var(--text3);font-size:11px}
 .rehber-ac-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--bg3);border:1px solid var(--border);border-radius:6px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;transition:background var(--t),border-color var(--t)}
 .rehber-ac-btn:hover{background:var(--blue-l);border-color:var(--blue)}
-.modal-box-xwide{max-width:920px}
+.modal-box-xwide{max-width:1180px}
 .satis-kalem-basliklar{display:flex;gap:6px;margin-bottom:4px;font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:700}
 .satis-kalem-basliklar>span{padding:0 9px}
 .satis-kalem-satir{display:flex;gap:6px;margin-bottom:6px;align-items:center}
-.satis-kalem-satir input{padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--bg3);outline:none;font-family:inherit}
-.satis-kalem-satir input:focus{border-color:var(--blue);background:var(--bg2)}
+.satis-kalem-satir input,.satis-kalem-satir select{padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--bg3);outline:none;font-family:inherit}
+.satis-kalem-satir input:focus,.satis-kalem-satir select:focus{border-color:var(--blue);background:var(--bg2)}
+.satis-kalem-stokkodu{width:110px;flex:0 0 110px}
 .satis-kalem-urun{flex:1;min-width:0}
-.satis-kalem-miktar{width:64px}
-.satis-kalem-birim{width:56px}
-.satis-kalem-fiyat{width:84px}
+.satis-kalem-miktar{width:90px;flex:0 0 90px}
+.satis-kalem-birim{width:90px;flex:0 0 90px}
+.satis-kalem-fiyat{width:120px;flex:0 0 120px}
+.satis-kalem-yuzde{width:70px;flex:0 0 70px}
 .satis-toplam{text-align:right;margin-top:14px;font-size:15px;font-weight:800}
 .satis-toplam-detay{margin-top:14px;padding:10px 12px;background:var(--bg3);border-radius:8px}
 .satis-toplam-satir{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--text3)}
@@ -292,6 +296,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
     <img src="./icon-192.png" alt="">
     <span>Fincanlar ERP</span>
   </div>
+  <span id="sayfa-baslik" class="sayfa-baslik"></span>
   <div class="searchwrap">
     <span class="si">🔍</span>
     <input id="global-ara" placeholder="Ürün ara (kod, isim, ebat)..." oninput="globalAraDegisti(this.value)">
@@ -874,6 +879,9 @@ function modulAc(id){
   const el = document.getElementById("mod-"+id);
   if(el) el.classList.add("active");
   document.getElementById("home-btn").classList.add("show");
+  const baslikEl = document.getElementById("sayfa-baslik");
+  const modul = MODULLER.find(m=>m.id===id);
+  if(baslikEl && modul){ baslikEl.textContent = modul.ic + " " + modul.lbl; baslikEl.classList.add("show"); }
 }
 
 function gitAnaSayfa(){
@@ -881,6 +889,8 @@ function gitAnaSayfa(){
   document.getElementById("home").style.display = "block";
   document.getElementById("home-btn").classList.remove("show");
   document.getElementById("global-ara").value = "";
+  const baslikEl = document.getElementById("sayfa-baslik");
+  if(baslikEl) baslikEl.classList.remove("show");
 }
 
 // Arama kutusuna bir şey yazılınca Stok modülüne geçilir (liste orada, "şimdiki yerinde" açılır).
@@ -1564,7 +1574,7 @@ function satisSonFaturalarGoster(){
             <span class="cari-item-ad">${s.cariAd}</span>
             <span class="cari-item-bakiye">${paraFormat(s.toplamTutar)}</span>
           </div>
-          <span class="cari-item-tip">${tarihGoster(s.tarih)} · ${s.odemeTipi}</span>
+          <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${s.odemeTipi}</span>
         </div>`).join("")}
     </div>`;
 }
@@ -1579,7 +1589,7 @@ function satisListesiCiz(liste){
         <span class="cari-item-ad">${s.cariAd}</span>
         <span class="cari-item-bakiye">${paraFormat(s.toplamTutar)}</span>
       </div>
-      <span class="cari-item-tip">${tarihGoster(s.tarih)} · ${s.odemeTipi}${s.siparisDurumu ? ` · <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}</span>
+      <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${s.odemeTipi}${s.siparisDurumu ? ` · <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}</span>
     </div>`).join("");
 }
 
@@ -1616,6 +1626,11 @@ function satisAramaFiltrele(deger){
 function satisAc(id){
   if(!_siparisDurumlari.length) siparisDurumlariYukle();
   _satisSecili = id;
+  // cariHareketIslemeGit gibi "satis" modülünü modulAc() ile yeni açan çağrılar önce
+  // satisAnaSecimeDon()'u tetikleyip Fatura/Teklif/Sipariş seçim ekranını gösterir;
+  // burada onu kapatıp doğrudan detay görünümüne geçiyoruz ki kayıt direkt açılsın.
+  document.getElementById("satis-secim").style.display = "none";
+  document.getElementById("satis-view").style.display = "flex";
   document.getElementById("mod-satis").classList.add("detay-acik");
   const panel = document.getElementById("satis-detail-panel");
   panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⏳</span><p>Yükleniyor...</p></div>';
@@ -1641,7 +1656,7 @@ function satisDetayCiz(res){
     <div class="cari-detail-head">
       <div>
         <h2>${s.cariAd}</h2>
-        <span class="tip-badge">${s.belgeTipi||'Fatura'} · ${tarihGoster(s.tarih)} · ${s.odemeTipi}</span>
+        <span class="tip-badge">${s.belgeTipi||'Fatura'} · <b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${s.odemeTipi}</span>
         ${siparis ? ` <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}
       </div>
       <div class="cari-bakiye-box">
@@ -1837,6 +1852,14 @@ function satisModalAc(onCariId, onBelgeTipi){
           ${siparisDurumSecenekleriHTML(_siparisDurumlari.length ? _siparisDurumlari[0].ad : "Beklemede")}
         </select>
       </div>
+      <div class="fld" id="sm-tutar-iskonto-fld" style="display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
+        <label>Tutar İskontosu (₺)</label>
+        <input id="sm-tutar-iskontosu" type="number" min="0" step="0.01" value="0" oninput="satisToplamGuncelle()">
+        <label style="flex-direction:row;align-items:center;gap:6px;text-transform:none;font-size:12px;color:var(--text2);margin-top:6px">
+          <input id="sm-tutar-iskonto-kdv-sonra" type="checkbox" checked onchange="satisToplamGuncelle()" style="width:auto">
+          KDV'den sonra düş (tik yoksa KDV'den önce düşülür)
+        </label>
+      </div>
       <div class="fld" style="position:relative"><label>Müşteri (Cari)</label>
         <input id="sm-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest müşteri)..." autocomplete="off" style="padding-right:34px"
                value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
@@ -1856,7 +1879,7 @@ function satisModalAc(onCariId, onBelgeTipi){
           <option value="Nakit">Nakit</option>
           <option value="Kredi Kartı">Kredi Kartı</option>
           <option value="Havale">Havale</option>
-          <option value="Açık Hesap">Açık Hesap</option>
+          <option value="Açık Hesap" selected>Açık Hesap</option>
         </select>
       </div>
       <div class="fld" id="sm-banka-fld" style="display:none">
@@ -1871,8 +1894,9 @@ function satisModalAc(onCariId, onBelgeTipi){
 
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
       <div class="satis-kalem-basliklar">
-        <span style="flex:1">Ürün</span><span style="width:110px">Miktar</span><span style="width:80px">Birim</span>
-        <span style="width:110px">Birim Fiyat</span><span style="width:64px">İsk.%</span><span style="width:64px">Kdv%</span>
+        <span class="satis-kalem-stokkodu">Stok Kodu</span><span style="flex:1">Ürün</span>
+        <span class="satis-kalem-miktar">Miktar</span><span class="satis-kalem-birim">Birim</span>
+        <span class="satis-kalem-fiyat">Birim Fiyat</span><span class="satis-kalem-yuzde">İsk.%</span><span class="satis-kalem-yuzde">Kdv%</span>
       </div>
       <div id="sm-kalemler" style="margin:8px 0"></div>
       <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
@@ -1891,6 +1915,7 @@ function satisModalAc(onCariId, onBelgeTipi){
   document.body.appendChild(overlay);
   satisKalemlerCiz();
   satisBankaSecenekleriYukle();
+  satisOdemeTipiDegisti();
 }
 
 // Ödeme Tipi "Havale" seçildiğinde banka/hesap, "Açık Hesap" seçildiğinde vade tarihi alanını gösterir.
@@ -1978,7 +2003,7 @@ function satisKalemlerCiz(){
   const el = document.getElementById("sm-kalemler");
   el.innerHTML = _yeniSatisKalemleri.map((k,idx)=>`
     <div class="satis-kalem-satir">
-      <input class="satis-kalem-birim" style="max-width:100px" type="text" placeholder="Stok Kodu" value="${k.stokKodu||''}" oninput="satisKalemAlanDegisti(${idx},'stokKodu',this.value)">
+      <input class="satis-kalem-stokkodu" type="text" placeholder="Stok Kodu" value="${k.stokKodu||''}" oninput="satisKalemAlanDegisti(${idx},'stokKodu',this.value)">
       <div style="flex:1;position:relative">
         <input class="satis-kalem-urun" style="width:100%;padding-right:32px" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
                oninput="satisKalemAlanDegisti(${idx},'urunAdi',this.value); urunOneriGoster(${idx})"
@@ -1989,10 +2014,10 @@ function satisKalemlerCiz(){
         <div id="urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="satisKalemAlanDegisti(${idx},'miktar',this.value)">
-      <input class="satis-kalem-birim" style="max-width:80px" type="text" placeholder="Birim" value="${k.birim}" oninput="satisKalemAlanDegisti(${idx},'birim',this.value)">
+      ${birimSelectHTML('satis-kalem-birim', k.birim, `satisKalemAlanDegisti(${idx},'birim',this.value)`)}
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.01" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="satisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
-      <input class="satis-kalem-fiyat" style="max-width:64px" type="number" min="0" step="0.01" title="İskonto %" placeholder="İsk.%" value="${k.iskontoYuzde||0}" oninput="satisKalemAlanDegisti(${idx},'iskontoYuzde',this.value)">
-      <input class="satis-kalem-fiyat" style="max-width:64px" type="number" min="0" step="0.01" title="KDV %" placeholder="Kdv%" value="${k.kdvOrani===undefined?20:k.kdvOrani}" oninput="satisKalemAlanDegisti(${idx},'kdvOrani',this.value)">
+      <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="İskonto %" placeholder="İsk.%" value="${k.iskontoYuzde||0}" oninput="satisKalemAlanDegisti(${idx},'iskontoYuzde',this.value)">
+      <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="KDV %" placeholder="Kdv%" value="${k.kdvOrani===undefined?20:k.kdvOrani}" oninput="satisKalemAlanDegisti(${idx},'kdvOrani',this.value)">
       ${_yeniSatisKalemleri.length>1 ? `<span class="hk-sil" onclick="satisKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
   satisToplamGuncelle();
@@ -2055,7 +2080,16 @@ function satisToplamGuncelle(){
   const dipIskontoYuzde = parseFloat((document.getElementById("sm-dip-iskonto")||{}).value) || 0;
   const dipIskontoTutari = araToplamKalem * (dipIskontoYuzde/100);
   const araToplam = araToplamKalem - dipIskontoTutari;
-  const genelToplam = araToplam + kdvT;
+  const { tutar: tutarIskontosu, kdvSonra } = smTutarIskontosuAl();
+  let genelToplam;
+  if(tutarIskontosu > 0 && !kdvSonra){
+    const araToplamNet = Math.max(0, araToplam - tutarIskontosu);
+    const ortalamaKdvOrani = araToplamKalem > 0 ? (kdvT / araToplamKalem) : 0;
+    genelToplam = araToplamNet * (1 + ortalamaKdvOrani);
+  } else {
+    genelToplam = araToplam + kdvT - tutarIskontosu;
+  }
+  genelToplam = Math.max(0, genelToplam);
   const el = document.getElementById("sm-toplam");
   if(!el) return;
   el.innerHTML = `
@@ -2063,12 +2097,23 @@ function satisToplamGuncelle(){
     <div class="satis-toplam-satir"><span>İskonto</span><b>-${paraFormat(iskT + dipIskontoTutari)}</b></div>
     <div class="satis-toplam-satir"><span>Ara Toplam</span><b>${paraFormat(araToplam)}</b></div>
     <div class="satis-toplam-satir"><span>Kdv Toplam</span><b>${paraFormat(kdvT)}</b></div>
+    ${tutarIskontosu>0 ? `<div class="satis-toplam-satir"><span>Tutar İskontosu (${kdvSonra?'KDV sonrası':'KDV öncesi'})</span><b>-${paraFormat(tutarIskontosu)}</b></div>` : ''}
     <div class="satis-toplam-satir genel"><span>Genel Toplam</span><b>${paraFormat(genelToplam)}</b></div>`;
 }
 
 function satisModalBelgeTipiDegisti(){
   const tip = document.getElementById("sm-belgetipi").value;
   document.getElementById("sm-siparis-durum-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
+  document.getElementById("sm-tutar-iskonto-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
+  satisToplamGuncelle();
+}
+
+function smTutarIskontosuAl(){
+  const tip = (document.getElementById("sm-belgetipi")||{}).value;
+  if(tip !== "Sipariş") return { tutar: 0, kdvSonra: true };
+  const tutar = Math.max(0, parseFloat((document.getElementById("sm-tutar-iskontosu")||{}).value) || 0);
+  const kdvSonra = !!(document.getElementById("sm-tutar-iskonto-kdv-sonra")||{}).checked;
+  return { tutar, kdvSonra };
 }
 
 function satisGenelToplamHesapla(){
@@ -2077,7 +2122,13 @@ function satisGenelToplamHesapla(){
   const araToplamKalem = brutT - iskT;
   const dipIskontoYuzde = parseFloat((document.getElementById("sm-dip-iskonto")||{}).value) || 0;
   const araToplam = araToplamKalem - (araToplamKalem * (dipIskontoYuzde/100));
-  return araToplam + kdvT;
+  const { tutar: tutarIskontosu, kdvSonra } = smTutarIskontosuAl();
+  if(tutarIskontosu > 0 && !kdvSonra){
+    const araToplamNet = Math.max(0, araToplam - tutarIskontosu);
+    const ortalamaKdvOrani = araToplamKalem > 0 ? (kdvT / araToplamKalem) : 0;
+    return Math.max(0, araToplamNet * (1 + ortalamaKdvOrani));
+  }
+  return Math.max(0, araToplam + kdvT - tutarIskontosu);
 }
 
 function satisKaydet(){
@@ -2098,6 +2149,7 @@ function satisKaydet(){
     }
   }
   const bankaHesapId = odemeTipi === "Havale" ? document.getElementById("sm-banka-hesap").value : "";
+  const { tutar: tutarIskontosu, kdvSonra: tutarIskontoKdvSonra } = smTutarIskontosuAl();
   const body = {
     cariId: cariId || undefined,
     cariAd: !cariId ? serbestAd : undefined,
@@ -2105,6 +2157,8 @@ function satisKaydet(){
     tarih: document.getElementById("sm-tarih").value,
     odemeTipi: odemeTipi,
     dipIskontoYuzde: parseFloat(document.getElementById("sm-dip-iskonto").value) || 0,
+    tutarIskontosu: tutarIskontosu,
+    tutarIskontoKdvSonra: tutarIskontoKdvSonra,
     bankaHesapId: bankaHesapId,
     vade: odemeTipi === "Açık Hesap" ? document.getElementById("sm-vade").value : "",
     aciklama: document.getElementById("sm-aciklama").value,
@@ -2179,7 +2233,7 @@ function alisListesiCiz(liste){
         <span class="cari-item-ad">${a.cariAd}</span>
         <span class="cari-item-bakiye">${paraFormat(a.toplamTutar)}</span>
       </div>
-      <span class="cari-item-tip">${tarihGoster(a.tarih)} · ${a.odemeTipi}</span>
+      <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(a.tarih)}</b> · ${a.odemeTipi}</span>
     </div>`).join("");
 }
 
@@ -2215,7 +2269,7 @@ function alisDetayCiz(res){
     <div class="cari-detail-head">
       <div>
         <h2>${a.cariAd}</h2>
-        <span class="tip-badge">${tarihGoster(a.tarih)} · ${a.odemeTipi}</span>
+        <span class="tip-badge"><b class="tarih-vurgu">${tarihGoster(a.tarih)}</b> · ${a.odemeTipi}</span>
       </div>
       <div class="cari-bakiye-box">
         <div class="num">${paraFormat(a.toplamTutar)}</div>
@@ -2373,7 +2427,7 @@ function alisKalemlerCiz(){
         <div id="alis-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="alisKalemAlanDegisti(${idx},'miktar',this.value)">
-      <input class="satis-kalem-birim" style="max-width:80px" type="text" placeholder="Birim" value="${k.birim}" oninput="alisKalemAlanDegisti(${idx},'birim',this.value)">
+      ${birimSelectHTML('satis-kalem-birim', k.birim, `alisKalemAlanDegisti(${idx},'birim',this.value)`)}
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.01" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
       ${_yeniAlisKalemleri.length>1 ? `<span class="hk-sil" onclick="alisKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
@@ -2477,7 +2531,7 @@ function alisIadeListesiCiz(liste){
         <span class="cari-item-ad">${a.cariAd}</span>
         <span class="cari-item-bakiye">${paraFormat(a.toplamTutar)}</span>
       </div>
-      <span class="cari-item-tip">${tarihGoster(a.tarih)}</span>
+      <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(a.tarih)}</b></span>
     </div>`).join("");
 }
 
@@ -2513,7 +2567,7 @@ function alisIadeDetayCiz(res){
     <div class="cari-detail-head">
       <div>
         <h2>${a.cariAd}</h2>
-        <span class="tip-badge">${tarihGoster(a.tarih)} · İade</span>
+        <span class="tip-badge"><b class="tarih-vurgu">${tarihGoster(a.tarih)}</b> · İade</span>
       </div>
       <div class="cari-bakiye-box">
         <div class="num">${paraFormat(a.toplamTutar)}</div>
@@ -2667,7 +2721,7 @@ function alisIadeKalemlerCiz(){
         <div id="aim-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="alisIadeKalemAlanDegisti(${idx},'miktar',this.value)">
-      <input class="satis-kalem-birim" style="max-width:80px" type="text" placeholder="Birim" value="${k.birim}" oninput="alisIadeKalemAlanDegisti(${idx},'birim',this.value)">
+      ${birimSelectHTML('satis-kalem-birim', k.birim, `alisIadeKalemAlanDegisti(${idx},'birim',this.value)`)}
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.01" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisIadeKalemAlanDegisti(${idx},'birimFiyat',this.value)">
       ${_yeniAlisIadeKalemleri.length>1 ? `<span class="hk-sil" onclick="alisIadeKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
@@ -4233,6 +4287,24 @@ function birimListesiYukle(){
     birimListesiCiz();
   }).catch(err=>{ if(el) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
 }
+// Sayfa henüz Ayarlar > Birim Tanımları'na hiç girilmemiş olsa da, formlardaki birim
+// seçim kutularının (bkz. birimSelectHTML) dolu gelmesi için listeyi baştan yüklüyoruz.
+birimListesiYukle();
+
+// Ürün kalemi satırlarındaki (Satış/Alış/Stok Hareket) "Birim" alanı için ortak <select>
+// üretici. Tanımlı birimler listesinden gelen seçeneklere ek olarak, satırın mevcut/eski
+// değeri listede yoksa (örn. tanımlanmadan önce serbest metinle girilmiş eski bir kayıt)
+// onu da kaybetmemek için ayrı bir seçenek olarak ekler.
+function birimSelectHTML(cssClass, seciliDeger, onchangeJS){
+  const deger = seciliDeger || "adet";
+  const adlar = (_birimListe||[]).map(b=>b.ad);
+  const secenekler = adlar.slice();
+  if(deger && !secenekler.includes(deger)) secenekler.unshift(deger);
+  if(secenekler.length===0) secenekler.push("adet");
+  return `<select class="${cssClass}" onchange="${onchangeJS}">` +
+    secenekler.map(ad=>`<option value="${ad}" ${ad===deger?'selected':''}>${ad}</option>`).join("") +
+    `</select>`;
+}
 function birimListesiCiz(){
   const el = document.getElementById("ayarlar-birim-liste");
   if(!el) return;
@@ -4717,8 +4789,9 @@ function stokTanimModalAc(editId){
       <div class="fld"><label>Stok Kodu</label><input id="st-stokkodu" type="text" value="${k?k.stokKodu:''}" placeholder="İsteğe bağlı (ilk 2 hane marka kodu olarak kullanılır)"></div>
       <div class="fld"><label>Stok Adı *</label><input id="st-stokadi" type="text" value="${k?k.stokAdi:''}"></div>
       <div class="fld"><label>1. Birim</label>
-        <input id="st-birim1" list="birim-datalist" type="text" value="${k?k.birim1:'adet'}" placeholder="adet, m2, kg...">
-        <datalist id="birim-datalist">${(_birimListe||[]).map(b=>`<option value="${b.ad}">`).join("")}</datalist>
+        <select id="st-birim1">
+          ${(()=>{ const d=k?k.birim1:'adet'; const ads=(_birimListe||[]).map(b=>b.ad); const secenekler=ads.slice(); if(d && !secenekler.includes(d)) secenekler.unshift(d); if(secenekler.length===0) secenekler.push('adet'); return secenekler.map(ad=>`<option value="${ad}" ${ad===d?'selected':''}>${ad}</option>`).join(''); })()}
+        </select>
       </div>
       <div class="fld"><label>Ambalaj Miktarı</label><input id="st-ambalajmiktar" type="number" min="0" step="0.01" value="${k?k.ambalajMiktari:''}"></div>
       <div class="fld"><label>Ambalaj Birimi</label><input id="st-ambalajbirimi" type="text" value="${k?k.ambalajBirimi:''}" placeholder="Koli, Palet, Rulo..."></div>
@@ -4964,7 +5037,7 @@ function stokHareketKalemlerCiz(mod){
         <div id="sh-${mod}-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="stokHareketAlanDegisti('${mod}',${idx},'miktar',this.value)">
-      <input class="satis-kalem-birim" style="max-width:80px" type="text" placeholder="Birim" value="${k.birim}" oninput="stokHareketAlanDegisti('${mod}',${idx},'birim',this.value)">
+      ${birimSelectHTML('satis-kalem-birim', k.birim, `stokHareketAlanDegisti('${mod}',${idx},'birim',this.value)`)}
       ${mod==="toplu" ? `
       <select style="max-width:92px;padding:7px 4px;border:1px solid var(--border);border-radius:7px;background:var(--bg3);font-family:inherit;font-size:13px" onchange="stokHareketAlanDegisti('${mod}',${idx},'hareketTipi',this.value)">
         <option value="Giriş" ${k.hareketTipi==="Giriş"?"selected":""}>Giriş</option>

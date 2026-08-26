@@ -728,6 +728,16 @@ function ensureSatisBelgeTipiColonu(sheet) {
   if (String(h13 || "") !== "SIPARIS_DURUMU") {
     sheet.getRange(1, 13).setValue("SIPARIS_DURUMU").setFontWeight("bold").setBackground("#e8edf5");
   }
+  // Sadece Sipariş'te kullanılan sabit ₺ "Tutar İskontosu" ve onun KDV'den önce mi
+  // sonra mı düşüldüğünü belirten bayrak (1=sonra/varsayılan, 0=önce).
+  const h14 = sheet.getRange(1, 14).getValue();
+  if (String(h14 || "") !== "TUTAR_ISKONTOSU") {
+    sheet.getRange(1, 14).setValue("TUTAR_ISKONTOSU").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  const h15 = sheet.getRange(1, 15).getValue();
+  if (String(h15 || "") !== "TUTAR_ISKONTO_KDV_SONRA") {
+    sheet.getRange(1, 15).setValue("TUTAR_ISKONTO_KDV_SONRA").setFontWeight("bold").setBackground("#e8edf5");
+  }
 }
 
 // SatisKalemleri sayfası daha önce ISKONTO_YUZDE / KDV_ORANI sütunları olmadan
@@ -857,6 +867,8 @@ function getSatisDetay(satisId) {
         dipIskontoYuzde: parseFloat(data[i][9]) || 0, bankaHesapId: String(data[i][10] || ""),
         kaynakSiparisId: String(data[i][11] || ""),
         siparisManuelDurum: String(data[i][12] || "") || "Beklemede",
+        tutarIskontosu: parseFloat(data[i][13]) || 0,
+        tutarIskontoKdvSonra: String(data[i][14]) !== "0",
       };
       break;
     }
@@ -936,16 +948,32 @@ function saveSatis(body) {
   // yansıyacak/tahsil edilecek nihai tutar. Kalem bazında iskonto % ve kdv % desteklenir.
   // Dip İskonto (fatura geneline uygulanan ek iskonto), kalemlerin toplam ara toplamı
   // üzerinden hesaplanır ve KDV'den sonra genel toplamdan düşülür.
-  let kalemGenelToplam = 0, kalemAraToplam = 0;
+  let kalemGenelToplam = 0, kalemAraToplam = 0, kalemKdvToplam = 0;
   kalemler.forEach(k => {
     const h = satisKalemHesapla(parseFloat(k.miktar) || 0, parseFloat(k.birimFiyat) || 0,
       parseFloat(k.iskontoYuzde) || 0, k.kdvOrani === undefined ? 20 : (parseFloat(k.kdvOrani) || 0));
     kalemGenelToplam += h.genelToplam;
     kalemAraToplam += h.araToplam;
+    kalemKdvToplam += h.kdvTutari;
   });
   const dipIskontoYuzde = parseFloat(body.dipIskontoYuzde) || 0;
   const dipIskontoTutari = kalemAraToplam * (dipIskontoYuzde / 100);
-  const toplamTutar = kalemGenelToplam - dipIskontoTutari;
+
+  // Tutar İskontosu (yalnızca Sipariş'te kullanılan sabit ₺ iskonto) — tikli ise
+  // KDV'den SONRA (genel toplamdan doğrudan düşülür, KDV tutarı değişmez); tiksiz ise
+  // KDV'den ÖNCE (ara toplamdan düşülür, kalemlerin ağırlıklı ortalama KDV oranı bu
+  // düşülmüş tabana yeniden uygulanarak KDV de orantılı azalır).
+  const tutarIskontosu = Math.max(0, parseFloat(body.tutarIskontosu) || 0);
+  const tutarIskontoKdvSonra = body.tutarIskontoKdvSonra !== false; // varsayılan: KDV'den sonra
+  let toplamTutar;
+  if (tutarIskontosu > 0 && !tutarIskontoKdvSonra) {
+    const araToplamNet = Math.max(0, kalemAraToplam - dipIskontoTutari - tutarIskontosu);
+    const ortalamaKdvOrani = kalemAraToplam > 0 ? (kalemKdvToplam / kalemAraToplam) : 0;
+    toplamTutar = araToplamNet * (1 + ortalamaKdvOrani);
+  } else {
+    toplamTutar = kalemGenelToplam - dipIskontoTutari - tutarIskontosu;
+  }
+  toplamTutar = Math.max(0, toplamTutar);
 
   const id = "st_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
@@ -957,7 +985,7 @@ function saveSatis(body) {
     const durumAdlari = getSiparisDurumlari().durumlar.map(d => d.ad);
     siparisDurumu = durumAdlari.includes(body.siparisDurumu) ? body.siparisDurumu : (durumAdlari[0] || "Beklemede");
   }
-  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu]);
+  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0]);
 
   // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
   // otomatik, minimal bir stok kartı oluşturulur (Alış modülündeki mantığın aynısı).
