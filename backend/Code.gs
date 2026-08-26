@@ -2135,7 +2135,7 @@ function getBekleyenAlisFaturalari() {
   const islenmis = {};
   for (let i = 1; i < durumData.length; i++) {
     const fno = String(durumData[i][0] || "");
-    if (fno) islenmis[fno] = String(durumData[i][1] || "");
+    if (fno) islenmis[fno] = { durum: String(durumData[i][1] || ""), islemTarihi: String(durumData[i][4] || "") };
   }
 
   // Stok kodu StokTanimlari'nda kayıtlı mı diye kontrol için hazır kod seti.
@@ -2155,7 +2155,8 @@ function getBekleyenAlisFaturalari() {
     const row = disData[i];
     const fno = String(row[col.fno] || "").trim();
     if (!fno) continue;
-    if (islenmis[fno]) continue; // Onaylanmış/reddedilmiş faturalar bekleyen listede görünmez.
+    // Not: işlenmiş (onaylanmış/reddedilmiş) faturalar artık listeden ATLANMIYOR —
+    // "İşlendi" durumuyla birlikte gösteriliyor, tekrar onaya kapatılıyor (bkz. onaylaAlisFaturasi).
 
     if (!gruplar[fno]) {
       gruplar[fno] = {
@@ -2177,6 +2178,8 @@ function getBekleyenAlisFaturalari() {
 
   const sonuc = Object.values(gruplar).map(f => {
     f.kalemSayisi = f.kalemler.length;
+    f.durum = islenmis[f.faturaNo] ? islenmis[f.faturaNo].durum : "Bekliyor";
+    f.islemTarihi = islenmis[f.faturaNo] ? islenmis[f.faturaNo].islemTarihi : "";
     const eslesenCariId = eslesmeMap[String(f.tedarikci || "").trim().toLocaleLowerCase('tr')] || "";
     f.eslesenCariId = eslesenCariId;
     f.eslesenCariAd = eslesenCariId && cariByIdMap[eslesenCariId] ? cariByIdMap[eslesenCariId].ad : "";
