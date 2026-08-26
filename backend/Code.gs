@@ -351,6 +351,7 @@ function handleRequest(e) {
       case "saveSiparisDurumlari": result = saveSiparisDurumlari(body); break;
       case "onaylaAlisFaturasi": result = onaylaAlisFaturasi(body); break;
       case "reddetAlisFaturasi": result = reddetAlisFaturasi(body); break;
+      case "sifirlaAlisFaturaDurum": result = sifirlaAlisFaturaDurum(body); break;
       case "getCekSenetDetay":   result = getCekSenetDetay(body.id); break;
       case "saveCekSenet":       result = saveCekSenet(body); break;
       case "silCekSenet":        result = silCekSenet(body); break;
@@ -2140,10 +2141,32 @@ function getBekleyenAlisFaturalari() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
   const durumData = durumSheet.getDataRange().getValues();
+
+  // "Onaylandı" durumundaki kayıtların bağlı olduğu Alış kaydı hâlâ var mı diye kontrol için
+  // mevcut Alış ID'lerinin setini çıkar. Bağlı Alış silinmiş ama durum kaydı (eski, bu kontrolün
+  // eklenmesinden önce oluşmuş) sahipsiz kalmışsa, o kaydı "Bekliyor"a döndürüp temizleriz.
+  const alisSheet = getOrCreateSheet(ss, SHEETS.alislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+  const alisIdSeti = {};
+  const alisData = alisSheet.getDataRange().getValues();
+  for (let i = 1; i < alisData.length; i++) { const aid = String(alisData[i][0] || ""); if (aid) alisIdSeti[aid] = true; }
+
   const islenmis = {};
+  const sahipsizSatirlar = []; // silinecek durumSheet satır indeksleri (1-tabanlı, aşağıdan yukarı)
   for (let i = 1; i < durumData.length; i++) {
     const fno = String(durumData[i][0] || "");
-    if (fno) islenmis[fno] = { durum: String(durumData[i][1] || ""), islemTarihi: String(durumData[i][4] || "") };
+    if (!fno) continue;
+    const durum = String(durumData[i][1] || "");
+    const alisId = String(durumData[i][2] || "");
+    if (durum === "Onaylandı" && alisId && !alisIdSeti[alisId]) {
+      // Bağlı Alış kaydı artık yok — sahipsiz durum kaydı, temizlenip "Bekliyor"a döndürülecek.
+      sahipsizSatirlar.push(i + 1);
+      continue;
+    }
+    islenmis[fno] = { durum: durum, islemTarihi: String(durumData[i][4] || "") };
+  }
+  if (sahipsizSatirlar.length) {
+    sahipsizSatirlar.sort((a, b) => b - a).forEach(r => durumSheet.deleteRow(r));
   }
 
   // Stok kodu StokTanimlari'nda kayıtlı mı diye kontrol için hazır kod seti.
@@ -2254,6 +2277,23 @@ function reddetAlisFaturasi(body) {
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
 
   return { ok: true };
+}
+
+// body: { faturaNo }
+// Bir faturanın durum kaydını (Onaylandı/Reddedildi) elle temizler, "Bekliyor"a döndürür.
+// NOT: "Onaylandı" bir faturayı sıfırlamak durum kaydını siler ama oluşmuş Alış kaydını SİLMEZ —
+// o kayıt hâlâ Alış listesinde durur; istenmiyorsa ayrıca Alış'tan silinmeli.
+function sifirlaAlisFaturaDurum(body) {
+  const faturaNo = String(body.faturaNo || "").trim();
+  if (!faturaNo) return { ok: false, hata: "faturaNo gerekli" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
+  const durumData = durumSheet.getDataRange().getValues();
+  for (let i = durumData.length - 1; i >= 1; i--) {
+    if (String(durumData[i][0]) === faturaNo) { durumSheet.deleteRow(i + 1); return { ok: true }; }
+  }
+  return { ok: false, hata: "Bu fatura için işlenmiş bir kayıt bulunamadı" };
 }
 
 function getFinansOzet() {

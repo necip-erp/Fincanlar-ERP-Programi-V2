@@ -2782,7 +2782,8 @@ function alisBekleyenListesiCiz(){
       </div>
       <div class="btnrow" style="margin-top:8px">
         ${f.faturaLink ? `<a class="btn" href="${f.faturaLink}" target="_blank" style="text-decoration:none">📄 Faturayı Gör</a>` : ""}
-        ${islendi ? `` : `
+        ${islendi ? `
+        <button class="btn" onclick="alisBekleyenDurumSifirla('${f.faturaNo}')">↺ Durumu Sıfırla</button>` : `
         <button class="btn btn-primary" onclick="alisBekleyenOnayModalAc('${f.faturaNo}')">✅ İncele ve Onayla</button>
         <button class="btn btn-danger" onclick="alisBekleyenReddet('${f.faturaNo}')">✖ Reddet</button>`}
       </div>
@@ -2801,6 +2802,14 @@ function alisBekleyenKalemGosterGizle(fi){
 function alisBekleyenReddet(faturaNo){
   if(!confirm("Bu faturayı reddetmek istediğinize emin misiniz? Reddedilen fatura listede \"Reddedildi\" olarak görünmeye devam eder ama tekrar işlenemez.")) return;
   cariApi("reddetAlisFaturasi", {faturaNo}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    alisBekleyenListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+function alisBekleyenDurumSifirla(faturaNo){
+  if(!confirm("Bu faturanın durumunu sıfırlayıp tekrar \"Bekliyor\"a döndürmek istediğinize emin misiniz?\n\nNot: Fatura onaylanmışsa bu işlem oluşan Alış kaydını SİLMEZ — sadece durum etiketini sıfırlar. Kaydı da silmek isterseniz ayrıca Alış listesinden silmeniz gerekir.")) return;
+  cariApi("sifirlaAlisFaturaDurum", {faturaNo}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     alisBekleyenListesiYukle();
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
