@@ -769,6 +769,19 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
         <button class="btn btn-primary" onclick="siparisDurumlariKaydet()">Kaydet</button>
       </div>
     </div>
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Seri Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">
+        Sipariş No, Teklif No, Satış/Alış Fatura No ve Cari No gibi belge numaralarının otomatik takibi için
+        seriler tanımlarsın (Ön ek + Sonraki Numara + Basamak Sayısı). İlgili ekranlardaki "🔢" butonuna
+        basıldığında buradaki güncel numara kullanılır ve sayaç otomatik bir artar.
+      </p>
+      <div id="ayarlar-seri-liste"><div class="cari-empty">Yükleniyor...</div></div>
+      <div class="modal-actions" style="justify-content:flex-start;margin-top:16px">
+        <button class="btn" onclick="seriSatirEkle()">+ Yeni Seri</button>
+        <button class="btn btn-primary" onclick="seriTanimlariKaydet()">Kaydet</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1426,7 +1439,12 @@ function cariModalAc(editId){
   overlay.innerHTML = `
     <div class="modal-box">
       <h3>${duzenle?"Cariyi Düzenle":"Yeni Cari Ekle"}</h3>
-      <div class="fld"><label>Cari Kodu</label><input id="cm-carikodu" type="text" value="${c?(c.cariKodu||''):''}" placeholder="İsteğe bağlı, örn. M-0001"></div>
+      <div class="fld"><label>Cari Kodu</label>
+        <div style="display:flex;gap:6px">
+          <input id="cm-carikodu" type="text" value="${c?(c.cariKodu||''):''}" placeholder="İsteğe bağlı, örn. M-0001" style="flex:1">
+          ${duzenle?'':'<button type="button" class="btn" title="Seri tanımından sonraki cari numarasını kullan" onclick="cariSonrakiNoKullan()">🔢</button>'}
+        </div>
+      </div>
       <div class="fld"><label>Ad Soyad / Firma *</label><input id="cm-ad" type="text" value="${c?c.ad:''}"></div>
       <div class="fld"><label>Tip</label>
         <select id="cm-tip">
@@ -1447,6 +1465,19 @@ function cariModalAc(editId){
     </div>`;
   document.body.appendChild(overlay);
   setTimeout(()=>document.getElementById("cm-ad").focus(), 50);
+}
+
+function cariSonrakiNoKullan(){
+  cariApi("getSeriTanimlari").then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    const seri = res.seriler.find(s=>s.ad==="Cari No");
+    if(!seri){ alert("'Cari No' serisi Ayarlar > Seri Tanımlama'da bulunamadı."); return; }
+    cariApi("seriSonrakiNoUret", {id: seri.id}).then(r2=>{
+      if(!r2.ok){ alert("Hata: "+(r2.hata||"bilinmiyor")); return; }
+      const inp = document.getElementById("cm-carikodu");
+      if(inp) inp.value = r2.no;
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
 function cariKaydet(id){
@@ -3969,6 +4000,7 @@ function ayarlarYukle(){
   ayarlarListesiCiz();
   aciklamaSablonlariYukle();
   siparisDurumlariYukle();
+  seriTanimlariYukle();
 }
 
 // ── Açıklama Şablonları ──
@@ -4096,6 +4128,71 @@ function siparisDurumlariKaydet(){
 function siparisDurumSecenekleriHTML(seciliDurum){
   const liste = _siparisDurumlari.length ? _siparisDurumlari : [{ad:"Beklemede"},{ad:"Onaylandı"},{ad:"Teslim Edildi"},{ad:"Haber Verecek"}];
   return liste.map(d=>`<option value="${d.ad}" ${d.ad===seciliDurum?'selected':''}>${d.ad}</option>`).join("");
+}
+
+// ── Seri Tanımlama ──
+// Sipariş No, Teklif No, Satış/Alış Fatura No, Cari No gibi belge numaralarının
+// otomatik takibi için: her seri Ad + Prefix + Sonraki No + Basamak Sayısı tutar.
+let _seriTanimlari = [];
+function seriTanimlariYukle(){
+  const el = document.getElementById("ayarlar-seri-liste");
+  if(el) el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getSeriTanimlari").then(res=>{
+    if(!res.ok){ if(el) el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _seriTanimlari = res.seriler;
+    seriTanimlariCiz();
+  }).catch(err=>{ if(el) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+function seriTanimlariCiz(){
+  const el = document.getElementById("ayarlar-seri-liste");
+  if(!el) return;
+  if(_seriTanimlari.length===0){ el.innerHTML = '<div class="cari-empty">Henüz seri tanımlanmadı.</div>'; return; }
+  el.innerHTML = _seriTanimlari.map((s,i)=>`
+    <div class="fld" style="flex-direction:row;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap" data-seri-satir="${i}">
+      <input type="text" data-seri-ad value="${s.ad}" placeholder="Ör. Sipariş No" style="flex:1;min-width:120px">
+      <input type="text" data-seri-prefix value="${s.prefix}" placeholder="Ön ek, ör. SIP-" style="width:100px">
+      <input type="number" data-seri-sonrakino value="${s.sonrakiNo}" min="1" placeholder="Sonraki No" style="width:100px">
+      <input type="number" data-seri-basamak value="${s.basamak}" min="1" max="10" placeholder="Basamak" style="width:80px">
+      <span style="font-size:12px;color:var(--text3);white-space:nowrap">Önizleme: <b>${s.onizleme}</b></span>
+      <button class="btn btn-danger" style="padding:6px 10px" onclick="seriSatirSil(${i})">🗑</button>
+    </div>`).join("");
+}
+function seriSatirEkle(){
+  _seriTanimlariGuncelDegerleriOku();
+  _seriTanimlari.push({id:"", ad:"Yeni Seri", prefix:"", sonrakiNo:1, basamak:4, onizleme:""});
+  seriTanimlariCiz();
+}
+function seriSatirSil(i){
+  const s = _seriTanimlari[i];
+  const devamEt = () => { _seriTanimlariGuncelDegerleriOku(); _seriTanimlari.splice(i,1); seriTanimlariCiz(); };
+  if(s && s.id){
+    cariApi("silSeriTanim", {id:s.id}).then(res=>{
+      if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+      devamEt();
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  } else devamEt();
+}
+function _seriTanimlariGuncelDegerleriOku(){
+  document.querySelectorAll("[data-seri-satir]").forEach(satir=>{
+    const i = parseInt(satir.dataset.seriSatir);
+    if(!_seriTanimlari[i]) return;
+    _seriTanimlari[i].ad = satir.querySelector("[data-seri-ad]").value.trim() || _seriTanimlari[i].ad;
+    _seriTanimlari[i].prefix = satir.querySelector("[data-seri-prefix]").value;
+    _seriTanimlari[i].sonrakiNo = parseInt(satir.querySelector("[data-seri-sonrakino]").value) || 1;
+    _seriTanimlari[i].basamak = parseInt(satir.querySelector("[data-seri-basamak]").value) || 4;
+  });
+}
+function seriTanimlariKaydet(){
+  _seriTanimlariGuncelDegerleriOku();
+  const seriler = _seriTanimlari.filter(s=>s.ad && s.ad.trim());
+  if(seriler.length===0){ alert("En az bir seri tanımlı olmalı"); return; }
+  Promise.all(seriler.map(s => cariApi("saveSeriTanim", {id:s.id||undefined, ad:s.ad, prefix:s.prefix, sonrakiNo:s.sonrakiNo, basamak:s.basamak})))
+    .then(sonuclar=>{
+      const hatali = sonuclar.find(r=>!r.ok);
+      if(hatali){ alert("Hata: "+(hatali.hata||"bilinmiyor")); return; }
+      alert("Seri tanımları kaydedildi.");
+      seriTanimlariYukle();
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
 // ── Birim Tanımlama ──
@@ -4785,6 +4882,24 @@ function stokHareketFormAc(mod){
     <div class="rapor-baslik" style="margin-top:10px">${baslik}</div>
     <p style="color:var(--text3);font-size:13px;margin:0 0 14px">${aciklama}</p>
     <div class="fld" style="max-width:220px"><label>Tarih</label><input id="sh-${mod}-tarih" type="date" value="${bugun}"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+      <div class="fld" style="max-width:200px"><label>Belge Tipi</label>
+        <select id="sh-${mod}-belgetipi" onchange="stokHareketBelgeTipiDegisti('${mod}')">
+          <option value="">— Seçiniz —</option>
+          <option value="Sipariş">Sipariş</option>
+          <option value="Teklif">Teklif</option>
+          <option value="Satış Faturası">Satış Faturası</option>
+          <option value="Alış Faturası">Alış Faturası</option>
+          <option value="Diğer">Diğer</option>
+        </select>
+      </div>
+      <div class="fld" style="max-width:220px"><label>Belge No</label>
+        <div style="display:flex;gap:6px">
+          <input id="sh-${mod}-belgeno" type="text" placeholder="Ör. SIP-0001" style="flex:1">
+          <button type="button" class="btn" title="Seri tanımından sonraki numarayı kullan" onclick="stokHareketSonrakiNoKullan('${mod}')">🔢</button>
+        </div>
+      </div>
+    </div>
     <div id="sh-${mod}-kalemler" style="margin-top:10px"></div>
     <button class="btn" style="margin-top:6px" onclick="stokHareketSatirEkleUI('${mod}')">+ Satır Ekle</button>
     <div class="modal-actions" style="justify-content:flex-start;margin-top:16px">
@@ -4875,11 +4990,35 @@ function stokHareketKaydet(mod){
   if(!tarih){ alert("Tarih seçin"); return; }
   const kalemler = _stokHareketKalemleri[mod].filter(k => k.urunAdi && k.urunAdi.trim() && (parseFloat(k.miktar)||0) > 0);
   if(kalemler.length===0){ alert("En az bir ürün ve miktar girin"); return; }
-  cariApi("stokHareketTopluEkle", { tarih, kayitlar: kalemler }).then(res=>{
+  const genelBelgeTipi = document.getElementById("sh-"+mod+"-belgetipi").value;
+  const genelBelgeNo = document.getElementById("sh-"+mod+"-belgeno").value;
+  cariApi("stokHareketTopluEkle", { tarih, kayitlar: kalemler, genelBelgeTipi, genelBelgeNo }).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||res.error||"bilinmiyor")); return; }
     alert((res.eklenen||kalemler.length) + " hareket kaydedildi.");
     _stokHareketKalemleri[mod] = [stokHareketBosKalem(mod)];
     stokHareketFormAc(mod);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// Belge Tipi seçimine göre eşleşen seriyi (Ayarlar > Seri Tanımlama) bulup
+// önizleme amaçlı Belge No alanına henüz DOKUNMAZ — sadece "🔢" butonuyla kullanılır.
+const STOK_HAREKET_BELGE_SERI_ESLEME = {
+  "Sipariş": "Sipariş No", "Teklif": "Teklif No",
+  "Satış Faturası": "Satış Fatura No", "Alış Faturası": "Alış Fatura No",
+};
+function stokHareketBelgeTipiDegisti(mod){ /* şimdilik ek bir işlem yok, ileride otomatik önizleme eklenebilir */ }
+function stokHareketSonrakiNoKullan(mod){
+  const belgeTipi = document.getElementById("sh-"+mod+"-belgetipi").value;
+  const seriAdi = STOK_HAREKET_BELGE_SERI_ESLEME[belgeTipi];
+  if(!seriAdi){ alert("Önce Belge Tipi seçin (Sipariş/Teklif/Satış Faturası/Alış Faturası)."); return; }
+  cariApi("getSeriTanimlari").then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    const seri = res.seriler.find(s=>s.ad===seriAdi);
+    if(!seri){ alert("'"+seriAdi+"' serisi Ayarlar > Seri Tanımlama'da bulunamadı."); return; }
+    cariApi("seriSonrakiNoUret", {id: seri.id}).then(r2=>{
+      if(!r2.ok){ alert("Hata: "+(r2.hata||"bilinmiyor")); return; }
+      document.getElementById("sh-"+mod+"-belgeno").value = r2.no;
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
@@ -4909,10 +5048,10 @@ function stokHareketRaporuYukle(){
         <div class="finans-kart"><div class="lbl">Toplam Çıkış</div><div class="num">${res.cikisToplam}</div></div>
       </div>
       <table class="rapor-tbl">
-        <thead><tr><th>Tarih</th><th>Ürün</th><th>Tip</th><th>Miktar</th><th>Birim</th><th>Açıklama</th></tr></thead>
+        <thead><tr><th>Tarih</th><th>Stok Kodu</th><th>Ürün</th><th>Tip</th><th>Miktar</th><th>Birim</th><th>Belge Tipi</th><th>Belge No</th><th>Açıklama</th></tr></thead>
         <tbody>
           ${res.hareketler.map(h=>`
-            <tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu?h.stokKodu+' · ':''}${h.stokAdi}</td><td>${h.hareketTipi}</td><td>${h.miktar}</td><td>${h.birim}</td><td>${h.aciklama||''}</td></tr>`).join("")}
+            <tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td>${h.hareketTipi}</td><td>${h.miktar}</td><td>${h.birim}</td><td>${h.belgeTipi||''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td></tr>`).join("")}
         </tbody>
       </table>`;
   }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
