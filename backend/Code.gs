@@ -326,6 +326,7 @@ function handleRequest(e) {
       case "getBankaHesapHareketleri": result = getBankaHesapHareketleri(body.bankaHesapId); break;
       case "getMuhasebeRaporu": result = getMuhasebeRaporu(body); break;
       case "getStokHareketListesi": result = getStokHareketListesi(body); break;
+      case "stokHareketGecmisiDoldur": result = stokHareketGecmisiDoldur(); break;
       case "stokHareketTopluEkle":  result = stokHareketTopluEkle(body); break;
       case "silStokHareket":        result = silStokHareket(body); break;
       case "getSeriTanimlari": result = getSeriTanimlari(); break;
@@ -1011,6 +1012,12 @@ function saveSatis(body) {
     kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, iskontoYuzde, kdvOrani, 0, String(k.stokKodu || "").trim()]);
   });
 
+  // Stok Hareket Raporu'na SADECE FATURA yansır (Teklif/Sipariş henüz stoktan mal
+  // çıkışı anlamına gelmez — mal siparişin faturalandırılmasıyla fiilen çıkar).
+  if (belgeTipi === "Fatura") {
+    stokHareketOtomatikYaz(ss, kalemler, tarih, "Çıkış", "Satış Faturası", id, "Satış Faturası — " + cariAd);
+  }
+
   // Cari harekete/banka hareketine SADECE FATURA yansır — Teklif ve Sipariş henüz
   // gerçekleşmiş bir satış değildir, cariye borç yazılmaz. Sipariş faturalandığında
   // (siparistenFaturaOlustur ile) oluşturulan Fatura zaten kendi Borç hareketini yaratır.
@@ -1191,6 +1198,9 @@ function silSatis(body) {
   }
   if (!bulundu) return { ok: false, hata: "Satış bulunamadı" };
 
+  // Bu satışın otomatik yazdığı Stok Hareket Raporu satırlarını da geri al.
+  stokHareketOtomatikSil(ss, id);
+
   // Kalemlerini sil (silmeden önce kaynak sipariş varsa geri almak için okuyoruz)
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
     ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
@@ -1368,6 +1378,10 @@ function saveAlis(body) {
     kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, String(k.stokKodu || "").trim()]);
   });
 
+  // Stok Hareket Raporu'na Alış Faturası girişi otomatik yazılır (Alış modülünde
+  // Teklif/Sipariş ayrımı yok, her kayıt doğrudan fiili bir alış kabul edilir).
+  stokHareketOtomatikYaz(ss, kalemler, tarih, "Giriş", "Alış Faturası", id, "Alış Faturası — " + cariAd);
+
   // Cari seçildiyse, tutar kadar otomatik Alacak hareketi ekle (biz tedarikçiye borçlanırız).
   if (cariId) {
     cariHareketEkle({
@@ -1403,6 +1417,9 @@ function silAlis(body) {
     }
   }
   if (!bulundu) return { ok: false, hata: "Alış bulunamadı" };
+
+  // Bu alışın otomatik yazdığı Stok Hareket Raporu satırlarını da geri al.
+  stokHareketOtomatikSil(ss, id);
 
   const kSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
     ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
@@ -1541,6 +1558,9 @@ function saveAlisIade(body) {
     kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat]);
   });
 
+  // Alış İadesi = tedarikçiye geri gönderilen mal = depodan Çıkış.
+  stokHareketOtomatikYaz(ss, kalemler, tarih, "Çıkış", "Alış İadesi", id, "Alış İadesi — " + cariAd);
+
   // Cari seçildiyse, tutar kadar Borç hareketi ekle (tedarikçiye olan borcumuz azalır).
   if (cariId) {
     cariHareketEkle({
@@ -1576,6 +1596,9 @@ function silAlisIade(body) {
     }
   }
   if (!bulundu) return { ok: false, hata: "İade bulunamadı" };
+
+  // Bu iadenin otomatik yazdığı Stok Hareket Raporu satırlarını da geri al.
+  stokHareketOtomatikSil(ss, id);
 
   const kSheet = getOrCreateSheet(ss, SHEETS.alisIadeKalemleri,
     ["ID","IADE_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
@@ -3071,6 +3094,151 @@ function saveStokTanimTopluce(body) {
 // hareket geçmişini/raporunu tutar.
 // ════════════════════════════════════════════════
 const STOK_HAREKET_BASLIKLAR = ["ID","TARIH","STOK_TANIM_ID","STOK_KODU","STOK_ADI","BIRIM","HAREKET_TIPI","MIKTAR","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI","BELGE_NO"];
+
+// Satış/Alış/Alış İade Faturaları KAYDEDİLDİĞİNDE Stok Hareket Raporu'na (StokHareketleri
+// sayfası) otomatik satır yazar. belgeNo = ilgili Satış/Alış kaydının ID'si; silinince
+// stokHareketOtomatikSil(belgeNo) ile bu satırlar da otomatik temizlenir.
+function stokHareketOtomatikYaz(ss, kalemler, tarih, hareketTipi, belgeTipi, belgeNo, aciklamaOnEk) {
+  if (!kalemler || !kalemler.length) return;
+  const shSheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+  ensureStokHareketBelgeColonlari(shSheet);
+
+  // stokKodu -> StokTanimlari ID eşlemesi (ürün bazlı rapor filtresinin çalışabilmesi için).
+  const tanimData = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR).getDataRange().getValues();
+  const koduIdMap = {};
+  for (let i = 1; i < tanimData.length; i++) {
+    const kod = String(tanimData[i][1] || "").trim();
+    if (kod) koduIdMap[kod] = String(tanimData[i][0] || "");
+  }
+
+  const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+  const satirlar = [];
+  kalemler.forEach((k, idx) => {
+    const miktar = parseFloat(k.miktar) || 0;
+    if (miktar <= 0) return;
+    const stokKodu = String(k.stokKodu || "").trim();
+    satirlar.push([
+      "sh_" + Date.now() + "_" + idx + "_" + Math.floor(Math.random() * 1000),
+      tarih, stokKodu ? (koduIdMap[stokKodu] || "") : "", stokKodu,
+      String(k.urunAdi || "").trim(), String(k.birim || "adet"), hareketTipi, miktar,
+      aciklamaOnEk, kayitTarihi, belgeTipi, belgeNo,
+    ]);
+  });
+  if (satirlar.length) {
+    shSheet.getRange(shSheet.getLastRow() + 1, 1, satirlar.length, STOK_HAREKET_BASLIKLAR.length).setValues(satirlar);
+    cacheTemizle(["stokHareketListesi"]);
+  }
+}
+
+// Bir Satış/Alış/Alış İade kaydı silindiğinde, stokHareketOtomatikYaz ile o kayda ait
+// oluşturulmuş BELGE_NO'lu Stok Hareket satırlarını da siler.
+function stokHareketOtomatikSil(ss, belgeNo) {
+  const shSheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+  ensureStokHareketBelgeColonlari(shSheet);
+  const data = shSheet.getDataRange().getValues();
+  let silindi = false;
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][11]) === String(belgeNo)) { shSheet.deleteRow(i + 1); silindi = true; }
+  }
+  if (silindi) cacheTemizle(["stokHareketListesi"]);
+}
+
+// stokHareketOtomatikYaz özelliği eklenmeden ÖNCE kaydedilmiş Satış Faturası / Alış
+// Faturası / Alış İadesi kayıtları için Stok Hareket Raporu'nda hiç satır yoktur.
+// Bu fonksiyon geçmişteki TÜM bu tip kayıtları tarayıp, StokHareketleri'nde o BELGE_NO
+// için henüz satır yoksa geriye dönük olarak oluşturur. Ayarlar/Rapor ekranından elle
+// tetiklenir, tekrar çalıştırılması güvenlidir (zaten işlenmiş belgeler atlanır).
+function stokHareketGecmisiDoldur() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const shSheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+  ensureStokHareketBelgeColonlari(shSheet);
+  const shData = shSheet.getDataRange().getValues();
+  const islenmisBelgeNolar = {};
+  for (let i = 1; i < shData.length; i++) {
+    const bn = String(shData[i][11] || "");
+    if (bn) islenmisBelgeNolar[bn] = true;
+  }
+
+  let eklenen = 0;
+
+  // Satış Faturaları
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  ensureSatisBelgeTipiColonu(sSheet);
+  const sData = sSheet.getDataRange().getValues();
+  const skSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
+    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
+  const skData = skSheet.getDataRange().getValues();
+  for (let i = 1; i < sData.length; i++) {
+    const sId = String(sData[i][0] || "");
+    const belgeTipi = String(sData[i][8] || "Fatura");
+    if (!sId || belgeTipi !== "Fatura" || islenmisBelgeNolar[sId]) continue;
+    const kalemler = [];
+    for (let j = 1; j < skData.length; j++) {
+      if (String(skData[j][1]) === sId) {
+        kalemler.push({ urunAdi: String(skData[j][2] || ""), miktar: parseFloat(skData[j][3]) || 0,
+          birim: String(skData[j][4] || "adet"), stokKodu: String(skData[j][10] || "") });
+      }
+    }
+    if (kalemler.length) {
+      stokHareketOtomatikYaz(ss, kalemler, hucreTarihStr(sData[i][1]), "Çıkış", "Satış Faturası", sId,
+        "Satış Faturası — " + String(sData[i][3] || ""));
+      eklenen++;
+    }
+  }
+
+  // Alış Faturaları
+  const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+  const aData = aSheet.getDataRange().getValues();
+  const akSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
+    ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
+  ensureAlisKalemStokKoduColonu(akSheet);
+  const akData = akSheet.getDataRange().getValues();
+  for (let i = 1; i < aData.length; i++) {
+    const aId = String(aData[i][0] || "");
+    if (!aId || islenmisBelgeNolar[aId]) continue;
+    const kalemler = [];
+    for (let j = 1; j < akData.length; j++) {
+      if (String(akData[j][1]) === aId) {
+        kalemler.push({ urunAdi: String(akData[j][2] || ""), miktar: parseFloat(akData[j][3]) || 0,
+          birim: String(akData[j][4] || "adet"), stokKodu: String(akData[j][7] || "") });
+      }
+    }
+    if (kalemler.length) {
+      stokHareketOtomatikYaz(ss, kalemler, hucreTarihStr(aData[i][1]), "Giriş", "Alış Faturası", aId,
+        "Alış Faturası — " + String(aData[i][3] || ""));
+      eklenen++;
+    }
+  }
+
+  // Alış İadeleri
+  const aiSheet = getOrCreateSheet(ss, SHEETS.alisIadeler,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
+  const aiData = aiSheet.getDataRange().getValues();
+  const aikSheet = getOrCreateSheet(ss, SHEETS.alisIadeKalemleri,
+    ["ID","IADE_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
+  const aikData = aikSheet.getDataRange().getValues();
+  for (let i = 1; i < aiData.length; i++) {
+    const aiId = String(aiData[i][0] || "");
+    if (!aiId || islenmisBelgeNolar[aiId]) continue;
+    const kalemler = [];
+    for (let j = 1; j < aikData.length; j++) {
+      if (String(aikData[j][1]) === aiId) {
+        kalemler.push({ urunAdi: String(aikData[j][2] || ""), miktar: parseFloat(aikData[j][3]) || 0,
+          birim: String(aikData[j][4] || "adet") });
+      }
+    }
+    if (kalemler.length) {
+      stokHareketOtomatikYaz(ss, kalemler, hucreTarihStr(aiData[i][1]), "Çıkış", "Alış İadesi", aiId,
+        "Alış İadesi — " + String(aiData[i][3] || ""));
+      eklenen++;
+    }
+  }
+
+  cacheTemizle(["stokHareketListesi"]);
+  return { ok: true, eklenenBelgeSayisi: eklenen };
+}
 
 // Sheet daha önce BELGE_TIPI/BELGE_NO kolonları olmadan oluşturulmuş olabilir; başlıkları tamamlar.
 function ensureStokHareketBelgeColonlari(sheet) {

@@ -527,7 +527,9 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
     <!-- KADEME 3: Stok Hareket Raporu -->
     <div id="stok-hareket-rapor-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
       <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('raporlar')">← Geri</button>
-      <div class="rapor-baslik" style="margin-top:10px">Stok Hareket Raporu</div>
+      <div class="rapor-baslik" style="margin-top:10px">Stok Hareket Raporu
+        <button class="btn" style="font-size:12px;margin-left:10px" onclick="stokHareketGecmisiDoldurTikla()" title="Bu özellik eklenmeden önce girilmiş Satış/Alış faturalarını geriye dönük olarak bu rapora işler">🔄 Geçmiş Faturaları İşle</button>
+      </div>
       <div class="rapor-filtre">
         <div class="fld"><label>Başlangıç</label><input type="date" id="shr-baslangic"></div>
         <div class="fld"><label>Bitiş</label><input type="date" id="shr-bitis"></div>
@@ -5130,6 +5132,15 @@ function stokHareketUrunFiltreDoldur(){
   sel.innerHTML = '<option value="">— Tüm ürünler —</option>' +
     _stokTanimListe.map(s=>`<option value="${s.id}">${s.stokAdi}</option>`).join("");
   sel.dataset.dolduruldu = "1";
+}
+
+function stokHareketGecmisiDoldurTikla(){
+  if(!confirm("Bu işlem, özellik eklenmeden önce kaydedilmiş TÜM Satış/Alış faturalarını ve Alış İadelerini tarayıp bu rapora geriye dönük olarak işler. Zaten işlenmiş faturalar tekrar eklenmez. Devam edilsin mi?")) return;
+  cariApi("stokHareketGecmisiDoldur").then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||res.error||"bilinmiyor")); return; }
+    alert((res.eklenenBelgeSayisi||0)+" belge işlendi.");
+    stokHareketRaporuYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
 function stokHareketRaporuYukle(){
