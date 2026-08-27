@@ -1480,10 +1480,13 @@ function cariModalAc(editId){
 }
 
 function cariSonrakiNoKullan(){
+  const tip = (document.getElementById("cm-tip")||{}).value || "Müşteri";
+  const seriAdi = tip === "Tedarikçi" ? "Cari No (Satıcı)" : "Cari No (Alıcı)";
   cariApi("getSeriTanimlari").then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
-    const seri = res.seriler.find(s=>s.ad==="Cari No");
-    if(!seri){ alert("'Cari No' serisi Ayarlar > Seri Tanımlama'da bulunamadı."); return; }
+    // Geriye dönük uyumluluk: eski tek "Cari No" serisi henüz göç etmediyse ona düş.
+    const seri = res.seriler.find(s=>s.ad===seriAdi) || res.seriler.find(s=>s.ad==="Cari No");
+    if(!seri){ alert("'"+seriAdi+"' serisi Ayarlar > Seri Tanımlama'da bulunamadı."); return; }
     cariApi("seriSonrakiNoUret", {id: seri.id}).then(r2=>{
       if(!r2.ok){ alert("Hata: "+(r2.hata||"bilinmiyor")); return; }
       const inp = document.getElementById("cm-carikodu");
@@ -4269,13 +4272,21 @@ function seriTanimlariKaydet(){
   _seriTanimlariGuncelDegerleriOku();
   const seriler = _seriTanimlari.filter(s=>s.ad && s.ad.trim());
   if(seriler.length===0){ alert("En az bir seri tanımlı olmalı"); return; }
-  Promise.all(seriler.map(s => cariApi("saveSeriTanim", {id:s.id||undefined, ad:s.ad, prefix:s.prefix, sonrakiNo:s.sonrakiNo, basamak:s.basamak})))
-    .then(sonuclar=>{
-      const hatali = sonuclar.find(r=>!r.ok);
-      if(hatali){ alert("Hata: "+(hatali.hata||"bilinmiyor")); return; }
+  // Not: satırlar paralel değil sırayla kaydediliyor — aynı anda birden fazla
+  // yeni satır eklenip Google Sheets'e eşzamanlı appendRow çağrısı yapılması
+  // (özellikle backend'deki kilitten önce) veri kaybına yol açabiliyordu.
+  (async () => {
+    try {
+      for (const s of seriler) {
+        const r = await cariApi("saveSeriTanim", {id:s.id||undefined, ad:s.ad, prefix:s.prefix, sonrakiNo:s.sonrakiNo, basamak:s.basamak});
+        if (!r.ok) { alert("Hata: "+(r.hata||"bilinmiyor")); return; }
+      }
       alert("Seri tanımları kaydedildi.");
       seriTanimlariYukle();
-    }).catch(err=>alert("Bağlantı hatası: "+err.message));
+    } catch (err) {
+      alert("Bağlantı hatası: "+err.message);
+    }
+  })();
 }
 
 // ── Birim Tanımlama ──

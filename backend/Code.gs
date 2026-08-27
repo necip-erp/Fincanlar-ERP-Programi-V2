@@ -3340,10 +3340,35 @@ function getSeriTanimlari() {
       ["sr_" + (Date.now() + 1) + "_2", "Teklif No", "TEK-", 1, 4],
       ["sr_" + (Date.now() + 2) + "_3", "Satış Fatura No", "SF-", 1, 4],
       ["sr_" + (Date.now() + 3) + "_4", "Alış Fatura No", "AF-", 1, 4],
-      ["sr_" + (Date.now() + 4) + "_5", "Cari No", "M-", 1, 4],
+      ["sr_" + (Date.now() + 4) + "_5", "Cari No (Alıcı)", "M-", 1, 4],
+      ["sr_" + (Date.now() + 5) + "_6", "Cari No (Satıcı)", "T-", 1, 4],
     ];
     sheet.getRange(2, 1, varsayilanlar.length, SERI_BASLIKLAR.length).setValues(varsayilanlar);
     data = sheet.getDataRange().getValues();
+  } else {
+    // Tek parça geçmiş "Cari No" serisini Alıcı/Satıcı olarak ikiye ayırma
+    // (bir kerelik göç): eski seri "Cari No (Alıcı)" olarak devam eder
+    // (numarası korunur), "Cari No (Satıcı)" 1'den başlayan yeni bir seri
+    // olarak eklenir. Bu blok sadece eski "Cari No" hâlâ mevcutken çalışır,
+    // ad değiştirildikten sonra bir daha eşleşmeyeceği için tekrar tetiklenmez.
+    let eskiCariNoSatir = -1, alıcıVar = false, satıcıVar = false;
+    for (let i = 1; i < data.length; i++) {
+      const ad = String(data[i][1] || "");
+      if (ad === "Cari No") eskiCariNoSatir = i;
+      if (ad === "Cari No (Alıcı)") alıcıVar = true;
+      if (ad === "Cari No (Satıcı)") satıcıVar = true;
+    }
+    if (eskiCariNoSatir > -1 && !alıcıVar && !satıcıVar) {
+      const lock = LockService.getScriptLock();
+      lock.waitLock(10000);
+      try {
+        sheet.getRange(eskiCariNoSatir + 1, 2).setValue("Cari No (Alıcı)");
+        sheet.appendRow(["sr_" + Date.now() + "_satici", "Cari No (Satıcı)", "T-", 1, 4]);
+      } finally {
+        lock.releaseLock();
+      }
+      data = sheet.getDataRange().getValues();
+    }
   }
   const seriler = [];
   for (let i = 1; i < data.length; i++) {
@@ -3362,22 +3387,32 @@ function getSeriTanimlari() {
 }
 
 // body: { id?, ad, prefix, sonrakiNo, basamak }
+// NOT: Ayarlar ekranı Kaydet'te TÜM seri satırlarını (değişmeyenler dahil)
+// aynı anda gönderebiliyor; kilitsiz çalışırsa özellikle yeni satır eklerken
+// (appendRow) eşzamanlı çağrılar birbirinin üstüne yazıp veri kaybına yol
+// açabiliyordu. LockService ile bu fonksiyonu uçtan uca serileştiriyoruz.
 function saveSeriTanim(body) {
   const ad = String(body.ad || "").trim();
   if (!ad) return { ok: false, hata: "Seri adı gerekli" };
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR);
-  const data = sheet.getDataRange().getValues();
-  let id = String(body.id || "").trim();
-  let satirIdx = -1;
-  if (id) {
-    for (let i = 1; i < data.length; i++) { if (String(data[i][0]) === id) { satirIdx = i + 1; break; } }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const data = sheet.getDataRange().getValues();
+    let id = String(body.id || "").trim();
+    let satirIdx = -1;
+    if (id) {
+      for (let i = 1; i < data.length; i++) { if (String(data[i][0]) === id) { satirIdx = i + 1; break; } }
+    }
+    if (!id) id = "sr_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+    const satir = [id, ad, String(body.prefix || ""), parseInt(body.sonrakiNo) || 1, parseInt(body.basamak) || 4];
+    if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
+    else sheet.appendRow(satir);
+    return { ok: true, id: id };
+  } finally {
+    lock.releaseLock();
   }
-  if (!id) id = "sr_" + Date.now();
-  const satir = [id, ad, String(body.prefix || ""), parseInt(body.sonrakiNo) || 1, parseInt(body.basamak) || 4];
-  if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
-  else sheet.appendRow(satir);
-  return { ok: true, id: id };
 }
 
 function silSeriTanim(body) {
@@ -3385,11 +3420,17 @@ function silSeriTanim(body) {
   if (!id) return { ok: false, hata: "id gerekli" };
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR);
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); return { ok: true }; }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); return { ok: true }; }
+    }
+    return { ok: false, hata: "Kayıt bulunamadı" };
+  } finally {
+    lock.releaseLock();
   }
-  return { ok: false, hata: "Kayıt bulunamadı" };
 }
 
 // body: { id } — seçilen serinin güncel numarasını formatlar, sayacı 1 artırır, formatlı numarayı döner.
@@ -3398,18 +3439,24 @@ function seriSonrakiNoUret(body) {
   if (!id) return { ok: false, hata: "id gerekli" };
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR);
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === id) {
-      const prefix = String(data[i][2] || "");
-      const sonrakiNo = parseInt(data[i][3]) || 1;
-      const basamak = parseInt(data[i][4]) || 4;
-      const no = seriFormatla(prefix, sonrakiNo, basamak);
-      sheet.getRange(i + 1, 4).setValue(sonrakiNo + 1);
-      return { ok: true, no: no };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === id) {
+        const prefix = String(data[i][2] || "");
+        const sonrakiNo = parseInt(data[i][3]) || 1;
+        const basamak = parseInt(data[i][4]) || 4;
+        const no = seriFormatla(prefix, sonrakiNo, basamak);
+        sheet.getRange(i + 1, 4).setValue(sonrakiNo + 1);
+        return { ok: true, no: no };
+      }
     }
+    return { ok: false, hata: "Seri bulunamadı" };
+  } finally {
+    lock.releaseLock();
   }
-  return { ok: false, hata: "Seri bulunamadı" };
 }
 
 function silStokHareket(body) {
