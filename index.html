@@ -665,6 +665,12 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
           <select id="alis-bekleyen-firma-filtre" onchange="alisBekleyenListesiCiz()" style="min-width:220px;margin:0">
             <option value="">Tüm firmalar</option>
           </select>
+          <select id="alis-bekleyen-durum-filtre" onchange="alisBekleyenListesiCiz()" style="min-width:160px;margin:0">
+            <option value="">Tüm durumlar</option>
+            <option value="Bekliyor">Bekliyor</option>
+            <option value="Onaylandı">✓ Onaylandı</option>
+            <option value="Reddedildi">✖ Reddedildi</option>
+          </select>
         </div>
         <div id="alis-bekleyen-list"><div class="cari-empty">Yükleniyor...</div></div>
       </div>
@@ -2828,11 +2834,16 @@ function alisBekleyenListesiCiz(){
   const el = document.getElementById("alis-bekleyen-list");
   const aramaEl = document.getElementById("alis-bekleyen-ara");
   const firmaEl = document.getElementById("alis-bekleyen-firma-filtre");
+  const durumEl = document.getElementById("alis-bekleyen-durum-filtre");
   const q = (aramaEl ? aramaEl.value : "").trim().toLocaleLowerCase('tr');
   const firmaSecili = firmaEl ? firmaEl.value : "";
+  const durumSecili = durumEl ? durumEl.value : "";
   let liste = _alisBekleyenListe;
   if(firmaSecili){
     liste = liste.filter(f => (f.tedarikci || "(Tedarikçi belirtilmemiş)") === firmaSecili);
+  }
+  if(durumSecili){
+    liste = liste.filter(f => (f.durum || "Bekliyor") === durumSecili);
   }
   if(q){
     liste = liste.filter(f =>
@@ -2841,7 +2852,7 @@ function alisBekleyenListesiCiz(){
       f.kalemler.some(k => (k.urunAdi||"").toLocaleLowerCase('tr').includes(q) || (k.stokKodu||"").toLocaleLowerCase('tr').includes(q))
     );
   }
-  if(liste.length === 0){ el.innerHTML = `<div class="cari-empty">${_alisBekleyenListe.length===0?'Onay bekleyen fatura yok 🎉':'Aramayla eşleşen fatura yok'}</div>`; return; }
+  if(liste.length === 0){ el.innerHTML = `<div class="cari-empty">${_alisBekleyenListe.length===0?'Onay bekleyen fatura yok 🎉':'Aramayla/filtreyle eşleşen fatura yok'}</div>`; return; }
   el.innerHTML = liste.map((f)=>{
     const fi = _alisBekleyenListe.indexOf(f);
     const islendi = f.durum && f.durum !== "Bekliyor";
