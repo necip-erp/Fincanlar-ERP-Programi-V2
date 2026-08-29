@@ -660,7 +660,12 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
           fincanlaryapi@gmail.com hesabına gelen e-Faturalardan otomatik çekilen fiyat/tedarikçi bilgileri — miktarları girip
           onayladığında gerçek bir Alış kaydı oluşur ve tedarikçi cari hesabına borç işlenir.
         </p>
-        <input id="alis-bekleyen-ara" placeholder="Tedarikçi, fatura no veya ürün adına göre ara..." oninput="alisBekleyenListesiCiz()" style="width:100%;margin-bottom:12px">
+        <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <input id="alis-bekleyen-ara" placeholder="Tedarikçi, fatura no veya ürün adına göre ara..." oninput="alisBekleyenListesiCiz()" style="flex:1;min-width:220px;margin:0">
+          <select id="alis-bekleyen-firma-filtre" onchange="alisBekleyenListesiCiz()" style="min-width:220px;margin:0">
+            <option value="">Tüm firmalar</option>
+          </select>
+        </div>
         <div id="alis-bekleyen-list"><div class="cari-empty">Yükleniyor...</div></div>
       </div>
     </div>
@@ -2798,15 +2803,37 @@ function alisBekleyenListesiYukle(){
   cariApi("getBekleyenAlisFaturalari").then(res=>{
     if(!res.ok){ document.getElementById("alis-bekleyen-list").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||"bilinmiyor")+'</div>'; return; }
     _alisBekleyenListe = res.faturalar;
+    alisBekleyenFirmaFiltreDoldur();
     alisBekleyenListesiCiz();
   }).catch(err=>{ document.getElementById("alis-bekleyen-list").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+
+// Listedeki faturalardan benzersiz tedarikçi adlarını çıkarıp dropdown'ı dolduruyor.
+// Önceden seçili bir firma varsa (liste yenilense de) seçim korunuyor.
+function alisBekleyenFirmaFiltreDoldur(){
+  const sel = document.getElementById("alis-bekleyen-firma-filtre");
+  if(!sel) return;
+  const oncekiSecim = sel.value;
+  const firmalar = [...new Set(_alisBekleyenListe.map(f => f.tedarikci || "(Tedarikçi belirtilmemiş)"))]
+    .sort((a,b)=>a.localeCompare(b,'tr'));
+  sel.innerHTML = '<option value="">Tüm firmalar (' + _alisBekleyenListe.length + ')</option>' +
+    firmalar.map(ad => {
+      const adet = _alisBekleyenListe.filter(f => (f.tedarikci || "(Tedarikçi belirtilmemiş)") === ad).length;
+      return `<option value="${ad.replace(/"/g,'&quot;')}">${ad} (${adet})</option>`;
+    }).join("");
+  if(firmalar.includes(oncekiSecim)) sel.value = oncekiSecim;
 }
 
 function alisBekleyenListesiCiz(){
   const el = document.getElementById("alis-bekleyen-list");
   const aramaEl = document.getElementById("alis-bekleyen-ara");
+  const firmaEl = document.getElementById("alis-bekleyen-firma-filtre");
   const q = (aramaEl ? aramaEl.value : "").trim().toLocaleLowerCase('tr');
+  const firmaSecili = firmaEl ? firmaEl.value : "";
   let liste = _alisBekleyenListe;
+  if(firmaSecili){
+    liste = liste.filter(f => (f.tedarikci || "(Tedarikçi belirtilmemiş)") === firmaSecili);
+  }
   if(q){
     liste = liste.filter(f =>
       (f.tedarikci||"").toLocaleLowerCase('tr').includes(q) ||
