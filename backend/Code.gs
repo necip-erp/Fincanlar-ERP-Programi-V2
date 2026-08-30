@@ -2193,7 +2193,7 @@ function getBekleyenAlisFaturalari() {
   const h = disData[0];
   const col = {
     kod: h.indexOf("STOK_KODU"), ad: h.indexOf("STOK_ADI"), mik: h.indexOf("MIKTAR"), fiy: h.indexOf("BIRIM_FIYAT"),
-    isk: h.indexOf("ISKONTO"), net: h.indexOf("NET_FIYAT"), nak: h.indexOf("NAKLIYE_PAYI"),
+    isk: h.indexOf("ISKONTO"), isk2: h.indexOf("ISKONTO2"), net: h.indexOf("NET_FIYAT"), nak: h.indexOf("NAKLIYE_PAYI"),
     kdv: h.indexOf("KDV_ORANI"), fno: h.indexOf("FATURA_NO"), ftar: h.indexOf("FATURA_TARIHI"),
     ted: h.indexOf("TEDARIKCI"), lnk: h.indexOf("FATURA_LINK"), edm: h.indexOf("EDM_LINK"),
   };
@@ -2263,6 +2263,7 @@ function getBekleyenAlisFaturalari() {
       stokVarMi: !!stokKoduSeti[String(row[col.kod] || "")],
       miktar: col.mik >= 0 ? (parseFloat(row[col.mik]) || 0) : 0,
       birimFiyat: parseFloat(row[col.fiy]) || 0, iskonto: parseFloat(row[col.isk]) || 0,
+      iskonto2: col.isk2 >= 0 ? (parseFloat(row[col.isk2]) || 0) : 0,
       netFiyat: parseFloat(row[col.net]) || 0, nakliyePayi: parseFloat(row[col.nak]) || 0,
       kdvOrani: parseFloat(row[col.kdv]) || 0,
     });
