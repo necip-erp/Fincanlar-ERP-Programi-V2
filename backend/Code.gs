@@ -33,6 +33,7 @@ const SHEETS = {
   altUrunGruplari: "AltUrunGruplari",
   ebatlar: "Ebatlar",
   renkler: "Renkler",
+  ambalajTanimlari: "AmbalajTanimlari",
   aciklamaSablonlari: "AciklamaSablonlari",
   cekSenetler: "CekSenetler",
   cekSenetHareketleri: "CekSenetHareketleri",
@@ -739,6 +740,13 @@ function ensureSatisBelgeTipiColonu(sheet) {
   if (String(h15 || "") !== "TUTAR_ISKONTO_KDV_SONRA") {
     sheet.getRange(1, 15).setValue("TUTAR_ISKONTO_KDV_SONRA").setFontWeight("bold").setBackground("#e8edf5");
   }
+  // Sadece belgeTipi=Sipariş için: modal açılırken Seri Tanımlama'daki "Sipariş No"
+  // serisinden otomatik çekilip formun sağ üstünde gösterilen, kayıtla birlikte
+  // saklanan sipariş numarası (ör. "SIP-0007").
+  const h16 = sheet.getRange(1, 16).getValue();
+  if (String(h16 || "") !== "SIPARIS_NO") {
+    sheet.getRange(1, 16).setValue("SIPARIS_NO").setFontWeight("bold").setBackground("#e8edf5");
+  }
 }
 
 // SatisKalemleri sayfası daha önce ISKONTO_YUZDE / KDV_ORANI sütunları olmadan
@@ -836,6 +844,7 @@ function getSatisListesi() {
       aciklama: String(row[6] || ""),
       kayitTarihi: hucreTarihStr(row[7]),
       belgeTipi: belgeTipi,
+      siparisNo: String(row[15] || ""),
       siparisManuelDurum: elleSecilenDurum || "Beklemede",
       siparisDurumu: belgeTipi === "Sipariş" ? siparisDurumHesapla(elleSecilenDurum, f && f.tamamiFaturalandi, f ? f.hicFaturalanmadi : true) : "",
     });
@@ -870,6 +879,7 @@ function getSatisDetay(satisId) {
         siparisManuelDurum: String(data[i][12] || "") || "Beklemede",
         tutarIskontosu: parseFloat(data[i][13]) || 0,
         tutarIskontoKdvSonra: String(data[i][14]) !== "0",
+        siparisNo: String(data[i][15] || ""),
       };
       break;
     }
@@ -986,7 +996,7 @@ function saveSatis(body) {
     const durumAdlari = getSiparisDurumlari().durumlar.map(d => d.ad);
     siparisDurumu = durumAdlari.includes(body.siparisDurumu) ? body.siparisDurumu : (durumAdlari[0] || "Beklemede");
   }
-  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0]);
+  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || "")]);
 
   // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
   // otomatik, minimal bir stok kartı oluşturulur (Alış modülündeki mantığın aynısı).
@@ -2392,10 +2402,14 @@ function getFinansOzet() {
 function getRaporOzet(body) {
   const baslangic = String(body.baslangic || "");
   const bitis = String(body.bitis || "");
-  // yyyy-MM-dd formatında string karşılaştırması kronolojik sıralamayla aynı sonucu verir
+  // yyyy-MM-dd formatında string karşılaştırması kronolojik sıralamayla aynı sonucu verir.
+  // tarih artık saat de içerebildiğinden (yyyy-MM-ddTHH:mm), karşılaştırmadan önce sadece
+  // gün kısmını (ilk 10 karakter) alıyoruz — yoksa "2026-08-30T14:30" gibi bir değer,
+  // salt "2026-08-30" olan bitiş sınırından BÜYÜK sayılıp o güne ait kayıtlar rapordan düşerdi.
   function araligaDahilMi(tarih) {
-    if (baslangic && tarih < baslangic) return false;
-    if (bitis && tarih > bitis) return false;
+    const gun = String(tarih || "").slice(0, 10);
+    if (baslangic && gun < baslangic) return false;
+    if (bitis && gun > bitis) return false;
     return true;
   }
 
@@ -2462,8 +2476,9 @@ function getMuhasebeRaporu(body) {
   const baslangic = String(body.baslangic || "");
   const bitis = String(body.bitis || "");
   function araligaDahilMi(tarih) {
-    if (baslangic && tarih < baslangic) return false;
-    if (bitis && tarih > bitis) return false;
+    const gun = String(tarih || "").slice(0, 10);
+    if (baslangic && gun < baslangic) return false;
+    if (bitis && gun > bitis) return false;
     return true;
   }
   const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -3535,8 +3550,10 @@ function getStokHareketListesi(body) {
   });
 
   let sonuc = tumListe;
-  if (baslangic) sonuc = sonuc.filter(h => h.tarih >= baslangic);
-  if (bitis) sonuc = sonuc.filter(h => h.tarih <= bitis);
+  // h.tarih artık saat de içerebiliyor (yyyy-MM-ddTHH:mm); aralık filtresi salt gün
+  // bazlı olduğu için karşılaştırmadan önce sadece gün kısmını (ilk 10 karakter) alıyoruz.
+  if (baslangic) sonuc = sonuc.filter(h => String(h.tarih || "").slice(0, 10) >= baslangic);
+  if (bitis) sonuc = sonuc.filter(h => String(h.tarih || "").slice(0, 10) <= bitis);
   if (stokTanimId) sonuc = sonuc.filter(h => h.stokTanimId === stokTanimId);
   sonuc = sonuc.slice().sort((a, b) => a.tarih < b.tarih ? 1 : (a.tarih > b.tarih ? -1 : 0));
 
@@ -3644,12 +3661,14 @@ const BASIT_TANIM_SHEET_ADI = {
   altUrunGrubu: SHEETS.altUrunGruplari,
   ebat: SHEETS.ebatlar,
   renk: SHEETS.renkler,
+  ambalaj: SHEETS.ambalajTanimlari,
 };
 const BASIT_TANIM_CACHE_ANAHTARI = {
   urunGrubu: "urunGrubuListesi",
   altUrunGrubu: "altUrunGrubuListesi",
   ebat: "ebatListesi",
   renk: "renkListesi",
+  ambalaj: "ambalajListesi",
 };
 const BASIT_TANIM_BASLIKLAR = ["ID", "AD", "UST_ID", "SIRA"];
 
