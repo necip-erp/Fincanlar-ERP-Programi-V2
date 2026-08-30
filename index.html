@@ -3065,7 +3065,7 @@ function alisBekleyenOnayModalAc(faturaNo){
           <div id="bfm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
           ${f.eslesenCariAd ? `<div style="font-size:11px;color:var(--green);margin-top:3px">✓ Daha önce "${f.tedarikci}" bu cariye işlenmiş, otomatik seçildi.</div>` : ``}
         </div>
-        <div class="fld" style="margin:0"><label>Tarih</label><input id="bfm-tarih" type="date" value="${tarihISO}"></div>
+        <div class="fld" style="margin:0"><label>Tarih</label><input id="bfm-tarih" type="datetime-local" value="${tarihISO}T00:00"></div>
         <div class="fld" style="margin:0"><label>Ödeme Tipi</label>
           <select id="bfm-odeme">
             <option value="Veresiye">Veresiye</option>
@@ -3079,9 +3079,10 @@ function alisBekleyenOnayModalAc(faturaNo){
       ${yeniStokSayisi>0 ? `<p style="font-size:12px;color:var(--red);margin:4px 0 8px">⚠️ ${yeniStokSayisi} üründe stok kartı bulunamadı — yanındaki kutuyu işaretli bırakırsan onaylayınca otomatik stok kartı oluşturulur.</p>` : ""}
       <div style="overflow:auto;max-height:44vh;border:1px solid var(--border);border-radius:10px;margin-top:6px">
       <table class="hk-tablo"><thead><tr>
-        <th style="min-width:130px">Stok Kodu</th><th style="min-width:220px">Ürün</th>
-        <th style="width:90px">Miktar</th><th style="width:80px">Birim</th>
-        <th style="width:110px">Birim Fiyat</th><th style="width:70px">İsk.%</th><th style="width:70px">KDV%</th>
+        <th style="min-width:130px">Stok Kodu</th><th style="min-width:200px">Ürün</th>
+        <th style="width:80px">Miktar</th><th style="width:80px">Birim</th>
+        <th style="width:100px">Birim Fiyat</th><th style="width:80px">İsk.1 %</th><th style="width:80px">İsk.2 %</th>
+        <th style="width:70px">KDV%</th><th style="width:110px">Tutar</th>
       </tr></thead>
       <tbody id="bfm-kalemler">
         ${f.kalemler.map((k,i)=>`
@@ -3091,11 +3092,13 @@ function alisBekleyenOnayModalAc(faturaNo){
             ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" checked style="width:auto"> yeni stok kartı</label>` : ""}
           </td>
           <td>${k.urunAdi}</td>
-          <td><input id="bfm-miktar-${i}" type="number" min="0" step="0.01" value="${k.miktar>0?k.miktar:''}" placeholder="0" style="width:80px"></td>
+          <td><input id="bfm-miktar-${i}" type="number" min="0" step="0.01" value="${k.miktar>0?k.miktar:''}" placeholder="0" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
           <td><select id="bfm-birim-${i}"><option value="adet">adet</option><option value="m2">m²</option><option value="paket">paket</option><option value="kg">kg</option></select></td>
-          <td><input id="bfm-fiyat-${i}" type="number" min="0" step="0.01" value="${k.netFiyat}" style="width:100px"></td>
-          <td>%${k.iskonto}</td>
+          <td><input id="bfm-fiyat-${i}" type="number" min="0" step="0.01" value="${k.birimFiyat||k.netFiyat}" style="width:100px" oninput="bfmSatirGuncelle(${i})"></td>
+          <td><input id="bfm-isk1-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
+          <td><input id="bfm-isk2-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto2||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
           <td>%${k.kdvOrani}</td>
+          <td id="bfm-tutar-${i}" style="font-weight:600;text-align:right;padding-right:8px"></td>
         </tr>`).join("")}
       </tbody></table>
       </div>
@@ -3103,7 +3106,8 @@ function alisBekleyenOnayModalAc(faturaNo){
       <div style="display:flex;justify-content:flex-end;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
         <div style="text-align:right">
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase">Fatura Tutarı (KDV Dahil)</div>
-          <div style="font-size:20px;font-weight:700">${paraFormat(f.genelToplam)}</div>
+          <div style="font-size:20px;font-weight:700" id="bfm-genel-toplam">${paraFormat(f.genelToplam)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">Gerçek fatura tutarıyla uyuşmuyorsa satırlardaki Miktar/Birim Fiyat/İsk.1/İsk.2'yi düzelt — toplam anlık güncellenir.</div>
         </div>
       </div>
 
@@ -3114,6 +3118,44 @@ function alisBekleyenOnayModalAc(faturaNo){
     </div>`;
   document.body.appendChild(overlay);
   window._bfmAktifFatura = f;
+  f.kalemler.forEach((k,i)=>bfmSatirGuncelle(i));
+}
+
+// Bir bfm satırının Tutar'ını (Miktar × Birim Fiyat × (1-İsk.1%) × (1-İsk.2%) × (1+KDV%))
+// canlı olarak hesaplayıp o satırın hücresine yazar, ardından genel toplamı günceller.
+// Tutar hariç her alan (Miktar, Birim Fiyat, İsk.1, İsk.2) elle düzeltilebilir — EDM'den
+// gelen veri gerçek faturayla uyuşmuyorsa (örn. eksik/yanlış aktarılmış ikinci iskonto)
+// onaylamadan önce burada düzeltilir.
+function bfmSatirGuncelle(i){
+  const f = window._bfmAktifFatura;
+  if(!f || !f.kalemler[i]) return;
+  const kdvOrani = f.kalemler[i].kdvOrani || 0;
+  const miktar = parseFloat((document.getElementById(`bfm-miktar-${i}`)||{}).value) || 0;
+  const fiyat = parseFloat((document.getElementById(`bfm-fiyat-${i}`)||{}).value) || 0;
+  const isk1 = parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0;
+  const isk2 = parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0;
+  const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100);
+  const tutarKdvHaric = miktar * netBirimFiyat;
+  const tutarKdvDahil = tutarKdvHaric * (1 + kdvOrani/100);
+  const hucre = document.getElementById(`bfm-tutar-${i}`);
+  if(hucre) hucre.textContent = paraFormat(tutarKdvDahil);
+  bfmGenelToplamGuncelle();
+}
+function bfmGenelToplamGuncelle(){
+  const f = window._bfmAktifFatura;
+  if(!f) return;
+  let toplam = 0;
+  f.kalemler.forEach((k,i)=>{
+    const kdvOrani = k.kdvOrani || 0;
+    const miktar = parseFloat((document.getElementById(`bfm-miktar-${i}`)||{}).value) || 0;
+    const fiyat = parseFloat((document.getElementById(`bfm-fiyat-${i}`)||{}).value) || 0;
+    const isk1 = parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0;
+    const isk2 = parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0;
+    const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100);
+    toplam += miktar * netBirimFiyat * (1 + kdvOrani/100);
+  });
+  const el = document.getElementById("bfm-genel-toplam");
+  if(el) el.textContent = paraFormat(toplam);
 }
 
 function bfmCariAramaDegisti(){ document.getElementById("bfm-cari").value = ""; bfmCariOneriGoster(); }
@@ -3152,11 +3194,15 @@ function alisBekleyenOnayla(faturaNo){
     const miktar = parseFloat(document.getElementById(`bfm-miktar-${i}`).value) || 0;
     if(miktar <= 0) continue; // Miktarı boş bırakılan satırlar alışa dahil edilmez.
     const yeniStokEl = document.getElementById(`bfm-yenistok-${i}`);
+    const fiyat = parseFloat(document.getElementById(`bfm-fiyat-${i}`).value) || 0;
+    const isk1 = parseFloat(document.getElementById(`bfm-isk1-${i}`).value) || 0;
+    const isk2 = parseFloat(document.getElementById(`bfm-isk2-${i}`).value) || 0;
+    const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100);
     kalemler.push({
       urunAdi: f.kalemler[i].urunAdi,
       miktar: miktar,
       birim: document.getElementById(`bfm-birim-${i}`).value,
-      birimFiyat: parseFloat(document.getElementById(`bfm-fiyat-${i}`).value) || 0,
+      birimFiyat: netBirimFiyat,
       stokKodu: document.getElementById(`bfm-stokkodu-${i}`).value.trim(),
       stokKartiOlustur: yeniStokEl ? yeniStokEl.checked : false,
     });
