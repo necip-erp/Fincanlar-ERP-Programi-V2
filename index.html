@@ -404,6 +404,11 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
           <div class="lbl">Renk Tanımları</div>
           <div class="desc">Ürün renk tanımları</div>
         </div>
+        <div class="modtile" onclick="stokTanimAltAc('ambalaj')">
+          <span class="ic">📦</span>
+          <div class="lbl">Ambalaj Tanımları</div>
+          <div class="desc">Kutu, Koli, Palet, Rulo vb.</div>
+        </div>
       </div>
     </div>
 
@@ -517,6 +522,17 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
         <button class="btn btn-primary" onclick="tanimEkle('renk')">+ Ekle</button>
       </div>
       <div id="tanimliste-renk" style="margin-top:12px"></div>
+    </div>
+
+    <div id="stok-ambalaj-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('tanimlar')">← Geri</button>
+      <div class="rapor-baslik" style="margin-top:10px">Ambalaj Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Ürünlerin satıldığı ambalaj birimlerini burada tanımlayın (Kutu, Koli, Palet, Rulo, Paket vb.). Bu tanımlar Stok Tanımlama ekranındaki "Ambalaj Birimi" seçiminde kullanılır.</p>
+      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="flex:1"><label>Yeni Ambalaj Adı</label><input id="tanim-ambalaj-yeni-ad" type="text" placeholder="Örn. Kutu, Koli, Palet"></div>
+        <button class="btn btn-primary" onclick="tanimEkle('ambalaj')">+ Ekle</button>
+      </div>
+      <div id="tanimliste-ambalaj" style="margin-top:12px"></div>
     </div>
 
     <!-- KADEME 3: Stok Giriş / Çıkış / Toplu Hareket (içerik JS ile dolduruluyor) -->
@@ -1025,6 +1041,25 @@ function tarihGoster(deger){
   if(!m) return s;
   const gun = m[1] && m[2] && m[3] ? `${m[3]}/${m[2]}/${m[1]}` : s;
   return m[4] && m[5] ? `${gun} ${m[4]}:${m[5]}` : gun;
+}
+
+// datetime-local input'ları için tarayıcının YEREL saatine göre "YYYY-MM-DDTHH:mm" üretir.
+// new Date().toISOString() UTC kullandığı için doğrudan kullanılırsa saat kayması olur,
+// bu yüzden yerel bileşenlerden (getFullYear/getHours vb.) elle kuruyoruz.
+function simdiTarihSaat(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+// Var olan bir kayıttan gelen tarih değerini datetime-local input'a basılabilir hale getirir.
+// Değer zaten "YYYY-MM-DDTHH:mm" ise olduğu gibi kullanılır (saniye varsa kırpılır); sadece
+// "YYYY-MM-DD" (eski, saatsiz kayıtlar) ise saat 00:00 ile tamamlanır.
+function datetimeLocalDeger(deger){
+  const s = String(deger||"").trim();
+  if(!s) return simdiTarihSaat();
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}))?/);
+  if(!m) return simdiTarihSaat();
+  return m[1] + "T" + (m[2] || "00:00");
 }
 
 // ══════════════ CARİ / STOK REHBERİ (Wolvox tarzı büyük seçim penceresi) ══════════════
@@ -1730,6 +1765,7 @@ function satisDetayCiz(res){
       </select>
       ${s.siparisDurumu!=='Muhasebelendi'&&s.siparisDurumu!=='Kısmen Faturalandı' ? `<button class="btn" style="padding:6px 12px" onclick="siparisDurumKaydet('${s.id}')">Güncelle</button>` : ''}
     </div>` : ''}
+    ${s.siparisNo ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Sipariş No</div><div class="v">${s.siparisNo}</div></div></div>` : ""}
     ${s.kaynakSiparisId ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Kaynak</div><div class="v">Sipariş'ten aktarıldı</div></div></div>` : ""}
     ${s.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${s.aciklama}</div></div></div>` : ""}
     <div class="btnrow">
@@ -1778,13 +1814,13 @@ function siparisFaturaModalAc(siparisId){
     overlay.className = "modal-overlay";
     overlay.id = "siparis-fatura-modal-overlay";
     overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
-    const bugun = new Date().toISOString().slice(0,10);
+    const bugun = simdiTarihSaat();
     overlay.innerHTML = `
       <div class="modal-box modal-box-wide">
         <h3>Siparişten Fatura Oluştur</h3>
         <p style="color:var(--text3);font-size:13px;margin:0 0 14px">${s.cariAd} — aktarmak istediğin ürünler için miktar gir (0 = aktarma). Kalan miktarlar siparişte açık kalmaya devam eder.</p>
         <div id="sf-kalemler"></div>
-        <div class="fld" style="margin-top:10px"><label>Fatura Tarihi</label><input id="sf-tarih" type="date" value="${bugun}"></div>
+        <div class="fld" style="margin-top:10px"><label>Fatura Tarihi</label><input id="sf-tarih" type="datetime-local" value="${bugun}"></div>
         <div class="fld"><label>Ödeme Tipi</label>
           <select id="sf-odeme">
             <option value="Peşin">Peşin</option>
@@ -1892,11 +1928,17 @@ function satisModalAc(onCariId, onBelgeTipi){
   overlay.className = "modal-overlay";
   overlay.id = "satis-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
-  const bugun = new Date().toISOString().slice(0,10);
+  const bugun = simdiTarihSaat();
   const belgeTipiBaslangic = onBelgeTipi || _satisAktifBelgeTipi;
   overlay.innerHTML = `
     <div class="modal-box modal-box-xwide">
-      <h3>Yeni ${belgeTipiBaslangic}</h3>
+      <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span>Yeni ${belgeTipiBaslangic}</span>
+        <span id="sm-siparis-no-badge" style="display:${belgeTipiBaslangic==='Sipariş'?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">
+          # <span id="sm-siparis-no-metin">—</span>
+        </span>
+        <input type="hidden" id="sm-siparis-no-deger" value="">
+      </h3>
       <div class="fld"><label>Belge Tipi</label>
         <select id="sm-belgetipi" onchange="satisModalBelgeTipiDegisti()">
           <option value="Fatura" ${belgeTipiBaslangic==='Fatura'?'selected':''}>Fatura</option>
@@ -1910,14 +1952,6 @@ function satisModalAc(onCariId, onBelgeTipi){
           ${siparisDurumSecenekleriHTML(_siparisDurumlari.length ? _siparisDurumlari[0].ad : "Beklemede")}
         </select>
       </div>
-      <div class="fld" id="sm-tutar-iskonto-fld" style="display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
-        <label>Tutar İskontosu (₺)</label>
-        <input id="sm-tutar-iskontosu" type="number" min="0" step="0.01" value="0" oninput="satisToplamGuncelle()">
-        <label style="flex-direction:row;align-items:center;gap:6px;text-transform:none;font-size:12px;color:var(--text2);margin-top:6px">
-          <input id="sm-tutar-iskonto-kdv-sonra" type="checkbox" checked onchange="satisToplamGuncelle()" style="width:auto">
-          KDV'den sonra düş (tik yoksa KDV'den önce düşülür)
-        </label>
-      </div>
       <div class="fld" style="position:relative"><label>Müşteri (Cari)</label>
         <input id="sm-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest müşteri)..." autocomplete="off" style="padding-right:34px"
                value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
@@ -1930,7 +1964,7 @@ function satisModalAc(onCariId, onBelgeTipi){
         <div id="sm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <div class="fld" id="sm-serbest-ad-fld"><label>Müşteri Adı (cari seçilmediyse)</label><input id="sm-serbest-ad" type="text" placeholder="Peşin Müşteri"></div>
-      <div class="fld"><label>Tarih</label><input id="sm-tarih" type="date" value="${bugun}"></div>
+      <div class="fld"><label>Tarih</label><input id="sm-tarih" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Ödeme Tipi</label>
         <select id="sm-odeme" onchange="satisOdemeTipiDegisti()">
           <option value="">— Seçilmedi —</option>
@@ -1946,7 +1980,7 @@ function satisModalAc(onCariId, onBelgeTipi){
       </div>
       <div class="fld" id="sm-vade-fld" style="display:none">
         <label>Vade Tarihi (son ödeme tarihi)</label>
-        <input id="sm-vade" type="date">
+        <input id="sm-vade" type="date" value="${belgeTipiBaslangic==='Sipariş' ? bugun.slice(0,10) : ''}">
       </div>
       <div class="fld"><label>Açıklama</label><input id="sm-aciklama" type="text" placeholder="İsteğe bağlı"></div>
 
@@ -1958,6 +1992,15 @@ function satisModalAc(onCariId, onBelgeTipi){
       </div>
       <div id="sm-kalemler" style="margin:8px 0"></div>
       <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
+
+      <div class="fld" id="sm-tutar-iskonto-fld" style="max-width:280px;margin-top:12px;display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
+        <label>Tutar İskontosu (₺)</label>
+        <input id="sm-tutar-iskontosu" type="number" min="0" step="0.01" value="0" oninput="satisToplamGuncelle()">
+        <label style="flex-direction:row;align-items:center;gap:6px;text-transform:none;font-size:12px;color:var(--text2);margin-top:6px">
+          <input id="sm-tutar-iskonto-kdv-sonra" type="checkbox" checked onchange="satisToplamGuncelle()" style="width:auto">
+          KDV'den sonra düş (tik yoksa KDV'den önce düşülür)
+        </label>
+      </div>
 
       <div class="fld" style="max-width:220px;margin-top:12px"><label>Dip İskonto (%)</label>
         <input id="sm-dip-iskonto" type="number" min="0" max="100" step="0.01" value="0" oninput="satisToplamGuncelle()">
@@ -1974,6 +2017,27 @@ function satisModalAc(onCariId, onBelgeTipi){
   satisKalemlerCiz();
   satisBankaSecenekleriYukle();
   satisOdemeTipiDegisti();
+  if(belgeTipiBaslangic === "Sipariş") siparisNumarasiOnizlemeYukle();
+}
+
+// Sipariş formunun sağ üstünde gösterilen sipariş numarası önizlemesini Seri
+// Tanımlama'daki "Sipariş No" (tur: siparis) serisinden çeker. Yalnızca bir kez
+// çekilir (aynı modal içinde belge tipi ileri geri değiştirilse bile tekrar
+// tüketmez) — kaydedilince bu numara kayıtla birlikte saklanır.
+function siparisNumarasiOnizlemeYukle(){
+  const deger = document.getElementById("sm-siparis-no-deger");
+  if(deger && deger.value) return; // zaten çekildi
+  cariApi("getSeriTanimlari").then(res=>{
+    if(!res.ok) return;
+    const seri = res.seriler.find(s=>s.tur==="siparis") || res.seriler.find(s=>s.ad==="Sipariş No");
+    if(!seri) return;
+    cariApi("seriSonrakiNoUret", {id: seri.id}).then(r2=>{
+      if(!r2.ok) return;
+      if(deger) deger.value = r2.no;
+      const metin = document.getElementById("sm-siparis-no-metin");
+      if(metin) metin.textContent = r2.no;
+    }).catch(()=>{});
+  }).catch(()=>{});
 }
 
 // Ödeme Tipi "Havale" seçildiğinde banka/hesap, "Açık Hesap" seçildiğinde vade tarihi alanını gösterir.
@@ -2052,6 +2116,16 @@ function satisKalemSilUI(idx){
   satisKalemlerCiz();
 }
 
+// Kalem satırındaki 📇 butonu: bu satırın stok koduna karşılık gelen aktif stok
+// kartını, Stok Tanımlama düzenleme modalıyla doğrudan açar.
+function satisKalemStokKartiAc(idx){
+  const kod = String((_yeniSatisKalemleri[idx]||{}).stokKodu||"").trim();
+  if(!kod){ alert("Bu satırda önce bir Stok Kodu girmelisiniz."); return; }
+  const s = (_stokTanimListe||[]).find(x=>x.stokKodu===kod);
+  if(!s){ alert("'"+kod+"' kodlu aktif bir stok kartı bulunamadı."); return; }
+  stokTanimModalAc(s.id);
+}
+
 function satisKalemAlanDegisti(idx, alan, deger){
   _yeniSatisKalemleri[idx][alan] = (alan==='miktar'||alan==='birimFiyat'||alan==='iskontoYuzde'||alan==='kdvOrani') ? (parseFloat(deger)||0) : deger;
   satisToplamGuncelle();
@@ -2062,6 +2136,7 @@ function satisKalemlerCiz(){
   el.innerHTML = _yeniSatisKalemleri.map((k,idx)=>`
     <div class="satis-kalem-satir">
       <input class="satis-kalem-stokkodu" type="text" placeholder="Stok Kodu" value="${k.stokKodu||''}" oninput="satisKalemAlanDegisti(${idx},'stokKodu',this.value)">
+      <button type="button" class="hk-sil" style="color:var(--accent);font-size:15px" title="Aktif stok kartını aç" onclick="satisKalemStokKartiAc(${idx})">📇</button>
       <div style="flex:1;position:relative">
         <input class="satis-kalem-urun" style="width:100%;padding-right:32px" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
                oninput="satisKalemAlanDegisti(${idx},'urunAdi',this.value); urunOneriGoster(${idx})"
@@ -2163,6 +2238,11 @@ function satisModalBelgeTipiDegisti(){
   const tip = document.getElementById("sm-belgetipi").value;
   document.getElementById("sm-siparis-durum-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
   document.getElementById("sm-tutar-iskonto-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
+  const rozet = document.getElementById("sm-siparis-no-badge");
+  if(rozet) rozet.style.display = (tip === "Sipariş") ? "inline-flex" : "none";
+  const vadeInp = document.getElementById("sm-vade");
+  if(vadeInp && tip === "Sipariş" && !vadeInp.value) vadeInp.value = simdiTarihSaat().slice(0,10);
+  if(tip === "Sipariş") siparisNumarasiOnizlemeYukle();
   satisToplamGuncelle();
 }
 
@@ -2215,6 +2295,7 @@ function satisKaydet(){
     tarih: document.getElementById("sm-tarih").value,
     odemeTipi: odemeTipi,
     dipIskontoYuzde: parseFloat(document.getElementById("sm-dip-iskonto").value) || 0,
+    siparisNo: belgeTipi === "Sipariş" ? (document.getElementById("sm-siparis-no-deger")||{}).value || "" : undefined,
     tutarIskontosu: tutarIskontosu,
     tutarIskontoKdvSonra: tutarIskontoKdvSonra,
     bankaHesapId: bankaHesapId,
@@ -2374,7 +2455,7 @@ function alisModalAc(){
   overlay.className = "modal-overlay";
   overlay.id = "alis-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
-  const bugun = new Date().toISOString().slice(0,10);
+  const bugun = simdiTarihSaat();
   overlay.innerHTML = `
     <div class="modal-box modal-box-wide">
       <h3>Yeni Alış</h3>
@@ -2390,7 +2471,7 @@ function alisModalAc(){
         <div id="am-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <div class="fld" id="am-serbest-ad-fld"><label>Tedarikçi Adı (cari seçilmediyse)</label><input id="am-serbest-ad" type="text" placeholder="Peşin Tedarikçi"></div>
-      <div class="fld"><label>Tarih</label><input id="am-tarih" type="date" value="${bugun}"></div>
+      <div class="fld"><label>Tarih</label><input id="am-tarih" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Ödeme Tipi</label>
         <select id="am-odeme">
           <option value="Peşin">Peşin</option>
@@ -2671,7 +2752,7 @@ function alisIadeModalAc(){
   overlay.className = "modal-overlay";
   overlay.id = "alisiade-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
-  const bugun = new Date().toISOString().slice(0,10);
+  const bugun = simdiTarihSaat();
   overlay.innerHTML = `
     <div class="modal-box modal-box-wide">
       <h3>Yeni İade</h3>
@@ -2687,7 +2768,7 @@ function alisIadeModalAc(){
         <div id="aim-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <div class="fld" id="aim-serbest-ad-fld"><label>Tedarikçi Adı (cari seçilmediyse)</label><input id="aim-serbest-ad" type="text" placeholder="Peşin Tedarikçi"></div>
-      <div class="fld"><label>Tarih</label><input id="aim-tarih" type="date" value="${bugun}"></div>
+      <div class="fld"><label>Tarih</label><input id="aim-tarih" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Açıklama</label><input id="aim-aciklama" type="text" placeholder="İsteğe bağlı (ör. iade nedeni)"></div>
 
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase">İade Edilen Ürünler</label>
@@ -3201,7 +3282,7 @@ function tahsilatModalAc(onCariId, editId){
   overlay.className = "modal-overlay";
   overlay.id = "tahsilat-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
-  const bugun = new Date().toISOString().slice(0,10);
+  const bugun = simdiTarihSaat();
   const baslangicCariId = t ? t.cariId : onCariId;
   overlay.innerHTML = `
     <div class="modal-box">
@@ -3219,7 +3300,7 @@ function tahsilatModalAc(onCariId, editId){
         <div id="tm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <div class="fld"><label>Tutar</label><input id="tm-tutar" type="number" min="0" step="0.01" placeholder="0,00" value="${t?t.tutar:''}"></div>
-      <div class="fld"><label>Tarih</label><input id="tm-tarih" type="date" value="${t?t.tarih:bugun}"></div>
+      <div class="fld"><label>Tarih</label><input id="tm-tarih" type="datetime-local" value="${datetimeLocalDeger(t?t.tarih:bugun)}"></div>
       <div class="fld"><label>Yöntem</label>
         <select id="tm-yontem" onchange="tahsilatYontemDegisti()">
           <option value="Nakit" ${t&&t.yontem==='Nakit'?'selected':''}>Nakit</option>
@@ -3440,7 +3521,7 @@ function odemeModalAc(onCariId){
   overlay.className = "modal-overlay";
   overlay.id = "odeme-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
-  const bugun = new Date().toISOString().slice(0,10);
+  const bugun = simdiTarihSaat();
   overlay.innerHTML = `
     <div class="modal-box">
       <h3>Yeni Ödeme</h3>
@@ -3456,7 +3537,7 @@ function odemeModalAc(onCariId){
         <div id="om-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <div class="fld"><label>Tutar</label><input id="om-tutar" type="number" min="0" step="0.01" placeholder="0,00"></div>
-      <div class="fld"><label>Tarih</label><input id="om-tarih" type="date" value="${bugun}"></div>
+      <div class="fld"><label>Tarih</label><input id="om-tarih" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Yöntem</label>
         <select id="om-yontem" onchange="odemeYontemDegisti()">
           <option value="Nakit">Nakit</option>
@@ -3707,12 +3788,12 @@ function cekSenetIslemModalAc(id){
   overlay.className = "modal-overlay";
   overlay.id = "cekislem-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
-  const bugun = new Date().toISOString().slice(0,10);
+  const bugun = simdiTarihSaat();
   overlay.innerHTML = `
     <div class="modal-box">
       <h3>${c.tip==='Alınan'?'Tahsilat':'Ödeme'} — ${c.cariAd}</h3>
       <div class="fld"><label>Tutar (kalan: ${paraFormat(c.kalanTutar)})</label><input id="ci-tutar" type="number" min="0" max="${c.kalanTutar}" step="0.01" value="${c.kalanTutar}"></div>
-      <div class="fld"><label>Tarih</label><input id="ci-tarih" type="date" value="${bugun}"></div>
+      <div class="fld"><label>Tarih</label><input id="ci-tarih" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Açıklama</label><input id="ci-aciklama" type="text" placeholder="İsteğe bağlı"></div>
       <input type="hidden" id="ci-id" value="${c.id}">
       <div class="modal-actions">
@@ -3742,7 +3823,7 @@ function cekSenetModalAc(onCariId){
   overlay.className = "modal-overlay";
   overlay.id = "ceksenet-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
-  const bugun = new Date().toISOString().slice(0,10);
+  const bugun = simdiTarihSaat();
   overlay.innerHTML = `
     <div class="modal-box">
       <h3>Yeni Çek/Senet</h3>
@@ -3765,7 +3846,7 @@ function cekSenetModalAc(onCariId){
       <div class="fld"><label>Tutar</label><input id="csm-tutar" type="number" min="0" step="0.01" placeholder="0,00"></div>
       <div class="fld"><label>Seri No</label><input id="csm-serino" type="text" placeholder="İsteğe bağlı"></div>
       <div class="fld"><label>Banka</label><input id="csm-banka" type="text" placeholder="İsteğe bağlı"></div>
-      <div class="fld"><label>Düzenlenme Tarihi</label><input id="csm-duzenlenme" type="date" value="${bugun}"></div>
+      <div class="fld"><label>Düzenlenme Tarihi</label><input id="csm-duzenlenme" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Vade</label><input id="csm-vade" type="date"></div>
       <div class="fld"><label>Açıklama</label><input id="csm-aciklama" type="text" placeholder="İsteğe bağlı"></div>
       <div class="modal-actions">
@@ -4510,8 +4591,8 @@ function birimSilOnay(id){
 }
 
 // ── Ürün Grubu / Alt Ürün Grubu / Ebat / Renk Tanımlama (ortak, "tip" parametreli) ──
-let _tanimListeCache = { urunGrubu:[], altUrunGrubu:[], ebat:[], renk:[] };
-let _tanimListeYuklendi = { urunGrubu:false, altUrunGrubu:false, ebat:false, renk:false };
+let _tanimListeCache = { urunGrubu:[], altUrunGrubu:[], ebat:[], renk:[], ambalaj:[] };
+let _tanimListeYuklendi = { urunGrubu:false, altUrunGrubu:false, ebat:false, renk:false, ambalaj:false };
 
 function tanimListesiYukle(tip){
   const el = document.getElementById("tanimliste-"+tip);
@@ -4758,7 +4839,7 @@ function kisayollariVarsayilanaDondur(){
 // Tüm Stok alt panelleri — bir tanesi gösterilirken diğerleri gizlenir.
 const STOK_PANELLER = ["stok-secim","stok-islemler-secim","stok-tanimlar-secim","stok-raporlar-secim",
   "stok-panel-view","stok-tanim-view","stok-birim-view","stok-marka-view","stok-urunGrubu-view",
-  "stok-altUrunGrubu-view","stok-ebat-view","stok-renk-view",
+  "stok-altUrunGrubu-view","stok-ebat-view","stok-renk-view","stok-ambalaj-view",
   "stok-giris-view","stok-cikis-view","stok-toplu-view","stok-hareket-rapor-view","stok-kritik-rapor-view"];
 
 function stokPaneliGoster(id){
@@ -4792,7 +4873,7 @@ function stokTanimAltAc(hangisi){
   } else if(hangisi === "marka"){
     stokPaneliGoster("stok-marka-view");
     markaListesiYukle();
-  } else if(["urunGrubu","altUrunGrubu","ebat","renk"].includes(hangisi)){
+  } else if(["urunGrubu","altUrunGrubu","ebat","renk","ambalaj"].includes(hangisi)){
     stokPaneliGoster("stok-"+hangisi+"-view");
     tanimListesiYukle(hangisi);
   }
@@ -4887,7 +4968,12 @@ function stokTanimListesiCiz(liste){
             <td>${k.stokKodu||"—"}</td>
             <td>${k.stokAdi}</td>
             <td>${k.birim1||"—"}</td>
-            <td>${k.ambalajMiktari ? (k.ambalajMiktari+' '+(k.ambalajBirimi||"")) : "—"}</td>
+            <td>${(()=>{
+              if(!k.ambalajMiktari) return "—";
+              const miktarStr = (Math.round(k.ambalajMiktari*100)/100).toString().replace(".",",");
+              const birimKisim = miktarStr + (k.birim1||"");
+              return k.ambalajBirimi ? `1 ${k.ambalajBirimi} / ${birimKisim}` : birimKisim;
+            })()}</td>
             <td>${paraFormat(k.alisFiyati)}</td>
             <td>${paraFormat(k.satisFiyati)}</td>
             <td>${k.minStok>0 && k.guncelStok<=k.minStok ? `<span class="hk-borc">${k.guncelStok} ⚠️</span>` : (k.guncelStok||0)}</td>
@@ -4915,7 +5001,7 @@ function stokTanimAramaFiltrele(deger){
 function stokTanimModalAc(editId){
   if(_birimListe.length===0) birimListesiYukle();
   if(!_markaYuklendi) markaListesiYukle();
-  ["urunGrubu","altUrunGrubu","ebat","renk"].forEach(tip=>{ if(!_tanimListeYuklendi[tip]) tanimListesiYukle(tip); });
+  ["urunGrubu","altUrunGrubu","ebat","renk","ambalaj"].forEach(tip=>{ if(!_tanimListeYuklendi[tip]) tanimListesiYukle(tip); });
   const k = editId ? _stokTanimListe.find(x=>x.id===editId) : null;
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -4933,8 +5019,12 @@ function stokTanimModalAc(editId){
           ${(()=>{ const d=k?k.birim1:'adet'; const ads=(_birimListe||[]).map(b=>b.ad); const secenekler=ads.slice(); if(d && !secenekler.includes(d)) secenekler.unshift(d); if(secenekler.length===0) secenekler.push('adet'); return secenekler.map(ad=>`<option value="${ad}" ${ad===d?'selected':''}>${ad}</option>`).join(''); })()}
         </select>
       </div>
-      <div class="fld"><label>Ambalaj Miktarı</label><input id="st-ambalajmiktar" type="number" min="0" step="0.01" value="${k?k.ambalajMiktari:''}"></div>
-      <div class="fld"><label>Ambalaj Birimi</label><input id="st-ambalajbirimi" type="text" value="${k?k.ambalajBirimi:''}" placeholder="Koli, Palet, Rulo..."></div>
+      <div class="fld"><label>Ambalaj Miktarı <span style="font-weight:400;color:var(--text3)">(1 ambalajın 1. Birim cinsinden karşılığı, örn. 1 kutu = 1,44)</span></label><input id="st-ambalajmiktar" type="number" min="0" step="0.01" value="${k?k.ambalajMiktari:''}"></div>
+      <div class="fld"><label>Ambalaj Birimi</label>
+        <select id="st-ambalajbirimi">
+          ${(()=>{ const d=k?k.ambalajBirimi:''; const ads=(_tanimListeCache.ambalaj||[]).map(a=>a.ad); const secenekler=ads.slice(); if(d && !secenekler.includes(d)) secenekler.unshift(d); return '<option value="">— Seçiniz —</option>' + secenekler.map(ad=>`<option value="${ad}" ${ad===d?'selected':''}>${ad}</option>`).join(''); })()}
+        </select>
+      </div>
       <div class="fld"><label>Alış Fiyatı</label><input id="st-alisfiyat" type="number" min="0" step="0.01" value="${k?k.alisFiyati:''}"></div>
       <div class="fld"><label>Alış İskontosu (%)</label><input id="st-aliskonto" type="number" min="0" step="0.01" value="${k?k.alisIskontosu:''}"></div>
       <div class="fld"><label>Satış Fiyatı</label><input id="st-satisfiyat" type="number" min="0" step="0.01" value="${k?k.satisFiyati:''}"></div>
@@ -5112,7 +5202,7 @@ function stokHareketFormAc(mod){
   if(!_stokHareketKalemleri[mod] || _stokHareketKalemleri[mod].length===0){
     _stokHareketKalemleri[mod] = [stokHareketBosKalem(mod)];
   }
-  const bugun = new Date().toISOString().slice(0,10);
+  const bugun = simdiTarihSaat();
   const baslik = mod==="giris" ? "Stok Giriş Hareketi" : mod==="cikis" ? "Stok Çıkış Hareketi" : "Toplu Stok Hareketi";
   const aciklama = mod==="giris" ? "Depoya giren ürünleri satır satır ekleyin."
     : mod==="cikis" ? "Depodan çıkan ürünleri satır satır ekleyin (fire, numune, sayım eksiği vb.)."
@@ -5121,7 +5211,7 @@ function stokHareketFormAc(mod){
     <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('islemler')">← Geri</button>
     <div class="rapor-baslik" style="margin-top:10px">${baslik}</div>
     <p style="color:var(--text3);font-size:13px;margin:0 0 14px">${aciklama}</p>
-    <div class="fld" style="max-width:220px"><label>Tarih</label><input id="sh-${mod}-tarih" type="date" value="${bugun}"></div>
+    <div class="fld" style="max-width:220px"><label>Tarih</label><input id="sh-${mod}-tarih" type="datetime-local" value="${bugun}"></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
       <div class="fld" style="max-width:200px"><label>Belge Tipi</label>
         <select id="sh-${mod}-belgetipi" onchange="stokHareketBelgeTipiDegisti('${mod}')">
