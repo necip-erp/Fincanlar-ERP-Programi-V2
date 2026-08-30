@@ -3320,7 +3320,28 @@ function stokHareketTopluEkle(body) {
 // Her seri: Ad + Prefix + Sonraki No + Basamak Sayısı. "Sonraki No'yu Kullan"
 // çağrıldığında GÜNCEL numara formatlanıp döndürülür ve sayaç 1 artırılır.
 // ════════════════════════════════════════════════
-const SERI_BASLIKLAR = ["ID","AD","PREFIX","SONRAKI_NO","BASAMAK"];
+const SERI_BASLIKLAR = ["ID","AD","PREFIX","SONRAKI_NO","BASAMAK","TUR"];
+
+// "TUR" — serinin hangi otomasyon noktasına bağlı olduğunu belirten SABİT anahtar
+// (siparis / teklif / satis_fatura / alis_fatura / cari_alici / cari_satici / "").
+// "AD" alanı kullanıcı tarafından Ayarlar ekranından serbestçe yeniden adlandırılabiliyor;
+// önceden eşleştirme bu görünen "AD" metnine göre yapılıyordu, dolayısıyla kullanıcı bir
+// seriyi yeniden adlandırdığında (örn. prefiksini "AD" kutusuna yazdığında) o seriye bağlı
+// "Sonraki No'yu Kullan" butonları sessizce "... serisi bulunamadı" hatası veriyordu. Artık
+// eşleştirme bu değişmez TUR alanına göre yapılır; TUR boşsa (özel/genel amaçlı seri) hiçbir
+// otomasyona bağlanmaz ve sadece elle seçilerek kullanılır.
+const SERI_TUR_ESKI_AD_ESLEME = {
+  "Sipariş No": "siparis", "Teklif No": "teklif",
+  "Satış Fatura No": "satis_fatura", "Alış Fatura No": "alis_fatura",
+  "Cari No (Alıcı)": "cari_alici", "Cari No (Satıcı)": "cari_satici",
+  "Cari No": "cari_alici",
+};
+const SERI_TUR_ETIKETLER = {
+  "": "— (otomasyona bağlı değil) —",
+  siparis: "Sipariş No", teklif: "Teklif No",
+  satis_fatura: "Satış Fatura No", alis_fatura: "Alış Fatura No",
+  cari_alici: "Cari No (Alıcı)", cari_satici: "Cari No (Satıcı)",
+};
 
 function seriFormatla(prefix, no, basamak) {
   const b = parseInt(basamak) || 4;
@@ -3336,38 +3357,57 @@ function getSeriTanimlari() {
   if (data.length <= 1) {
     // İlk kurulumda sık kullanılan varsayılan seriler otomatik oluşturulur.
     const varsayilanlar = [
-      ["sr_" + Date.now() + "_1", "Sipariş No", "SIP-", 1, 4],
-      ["sr_" + (Date.now() + 1) + "_2", "Teklif No", "TEK-", 1, 4],
-      ["sr_" + (Date.now() + 2) + "_3", "Satış Fatura No", "SF-", 1, 4],
-      ["sr_" + (Date.now() + 3) + "_4", "Alış Fatura No", "AF-", 1, 4],
-      ["sr_" + (Date.now() + 4) + "_5", "Cari No (Alıcı)", "M-", 1, 4],
-      ["sr_" + (Date.now() + 5) + "_6", "Cari No (Satıcı)", "T-", 1, 4],
+      ["sr_" + Date.now() + "_1", "Sipariş No", "SIP-", 1, 4, "siparis"],
+      ["sr_" + (Date.now() + 1) + "_2", "Teklif No", "TEK-", 1, 4, "teklif"],
+      ["sr_" + (Date.now() + 2) + "_3", "Satış Fatura No", "SF-", 1, 4, "satis_fatura"],
+      ["sr_" + (Date.now() + 3) + "_4", "Alış Fatura No", "AF-", 1, 4, "alis_fatura"],
+      ["sr_" + (Date.now() + 4) + "_5", "Cari No (Alıcı)", "M-", 1, 4, "cari_alici"],
+      ["sr_" + (Date.now() + 5) + "_6", "Cari No (Satıcı)", "T-", 1, 4, "cari_satici"],
     ];
     sheet.getRange(2, 1, varsayilanlar.length, SERI_BASLIKLAR.length).setValues(varsayilanlar);
     data = sheet.getDataRange().getValues();
   } else {
-    // Tek parça geçmiş "Cari No" serisini Alıcı/Satıcı olarak ikiye ayırma
-    // (bir kerelik göç): eski seri "Cari No (Alıcı)" olarak devam eder
-    // (numarası korunur), "Cari No (Satıcı)" 1'den başlayan yeni bir seri
-    // olarak eklenir. Bu blok sadece eski "Cari No" hâlâ mevcutken çalışır,
-    // ad değiştirildikten sonra bir daha eşleşmeyeceği için tekrar tetiklenmez.
-    let eskiCariNoSatir = -1, alıcıVar = false, satıcıVar = false;
-    for (let i = 1; i < data.length; i++) {
-      const ad = String(data[i][1] || "");
-      if (ad === "Cari No") eskiCariNoSatir = i;
-      if (ad === "Cari No (Alıcı)") alıcıVar = true;
-      if (ad === "Cari No (Satıcı)") satıcıVar = true;
-    }
-    if (eskiCariNoSatir > -1 && !alıcıVar && !satıcıVar) {
-      const lock = LockService.getScriptLock();
-      lock.waitLock(10000);
-      try {
-        sheet.getRange(eskiCariNoSatir + 1, 2).setValue("Cari No (Alıcı)");
-        sheet.appendRow(["sr_" + Date.now() + "_satici", "Cari No (Satıcı)", "T-", 1, 4]);
-      } finally {
-        lock.releaseLock();
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      // Eski (TUR sütunu olmayan) tablolarda 6. sütun başlığını ekle.
+      if (sheet.getLastColumn() < 6 || String(sheet.getRange(1,6).getValue()||"") !== "TUR") {
+        sheet.getRange(1, 6).setValue("TUR");
+        data = sheet.getDataRange().getValues();
       }
-      data = sheet.getDataRange().getValues();
+      // Tek parça geçmiş "Cari No" serisini Alıcı/Satıcı olarak ikiye ayırma
+      // (bir kerelik göç): eski seri "Cari No (Alıcı)" olarak devam eder
+      // (numarası korunur), "Cari No (Satıcı)" 1'den başlayan yeni bir seri
+      // olarak eklenir. Bu blok sadece eski "Cari No" hâlâ mevcutken çalışır.
+      let eskiCariNoSatir = -1, alıcıVar = false, satıcıVar = false;
+      for (let i = 1; i < data.length; i++) {
+        const ad = String(data[i][1] || "");
+        if (ad === "Cari No") eskiCariNoSatir = i;
+        if (ad === "Cari No (Alıcı)") alıcıVar = true;
+        if (ad === "Cari No (Satıcı)") satıcıVar = true;
+      }
+      if (eskiCariNoSatir > -1 && !alıcıVar && !satıcıVar) {
+        sheet.getRange(eskiCariNoSatir + 1, 2).setValue("Cari No (Alıcı)");
+        sheet.appendRow(["sr_" + Date.now() + "_satici", "Cari No (Satıcı)", "T-", 1, 4, "cari_satici"]);
+        data = sheet.getDataRange().getValues();
+      }
+      // Boş TUR hücrelerini, satırın (o anki) AD metnine bakarak bir kerelik
+      // otomatik doldurma: metin hâlâ bilinen varsayılan isimlerden biriyse
+      // (kullanıcı yeniden adlandırmadıysa) doğru TUR atanır. Zaten farklı bir
+      // metne değiştirilmiş satırlarda TUR boş kalır — kullanıcı Ayarlar'dan
+      // elle seçmeli, çünkü hangi otomasyona ait olduğu artık metinden anlaşılamıyor.
+      let turDegisti = false;
+      for (let i = 1; i < data.length; i++) {
+        if (!data[i][0]) continue;
+        const mevcutTur = String(data[i][5] || "");
+        if (mevcutTur) continue;
+        const ad = String(data[i][1] || "");
+        const tahmin = SERI_TUR_ESKI_AD_ESLEME[ad];
+        if (tahmin) { sheet.getRange(i + 1, 6).setValue(tahmin); turDegisti = true; }
+      }
+      if (turDegisti) data = sheet.getDataRange().getValues();
+    } finally {
+      lock.releaseLock();
     }
   }
   const seriler = [];
@@ -3379,14 +3419,14 @@ function getSeriTanimlari() {
     const basamak = parseInt(row[4]) || 4;
     seriler.push({
       id: String(row[0]), ad: String(row[1] || ""), prefix: prefix,
-      sonrakiNo: sonrakiNo, basamak: basamak,
+      sonrakiNo: sonrakiNo, basamak: basamak, tur: String(row[5] || ""),
       onizleme: seriFormatla(prefix, sonrakiNo, basamak),
     });
   }
-  return { ok: true, seriler: seriler };
+  return { ok: true, seriler: seriler, turEtiketler: SERI_TUR_ETIKETLER };
 }
 
-// body: { id?, ad, prefix, sonrakiNo, basamak }
+// body: { id?, ad, prefix, sonrakiNo, basamak, tur }
 // NOT: Ayarlar ekranı Kaydet'te TÜM seri satırlarını (değişmeyenler dahil)
 // aynı anda gönderebiliyor; kilitsiz çalışırsa özellikle yeni satır eklerken
 // (appendRow) eşzamanlı çağrılar birbirinin üstüne yazıp veri kaybına yol
@@ -3406,7 +3446,7 @@ function saveSeriTanim(body) {
       for (let i = 1; i < data.length; i++) { if (String(data[i][0]) === id) { satirIdx = i + 1; break; } }
     }
     if (!id) id = "sr_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
-    const satir = [id, ad, String(body.prefix || ""), parseInt(body.sonrakiNo) || 1, parseInt(body.basamak) || 4];
+    const satir = [id, ad, String(body.prefix || ""), parseInt(body.sonrakiNo) || 1, parseInt(body.basamak) || 4, String(body.tur || "")];
     if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
     else sheet.appendRow(satir);
     return { ok: true, id: id };
