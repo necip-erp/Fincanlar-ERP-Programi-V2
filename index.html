@@ -1952,32 +1952,39 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         </span>
         <input type="hidden" id="sm-siparis-no-deger" value="${s && s.siparisNo ? s.siparisNo : ''}">
       </h3>
-      <div class="fld"><label>Belge Tipi</label>
-        <select id="sm-belgetipi" onchange="satisModalBelgeTipiDegisti()" ${duzenle?'disabled title="Düzenlemede belge tipi değiştirilemez"':''}>
-          <option value="Fatura" ${belgeTipiBaslangic==='Fatura'?'selected':''}>Fatura</option>
-          <option value="Teklif" ${belgeTipiBaslangic==='Teklif'?'selected':''}>Teklif</option>
-          <option value="Sipariş" ${belgeTipiBaslangic==='Sipariş'?'selected':''}>Sipariş</option>
-        </select>
+      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Belge Tipi</label>
+          <select id="sm-belgetipi" onchange="satisModalBelgeTipiDegisti()" ${duzenle?'disabled title="Düzenlemede belge tipi değiştirilemez"':''}>
+            <option value="Fatura" ${belgeTipiBaslangic==='Fatura'?'selected':''}>Fatura</option>
+            <option value="Teklif" ${belgeTipiBaslangic==='Teklif'?'selected':''}>Teklif</option>
+            <option value="Sipariş" ${belgeTipiBaslangic==='Sipariş'?'selected':''}>Sipariş</option>
+          </select>
+        </div>
+        <div class="fld" id="sm-siparis-durum-fld" style="flex:1;min-width:160px;margin-bottom:0;display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
+          <label>Sipariş Durumu</label>
+          <select id="sm-siparis-durumu">
+            ${siparisDurumSecenekleriHTML(s ? s.siparisManuelDurum : (_siparisDurumlari.length ? _siparisDurumlari[0].ad : "Beklemede"))}
+          </select>
+        </div>
       </div>
-      <div class="fld" id="sm-siparis-durum-fld" style="display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
-        <label>Sipariş Durumu</label>
-        <select id="sm-siparis-durumu">
-          ${siparisDurumSecenekleriHTML(s ? s.siparisManuelDurum : (_siparisDurumlari.length ? _siparisDurumlari[0].ad : "Beklemede"))}
-        </select>
+      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <div class="fld" style="flex:2;min-width:220px;margin-bottom:0;position:relative"><label>Müşteri (Cari)</label>
+          <input id="sm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" style="padding-right:34px"
+                 value="${s ? (s.cariId ? s.cariAd : '') : (onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : '')}"
+                 oninput="smCariAramaDegisti(this.value)"
+                 onfocus="smCariOneriGoster()"
+                 onblur="setTimeout(()=>smCariOneriKapat(),200)"
+                 onkeydown="oneriKlavyeYonet(event,'sm-cari-oneri')">
+          <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('sm-cari').value=c.id; document.getElementById('sm-cari-arama').value=c.ad; if(c.iskontoOrani>0){ _yeniSatisKalemleri.forEach(k=>{ if(!k.iskontoYuzde) k.iskontoYuzde=c.iskontoOrani; }); satisKalemlerCiz(); satisToplamGuncelle(); } })">🔍</button>
+          <input type="hidden" id="sm-cari" value="${s ? (s.cariId||'') : (onCariId||'')}">
+          <div id="sm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+        </div>
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Tarih</label><input id="sm-tarih" type="datetime-local" value="${bugun}"></div>
+        <div class="fld" id="sm-vade-fld" style="flex:1;min-width:140px;margin-bottom:0;display:none">
+          <label>Vade Tarihi (son ödeme tarihi)</label>
+          <input id="sm-vade" type="date" value="${belgeTipiBaslangic==='Sipariş' ? bugun.slice(0,10) : ''}">
+        </div>
       </div>
-      <div class="fld" style="position:relative"><label>Müşteri (Cari)</label>
-        <input id="sm-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest müşteri)..." autocomplete="off" style="padding-right:34px"
-               value="${s ? (s.cariId ? s.cariAd : '') : (onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : '')}"
-               oninput="smCariAramaDegisti(this.value)"
-               onfocus="smCariOneriGoster()"
-               onblur="setTimeout(()=>smCariOneriKapat(),200)"
-               onkeydown="oneriKlavyeYonet(event,'sm-cari-oneri')">
-        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('sm-cari').value=c.id; document.getElementById('sm-cari-arama').value=c.ad; satisCariSecimiDegisti(); if(c.iskontoOrani>0){ _yeniSatisKalemleri.forEach(k=>{ if(!k.iskontoYuzde) k.iskontoYuzde=c.iskontoOrani; }); satisKalemlerCiz(); satisToplamGuncelle(); } })">🔍</button>
-        <input type="hidden" id="sm-cari" value="${s ? (s.cariId||'') : (onCariId||'')}">
-        <div id="sm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
-      </div>
-      <div class="fld" id="sm-serbest-ad-fld" style="${s && s.cariId ? 'display:none' : ''}"><label>Müşteri Adı (cari seçilmediyse)</label><input id="sm-serbest-ad" type="text" placeholder="Peşin Müşteri" value="${s && !s.cariId ? s.cariAd : ''}"></div>
-      <div class="fld"><label>Tarih</label><input id="sm-tarih" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Ödeme Tipi</label>
         <select id="sm-odeme" onchange="satisOdemeTipiDegisti()">
           <option value="" ${s && s.odemeTipi===''?'selected':''}>— Seçilmedi —</option>
@@ -1990,10 +1997,6 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       <div class="fld" id="sm-banka-fld" style="display:none">
         <label>Havale — Banka / Hesap</label>
         <select id="sm-banka-hesap"></select>
-      </div>
-      <div class="fld" id="sm-vade-fld" style="display:none">
-        <label>Vade Tarihi (son ödeme tarihi)</label>
-        <input id="sm-vade" type="date" value="${belgeTipiBaslangic==='Sipariş' ? bugun.slice(0,10) : ''}">
       </div>
       <div class="fld"><label>Açıklama</label><input id="sm-aciklama" type="text" placeholder="İsteğe bağlı" value="${s ? (s.aciklama||'') : ''}"></div>
 
@@ -2083,14 +2086,8 @@ function satisBankaSecenekleriYukle(onSecili){
   }).catch(()=>{});
 }
 
-function satisCariSecimiDegisti(){
-  const cariSecili = !!document.getElementById("sm-cari").value;
-  document.getElementById("sm-serbest-ad-fld").style.display = cariSecili ? "none" : "flex";
-}
-
 function smCariAramaDegisti(){
   document.getElementById("sm-cari").value = "";
-  satisCariSecimiDegisti();
   smCariOneriGoster();
 }
 function smCariOneriGoster(){
@@ -2121,7 +2118,6 @@ function smCariSec(i){
   document.getElementById("sm-cari").value = c.id;
   document.getElementById("sm-cari-arama").value = c.ad;
   kutu.style.display = "none";
-  satisCariSecimiDegisti();
   // Carinin genel iskonto oranı varsa, henüz elle değiştirilmemiş kalemlere otomatik uygula.
   if(c.iskontoOrani > 0){
     _yeniSatisKalemleri.forEach(k=>{ if(!k.iskontoYuzde) k.iskontoYuzde = c.iskontoOrani; });
@@ -2317,7 +2313,7 @@ function satisGenelToplamHesapla(){
 
 function satisKaydet(){
   const cariId = document.getElementById("sm-cari").value;
-  const serbestAd = document.getElementById("sm-serbest-ad").value.trim();
+  if(!cariId){ alert("Cari (müşteri) seçimi zorunludur."); document.getElementById("sm-cari-arama").focus(); return; }
   const kalemler = _yeniSatisKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
   if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
   const odemeTipi = document.getElementById("sm-odeme").value;
@@ -2335,8 +2331,7 @@ function satisKaydet(){
   const bankaHesapId = odemeTipi === "Havale" ? document.getElementById("sm-banka-hesap").value : "";
   const { tutar: tutarIskontosu, kdvSonra: tutarIskontoKdvSonra } = smTutarIskontosuAl();
   const body = {
-    cariId: cariId || undefined,
-    cariAd: !cariId ? serbestAd : undefined,
+    cariId: cariId,
     belgeTipi: belgeTipi,
     tarih: document.getElementById("sm-tarih").value,
     odemeTipi: odemeTipi,

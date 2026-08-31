@@ -945,7 +945,7 @@ function getSatisDetay(satisId) {
   return { ok: true, satis: satis, kalemler: kalemler };
 }
 
-// body: { cariId (opsiyonel), cariAd (cariId yoksa serbest müşteri adı), tarih,
+// body: { cariId (zorunlu), tarih,
 //         odemeTipi, aciklama, kalemler: [{urunAdi, miktar, birim, birimFiyat}, ...] }
 function saveSatis(body) {
   const kalemler = Array.isArray(body.kalemler) ? body.kalemler : [];
@@ -965,8 +965,9 @@ function saveSatis(body) {
   ensureSatisKalemVergiKolonlari(kSheet);
 
   const cariId = String(body.cariId || "").trim();
-  let cariAd = String(body.cariAd || "").trim();
-  if (cariId) {
+  if (!cariId) return { ok: false, hata: "Cari (müşteri) seçimi zorunludur" };
+  let cariAd = "";
+  {
     const cSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
       ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH"]);
     const cData = cSheet.getDataRange().getValues();
@@ -974,7 +975,7 @@ function saveSatis(body) {
       if (String(cData[i][0]) === cariId) { cariAd = String(cData[i][2] || ""); break; }
     }
   }
-  if (!cariAd) cariAd = "Peşin Müşteri";
+  if (!cariAd) return { ok: false, hata: "Seçilen cari bulunamadı" };
 
   // Toplam tutar = Genel Toplam (Brüt Toplam - İskonto + Kdv Toplam), yani cariye
   // yansıyacak/tahsil edilecek nihai tutar. Kalem bazında iskonto % ve kdv % desteklenir.
@@ -1281,7 +1282,7 @@ function silSatis(body) {
   return { ok: true };
 }
 
-// body: { id, cariId (opsiyonel), cariAd, tarih, odemeTipi, bankaHesapId, aciklama,
+// body: { id, cariId (zorunlu), tarih, odemeTipi, bankaHesapId, aciklama,
 //         dipIskontoYuzde, tutarIskontosu, tutarIskontoKdvSonra, siparisNo,
 //         kalemler: [{urunAdi,miktar,birim,birimFiyat,iskontoYuzde,kdvOrani,stokKodu (opsiyonel),
 //                     stokKartiOlustur (opsiyonel)}] }
@@ -1292,6 +1293,9 @@ function silSatis(body) {
 function updateSatis(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
+
+  const cariId = String(body.cariId || "").trim();
+  if (!cariId) return { ok: false, hata: "Cari (müşteri) seçimi zorunludur" };
 
   const kalemler = Array.isArray(body.kalemler) ? body.kalemler : [];
   if (kalemler.length === 0) return { ok: false, hata: "En az bir ürün kalemi eklemelisiniz" };
@@ -1314,6 +1318,15 @@ function updateSatis(body) {
   if (satirIdx === -1) return { ok: false, hata: "Kayıt bulunamadı" };
   if (belgeTipi !== "Sipariş" && belgeTipi !== "Teklif") {
     return { ok: false, hata: "Sadece Sipariş veya Teklif düzenlenebilir (Fatura düzenlenemez)" };
+  }
+
+  const cAdKontrolSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
+    ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH"]);
+  {
+    const cData = cAdKontrolSheet.getDataRange().getValues();
+    let bulundu = false;
+    for (let i = 1; i < cData.length; i++) { if (String(cData[i][0]) === cariId) { bulundu = true; break; } }
+    if (!bulundu) return { ok: false, hata: "Seçilen cari bulunamadı" };
   }
 
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
@@ -1347,17 +1360,13 @@ function updateSatis(body) {
     });
   }
 
-  const cariId = String(body.cariId || "").trim();
-  let cariAd = String(body.cariAd || "").trim();
-  if (cariId) {
-    const cSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
-      ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH"]);
-    const cData = cSheet.getDataRange().getValues();
+  let cariAd = "";
+  {
+    const cData = cAdKontrolSheet.getDataRange().getValues();
     for (let i = 1; i < cData.length; i++) {
       if (String(cData[i][0]) === cariId) { cariAd = String(cData[i][2] || ""); break; }
     }
   }
-  if (!cariAd) cariAd = "Peşin Müşteri";
 
   // Tutar hesaplaması saveSatis ile birebir aynı (bkz. oradaki yorumlar).
   let kalemGenelToplam = 0, kalemAraToplam = 0, kalemKdvToplam = 0;
