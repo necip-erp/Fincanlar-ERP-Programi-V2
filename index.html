@@ -3190,24 +3190,31 @@ function alisBekleyenOnayModalAc(faturaNo){
   f.kalemler.forEach((k,i)=>bfmSatirGuncelle(i));
 }
 
-// Bir bfm satırının Tutar'ını (Miktar × Birim Fiyat × (1-İsk.1%) × (1-İsk.2%) × (1+KDV%))
-// canlı olarak hesaplayıp o satırın hücresine yazar, ardından genel toplamı günceller.
-// Tutar hariç her alan (Miktar, Birim Fiyat, İsk.1, İsk.2) elle düzeltilebilir — EDM'den
-// gelen veri gerçek faturayla uyuşmuyorsa (örn. eksik/yanlış aktarılmış ikinci iskonto)
-// onaylamadan önce burada düzeltilir.
+// Bir bfm satırının Tutar'ını (Miktar × (Birim Fiyat × (1-İsk.1%) × (1-İsk.2%) + Nakliye Payı)
+// × (1+KDV%)) canlı olarak hesaplayıp o satırın hücresine yazar, ardından genel toplamı
+// günceller. Tutar hariç her alan (Miktar, Birim Fiyat, İsk.1, İsk.2) elle düzeltilebilir —
+// EDM'den gelen veri gerçek faturayla uyuşmuyorsa (örn. eksik/yanlış aktarılmış ikinci
+// iskonto) onaylamadan önce burada düzeltilir. Nakliye Payı (varsa) EDM'den geldiği gibi
+// sabit kalır — fatura-okuma-otomasyonu tarafında palet/nakliye bedelinin m²'ye bölünmüş
+// hâlidir, elle düzeltilebilir alanların hiçbiri onu etkilemez.
+// ★ DÜZELTME: bu hesaplama önceden nakliyePayi'yi tamamen atlıyordu — bu yüzden bu modalda
+// görünen Fatura Tutarı, "Bekleyen Alış Faturaları" liste ekranındaki toplamla (backend'de
+// nakliyePayi dahil hesaplanıyor) tutarsızdı; nakliyeli faturalarda modal daha düşük bir
+// tutar gösteriyordu.
 function bfmSatirGuncelle(i){
   const f = window._bfmAktifFatura;
   if(!f || !f.kalemler[i]) return;
   const kdvOrani = f.kalemler[i].kdvOrani || 0;
+  const nakliyePayi = f.kalemler[i].nakliyePayi || 0;
   const miktar = parseFloat((document.getElementById(`bfm-miktar-${i}`)||{}).value) || 0;
   const fiyat = parseFloat((document.getElementById(`bfm-fiyat-${i}`)||{}).value) || 0;
   const isk1 = parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0;
   const isk2 = parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0;
-  const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100);
+  const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100) + nakliyePayi;
   const tutarKdvHaric = miktar * netBirimFiyat;
   const tutarKdvDahil = tutarKdvHaric * (1 + kdvOrani/100);
   const hucre = document.getElementById(`bfm-tutar-${i}`);
-  if(hucre) hucre.textContent = paraFormat(tutarKdvDahil);
+  if(hucre) hucre.innerHTML = paraFormat(tutarKdvDahil) + (nakliyePayi>0 ? ` <span style="font-size:9px;color:var(--amber)" title="Nakliye/palet payı dahil: ${paraFormat(nakliyePayi)}/birim">+N</span>` : "");
   bfmGenelToplamGuncelle();
 }
 function bfmGenelToplamGuncelle(){
@@ -3216,11 +3223,12 @@ function bfmGenelToplamGuncelle(){
   let toplam = 0;
   f.kalemler.forEach((k,i)=>{
     const kdvOrani = k.kdvOrani || 0;
+    const nakliyePayi = k.nakliyePayi || 0;
     const miktar = parseFloat((document.getElementById(`bfm-miktar-${i}`)||{}).value) || 0;
     const fiyat = parseFloat((document.getElementById(`bfm-fiyat-${i}`)||{}).value) || 0;
     const isk1 = parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0;
     const isk2 = parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0;
-    const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100);
+    const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100) + nakliyePayi;
     toplam += miktar * netBirimFiyat * (1 + kdvOrani/100);
   });
   const el = document.getElementById("bfm-genel-toplam");
@@ -3266,7 +3274,12 @@ function alisBekleyenOnayla(faturaNo){
     const fiyat = parseFloat(document.getElementById(`bfm-fiyat-${i}`).value) || 0;
     const isk1 = parseFloat(document.getElementById(`bfm-isk1-${i}`).value) || 0;
     const isk2 = parseFloat(document.getElementById(`bfm-isk2-${i}`).value) || 0;
-    const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100);
+    // ★ DÜZELTME: nakliyePayi (fatura-okuma-otomasyonu'nda Canyap için palet/nakliye
+    // bedelinin m²'ye dağıtılmış payı) önceden buraya hiç eklenmiyordu — onaylanan Alış
+    // kaydına yazılan birim fiyat gerçek maliyetten düşük çıkıyordu (nakliye bedeli hiç
+    // maliyete yansımıyordu). Artık bfmSatirGuncelle'deki toplam hesaplamasıyla aynı
+    // mantıkla ekleniyor.
+    const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100) + (f.kalemler[i].nakliyePayi || 0);
     kalemler.push({
       urunAdi: f.kalemler[i].urunAdi,
       miktar: miktar,
