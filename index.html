@@ -239,6 +239,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .satis-kalem-birim{width:90px;flex:0 0 90px}
 .satis-kalem-fiyat{width:120px;flex:0 0 120px}
 .satis-kalem-yuzde{width:70px;flex:0 0 70px}
+.satis-kalem-paket{width:88px;flex:0 0 88px;font-size:12px;color:var(--text2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .satis-toplam{text-align:right;margin-top:14px;font-size:15px;font-weight:800}
 .satis-toplam-detay{margin-top:14px;padding:10px 12px;background:var(--bg3);border-radius:8px}
 .satis-toplam-satir{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--text3)}
@@ -2001,6 +2002,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         <span class="satis-kalem-stokkodu">Stok Kodu</span><span style="flex:1">Ürün</span>
         <span class="satis-kalem-miktar">Miktar</span><span class="satis-kalem-birim">Birim</span>
         <span class="satis-kalem-fiyat">Birim Fiyat</span><span class="satis-kalem-yuzde">İsk.%</span><span class="satis-kalem-yuzde">Kdv%</span>
+        <span class="satis-kalem-paket" id="sm-paket-baslik" style="display:${belgeTipiBaslangic==='Sipariş'?'block':'none'}" title="Ambalaj Tanımlama'daki ambalaj miktarına göre hesaplanan gerekli paket/kutu sayısı">Paket</span>
       </div>
       <div id="sm-kalemler" style="margin:8px 0"></div>
       <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
@@ -2150,11 +2152,30 @@ function satisKalemStokKartiAc(idx){
 
 function satisKalemAlanDegisti(idx, alan, deger){
   _yeniSatisKalemleri[idx][alan] = (alan==='miktar'||alan==='birimFiyat'||alan==='iskontoYuzde'||alan==='kdvOrani') ? (parseFloat(deger)||0) : deger;
+  if(alan==='miktar' || alan==='stokKodu'){
+    const paketEl = document.getElementById("sm-paket-"+idx);
+    if(paketEl) paketEl.textContent = siparisPaketBilgisi(_yeniSatisKalemleri[idx]);
+  }
   satisToplamGuncelle();
+}
+
+// Sipariş formunda, kalemin Stok Kodu'na Ambalaj Tanımlama'da tanımlı bir ambalaj
+// miktarı eşleşiyorsa, girilen miktarı karşılamak için gereken paket/kutu sayısını
+// (yukarı yuvarlanmış) "≈N Koli" biçiminde döner. Eşleşme yoksa boş döner.
+function siparisPaketBilgisi(k){
+  const kod = String(k.stokKodu||"").trim();
+  const miktar = parseFloat(k.miktar)||0;
+  if(!kod || miktar<=0) return "";
+  const s = (_stokTanimListe||[]).find(x=>x.stokKodu===kod);
+  if(!s || !(s.ambalajMiktari>0)) return "";
+  const paketSayisi = Math.ceil(miktar / s.ambalajMiktari);
+  return "≈"+paketSayisi+" "+(s.ambalajBirimi||"Paket");
 }
 
 function satisKalemlerCiz(){
   const el = document.getElementById("sm-kalemler");
+  const tip = (document.getElementById("sm-belgetipi")||{}).value;
+  const siparis = tip === "Sipariş";
   el.innerHTML = _yeniSatisKalemleri.map((k,idx)=>`
     <div class="satis-kalem-satir">
       <input class="satis-kalem-stokkodu" type="text" placeholder="Stok Kodu" value="${k.stokKodu||''}" oninput="satisKalemAlanDegisti(${idx},'stokKodu',this.value)">
@@ -2173,6 +2194,7 @@ function satisKalemlerCiz(){
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.01" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="satisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
       <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="İskonto %" placeholder="İsk.%" value="${k.iskontoYuzde||0}" oninput="satisKalemAlanDegisti(${idx},'iskontoYuzde',this.value)">
       <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="KDV %" placeholder="Kdv%" value="${k.kdvOrani===undefined?20:k.kdvOrani}" oninput="satisKalemAlanDegisti(${idx},'kdvOrani',this.value)">
+      ${siparis ? `<span class="satis-kalem-paket" id="sm-paket-${idx}" title="Ambalaj Tanımlama'ya göre gerekli paket/kutu sayısı">${siparisPaketBilgisi(k)}</span>` : ''}
       ${_yeniSatisKalemleri.length>1 ? `<span class="hk-sil" onclick="satisKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
   satisToplamGuncelle();
@@ -2262,10 +2284,12 @@ function satisModalBelgeTipiDegisti(){
   document.getElementById("sm-tutar-iskonto-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
   const rozet = document.getElementById("sm-siparis-no-badge");
   if(rozet) rozet.style.display = (tip === "Sipariş") ? "inline-flex" : "none";
+  const paketBaslik = document.getElementById("sm-paket-baslik");
+  if(paketBaslik) paketBaslik.style.display = (tip === "Sipariş") ? "block" : "none";
   const vadeInp = document.getElementById("sm-vade");
   if(vadeInp && tip === "Sipariş" && !vadeInp.value) vadeInp.value = simdiTarihSaat().slice(0,10);
   if(tip === "Sipariş") siparisNumarasiOnizlemeYukle();
-  satisToplamGuncelle();
+  satisKalemlerCiz();
 }
 
 function smTutarIskontosuAl(){
