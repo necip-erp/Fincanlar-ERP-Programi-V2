@@ -285,10 +285,12 @@ function handleRequest(e) {
       case "getSatisListesi": result = getSatisListesi(); break;
       case "getSatisDetay":   result = getSatisDetay(body.satisId); break;
       case "saveSatis":       result = saveSatis(body); break;
+      case "updateSatis":     result = updateSatis(body); break;
       case "silSatis":        result = silSatis(body); break;
       case "getAlisListesi":  result = getAlisListesi(); break;
       case "getAlisDetay":    result = getAlisDetay(body.alisId); break;
       case "saveAlis":        result = saveAlis(body); break;
+      case "updateAlis":      result = updateAlis(body); break;
       case "siparistenFaturaOlustur": result = siparistenFaturaOlustur(body); break;
       case "siparisDurumGuncelle": result = siparisDurumGuncelle(body); break;
       case "getCariSiparisListesi": result = getCariSiparisListesi(body.cariId); break;
@@ -916,10 +918,29 @@ function getSatisDetay(satisId) {
   }
   const dipIskontoTutari = araToplamKalem * ((satis.dipIskontoYuzde || 0) / 100);
   const araToplam = brutToplam - iskontoToplam - dipIskontoTutari;
-  const genelToplam = araToplam + kdvToplam;
+  const kalemGenelToplam = araToplam + kdvToplam;
+
+  // Tutar İskontosu (sabit ₺, sadece Sipariş'te kullanılır) — saveAlis/updateSatis'teki
+  // aynı mantık: KDV'den sonra (varsayılan) doğrudan genel toplamdan, ya da KDV'den önce
+  // (ara toplamdan düşülüp kdv oransal olarak yeniden hesaplanır) uygulanır. Daha önce bu
+  // tutar sadece saklanıyordu, hiçbir toplam satırında görünmüyordu — burada gösterime
+  // giren nihai kdvToplam/araToplam/genelToplam bu iskontoyu yansıtır.
+  const tutarIskontosu = satis.tutarIskontosu || 0;
+  let nihaiAraToplam = araToplam, nihaiKdvToplam = kdvToplam, nihaiGenelToplam = kalemGenelToplam;
+  if (tutarIskontosu > 0) {
+    if (satis.tutarIskontoKdvSonra) {
+      nihaiGenelToplam = Math.max(0, kalemGenelToplam - tutarIskontosu);
+    } else {
+      nihaiAraToplam = Math.max(0, araToplam - tutarIskontosu);
+      const ortalamaKdvOrani = araToplam > 0 ? (kdvToplam / araToplam) : 0;
+      nihaiKdvToplam = nihaiAraToplam * ortalamaKdvOrani;
+      nihaiGenelToplam = nihaiAraToplam + nihaiKdvToplam;
+    }
+  }
+
   satis.toplamlar = {
-    brutToplam: brutToplam, iskontoToplam: iskontoToplam + dipIskontoTutari, araToplam: araToplam,
-    kdvToplam: kdvToplam, genelToplam: genelToplam,
+    brutToplam: brutToplam, iskontoToplam: iskontoToplam + dipIskontoTutari, araToplam: nihaiAraToplam,
+    kdvToplam: nihaiKdvToplam, tutarIskontosu: tutarIskontosu, genelToplam: nihaiGenelToplam,
   };
   return { ok: true, satis: satis, kalemler: kalemler };
 }
@@ -1260,6 +1281,136 @@ function silSatis(body) {
   return { ok: true };
 }
 
+// body: { id, cariId (opsiyonel), cariAd, tarih, odemeTipi, bankaHesapId, aciklama,
+//         dipIskontoYuzde, tutarIskontosu, tutarIskontoKdvSonra, siparisNo,
+//         kalemler: [{urunAdi,miktar,birim,birimFiyat,iskontoYuzde,kdvOrani,stokKodu (opsiyonel),
+//                     stokKartiOlustur (opsiyonel)}] }
+// SADECE Sipariş/Teklif için — bunlar hiç stok/cari harekete yansımadığından (bkz. saveSatis
+// yorumları) ledger riski olmadan doğrudan yerinde güncellenebilir. Fatura reddedilir; onun
+// stok çıkışı + cari borcu olduğundan düzenlenmesi ayrı bir reversal+reapply akışı gerektirir
+// (bkz. updateAlis) ve şimdilik desteklenmiyor.
+function updateSatis(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+
+  const kalemler = Array.isArray(body.kalemler) ? body.kalemler : [];
+  if (kalemler.length === 0) return { ok: false, hata: "En az bir ürün kalemi eklemelisiniz" };
+  for (const k of kalemler) {
+    if (!String(k.urunAdi || "").trim()) return { ok: false, hata: "Kalemlerde ürün adı gerekli" };
+    if (!(parseFloat(k.miktar) > 0)) return { ok: false, hata: "Kalemlerde miktar sıfırdan büyük olmalı" };
+    if (!(parseFloat(k.birimFiyat) >= 0)) return { ok: false, hata: "Kalemlerde birim fiyat geçersiz" };
+  }
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  ensureSatisBelgeTipiColonu(sSheet);
+  const data = sSheet.getDataRange().getValues();
+
+  let satirIdx = -1, belgeTipi = "";
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) { satirIdx = i + 1; belgeTipi = String(data[i][8] || "") || "Fatura"; break; }
+  }
+  if (satirIdx === -1) return { ok: false, hata: "Kayıt bulunamadı" };
+  if (belgeTipi !== "Sipariş" && belgeTipi !== "Teklif") {
+    return { ok: false, hata: "Sadece Sipariş veya Teklif düzenlenebilir (Fatura düzenlenemez)" };
+  }
+
+  const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
+    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
+  ensureSatisKalemVergiKolonlari(kSheet);
+  const kData = kSheet.getDataRange().getValues();
+
+  // Ürün adına göre eski FATURALANAN_MIKTAR'ı topluyoruz ki kısmen faturalanmış bir
+  // Sipariş kalemi düzenlemede bu bilgi kaybolmasın (yeni miktarı aşamaz).
+  const eskiFaturalanan = {};
+  for (let i = 1; i < kData.length; i++) {
+    if (String(kData[i][1]) === id) {
+      const ad = String(kData[i][2] || "");
+      eskiFaturalanan[ad] = (eskiFaturalanan[ad] || 0) + (parseFloat(kData[i][9]) || 0);
+    }
+  }
+  for (let i = kData.length - 1; i >= 1; i--) {
+    if (String(kData[i][1]) === id) kSheet.deleteRow(i + 1);
+  }
+
+  const olusturulacaklar = kalemler.filter(k => k.stokKartiOlustur && String(k.stokKodu || "").trim());
+  if (olusturulacaklar.length > 0) {
+    const mevcutStoklar = getStokTanimListesi().kalemler;
+    const mevcutKoduSeti = {};
+    mevcutStoklar.forEach(s => { if (s.stokKodu) mevcutKoduSeti[s.stokKodu] = true; });
+    olusturulacaklar.forEach(k => {
+      const kod = String(k.stokKodu).trim();
+      if (mevcutKoduSeti[kod]) return;
+      saveStokTanim({ stokKodu: kod, stokAdi: String(k.urunAdi).trim(), birim1: String(k.birim || "adet") });
+      mevcutKoduSeti[kod] = true;
+    });
+  }
+
+  const cariId = String(body.cariId || "").trim();
+  let cariAd = String(body.cariAd || "").trim();
+  if (cariId) {
+    const cSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
+      ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH"]);
+    const cData = cSheet.getDataRange().getValues();
+    for (let i = 1; i < cData.length; i++) {
+      if (String(cData[i][0]) === cariId) { cariAd = String(cData[i][2] || ""); break; }
+    }
+  }
+  if (!cariAd) cariAd = "Peşin Müşteri";
+
+  // Tutar hesaplaması saveSatis ile birebir aynı (bkz. oradaki yorumlar).
+  let kalemGenelToplam = 0, kalemAraToplam = 0, kalemKdvToplam = 0;
+  kalemler.forEach(k => {
+    const h = satisKalemHesapla(parseFloat(k.miktar) || 0, parseFloat(k.birimFiyat) || 0,
+      parseFloat(k.iskontoYuzde) || 0, k.kdvOrani === undefined ? 20 : (parseFloat(k.kdvOrani) || 0));
+    kalemGenelToplam += h.genelToplam;
+    kalemAraToplam += h.araToplam;
+    kalemKdvToplam += h.kdvTutari;
+  });
+  const dipIskontoYuzde = parseFloat(body.dipIskontoYuzde) || 0;
+  const dipIskontoTutari = kalemAraToplam * (dipIskontoYuzde / 100);
+  const tutarIskontosu = Math.max(0, parseFloat(body.tutarIskontosu) || 0);
+  const tutarIskontoKdvSonra = body.tutarIskontoKdvSonra !== false;
+  let toplamTutar;
+  if (tutarIskontosu > 0 && !tutarIskontoKdvSonra) {
+    const araToplamNet = Math.max(0, kalemAraToplam - dipIskontoTutari - tutarIskontosu);
+    const ortalamaKdvOrani = kalemAraToplam > 0 ? (kalemKdvToplam / kalemAraToplam) : 0;
+    toplamTutar = araToplamNet * (1 + ortalamaKdvOrani);
+  } else {
+    toplamTutar = kalemGenelToplam - dipIskontoTutari - tutarIskontosu;
+  }
+  toplamTutar = Math.max(0, toplamTutar);
+
+  const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
+  const bankaHesapId = String(body.bankaHesapId || "").trim();
+  const eskiRow = data[satirIdx - 1];
+
+  // KAYIT_TARIHI (7), KAYNAK_SIPARIS_ID (11) ve SIPARIS_DURUMU (12) düzenlemeden
+  // etkilenmez — orijinal değerleriyle korunur.
+  const yeniRow = eskiRow.slice();
+  yeniRow[1] = tarih; yeniRow[2] = cariId; yeniRow[3] = cariAd; yeniRow[4] = toplamTutar;
+  yeniRow[5] = String(body.odemeTipi || "Peşin"); yeniRow[6] = String(body.aciklama || "");
+  yeniRow[9] = dipIskontoYuzde; yeniRow[10] = bankaHesapId;
+  yeniRow[13] = tutarIskontosu; yeniRow[14] = tutarIskontoKdvSonra ? 1 : 0;
+  yeniRow[15] = String(body.siparisNo !== undefined ? body.siparisNo : (eskiRow[15] || ""));
+  sSheet.getRange(satirIdx, 1, 1, yeniRow.length).setValues([yeniRow]);
+
+  kalemler.forEach((k, idx) => {
+    const kId = "sk_" + Date.now() + "_" + idx;
+    const miktar = parseFloat(k.miktar) || 0;
+    const birimFiyat = parseFloat(k.birimFiyat) || 0;
+    const iskontoYuzde = parseFloat(k.iskontoYuzde) || 0;
+    const kdvOrani = k.kdvOrani === undefined ? 20 : (parseFloat(k.kdvOrani) || 0);
+    const ad = String(k.urunAdi).trim();
+    const faturalanan = Math.min(miktar, eskiFaturalanan[ad] || 0);
+    kSheet.appendRow([kId, id, ad, miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, iskontoYuzde, kdvOrani, faturalanan, String(k.stokKodu || "").trim()]);
+  });
+
+  cacheTemizle(["satisListesi"]);
+  return { ok: true, id: id, toplamTutar: toplamTutar };
+}
+
 // ════════════════════════════════════════════════
 // ALIŞ MODÜLÜ
 // Satış modülünün aynası ama ters yönlü: Alış yapılınca biz tedarikçiye
@@ -1460,6 +1611,117 @@ function silAlis(body) {
   }
 
   return { ok: true };
+}
+
+// body: { id, cariId (opsiyonel), cariAd, tarih, odemeTipi, aciklama,
+//         kalemler: [{urunAdi,miktar,birim,birimFiyat,stokKodu (opsiyonel),
+//                     stokKartiOlustur (opsiyonel)}] }
+// Onaylanmış/aktarılmış bir Alış Faturası'nı ID'sini koruyarak günceller: önce
+// silAlis'in ters mantığıyla eski stok hareketi + cari hareketi geri alınır
+// (fakat alış satırı ve "Onaylandı" durum kaydı SİLİNMEZ), sonra saveAlis'in
+// uygulama mantığıyla yeni değerler aynı ID üzerine yazılır.
+function updateAlis(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+
+  const kalemler = Array.isArray(body.kalemler) ? body.kalemler : [];
+  if (kalemler.length === 0) return { ok: false, hata: "En az bir ürün kalemi eklemelisiniz" };
+  for (const k of kalemler) {
+    if (!String(k.urunAdi || "").trim()) return { ok: false, hata: "Kalemlerde ürün adı gerekli" };
+    if (!(parseFloat(k.miktar) > 0)) return { ok: false, hata: "Kalemlerde miktar sıfırdan büyük olmalı" };
+    if (!(parseFloat(k.birimFiyat) >= 0)) return { ok: false, hata: "Kalemlerde birim fiyat geçersiz" };
+  }
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+  const data = aSheet.getDataRange().getValues();
+
+  let satirIdx = -1, eskiCariId = "";
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) { satirIdx = i + 1; eskiCariId = String(data[i][2] || ""); break; }
+  }
+  if (satirIdx === -1) return { ok: false, hata: "Alış bulunamadı" };
+
+  // 1) ESKİ ETKİLERİ GERİ AL (silAlis'in aynısı, ama alış satırı ve "Onaylandı" durum
+  // kaydı SİLİNMEZ — bu ikisi güncellemeden etkilenmemeli).
+  stokHareketOtomatikSil(ss, id);
+
+  const kSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
+    ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
+  ensureAlisKalemStokKoduColonu(kSheet);
+  const kData = kSheet.getDataRange().getValues();
+  for (let i = kData.length - 1; i >= 1; i--) {
+    if (String(kData[i][1]) === id) kSheet.deleteRow(i + 1);
+  }
+
+  if (eskiCariId) {
+    const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler,
+      ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
+    const hkData = hkSheet.getDataRange().getValues();
+    for (let i = hkData.length - 1; i >= 1; i--) {
+      if (String(hkData[i][1]) === eskiCariId && String(hkData[i][5] || "").indexOf("ALIS:" + id) === 0) {
+        hkSheet.deleteRow(i + 1);
+        cacheTemizle(["cariListesi"]);
+        break;
+      }
+    }
+  }
+
+  // 2) YENİ DEĞERLERİ AYNI ID ÜZERİNE UYGULA (saveAlis'in aynısı, appendRow yerine
+  // mevcut satırın güncellenmesi — KAYIT_TARIHI orijinal oluşturma zamanı olarak korunur).
+  const olusturulacaklar = kalemler.filter(k => k.stokKartiOlustur && String(k.stokKodu || "").trim());
+  if (olusturulacaklar.length > 0) {
+    const mevcutStoklar = getStokTanimListesi().kalemler;
+    const mevcutKoduSeti = {};
+    mevcutStoklar.forEach(s => { if (s.stokKodu) mevcutKoduSeti[s.stokKodu] = true; });
+    olusturulacaklar.forEach(k => {
+      const kod = String(k.stokKodu).trim();
+      if (mevcutKoduSeti[kod]) return;
+      saveStokTanim({ stokKodu: kod, stokAdi: String(k.urunAdi).trim(), birim1: String(k.birim || "adet") });
+      mevcutKoduSeti[kod] = true;
+    });
+  }
+
+  const cariId = String(body.cariId || "").trim();
+  let cariAd = String(body.cariAd || "").trim();
+  if (cariId) {
+    const cSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
+      ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH"]);
+    const cData = cSheet.getDataRange().getValues();
+    for (let i = 1; i < cData.length; i++) {
+      if (String(cData[i][0]) === cariId) { cariAd = String(cData[i][2] || ""); break; }
+    }
+  }
+  if (!cariAd) cariAd = "Peşin Tedarikçi";
+
+  let toplamTutar = 0;
+  kalemler.forEach(k => { toplamTutar += (parseFloat(k.miktar) || 0) * (parseFloat(k.birimFiyat) || 0); });
+
+  const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
+  const kayitTarihi = String(data[satirIdx - 1][7] || "");
+  aSheet.getRange(satirIdx, 1, 1, 8).setValues([[id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi]]);
+
+  kalemler.forEach((k, idx) => {
+    const kId = "ak_" + Date.now() + "_" + idx;
+    const miktar = parseFloat(k.miktar) || 0;
+    const birimFiyat = parseFloat(k.birimFiyat) || 0;
+    kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, String(k.stokKodu || "").trim()]);
+  });
+
+  stokHareketOtomatikYaz(ss, kalemler, tarih, "Giriş", "Alış Faturası", id, "Alış Faturası — " + cariAd);
+
+  if (cariId) {
+    cariHareketEkle({
+      cariId: cariId,
+      tarih: tarih,
+      tip: "Alacak",
+      tutar: toplamTutar,
+      aciklama: cariHareketAciklamaOlustur("ALIS", id, "alis", body.aciklama),
+    });
+  }
+
+  return { ok: true, id: id, toplamTutar: toplamTutar };
 }
 
 // ════════════════════════════════════════════════

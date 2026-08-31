@@ -1028,7 +1028,7 @@ function cariApi(action, params){
 
 function paraFormat(n){
   const sign = n < 0 ? "-" : "";
-  return sign + Math.abs(n).toLocaleString("tr-TR", {minimumFractionDigits:2, maximumFractionDigits:2}) + " ₺";
+  return sign + Math.abs(n).toLocaleString("tr-TR", {minimumFractionDigits:2, maximumFractionDigits:2}) + "\u00A0₺";
 }
 
 // Genel tarih gösterim biçimi: gün/ay/yıl [saat:dakika] (uygulama genelinde kullanılır).
@@ -1616,6 +1616,7 @@ let _satisYuklendi = false;
 let _satisListe = [];
 let _satisSecili = null;
 let _yeniSatisKalemleri = [];
+let _satisDuzenleId = null; // dolu ise satisKaydet güncelleme (updateSatis) yapar, yeni kayıt oluşturmaz
 
 function satisListesiYukle(){
   _satisYuklendi = true;
@@ -1770,6 +1771,7 @@ function satisDetayCiz(res){
     ${s.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${s.aciklama}</div></div></div>` : ""}
     <div class="btnrow">
       ${siparis && s.siparisDurumu !== "Muhasebelendi" ? `<button class="btn btn-primary" onclick="siparisFaturaModalAc('${s.id}')">🧾 Fatura Oluştur</button>` : ''}
+      ${(s.belgeTipi==='Sipariş'||s.belgeTipi==='Teklif') ? `<button class="btn btn-primary" onclick="satisDuzenleAc('${s.id}')">✏️ Düzenle</button>` : ''}
       <button class="btn btn-primary" onclick="satisFisYazdir('${s.id}')">🖨 Yazdır</button>
       <button class="btn btn-danger" onclick="satisSilOnay('${s.id}')">🗑 Satışı Sil</button>
     </div>
@@ -1796,6 +1798,7 @@ function satisDetayCiz(res){
       <tr><td>İskonto</td><td>-${paraFormat(s.toplamlar.iskontoToplam)}</td></tr>
       <tr><td>Ara Toplam</td><td>${paraFormat(s.toplamlar.araToplam)}</td></tr>
       <tr><td>Kdv Toplam</td><td>${paraFormat(s.toplamlar.kdvToplam)}</td></tr>
+      ${s.toplamlar.tutarIskontosu>0 ? `<tr><td>Tutar İskontosu</td><td>-${paraFormat(s.toplamlar.tutarIskontosu)}</td></tr>` : ""}
       <tr class="genel"><td>Genel Toplam</td><td>${paraFormat(s.toplamlar.genelToplam)}</td></tr>
     </table>` : ""}
   `;
@@ -1884,10 +1887,10 @@ function satisFisYazdir(id){
       <h2 style="margin:0 0 4px">${s.belgeTipi||'Fatura'}</h2>
       <p style="margin:0 0 16px;color:#555">${s.cariAd} · ${tarihGoster(s.tarih)} · ${s.odemeTipi}</p>
       <table style="width:100%;border-collapse:collapse" border="1" cellpadding="6">
-        <thead><tr><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th></tr></thead>
+        <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th></tr></thead>
         <tbody>
           ${kalemler.map(k=>`<tr>
-            <td>${k.urunAdi}</td><td>${k.miktar}</td><td>${k.birim}</td>
+            <td>${k.stokKodu||'—'}</td><td>${k.urunAdi}</td><td>${k.miktar}</td><td>${k.birim}</td>
             <td>${paraFormat(k.birimFiyat)}</td><td>${k.iskontoYuzde||0}</td>
             <td>${k.kdvOrani===undefined?20:k.kdvOrani}</td><td>${paraFormat(k.tutar)}</td>
           </tr>`).join("")}
@@ -1898,6 +1901,7 @@ function satisFisYazdir(id){
         <tr><td>İskonto</td><td>-${paraFormat(t.iskontoToplam||0)}</td></tr>
         <tr><td>Ara Toplam</td><td>${paraFormat(t.araToplam||0)}</td></tr>
         <tr><td>Kdv Toplam</td><td>${paraFormat(t.kdvToplam||0)}</td></tr>
+        ${t.tutarIskontosu>0 ? `<tr><td>Tutar İskontosu</td><td>-${paraFormat(t.tutarIskontosu)}</td></tr>` : ""}
         <tr class="genel"><td>Genel Toplam</td><td>${paraFormat(t.genelToplam||0)}</td></tr>
       </table>`;
     document.body.appendChild(div);
@@ -1919,28 +1923,36 @@ function satisSilOnay(id){
 
 // ── Yeni satış modal ── (onCariId ve onBelgeTipi verilirse, Cari sayfasındaki
 // "İşlemler" panelinden ön-doldurulmuş şekilde açılır — Faz 2)
-function satisModalAc(onCariId, onBelgeTipi){
+// duzenle verilirse (getSatisDetay sonucu: {satis, kalemler}, sadece Sipariş/Teklif için
+// çağrılmalı — Fatura backend tarafından reddedilir) modal "Düzenle" moduna geçer, alanlar
+// ön doldurulur, Belge Tipi değiştirilemez (updateSatis id'yi koruyarak günceller) ve
+// Kaydet updateSatis çağırır.
+function satisModalAc(onCariId, onBelgeTipi, duzenle){
   if(!_siparisDurumlari.length) siparisDurumlariYukle();
-  _yeniSatisKalemleri = [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""}];
+  const s = duzenle ? duzenle.satis : null;
+  _satisDuzenleId = s ? s.id : null;
+  _yeniSatisKalemleri = duzenle
+    ? duzenle.kalemler.map(k=>({urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:k.birimFiyat, iskontoYuzde:k.iskontoYuzde||0, kdvOrani:k.kdvOrani===undefined?20:k.kdvOrani, stokKodu:k.stokKodu||""}))
+    : [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""}];
   if(!_cariYuklendi) cariListesiYukle();
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "satis-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
-  const bugun = simdiTarihSaat();
-  const belgeTipiBaslangic = onBelgeTipi || _satisAktifBelgeTipi;
+  const bugun = s ? s.tarih : simdiTarihSaat();
+  const belgeTipiBaslangic = s ? s.belgeTipi : (onBelgeTipi || _satisAktifBelgeTipi);
   overlay.innerHTML = `
     <div class="modal-box modal-box-xwide">
       <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <span>Yeni ${belgeTipiBaslangic}</span>
+        <span>${duzenle ? belgeTipiBaslangic+"'i Düzenle" : "Yeni "+belgeTipiBaslangic}</span>
         <span id="sm-siparis-no-badge" style="display:${belgeTipiBaslangic==='Sipariş'?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">
-          # <span id="sm-siparis-no-metin">—</span>
+          # <span id="sm-siparis-no-metin">${s && s.siparisNo ? s.siparisNo : '—'}</span>
         </span>
-        <input type="hidden" id="sm-siparis-no-deger" value="">
+        <input type="hidden" id="sm-siparis-no-deger" value="${s && s.siparisNo ? s.siparisNo : ''}">
       </h3>
       <div class="fld"><label>Belge Tipi</label>
-        <select id="sm-belgetipi" onchange="satisModalBelgeTipiDegisti()">
+        <select id="sm-belgetipi" onchange="satisModalBelgeTipiDegisti()" ${duzenle?'disabled title="Düzenlemede belge tipi değiştirilemez"':''}>
           <option value="Fatura" ${belgeTipiBaslangic==='Fatura'?'selected':''}>Fatura</option>
           <option value="Teklif" ${belgeTipiBaslangic==='Teklif'?'selected':''}>Teklif</option>
           <option value="Sipariş" ${belgeTipiBaslangic==='Sipariş'?'selected':''}>Sipariş</option>
@@ -1949,29 +1961,29 @@ function satisModalAc(onCariId, onBelgeTipi){
       <div class="fld" id="sm-siparis-durum-fld" style="display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
         <label>Sipariş Durumu</label>
         <select id="sm-siparis-durumu">
-          ${siparisDurumSecenekleriHTML(_siparisDurumlari.length ? _siparisDurumlari[0].ad : "Beklemede")}
+          ${siparisDurumSecenekleriHTML(s ? s.siparisManuelDurum : (_siparisDurumlari.length ? _siparisDurumlari[0].ad : "Beklemede"))}
         </select>
       </div>
       <div class="fld" style="position:relative"><label>Müşteri (Cari)</label>
         <input id="sm-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest müşteri)..." autocomplete="off" style="padding-right:34px"
-               value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
+               value="${s ? (s.cariId ? s.cariAd : '') : (onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : '')}"
                oninput="smCariAramaDegisti(this.value)"
                onfocus="smCariOneriGoster()"
                onblur="setTimeout(()=>smCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'sm-cari-oneri')">
         <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('sm-cari').value=c.id; document.getElementById('sm-cari-arama').value=c.ad; satisCariSecimiDegisti(); if(c.iskontoOrani>0){ _yeniSatisKalemleri.forEach(k=>{ if(!k.iskontoYuzde) k.iskontoYuzde=c.iskontoOrani; }); satisKalemlerCiz(); satisToplamGuncelle(); } })">🔍</button>
-        <input type="hidden" id="sm-cari" value="${onCariId||''}">
+        <input type="hidden" id="sm-cari" value="${s ? (s.cariId||'') : (onCariId||'')}">
         <div id="sm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
-      <div class="fld" id="sm-serbest-ad-fld"><label>Müşteri Adı (cari seçilmediyse)</label><input id="sm-serbest-ad" type="text" placeholder="Peşin Müşteri"></div>
+      <div class="fld" id="sm-serbest-ad-fld" style="${s && s.cariId ? 'display:none' : ''}"><label>Müşteri Adı (cari seçilmediyse)</label><input id="sm-serbest-ad" type="text" placeholder="Peşin Müşteri" value="${s && !s.cariId ? s.cariAd : ''}"></div>
       <div class="fld"><label>Tarih</label><input id="sm-tarih" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Ödeme Tipi</label>
         <select id="sm-odeme" onchange="satisOdemeTipiDegisti()">
-          <option value="">— Seçilmedi —</option>
-          <option value="Nakit">Nakit</option>
-          <option value="Kredi Kartı">Kredi Kartı</option>
-          <option value="Havale">Havale</option>
-          <option value="Açık Hesap" selected>Açık Hesap</option>
+          <option value="" ${s && s.odemeTipi===''?'selected':''}>— Seçilmedi —</option>
+          <option value="Nakit" ${s && s.odemeTipi==='Nakit'?'selected':''}>Nakit</option>
+          <option value="Kredi Kartı" ${s && s.odemeTipi==='Kredi Kartı'?'selected':''}>Kredi Kartı</option>
+          <option value="Havale" ${s && s.odemeTipi==='Havale'?'selected':''}>Havale</option>
+          <option value="Açık Hesap" ${!s || s.odemeTipi==='Açık Hesap'?'selected':''}>Açık Hesap</option>
         </select>
       </div>
       <div class="fld" id="sm-banka-fld" style="display:none">
@@ -1982,7 +1994,7 @@ function satisModalAc(onCariId, onBelgeTipi){
         <label>Vade Tarihi (son ödeme tarihi)</label>
         <input id="sm-vade" type="date" value="${belgeTipiBaslangic==='Sipariş' ? bugun.slice(0,10) : ''}">
       </div>
-      <div class="fld"><label>Açıklama</label><input id="sm-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+      <div class="fld"><label>Açıklama</label><input id="sm-aciklama" type="text" placeholder="İsteğe bağlı" value="${s ? (s.aciklama||'') : ''}"></div>
 
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
       <div class="satis-kalem-basliklar">
@@ -1995,15 +2007,15 @@ function satisModalAc(onCariId, onBelgeTipi){
 
       <div class="fld" id="sm-tutar-iskonto-fld" style="max-width:280px;margin-top:12px;display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
         <label>Tutar İskontosu (₺)</label>
-        <input id="sm-tutar-iskontosu" type="number" min="0" step="0.01" value="0" oninput="satisToplamGuncelle()">
+        <input id="sm-tutar-iskontosu" type="number" min="0" step="0.01" value="${s ? (s.tutarIskontosu||0) : 0}" oninput="satisToplamGuncelle()">
         <label style="flex-direction:row;align-items:center;gap:6px;text-transform:none;font-size:12px;color:var(--text2);margin-top:6px">
-          <input id="sm-tutar-iskonto-kdv-sonra" type="checkbox" checked onchange="satisToplamGuncelle()" style="width:auto">
+          <input id="sm-tutar-iskonto-kdv-sonra" type="checkbox" ${!s || s.tutarIskontoKdvSonra?'checked':''} onchange="satisToplamGuncelle()" style="width:auto">
           KDV'den sonra düş (tik yoksa KDV'den önce düşülür)
         </label>
       </div>
 
       <div class="fld" style="max-width:220px;margin-top:12px"><label>Dip İskonto (%)</label>
-        <input id="sm-dip-iskonto" type="number" min="0" max="100" step="0.01" value="0" oninput="satisToplamGuncelle()">
+        <input id="sm-dip-iskonto" type="number" min="0" max="100" step="0.01" value="${s ? (s.dipIskontoYuzde||0) : 0}" oninput="satisToplamGuncelle()">
       </div>
 
       <div id="sm-toplam" class="satis-toplam-detay"></div>
@@ -2015,9 +2027,18 @@ function satisModalAc(onCariId, onBelgeTipi){
     </div>`;
   document.body.appendChild(overlay);
   satisKalemlerCiz();
-  satisBankaSecenekleriYukle();
+  satisBankaSecenekleriYukle(s ? s.bankaHesapId : undefined);
   satisOdemeTipiDegisti();
-  if(belgeTipiBaslangic === "Sipariş") siparisNumarasiOnizlemeYukle();
+  if(!duzenle && belgeTipiBaslangic === "Sipariş") siparisNumarasiOnizlemeYukle();
+}
+
+// Satış/Sipariş/Teklif detayındaki "✏️ Düzenle" butonu (SADECE Sipariş/Teklif'te
+// görünür) — güncel detayı çekip modalı düzenleme modunda açar.
+function satisDuzenleAc(id){
+  cariApi("getSatisDetay", {satisId:id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    satisModalAc(null, null, {satis:res.satis, kalemler:res.kalemler});
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
 // Sipariş formunun sağ üstünde gösterilen sipariş numarası önizlemesini Seri
@@ -2047,7 +2068,7 @@ function satisOdemeTipiDegisti(){
   document.getElementById("sm-vade-fld").style.display = (tip === "Açık Hesap") ? "flex" : "none";
 }
 
-function satisBankaSecenekleriYukle(){
+function satisBankaSecenekleriYukle(onSecili){
   cariApi("getBankaYapisi").then(res=>{
     if(!res.ok) return;
     const sel = document.getElementById("sm-banka-hesap");
@@ -2056,6 +2077,7 @@ function satisBankaSecenekleriYukle(){
       const banka = res.bankalar.find(b=>b.id===h.bankaId);
       return `<option value="${h.id}">${banka?banka.ad:''} — ${h.hesapAdi}</option>`;
     }).join("");
+    if(onSecili) sel.value = onSecili;
   }).catch(()=>{});
 }
 
@@ -2304,13 +2326,16 @@ function satisKaydet(){
     siparisDurumu: belgeTipi === "Sipariş" ? document.getElementById("sm-siparis-durumu").value : undefined,
     kalemler,
   };
-  cariApi("saveSatis", body).then(res=>{
+  const duzenleId = _satisDuzenleId;
+  if(duzenleId) body.id = duzenleId;
+  cariApi(duzenleId ? "updateSatis" : "saveSatis", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("satis-modal-overlay").remove();
+    _satisDuzenleId = null;
     satisBelgeTipiDegistir(body.belgeTipi);
     satisListesiYukle();
     if(cariId) cariListesiYukle(); // cari bakiyesi güncellenmiş olabilir
-    satisAc(res.id);
+    satisAc(duzenleId || res.id);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 </script>
@@ -2323,6 +2348,7 @@ let _alisYuklendi = false;
 let _alisListe = [];
 let _alisSecili = null;
 let _yeniAlisKalemleri = [];
+let _alisDuzenleId = null; // dolu ise alisKaydet güncelleme (updateAlis) yapar, yeni kayıt oluşturmaz
 
 // ── Alış: 2 kademeli seçim (Alış Girişi / İade) ──
 function alisAnaSecimeDon(){
@@ -2417,6 +2443,7 @@ function alisDetayCiz(res){
     </div>
     ${a.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${a.aciklama}</div></div></div>` : ""}
     <div class="btnrow">
+      <button class="btn btn-primary" onclick="alisDuzenleAc('${a.id}')">✏️ Düzenle</button>
       <button class="btn btn-danger" onclick="alisSilOnay('${a.id}')">🗑 Alışı Sil</button>
     </div>
     <table class="hareket-tbl">
@@ -2447,38 +2474,44 @@ function alisSilOnay(id){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
-// ── Yeni alış modal ──
-function alisModalAc(){
-  _yeniAlisKalemleri = [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0}];
+// ── Yeni alış modal / Alış düzenleme ──
+// duzenle verilirse (getAlisDetay sonucu: {alis, kalemler}) modal "Alışı Düzenle" moduna
+// geçer, alanlar ön doldurulur ve Kaydet updateAlis çağırır (id korunur).
+function alisModalAc(duzenle){
+  _alisDuzenleId = duzenle ? duzenle.alis.id : null;
+  _yeniAlisKalemleri = duzenle
+    ? duzenle.kalemler.map(k=>({urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:k.birimFiyat, stokKodu:k.stokKodu||""}))
+    : [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0}];
   if(!_cariYuklendi) cariListesiYukle();
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "alis-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
-  const bugun = simdiTarihSaat();
+  const a = duzenle ? duzenle.alis : null;
+  const bugun = (a && a.tarih) ? a.tarih : simdiTarihSaat();
   overlay.innerHTML = `
     <div class="modal-box modal-box-wide">
-      <h3>Yeni Alış</h3>
+      <h3>${duzenle ? 'Alışı Düzenle' : 'Yeni Alış'}</h3>
       <div class="fld" style="position:relative">
         <label>Tedarikçi (Cari)</label>
-        <input id="am-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off" style="padding-right:34px"
+        <input id="am-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off" style="padding-right:34px" value="${a && a.cariId ? a.cariAd : ''}"
                oninput="amCariAramaDegisti(this.value)"
                onfocus="amCariOneriGoster()"
                onblur="setTimeout(()=>amCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'am-cari-oneri')">
         <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('am-cari').value=c.id; document.getElementById('am-cari-arama').value=c.ad; alisCariSecimiDegisti(); })">🔍</button>
-        <input type="hidden" id="am-cari" value="">
+        <input type="hidden" id="am-cari" value="${a && a.cariId ? a.cariId : ''}">
         <div id="am-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
-      <div class="fld" id="am-serbest-ad-fld"><label>Tedarikçi Adı (cari seçilmediyse)</label><input id="am-serbest-ad" type="text" placeholder="Peşin Tedarikçi"></div>
+      <div class="fld" id="am-serbest-ad-fld" style="${a && a.cariId ? 'display:none' : ''}"><label>Tedarikçi Adı (cari seçilmediyse)</label><input id="am-serbest-ad" type="text" placeholder="Peşin Tedarikçi" value="${a && !a.cariId ? a.cariAd : ''}"></div>
       <div class="fld"><label>Tarih</label><input id="am-tarih" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Ödeme Tipi</label>
         <select id="am-odeme">
-          <option value="Peşin">Peşin</option>
-          <option value="Veresiye">Veresiye</option>
+          <option value="Peşin" ${a && a.odemeTipi==='Peşin'?'selected':''}>Peşin</option>
+          <option value="Veresiye" ${a && a.odemeTipi==='Veresiye'?'selected':''}>Veresiye</option>
         </select>
       </div>
-      <div class="fld"><label>Açıklama</label><input id="am-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+      <div class="fld"><label>Açıklama</label><input id="am-aciklama" type="text" placeholder="İsteğe bağlı" value="${a ? (a.aciklama||'') : ''}"></div>
 
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
       <div id="am-kalemler" style="margin:8px 0"></div>
@@ -2493,6 +2526,15 @@ function alisModalAc(){
     </div>`;
   document.body.appendChild(overlay);
   alisKalemlerCiz();
+}
+
+// Alış detayındaki "✏️ Düzenle" butonu — güncel alış detayını çekip modalı düzenleme
+// modunda açar.
+function alisDuzenleAc(id){
+  cariApi("getAlisDetay", {alisId:id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    alisModalAc({alis:res.alis, kalemler:res.kalemler});
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
 function alisCariSecimiDegisti(){
@@ -2629,12 +2671,15 @@ function alisKaydet(){
     aciklama: document.getElementById("am-aciklama").value,
     kalemler,
   };
-  cariApi("saveAlis", body).then(res=>{
+  const duzenleId = _alisDuzenleId;
+  if(duzenleId) body.id = duzenleId;
+  cariApi(duzenleId ? "updateAlis" : "saveAlis", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("alis-modal-overlay").remove();
+    _alisDuzenleId = null;
     alisListesiYukle();
     if(cariId) cariListesiYukle();
-    alisAc(res.id);
+    alisAc(duzenleId || res.id);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 </script>
