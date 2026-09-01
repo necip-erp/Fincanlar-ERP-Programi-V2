@@ -3568,7 +3568,7 @@ function saveStokTanimTopluce(body) {
 // gösterdiği "güncel stok" rakamını otomatik güncellemez, sadece kendi
 // hareket geçmişini/raporunu tutar.
 // ════════════════════════════════════════════════
-const STOK_HAREKET_BASLIKLAR = ["ID","TARIH","STOK_TANIM_ID","STOK_KODU","STOK_ADI","BIRIM","HAREKET_TIPI","MIKTAR","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI","BELGE_NO"];
+const STOK_HAREKET_BASLIKLAR = ["ID","TARIH","STOK_TANIM_ID","STOK_KODU","STOK_ADI","BIRIM","HAREKET_TIPI","MIKTAR","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI","BELGE_NO","MALIYET_FIYATI"];
 
 // Satış/Alış/Alış İade Faturaları KAYDEDİLDİĞİNDE Stok Hareket Raporu'na (StokHareketleri
 // sayfası) otomatik satır yazar. belgeNo = ilgili Satış/Alış kaydının ID'si; silinince
@@ -3725,6 +3725,10 @@ function ensureStokHareketBelgeColonlari(sheet) {
   if (String(h12 || "") !== "BELGE_NO") {
     sheet.getRange(1, 12).setValue("BELGE_NO").setFontWeight("bold").setBackground("#e8edf5");
   }
+  const h13 = sheet.getRange(1, 13).getValue();
+  if (String(h13 || "") !== "MALIYET_FIYATI") {
+    sheet.getRange(1, 13).setValue("MALIYET_FIYATI").setFontWeight("bold").setBackground("#e8edf5");
+  }
 }
 
 function stokHareketSatiriNesneYap(row) {
@@ -3758,13 +3762,20 @@ function stokHareketTopluEkle(body) {
   ensureStokHareketBelgeColonlari(sheet);
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
 
+  const genelBelgeTipi = String(body.genelBelgeTipi || "");
   const satirlar = [];
   let eklenen = 0, atlanan = 0;
+  // Devir/Stok Düzeltme girişlerinde satırda Maliyet Fiyatı verilmişse, o ürünün stok
+  // tanımındaki Alış Fiyatı'nı (maliyet) da günceller — açılış/düzeltme anında maliyet
+  // bazının doğru kurulması için.
+  const maliyetGuncellenecek = [];
   kayitlar.forEach((k, idx) => {
     const stokAdi = String(k.stokAdi || k.urunAdi || "").trim();
     const miktar = parseFloat(k.miktar) || 0;
     if (!stokAdi || miktar <= 0) { atlanan++; return; }
     const hareketTipi = String(k.hareketTipi || "") === "Çıkış" ? "Çıkış" : "Giriş";
+    const belgeTipi = String(k.belgeTipi || genelBelgeTipi || "");
+    const maliyetFiyati = parseFloat(k.maliyetFiyati) || 0;
     satirlar.push([
       "sh_" + Date.now() + "_" + idx,
       tarih,
@@ -3776,17 +3787,39 @@ function stokHareketTopluEkle(body) {
       miktar,
       String(k.aciklama || body.genelAciklama || ""),
       kayitTarihi,
-      String(k.belgeTipi || body.genelBelgeTipi || ""),
+      belgeTipi,
       String(k.belgeNo || body.genelBelgeNo || ""),
+      maliyetFiyati,
     ]);
     eklenen++;
+    if (hareketTipi === "Giriş" && maliyetFiyati > 0 && k.stokTanimId && (belgeTipi === "Devir" || belgeTipi === "Stok Düzeltme")) {
+      maliyetGuncellenecek.push({ id: String(k.stokTanimId), alisFiyati: maliyetFiyati });
+    }
   });
 
   if (satirlar.length > 0) {
     sheet.getRange(sheet.getLastRow() + 1, 1, satirlar.length, STOK_HAREKET_BASLIKLAR.length).setValues(satirlar);
   }
+  maliyetGuncellenecek.forEach(m => stokTanimMaliyetGuncelle(m.id, m.alisFiyati));
   cacheTemizle(["stokHareketListesi"]);
   return { ok: true, eklenen: eklenen, atlanan: atlanan };
+}
+
+// Devir/Stok Düzeltme girişinde satırda Maliyet Fiyatı belirtilmişse, saveStokTanim'i
+// (tüm satırı body'den yeniden kuran, bu yüzden burada KULLANILMAMASI gereken) çağırmak
+// yerine SADECE Alış Fiyatı (maliyet) hücresini günceller — diğer alanlar (kod, marka,
+// birim vb.) olduğu gibi korunur.
+function stokTanimMaliyetGuncelle(id, alisFiyati) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) {
+      sheet.getRange(i + 1, 7).setValue(parseFloat(alisFiyati) || 0); // 7. sütun = ALIS_FIYATI
+      cacheTemizle(["stokTanimListesi"]);
+      return;
+    }
+  }
 }
 
 // ════════════════════════════════════════════════
