@@ -553,6 +553,9 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
         <div class="fld" style="max-width:240px"><label>Ürün</label>
           <select id="shr-urun-secim"><option value="">— Tüm ürünler —</option></select>
         </div>
+        <div class="fld" style="max-width:260px"><label>Ara</label>
+          <input type="text" id="shr-arama" placeholder="Ürün, stok kodu, belge no, açıklama..." oninput="stokHareketAramaFiltrele(this.value)">
+        </div>
         <button class="btn btn-primary" onclick="stokHareketRaporuYukle()">Filtrele</button>
         <button class="btn" onclick="stokHareketRaporuTemizle()">Tümü</button>
       </div>
@@ -762,6 +765,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
         <select id="mr-tip-secim" onchange="muhasebeRaporuYukle()">
           <option value="alisFatura">Alış Fatura Raporu</option>
           <option value="satisFatura">Satış Fatura Raporu</option>
+          <option value="kasaRaporu">Kasa Raporu (Nakit)</option>
           <option value="urunBazliHareket">Ürün Bazlı Hareket Raporu</option>
           <option value="urunBazliSiparis">Ürün Bazlı Sipariş Raporu</option>
           <option value="urunBazliFatura">Ürün Bazlı Fatura Raporu</option>
@@ -2010,17 +2014,19 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       <div id="sm-kalemler" style="margin:8px 0"></div>
       <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
 
-      <div class="fld" id="sm-tutar-iskonto-fld" style="max-width:280px;margin-top:12px;display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
-        <label>Tutar İskontosu (₺)</label>
-        <input id="sm-tutar-iskontosu" type="number" min="0" step="0.01" value="${s ? (s.tutarIskontosu||0) : 0}" oninput="satisToplamGuncelle()">
-        <label style="flex-direction:row;align-items:center;gap:6px;text-transform:none;font-size:12px;color:var(--text2);margin-top:6px">
-          <input id="sm-tutar-iskonto-kdv-sonra" type="checkbox" ${!s || s.tutarIskontoKdvSonra?'checked':''} onchange="satisToplamGuncelle()" style="width:auto">
-          KDV'den sonra düş (tik yoksa KDV'den önce düşülür)
-        </label>
-      </div>
+      <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
+        <div class="fld" id="sm-tutar-iskonto-fld" style="flex:1;min-width:220px;max-width:280px;margin-bottom:0;display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
+          <label>Tutar İskontosu (₺)</label>
+          <input id="sm-tutar-iskontosu" type="number" min="0" step="0.01" value="${s ? (s.tutarIskontosu||0) : 0}" oninput="satisToplamGuncelle()">
+          <label style="flex-direction:row;align-items:center;gap:6px;text-transform:none;font-size:12px;color:var(--text2);margin-top:6px">
+            <input id="sm-tutar-iskonto-kdv-sonra" type="checkbox" ${!s || s.tutarIskontoKdvSonra?'checked':''} onchange="satisToplamGuncelle()" style="width:auto">
+            KDV'den sonra düş (tik yoksa KDV'den önce düşülür)
+          </label>
+        </div>
 
-      <div class="fld" style="max-width:220px;margin-top:12px"><label>Dip İskonto (%)</label>
-        <input id="sm-dip-iskonto" type="number" min="0" max="100" step="0.01" value="${s ? (s.dipIskontoYuzde||0) : 0}" oninput="satisToplamGuncelle()">
+        <div class="fld" style="flex:1;min-width:180px;max-width:220px;margin-bottom:0"><label>Dip İskonto (%)</label>
+          <input id="sm-dip-iskonto" type="number" min="0" max="100" step="0.01" value="${s ? (s.dipIskontoYuzde||0) : 0}" oninput="satisToplamGuncelle()">
+        </div>
       </div>
 
       <div id="sm-toplam" class="satis-toplam-detay"></div>
@@ -4215,6 +4221,23 @@ function muhasebeRaporuYukle(){
 
   cariApi("getMuhasebeRaporu", {tip, baslangic, bitis}).then(res=>{
     if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(tip === "kasaRaporu"){
+      if(res.satirlar.length===0){ el.innerHTML = '<div class="cari-empty">Bu aralıkta nakit işlem yok.</div>'; return; }
+      el.innerHTML = `
+        <div class="finans-kartlar">
+          <div class="finans-kart"><div class="lbl">Nakit Giriş</div><div class="num">${paraFormat(res.toplamGiris)}</div></div>
+          <div class="finans-kart"><div class="lbl">Nakit Çıkış</div><div class="num">${paraFormat(res.toplamCikis)}</div></div>
+          <div class="finans-kart"><div class="lbl">Kasa Bakiyesi</div><div class="num">${paraFormat(res.bakiye)}</div></div>
+        </div>
+        <table class="rapor-tbl">
+          <thead><tr><th>Tarih</th><th>Yön</th><th>Kaynak</th><th>Cari</th><th>Tutar</th><th>Açıklama</th></tr></thead>
+          <tbody>
+            ${res.satirlar.map(s=>`
+              <tr><td>${tarihGoster(s.tarih)}</td><td class="${s.yon==='Giriş'?'hk-alacak':'hk-borc'}">${s.yon}</td><td>${s.kaynak}</td><td>${s.cariAd||''}</td><td>${paraFormat(s.tutar)}</td><td>${s.aciklama||''}</td></tr>`).join("")}
+          </tbody>
+        </table>`;
+      return;
+    }
     if(tip === "karZarar"){
       if(res.satirlar.length===0){ el.innerHTML = '<div class="cari-empty">Bu aralıkta satış yok.</div>'; return; }
       el.innerHTML = `
@@ -5513,6 +5536,7 @@ function stokHareketSonrakiNoKullan(mod){
 }
 
 // ── Stok Hareket Raporu ──
+let _shrSonuc = null;
 function stokHareketUrunFiltreDoldur(){
   const sel = document.getElementById("shr-urun-secim");
   if(!sel || sel.dataset.dolduruldu) return;
@@ -5540,26 +5564,63 @@ function stokHareketRaporuYukle(){
   el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getStokHareketListesi", {baslangic, bitis, stokTanimId}).then(res=>{
     if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
-    if(res.hareketler.length===0){ el.innerHTML = '<div class="cari-empty">Bu aralıkta stok hareketi yok.</div>'; return; }
-    el.innerHTML = `
-      <div class="finans-kartlar">
-        <div class="finans-kart"><div class="lbl">Toplam Giriş</div><div class="num">${res.girisToplam}</div></div>
-        <div class="finans-kart"><div class="lbl">Toplam Çıkış</div><div class="num">${res.cikisToplam}</div></div>
-      </div>
-      <table class="rapor-tbl">
-        <thead><tr><th>Tarih</th><th>Stok Kodu</th><th>Ürün</th><th>Tip</th><th>Miktar</th><th>Birim</th><th>Belge Tipi</th><th>Belge No</th><th>Açıklama</th></tr></thead>
-        <tbody>
-          ${res.hareketler.map(h=>`
-            <tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td>${h.hareketTipi}</td><td>${h.miktar}</td><td>${h.birim}</td><td>${h.belgeTipi||''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td></tr>`).join("")}
-        </tbody>
-      </table>`;
+    _shrSonuc = res;
+    stokHareketRaporuCiz();
   }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+
+// belgeTipi'ne göre gerçek bir Satış/Alış/Alış İadesi kaydına bağlı olan hareketlerde
+// "📄 Belgeyi Aç" butonu gösterilebilmesi için kullanılır (manuel Stok Giriş/Çıkış/Toplu
+// Hareket kayıtlarındaki serbest metin belgeNo'larda buton gösterilmez).
+const STOK_HAREKET_BELGE_TIPLERI = {"Satış Faturası":1, "Alış Faturası":1, "Alış İadesi":1};
+
+function stokHareketRaporuCiz(){
+  const el = document.getElementById("shr-icerik");
+  if(!_shrSonuc){ el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>'; return; }
+  const q = (document.getElementById("shr-arama").value || "").trim().toLocaleLowerCase('tr');
+  const hareketler = !q ? _shrSonuc.hareketler : _shrSonuc.hareketler.filter(h =>
+    (h.stokAdi||"").toLocaleLowerCase('tr').includes(q) ||
+    (h.stokKodu||"").toLocaleLowerCase('tr').includes(q) ||
+    (h.belgeNo||"").toLocaleLowerCase('tr').includes(q) ||
+    (h.belgeTipi||"").toLocaleLowerCase('tr').includes(q) ||
+    (h.aciklama||"").toLocaleLowerCase('tr').includes(q)
+  );
+  if(hareketler.length===0){ el.innerHTML = '<div class="cari-empty">'+(q?'Aramayla eşleşen hareket yok.':'Bu aralıkta stok hareketi yok.')+'</div>'; return; }
+  el.innerHTML = `
+    <div class="finans-kartlar">
+      <div class="finans-kart"><div class="lbl">Toplam Giriş</div><div class="num">${_shrSonuc.girisToplam}</div></div>
+      <div class="finans-kart"><div class="lbl">Toplam Çıkış</div><div class="num">${_shrSonuc.cikisToplam}</div></div>
+    </div>
+    <table class="rapor-tbl">
+      <thead><tr><th>Tarih</th><th>Stok Kodu</th><th>Ürün</th><th>Tip</th><th>Miktar</th><th>Birim</th><th>Belge Tipi</th><th>Belge No</th><th>Açıklama</th><th></th></tr></thead>
+      <tbody>
+        ${hareketler.map(h=>{
+          const belgeliMi = STOK_HAREKET_BELGE_TIPLERI[h.belgeTipi] && h.belgeNo;
+          const btn = belgeliMi ? `<button class="btn" style="font-size:11px;padding:4px 8px" onclick="stokHareketBelgeAc('${h.belgeTipi}','${h.belgeNo}')" title="İlgili belgeyi aç">📄 Aç</button>` : "";
+          return `<tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td>${h.hareketTipi}</td><td>${h.miktar}</td><td>${h.birim}</td><td>${h.belgeTipi||''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td><td>${btn}</td></tr>`;
+        }).join("")}
+      </tbody>
+    </table>`;
+}
+
+function stokHareketAramaFiltrele(){
+  stokHareketRaporuCiz();
+}
+
+// Stok Hareket Raporu satırındaki "📄 Aç" butonu — belgeTipi'ne göre ilgili Satış/Alış/
+// Alış İadesi kaydını kendi modülünde detay görünümünde açar (bkz. cariHareketIslemeGit
+// ile aynı yönlendirme mantığı).
+function stokHareketBelgeAc(belgeTipi, belgeNo){
+  if(belgeTipi === "Satış Faturası"){ modulAc("satis"); satisAc(belgeNo); }
+  else if(belgeTipi === "Alış Faturası"){ modulAc("alis"); alisAltModulAc("giris"); alisAc(belgeNo); }
+  else if(belgeTipi === "Alış İadesi"){ modulAc("alis"); alisAltModulAc("iade"); alisIadeAc(belgeNo); }
 }
 
 function stokHareketRaporuTemizle(){
   document.getElementById("shr-baslangic").value = "";
   document.getElementById("shr-bitis").value = "";
   document.getElementById("shr-urun-secim").value = "";
+  document.getElementById("shr-arama").value = "";
   stokHareketRaporuYukle();
 }
 </script>

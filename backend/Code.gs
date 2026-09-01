@@ -2755,6 +2755,68 @@ function getMuhasebeRaporu(body) {
   }
   const ss = SpreadsheetApp.openById(SHEET_ID);
 
+  if (tip === "kasaRaporu") {
+    const satirlar = [];
+    let toplamGiris = 0, toplamCikis = 0;
+
+    const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+    ensureSatisBelgeTipiColonu(sSheet);
+    const sData = sSheet.getDataRange().getValues();
+    for (let i = 1; i < sData.length; i++) {
+      const row = sData[i];
+      if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
+      const belgeTipi = String(row[8] || "") || "Fatura";
+      if (belgeTipi !== "Fatura" || String(row[5] || "") !== "Nakit") continue;
+      const tutar = parseFloat(row[4]) || 0;
+      toplamGiris += tutar;
+      satirlar.push({ id: String(row[0]), tarih: hucreTarihStr(row[1]), yon: "Giriş", kaynak: "Satış Faturası",
+        cariAd: String(row[3] || ""), tutar: tutar, aciklama: String(row[6] || "") });
+    }
+
+    const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+    const aData = aSheet.getDataRange().getValues();
+    for (let i = 1; i < aData.length; i++) {
+      const row = aData[i];
+      if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
+      if (String(row[5] || "") !== "Nakit") continue;
+      const tutar = parseFloat(row[4]) || 0;
+      toplamCikis += tutar;
+      satirlar.push({ id: String(row[0]), tarih: hucreTarihStr(row[1]), yon: "Çıkış", kaynak: "Alış Faturası",
+        cariAd: String(row[3] || ""), tutar: tutar, aciklama: String(row[6] || "") });
+    }
+
+    const tSheet = getOrCreateSheet(ss, SHEETS.tahsilatlar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI","POS_HESAP_ID"]);
+    const tData = tSheet.getDataRange().getValues();
+    for (let i = 1; i < tData.length; i++) {
+      const row = tData[i];
+      if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
+      if (String(row[5] || "") !== "Nakit") continue;
+      const tutar = parseFloat(row[4]) || 0;
+      toplamGiris += tutar;
+      satirlar.push({ id: String(row[0]), tarih: hucreTarihStr(row[1]), yon: "Giriş", kaynak: "Tahsilat",
+        cariAd: String(row[3] || ""), tutar: tutar, aciklama: String(row[6] || "") });
+    }
+
+    const oSheet = getOrCreateSheet(ss, SHEETS.odemeler,
+      ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI","POS_HESAP_ID","BANKA_HESAP_ID"]);
+    const oData = oSheet.getDataRange().getValues();
+    for (let i = 1; i < oData.length; i++) {
+      const row = oData[i];
+      if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
+      if (String(row[5] || "") !== "Nakit") continue;
+      const tutar = parseFloat(row[4]) || 0;
+      toplamCikis += tutar;
+      satirlar.push({ id: String(row[0]), tarih: hucreTarihStr(row[1]), yon: "Çıkış", kaynak: "Ödeme",
+        cariAd: String(row[3] || ""), tutar: tutar, aciklama: String(row[6] || "") });
+    }
+
+    satirlar.sort((a, b) => a.tarih < b.tarih ? 1 : (a.tarih > b.tarih ? -1 : 0));
+    return { ok: true, tip: tip, satirlar: satirlar, toplamGiris: toplamGiris, toplamCikis: toplamCikis, bakiye: toplamGiris - toplamCikis };
+  }
+
   if (tip === "alisFatura") {
     const sheet = getOrCreateSheet(ss, SHEETS.alislar,
       ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
