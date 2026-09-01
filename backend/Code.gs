@@ -4221,36 +4221,45 @@ function basitTanimSiraGuncelle(body) {
 // ilk 2 hanesiyle EŞLEŞMESİ ÖNERİLEN bir referans kaydıdır — Stok Kodu
 // serbest metin olarak kalır, otomatik senkronize edilmez.)
 // ════════════════════════════════════════════════
-const MARKA_BASLIKLAR = ["ID", "KOD", "AD", "SIRA"];
+const MARKA_BASLIKLAR = ["ID", "KOD", "AD", "SIRA", "RENK"];
 
 function getMarkaListesi() {
   return cacheOkuVeyaHesapla("markaListesi", 300, function () {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const sheet = getOrCreateSheet(ss, SHEETS.markalar, MARKA_BASLIKLAR);
+    ensureMarkaRenkKolonu(sheet);
     const data = sheet.getDataRange().getValues();
     const sonuc = [];
     for (let i = 1; i < data.length; i++) {
       if (!data[i][0]) continue;
-      sonuc.push({ id: String(data[i][0]), kod: String(data[i][1] || ""), ad: String(data[i][2] || ""), sira: parseFloat(data[i][3]) || 0 });
+      sonuc.push({ id: String(data[i][0]), kod: String(data[i][1] || ""), ad: String(data[i][2] || ""), sira: parseFloat(data[i][3]) || 0, renk: String(data[i][4] || "") });
     }
     return { ok: true, markalar: siraliDizile(sonuc) };
   });
 }
 
-// body: { id (varsa güncelleme), kod, ad }
+// Eski kayıtlarda RENK sütunu olmayabilir (özellik sonradan eklendi) — sheet'i
+// gerektiğinde 5. sütun (RENK) ile tamamlar, mevcut veriye dokunmaz.
+function ensureMarkaRenkKolonu(sheet) {
+  if (sheet.getLastColumn() < 5) sheet.getRange(1, 5).setValue("RENK");
+}
+
+// body: { id (varsa güncelleme), kod, ad, renk (opsiyonel, #rrggbb) }
 function saveMarka(body) {
   const ad = String(body.ad || "").trim();
   if (!ad) return { ok: false, hata: "Marka adı gerekli" };
   const kod = String(body.kod || "").trim().toUpperCase().slice(0, 2);
   if (kod.length !== 2) return { ok: false, hata: "Marka kodu 2 karakter olmalı" };
+  const renk = String(body.renk || "").trim();
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.markalar, MARKA_BASLIKLAR);
+  ensureMarkaRenkKolonu(sheet);
   const data = sheet.getDataRange().getValues();
   let id = String(body.id || "").trim();
   if (id) {
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === id) {
-        sheet.getRange(i + 1, 1, 1, 3).setValues([[id, kod, ad]]);
+        sheet.getRange(i + 1, 1, 1, 5).setValues([[id, kod, ad, data[i][3], renk]]);
         cacheTemizle(["markaListesi"]);
         return { ok: true, id: id };
       }
@@ -4258,7 +4267,7 @@ function saveMarka(body) {
   }
   const maxSira = data.slice(1).reduce((m, r) => Math.max(m, parseFloat(r[3]) || 0), 0);
   id = "mrk_" + Date.now();
-  sheet.appendRow([id, kod, ad, maxSira + 1]);
+  sheet.appendRow([id, kod, ad, maxSira + 1, renk]);
   cacheTemizle(["markaListesi"]);
   return { ok: true, id: id };
 }

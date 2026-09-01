@@ -269,6 +269,10 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .rapor-tbl{width:100%;border-collapse:collapse;margin-top:10px;margin-bottom:24px}
 .rapor-tbl th{text-align:left;font-size:11px;color:var(--text3);text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--border)}
 .rapor-tbl td{padding:8px;border-bottom:1px solid var(--border);font-size:13px}
+.rapor-tbl th.siralanabilir{cursor:pointer;user-select:none;white-space:nowrap}
+.rapor-tbl th.siralanabilir:hover{color:var(--text1)}
+.rapor-tbl th.siralanabilir .ok{opacity:.5;margin-left:2px}
+.rapor-tbl th.siralanabilir.aktif .ok{opacity:1;color:var(--accent)}
 .rapor-baslik{font-size:14px;font-weight:800;margin:20px 0 4px}
 .modtile{cursor:grab}
 .modtile.surukleniyor{opacity:.35}
@@ -346,7 +350,18 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
     <div id="stok-islemler-secim" class="finans-panel" style="display:none">
       <button class="cari-back-btn" style="display:inline-flex" onclick="stokAnaSecimeDon()">← Stok seçimine dön</button>
       <div class="rapor-baslik" style="margin-top:10px">İşlemler</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Satış/Alış faturalarındaki stok hareketleri otomatik işlenir. Bu bölüm, sisteme yeni geçişte açılış (devir) bakiyesi girmek veya sayım/fire sonrası stok düzeltmesi yapmak gibi elle müdahale gereken durumlar içindir.</p>
       <div class="modgrid" style="margin-top:14px">
+        <div class="modtile" onclick="stokHareketFormAc('giris','Devir')">
+          <span class="ic">📥</span>
+          <div class="lbl">Devir Girişi</div>
+          <div class="desc">Sisteme ilk geçişte ürünlerin mevcut (açılış) stoğunu topluca gir</div>
+        </div>
+        <div class="modtile" onclick="stokHareketFormAc('toplu','Stok Düzeltme')">
+          <span class="ic">🛠️</span>
+          <div class="lbl">Stok Düzeltme</div>
+          <div class="desc">Sayım farkı, fire, kayıp/bulunan ürün gibi düzeltme girişleri (giriş+çıkış aynı ekranda)</div>
+        </div>
         <div class="modtile" onclick="stokHareketFormAc('giris')">
           <span class="ic">⬇️</span>
           <div class="lbl">Stok Giriş Hareketi</div>
@@ -475,6 +490,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
       <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
         <div style="width:90px"><label>Kod (2 hane)</label><input id="marka-yeni-kod" type="text" maxlength="2" placeholder="AR" style="text-transform:uppercase"></div>
         <div style="flex:1"><label>Marka Adı</label><input id="marka-yeni-ad" type="text" placeholder="Örn. Arçelik"></div>
+        <div style="width:70px"><label>Renk</label><input id="marka-yeni-renk" type="color" value="#3b82f6" style="width:100%;height:34px;padding:2px;cursor:pointer"></div>
         <button class="btn btn-primary" onclick="markaEkleUI()">+ Ekle</button>
       </div>
       <div id="marka-liste" style="margin-top:12px"></div>
@@ -1082,6 +1098,22 @@ function cariApi(action, params){
 function paraFormat(n){
   const sign = n < 0 ? "-" : "";
   return sign + Math.abs(n).toLocaleString("tr-TR", {minimumFractionDigits:2, maximumFractionDigits:2}) + "\u00A0₺";
+}
+
+// Miktar (ürün adedi/ölçüsü) gösterimi — virgülden sonra 4 hane (Sipariş/Teklif/Fatura/
+// Alış/Alış İade/Stok Hareket kalemlerinde). Alt hesaplamalar (ara toplam, kdv, genel
+// toplam) hâlâ paraFormat ile 2 hane gösterilir, bu fonksiyon SADECE miktar alanı içindir.
+function miktarFormat(n){
+  n = parseFloat(n) || 0;
+  return n.toLocaleString("tr-TR", {minimumFractionDigits:0, maximumFractionDigits:4});
+}
+
+// Birim (ürün) fiyatı gösterimi — virgülden sonra 4 hane + ₺. Ara toplam/Kdv/Genel
+// Toplam gibi belge alt hesaplamaları bunu KULLANMAZ, onlar paraFormat (2 hane) kullanır.
+function fiyatFormat(n){
+  const num = parseFloat(n) || 0;
+  const sign = num < 0 ? "-" : "";
+  return sign + Math.abs(num).toLocaleString("tr-TR", {minimumFractionDigits:2, maximumFractionDigits:4}) + "\u00A0₺";
 }
 
 // Genel tarih gösterim biçimi: gün/ay/yıl [saat:dakika] (uygulama genelinde kullanılır).
@@ -1835,10 +1867,10 @@ function satisDetayCiz(res){
           <tr>
             <td>${k.stokKodu||'—'}</td>
             <td>${k.urunAdi}</td>
-            <td>${k.miktar}</td>
-            ${siparis?`<td>${k.faturalananMiktar||0}</td><td class="${k.kalanMiktar>0?'hk-borc':'hk-alacak'}">${k.kalanMiktar}</td>`:''}
+            <td>${miktarFormat(k.miktar)}</td>
+            ${siparis?`<td>${miktarFormat(k.faturalananMiktar||0)}</td><td class="${k.kalanMiktar>0?'hk-borc':'hk-alacak'}">${miktarFormat(k.kalanMiktar)}</td>`:''}
             <td>${k.birim}</td>
-            <td>${paraFormat(k.birimFiyat)}</td>
+            <td>${fiyatFormat(k.birimFiyat)}</td>
             <td>${k.iskontoYuzde||0}</td>
             <td>${k.kdvOrani===undefined?20:k.kdvOrani}</td>
             <td>${paraFormat(k.tutar)}</td>
@@ -1943,8 +1975,8 @@ function satisFisYazdir(id){
         <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th></tr></thead>
         <tbody>
           ${kalemler.map(k=>`<tr>
-            <td>${k.stokKodu||'—'}</td><td>${k.urunAdi}</td><td>${k.miktar}</td><td>${k.birim}</td>
-            <td>${paraFormat(k.birimFiyat)}</td><td>${k.iskontoYuzde||0}</td>
+            <td>${k.stokKodu||'—'}</td><td>${k.urunAdi}</td><td>${miktarFormat(k.miktar)}</td><td>${k.birim}</td>
+            <td>${fiyatFormat(k.birimFiyat)}</td><td>${k.iskontoYuzde||0}</td>
             <td>${k.kdvOrani===undefined?20:k.kdvOrani}</td><td>${paraFormat(k.tutar)}</td>
           </tr>`).join("")}
         </tbody>
@@ -2239,9 +2271,9 @@ function satisKalemlerCiz(){
         <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniSatisKalemleri[${idx}].urunAdi=s.stokAdi; _yeniSatisKalemleri[${idx}].stokKodu=s.stokKodu||''; _yeniSatisKalemleri[${idx}].birim=s.birim1||'adet'; if(s.satisFiyati) _yeniSatisKalemleri[${idx}].birimFiyat=s.satisFiyati; if(s.satisIskontosu) _yeniSatisKalemleri[${idx}].iskontoYuzde=s.satisIskontosu; satisKalemlerCiz(); })">🔍</button>
         <div id="urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
-      <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="satisKalemAlanDegisti(${idx},'miktar',this.value)">
+      <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="satisKalemAlanDegisti(${idx},'miktar',this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `satisKalemAlanDegisti(${idx},'birim',this.value)`)}
-      <input class="satis-kalem-fiyat" type="number" min="0" step="0.01" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="satisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
+      <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="satisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
       <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="İskonto %" placeholder="İsk.%" value="${k.iskontoYuzde||0}" oninput="satisKalemAlanDegisti(${idx},'iskontoYuzde',this.value)">
       <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="KDV %" placeholder="Kdv%" value="${k.kdvOrani===undefined?20:k.kdvOrani}" oninput="satisKalemAlanDegisti(${idx},'kdvOrani',this.value)">
       ${siparis ? `<span class="satis-kalem-paket" id="sm-paket-${idx}" title="Ambalaj Tanımlama'ya göre gerekli paket/kutu sayısı">${siparisPaketBilgisi(k)}</span>` : ''}
@@ -2526,9 +2558,9 @@ function alisDetayCiz(res){
           <tr>
             <td>${k.stokKodu||'—'}</td>
             <td>${k.urunAdi}</td>
-            <td>${k.miktar}</td>
+            <td>${miktarFormat(k.miktar)}</td>
             <td>${k.birim}</td>
-            <td>${paraFormat(k.birimFiyat)}</td>
+            <td>${fiyatFormat(k.birimFiyat)}</td>
             <td>${paraFormat(k.tutar)}</td>
           </tr>`).join("")}
       </tbody>
@@ -2680,9 +2712,9 @@ function alisKalemlerCiz(){
         <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniAlisKalemleri[${idx}].urunAdi=s.stokAdi; _yeniAlisKalemleri[${idx}].birim=s.birim1||'adet'; if(s.alisFiyati) _yeniAlisKalemleri[${idx}].birimFiyat=s.alisFiyati; alisKalemlerCiz(); })">🔍</button>
         <div id="alis-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
-      <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="alisKalemAlanDegisti(${idx},'miktar',this.value)">
+      <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="alisKalemAlanDegisti(${idx},'miktar',this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `alisKalemAlanDegisti(${idx},'birim',this.value)`)}
-      <input class="satis-kalem-fiyat" type="number" min="0" step="0.01" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
+      <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
       ${_yeniAlisKalemleri.length>1 ? `<span class="hk-sil" onclick="alisKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
   alisToplamGuncelle();
@@ -2841,9 +2873,9 @@ function alisIadeDetayCiz(res){
         ${kalemler.map(k=>`
           <tr>
             <td>${k.urunAdi}</td>
-            <td>${k.miktar}</td>
+            <td>${miktarFormat(k.miktar)}</td>
             <td>${k.birim}</td>
-            <td>${paraFormat(k.birimFiyat)}</td>
+            <td>${fiyatFormat(k.birimFiyat)}</td>
             <td>${paraFormat(k.tutar)}</td>
           </tr>`).join("")}
       </tbody>
@@ -2977,9 +3009,9 @@ function alisIadeKalemlerCiz(){
         <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniAlisIadeKalemleri[${idx}].urunAdi=s.stokAdi; _yeniAlisIadeKalemleri[${idx}].birim=s.birim1||'adet'; if(s.alisFiyati) _yeniAlisIadeKalemleri[${idx}].birimFiyat=s.alisFiyati; alisIadeKalemlerCiz(); })">🔍</button>
         <div id="aim-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
-      <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="alisIadeKalemAlanDegisti(${idx},'miktar',this.value)">
+      <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="alisIadeKalemAlanDegisti(${idx},'miktar',this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `alisIadeKalemAlanDegisti(${idx},'birim',this.value)`)}
-      <input class="satis-kalem-fiyat" type="number" min="0" step="0.01" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisIadeKalemAlanDegisti(${idx},'birimFiyat',this.value)">
+      <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisIadeKalemAlanDegisti(${idx},'birimFiyat',this.value)">
       ${_yeniAlisIadeKalemleri.length>1 ? `<span class="hk-sil" onclick="alisIadeKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
   alisIadeToplamGuncelle();
@@ -4331,7 +4363,7 @@ function raporYukle(){
         <thead><tr><th>Ürün</th><th>Miktar</th><th>Toplam Tutar</th></tr></thead>
         <tbody>
           ${res.enCokSatilanlar.map(u=>`
-            <tr><td>${u.urunAdi}</td><td>${u.miktar}</td><td>${paraFormat(u.tutar)}</td></tr>`).join("")}
+            <tr><td>${u.urunAdi}</td><td>${miktarFormat(u.miktar)}</td><td>${paraFormat(u.tutar)}</td></tr>`).join("")}
         </tbody>
       </table>`}
     `;
@@ -4468,7 +4500,7 @@ function muhasebeRaporuYukle(){
           <thead><tr><th>Ürün</th><th>Miktar</th><th>Satış Tutarı</th><th>Maliyet</th><th>Kâr</th></tr></thead>
           <tbody>
             ${res.satirlar.map(s=>`
-              <tr><td>${s.urunAdi}${s.maliyetBilinmiyor?' ⚠️':''}</td><td>${s.miktar}</td><td>${paraFormat(s.satisTutari)}</td><td>${paraFormat(s.maliyet)}</td><td>${paraFormat(s.kar)}</td></tr>`).join("")}
+              <tr><td>${s.urunAdi}${s.maliyetBilinmiyor?' ⚠️':''}</td><td>${miktarFormat(s.miktar)}</td><td>${paraFormat(s.satisTutari)}</td><td>${paraFormat(s.maliyet)}</td><td>${paraFormat(s.kar)}</td></tr>`).join("")}
           </tbody>
         </table>`;
       return;
@@ -5130,26 +5162,37 @@ function markaListesiCiz(){
   const el = document.getElementById("marka-liste");
   if(!el) return;
   if(_markaListe.length===0){ el.innerHTML = '<div class="cari-empty">Henüz marka tanımlanmadı.</div>'; return; }
-  el.innerHTML = _markaListe.map((m,idx)=>`
-    <div class="satis-kalem-satir" style="justify-content:space-between" id="marka-satir-${m.id}">
-      <span style="display:flex;flex-direction:column;gap:0">
-        <span class="hk-sil" style="font-size:11px;${idx===0?'opacity:.25;pointer-events:none':''}" onclick="markaSiraTasi(${idx},-1)" title="Yukarı taşı">▲</span>
-        <span class="hk-sil" style="font-size:11px;${idx===_markaListe.length-1?'opacity:.25;pointer-events:none':''}" onclick="markaSiraTasi(${idx},1)" title="Aşağı taşı">▼</span>
-      </span>
-      <span style="width:34px;font-weight:700;color:var(--blue)">${m.kod}</span>
-      <span style="flex:1" id="marka-metin-${m.id}">${m.ad}</span>
-      <span class="hk-sil" onclick="markaDuzenleAc('${m.id}')" title="Düzenle">✏️</span>
-      <span class="hk-sil" onclick="markaSilOnay('${m.id}')" title="Sil">🗑</span>
-    </div>`).join("");
+  el.innerHTML = `
+    <table class="rapor-tbl">
+      <thead><tr><th style="width:70px"></th><th>Marka Kodu</th><th>Marka</th><th>Renk</th><th style="width:90px"></th></tr></thead>
+      <tbody>
+        ${_markaListe.map((m,idx)=>`
+        <tr id="marka-satir-${m.id}">
+          <td>
+            <span class="hk-sil" style="font-size:11px;${idx===0?'opacity:.25;pointer-events:none':''}" onclick="markaSiraTasi(${idx},-1)" title="Yukarı taşı">▲</span>
+            <span class="hk-sil" style="font-size:11px;margin-left:4px;${idx===_markaListe.length-1?'opacity:.25;pointer-events:none':''}" onclick="markaSiraTasi(${idx},1)" title="Aşağı taşı">▼</span>
+          </td>
+          <td style="font-weight:700;color:var(--blue)">${m.kod}</td>
+          <td id="marka-metin-${m.id}">${m.ad}</td>
+          <td><span style="display:inline-block;width:20px;height:20px;border-radius:5px;border:1px solid var(--border);background:${m.renk||'transparent'}" title="${m.renk||'Renk tanımlanmadı'}"></span></td>
+          <td>
+            <span class="hk-sil" onclick="markaDuzenleAc('${m.id}')" title="Düzenle">✏️</span>
+            <span class="hk-sil" onclick="markaSilOnay('${m.id}')" title="Sil">🗑</span>
+          </td>
+        </tr>`).join("")}
+      </tbody>
+    </table>`;
 }
 function markaEkleUI(){
   const kodInput = document.getElementById("marka-yeni-kod");
   const adInput = document.getElementById("marka-yeni-ad");
+  const renkInput = document.getElementById("marka-yeni-renk");
   const kod = kodInput.value.trim();
   const ad = adInput.value.trim();
+  const renk = renkInput ? renkInput.value : "";
   if(!ad){ alert("Marka adı girin"); return; }
   if(kod.length!==2){ alert("Marka kodu tam 2 karakter olmalı"); return; }
-  cariApi("saveMarka", {kod, ad}).then(res=>{
+  cariApi("saveMarka", {kod, ad, renk}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     kodInput.value = ""; adInput.value = "";
     markaListesiYukle();
@@ -5158,21 +5201,26 @@ function markaEkleUI(){
 function markaDuzenleAc(id){
   const m = _markaListe.find(x=>x.id===id);
   if(!m) return;
-  const el = document.getElementById("marka-metin-"+id);
-  if(!el) return;
-  el.outerHTML = `<span style="flex:1;display:flex;gap:6px">
-    <input id="marka-duzenle-kod-${id}" type="text" maxlength="2" value="${m.kod}" style="width:46px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);text-transform:uppercase">
-    <input id="marka-duzenle-ad-${id}" type="text" value="${m.ad}" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2)">
-    <button class="btn btn-primary" style="padding:4px 10px" onclick="markaDuzenleKaydet('${id}')">Kaydet</button>
-    <button class="btn" style="padding:4px 10px" onclick="markaListesiCiz()">Vazgeç</button>
-  </span>`;
+  const satir = document.getElementById("marka-satir-"+id);
+  if(!satir) return;
+  satir.innerHTML = `
+    <td></td>
+    <td><input id="marka-duzenle-kod-${id}" type="text" maxlength="2" value="${m.kod}" style="width:46px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);text-transform:uppercase"></td>
+    <td><input id="marka-duzenle-ad-${id}" type="text" value="${m.ad}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2)"></td>
+    <td><input id="marka-duzenle-renk-${id}" type="color" value="${m.renk||'#3b82f6'}" style="width:44px;height:32px;padding:2px;cursor:pointer"></td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-primary" style="padding:4px 10px" onclick="markaDuzenleKaydet('${id}')">Kaydet</button>
+      <button class="btn" style="padding:4px 10px" onclick="markaListesiCiz()">Vazgeç</button>
+    </td>`;
 }
 function markaDuzenleKaydet(id){
   const kod = document.getElementById("marka-duzenle-kod-"+id).value.trim();
   const ad = document.getElementById("marka-duzenle-ad-"+id).value.trim();
+  const renkEl = document.getElementById("marka-duzenle-renk-"+id);
+  const renk = renkEl ? renkEl.value : "";
   if(!ad){ alert("Marka adı girin"); return; }
   if(kod.length!==2){ alert("Marka kodu tam 2 karakter olmalı"); return; }
-  cariApi("saveMarka", {id, kod, ad}).then(res=>{
+  cariApi("saveMarka", {id, kod, ad, renk}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     markaListesiYukle();
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
@@ -5415,32 +5463,40 @@ function stokTanimModalAc(editId){
   const secenekHtml = (liste, seciliId) => '<option value="">— Seçiniz —</option>' +
     (liste||[]).map(x=>`<option value="${x.id}" ${seciliId===x.id?'selected':''}>${x.kod?x.kod+' — ':''}${x.ad}</option>`).join("");
   overlay.innerHTML = `
-    <div class="modal-box modal-box-wide">
+    <div class="modal-box modal-box-xwide">
       <h3>${k ? 'Stok Tanımını Düzenle' : 'Yeni Stok Tanımı'}</h3>
-      <div class="fld"><label>Stok Kodu</label><input id="st-stokkodu" type="text" value="${k?k.stokKodu:''}" placeholder="İsteğe bağlı (ilk 2 hane marka kodu olarak kullanılır)"></div>
-      <div class="fld"><label>Stok Adı *</label><input id="st-stokadi" type="text" value="${k?k.stokAdi:''}"></div>
-      <div class="fld"><label>1. Birim</label>
-        <select id="st-birim1">
-          ${(()=>{ const d=k?k.birim1:'adet'; const ads=(_birimListe||[]).map(b=>b.ad); const secenekler=ads.slice(); if(d && !secenekler.includes(d)) secenekler.unshift(d); if(secenekler.length===0) secenekler.push('adet'); return secenekler.map(ad=>`<option value="${ad}" ${ad===d?'selected':''}>${ad}</option>`).join(''); })()}
-        </select>
+      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Stok Kodu</label><input id="st-stokkodu" type="text" value="${k?k.stokKodu:''}" placeholder="İsteğe bağlı (ilk 2 hane marka kodu)"></div>
+        <div class="fld" style="flex:2;min-width:220px;margin-bottom:0"><label>Stok Adı *</label><input id="st-stokadi" type="text" value="${k?k.stokAdi:''}"></div>
+        <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Barkod</label><input id="st-barkod" type="text" value="${k?k.barkod||'':''}" placeholder="İsteğe bağlı"></div>
       </div>
-      <div class="fld"><label>Ambalaj Miktarı <span style="font-weight:400;color:var(--text3)">(1 ambalajın 1. Birim cinsinden karşılığı, örn. 1 kutu = 1,44)</span></label><input id="st-ambalajmiktar" type="number" min="0" step="0.01" value="${k?k.ambalajMiktari:''}"></div>
-      <div class="fld"><label>Ambalaj Birimi</label>
-        <select id="st-ambalajbirimi">
-          ${(()=>{ const d=k?k.ambalajBirimi:''; const ads=(_tanimListeCache.ambalaj||[]).map(a=>a.ad); const secenekler=ads.slice(); if(d && !secenekler.includes(d)) secenekler.unshift(d); return '<option value="">— Seçiniz —</option>' + secenekler.map(ad=>`<option value="${ad}" ${ad===d?'selected':''}>${ad}</option>`).join(''); })()}
-        </select>
+      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>1. Birim</label>
+          <select id="st-birim1">
+            ${(()=>{ const d=k?k.birim1:'adet'; const ads=(_birimListe||[]).map(b=>b.ad); const secenekler=ads.slice(); if(d && !secenekler.includes(d)) secenekler.unshift(d); if(secenekler.length===0) secenekler.push('adet'); return secenekler.map(ad=>`<option value="${ad}" ${ad===d?'selected':''}>${ad}</option>`).join(''); })()}
+          </select>
+        </div>
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Ambalaj Miktarı</label><input id="st-ambalajmiktar" type="number" min="0" step="0.01" value="${k?k.ambalajMiktari:''}" title="1 ambalajın 1. Birim cinsinden karşılığı, örn. 1 kutu = 1,44"></div>
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Ambalaj Birimi</label>
+          <select id="st-ambalajbirimi">
+            ${(()=>{ const d=k?k.ambalajBirimi:''; const ads=(_tanimListeCache.ambalaj||[]).map(a=>a.ad); const secenekler=ads.slice(); if(d && !secenekler.includes(d)) secenekler.unshift(d); return '<option value="">— Seçiniz —</option>' + secenekler.map(ad=>`<option value="${ad}" ${ad===d?'selected':''}>${ad}</option>`).join(''); })()}
+          </select>
+        </div>
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Minimum Stok Miktarı</label><input id="st-minstok" type="number" min="0" step="1" value="${k?k.minStok||'':''}" placeholder="0 = uyarı kapalı"></div>
       </div>
-      <div class="fld"><label>Alış Fiyatı</label><input id="st-alisfiyat" type="number" min="0" step="0.01" value="${k?k.alisFiyati:''}"></div>
-      <div class="fld"><label>Alış İskontosu (%)</label><input id="st-aliskonto" type="number" min="0" step="0.01" value="${k?k.alisIskontosu:''}"></div>
-      <div class="fld"><label>Satış Fiyatı</label><input id="st-satisfiyat" type="number" min="0" step="0.01" value="${k?k.satisFiyati:''}"></div>
-      <div class="fld"><label>Satış İskontosu (%)</label><input id="st-satisiskonto" type="number" min="0" step="0.01" value="${k?k.satisIskontosu:''}"></div>
-      <div class="fld"><label>Marka</label><select id="st-marka">${secenekHtml(_markaListe, k?k.markaId:'')}</select></div>
-      <div class="fld"><label>Ürün Grubu</label><select id="st-urungrubu">${secenekHtml(_tanimListeCache.urunGrubu, k?k.urunGrubuId:'')}</select></div>
-      <div class="fld"><label>Alt Ürün Grubu</label><select id="st-alturungrubu">${secenekHtml(_tanimListeCache.altUrunGrubu, k?k.altUrunGrubuId:'')}</select></div>
-      <div class="fld"><label>Ebat</label><select id="st-ebat">${secenekHtml(_tanimListeCache.ebat, k?k.ebatId:'')}</select></div>
-      <div class="fld"><label>Renk</label><select id="st-renk">${secenekHtml(_tanimListeCache.renk, k?k.renkId:'')}</select></div>
-      <div class="fld"><label>Barkod</label><input id="st-barkod" type="text" value="${k?k.barkod||'':''}" placeholder="İsteğe bağlı"></div>
-      <div class="fld"><label>Minimum Stok Miktarı</label><input id="st-minstok" type="number" min="0" step="1" value="${k?k.minStok||'':''}" placeholder="0 = uyarı kapalı"></div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Alış Fiyatı</label><input id="st-alisfiyat" type="number" min="0" step="0.0001" value="${k?k.alisFiyati:''}"></div>
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Alış İskontosu (%)</label><input id="st-aliskonto" type="number" min="0" step="0.01" value="${k?k.alisIskontosu:''}"></div>
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Satış Fiyatı</label><input id="st-satisfiyat" type="number" min="0" step="0.0001" value="${k?k.satisFiyati:''}"></div>
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Satış İskontosu (%)</label><input id="st-satisiskonto" type="number" min="0" step="0.01" value="${k?k.satisIskontosu:''}"></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Marka</label><select id="st-marka">${secenekHtml(_markaListe, k?k.markaId:'')}</select></div>
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Ürün Grubu</label><select id="st-urungrubu">${secenekHtml(_tanimListeCache.urunGrubu, k?k.urunGrubuId:'')}</select></div>
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Alt Ürün Grubu</label><select id="st-alturungrubu">${secenekHtml(_tanimListeCache.altUrunGrubu, k?k.altUrunGrubuId:'')}</select></div>
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Ebat</label><select id="st-ebat">${secenekHtml(_tanimListeCache.ebat, k?k.ebatId:'')}</select></div>
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Renk</label><select id="st-renk">${secenekHtml(_tanimListeCache.renk, k?k.renkId:'')}</select></div>
+      </div>
       ${k ? `<div class="btnrow"><button class="btn btn-danger" onclick="stokTanimSilOnay('${k.id}')">🗑 Sil</button></div>` : ''}
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('stoktanim-modal-overlay').remove()">İptal</button>
@@ -5602,16 +5658,21 @@ function stokHareketBosKalem(mod){
     hareketTipi: mod==="cikis" ? "Çıkış" : "Giriş", aciklama:"" };
 }
 
-function stokHareketFormAc(mod){
+function stokHareketFormAc(mod, belgeTipiOnAyar){
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
   if(!_stokHareketKalemleri[mod] || _stokHareketKalemleri[mod].length===0){
     _stokHareketKalemleri[mod] = [stokHareketBosKalem(mod)];
   }
   const bugun = simdiTarihSaat();
-  const baslik = mod==="giris" ? "Stok Giriş Hareketi" : mod==="cikis" ? "Stok Çıkış Hareketi" : "Toplu Stok Hareketi";
-  const aciklama = mod==="giris" ? "Depoya giren ürünleri satır satır ekleyin."
+  const baslikMap = {"Devir":"Devir Girişi", "Stok Düzeltme":"Stok Düzeltme"};
+  const baslik = baslikMap[belgeTipiOnAyar] || (mod==="giris" ? "Stok Giriş Hareketi" : mod==="cikis" ? "Stok Çıkış Hareketi" : "Toplu Stok Hareketi");
+  const aciklamaMap = {
+    "Devir": "Sisteme ilk geçişte ürünlerin mevcut (açılış) stok miktarlarını satır satır girin.",
+    "Stok Düzeltme": "Sayım farkı, fire, kayıp/bulunan ürün gibi durumlarda ilgili satırı Giriş veya Çıkış olarak işaretleyip düzeltmeyi kaydedin."
+  };
+  const aciklama = aciklamaMap[belgeTipiOnAyar] || (mod==="giris" ? "Depoya giren ürünleri satır satır ekleyin."
     : mod==="cikis" ? "Depodan çıkan ürünleri satır satır ekleyin (fire, numune, sayım eksiği vb.)."
-    : "Aynı işlemde hem giriş hem çıkış satırı ekleyebilirsiniz.";
+    : "Aynı işlemde hem giriş hem çıkış satırı ekleyebilirsiniz.");
   document.getElementById("stok-"+mod+"-view").innerHTML = `
     <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('islemler')">← Geri</button>
     <div class="rapor-baslik" style="margin-top:10px">${baslik}</div>
@@ -5621,6 +5682,8 @@ function stokHareketFormAc(mod){
       <div class="fld" style="max-width:200px"><label>Belge Tipi</label>
         <select id="sh-${mod}-belgetipi" onchange="stokHareketBelgeTipiDegisti('${mod}')">
           <option value="">— Seçiniz —</option>
+          <option value="Devir" ${belgeTipiOnAyar==="Devir"?"selected":""}>Devir</option>
+          <option value="Stok Düzeltme" ${belgeTipiOnAyar==="Stok Düzeltme"?"selected":""}>Stok Düzeltme</option>
           <option value="Sipariş">Sipariş</option>
           <option value="Teklif">Teklif</option>
           <option value="Satış Faturası">Satış Faturası</option>
@@ -5671,7 +5734,7 @@ function stokHareketKalemlerCiz(mod){
         <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _stokHareketKalemleri['${mod}'][${idx}].urunAdi=s.stokAdi; _stokHareketKalemleri['${mod}'][${idx}].stokTanimId=s.id; _stokHareketKalemleri['${mod}'][${idx}].stokKodu=s.stokKodu; _stokHareketKalemleri['${mod}'][${idx}].birim=s.birim1||'adet'; stokHareketKalemlerCiz('${mod}'); })">🔍</button>
         <div id="sh-${mod}-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
-      <input class="satis-kalem-miktar" type="number" min="0" step="1" placeholder="Miktar" value="${k.miktar}" oninput="stokHareketAlanDegisti('${mod}',${idx},'miktar',this.value)">
+      <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="stokHareketAlanDegisti('${mod}',${idx},'miktar',this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `stokHareketAlanDegisti('${mod}',${idx},'birim',this.value)`)}
       ${mod==="toplu" ? `
       <select style="max-width:92px;padding:7px 4px;border:1px solid var(--border);border-radius:7px;background:var(--bg3);font-family:inherit;font-size:13px" onchange="stokHareketAlanDegisti('${mod}',${idx},'hareketTipi',this.value)">
@@ -5792,8 +5855,23 @@ function stokHareketRaporuYukle(){
   cariApi("getStokHareketListesi", {baslangic, bitis, stokTanimId}).then(res=>{
     if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _shrSonuc = res;
+    stokHareketKalanHesapla(_shrSonuc.hareketler);
     stokHareketRaporuCiz();
   }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+
+// Her hareket satırına, o ürünün (stokTanimId/stokKodu) o ana kadarki kronolojik
+// GİRİŞ-ÇIKIŞ bakiyesini ".kalan" alanı olarak ekler. Ekranda seçilen sıralama/arama
+// filtresinden bağımsız olarak her zaman gerçek kronolojik sıraya göre hesaplanır.
+function stokHareketKalanHesapla(hareketler){
+  const bakiye = {};
+  hareketler.slice().sort((a,b)=> a.tarih < b.tarih ? -1 : (a.tarih > b.tarih ? 1 : 0))
+    .forEach(h=>{
+      const anahtar = h.stokTanimId || h.stokKodu || h.stokAdi;
+      if(bakiye[anahtar]===undefined) bakiye[anahtar] = 0;
+      bakiye[anahtar] += (h.hareketTipi === "Giriş" ? (parseFloat(h.miktar)||0) : -(parseFloat(h.miktar)||0));
+      h.kalan = bakiye[anahtar];
+    });
 }
 
 // belgeTipi'ne göre gerçek bir Satış/Alış/Alış İadesi kaydına bağlı olan hareketlerde
@@ -5801,11 +5879,33 @@ function stokHareketRaporuYukle(){
 // Hareket kayıtlarındaki serbest metin belgeNo'larda buton gösterilmez).
 const STOK_HAREKET_BELGE_TIPLERI = {"Satış Faturası":1, "Alış Faturası":1, "Alış İadesi":1};
 
+// Stok Hareket Raporu tablosunun sıralama durumu — üst başlığa tıklanınca değişir.
+// Sütun başlıklarına tıklandığında artan/azalan (asc/desc) arasında geçiş yapılır.
+let _shrSirala = { anahtar: "tarih", yon: "desc" };
+const SHR_SUTUNLAR = [
+  { anahtar: "tarih",     baslik: "Tarih",      al: h => h.tarih || "" },
+  { anahtar: "stokKodu",  baslik: "Stok Kodu",  al: h => (h.stokKodu||"").toLocaleLowerCase('tr') },
+  { anahtar: "stokAdi",   baslik: "Ürün",       al: h => (h.stokAdi||"").toLocaleLowerCase('tr') },
+  { anahtar: "giris",     baslik: "Giriş",      al: h => h.hareketTipi==="Giriş" ? (parseFloat(h.miktar)||0) : 0 },
+  { anahtar: "cikis",     baslik: "Çıkış",      al: h => h.hareketTipi==="Çıkış" ? (parseFloat(h.miktar)||0) : 0 },
+  { anahtar: "kalan",     baslik: "Kalan",      al: h => h.kalan||0 },
+  { anahtar: "birim",     baslik: "Birim",      al: h => (h.birim||"").toLocaleLowerCase('tr') },
+  { anahtar: "belgeTipi", baslik: "Belge Tipi", al: h => (h.belgeTipi||"").toLocaleLowerCase('tr') },
+  { anahtar: "belgeNo",   baslik: "Belge No",   al: h => (h.belgeNo||"").toLocaleLowerCase('tr') },
+  { anahtar: "aciklama",  baslik: "Açıklama",   al: h => (h.aciklama||"").toLocaleLowerCase('tr') },
+];
+
+function stokHareketSirala(anahtar){
+  if(_shrSirala.anahtar === anahtar) _shrSirala.yon = (_shrSirala.yon==="asc" ? "desc" : "asc");
+  else _shrSirala = { anahtar, yon: "asc" };
+  stokHareketRaporuCiz();
+}
+
 function stokHareketRaporuCiz(){
   const el = document.getElementById("shr-icerik");
   if(!_shrSonuc){ el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>'; return; }
   const q = (document.getElementById("shr-arama").value || "").trim().toLocaleLowerCase('tr');
-  const hareketler = !q ? _shrSonuc.hareketler : _shrSonuc.hareketler.filter(h =>
+  let hareketler = !q ? _shrSonuc.hareketler : _shrSonuc.hareketler.filter(h =>
     (h.stokAdi||"").toLocaleLowerCase('tr').includes(q) ||
     (h.stokKodu||"").toLocaleLowerCase('tr').includes(q) ||
     (h.belgeNo||"").toLocaleLowerCase('tr').includes(q) ||
@@ -5813,18 +5913,34 @@ function stokHareketRaporuCiz(){
     (h.aciklama||"").toLocaleLowerCase('tr').includes(q)
   );
   if(hareketler.length===0){ el.innerHTML = '<div class="cari-empty">'+(q?'Aramayla eşleşen hareket yok.':'Bu aralıkta stok hareketi yok.')+'</div>'; return; }
+
+  const sutun = SHR_SUTUNLAR.find(s=>s.anahtar===_shrSirala.anahtar) || SHR_SUTUNLAR[0];
+  hareketler = hareketler.slice().sort((a,b)=>{
+    const av = sutun.al(a), bv = sutun.al(b);
+    const cmp = av < bv ? -1 : (av > bv ? 1 : 0);
+    return _shrSirala.yon === "asc" ? cmp : -cmp;
+  });
+
+  const basliklar = SHR_SUTUNLAR.map(s => {
+    const aktif = s.anahtar === _shrSirala.anahtar;
+    const ok = aktif ? (_shrSirala.yon==="asc" ? "▲" : "▼") : "▲";
+    return `<th class="siralanabilir${aktif?' aktif':''}" onclick="stokHareketSirala('${s.anahtar}')">${s.baslik} <span class="ok">${ok}</span></th>`;
+  }).join("") + "<th></th>";
+
   el.innerHTML = `
     <div class="finans-kartlar">
-      <div class="finans-kart"><div class="lbl">Toplam Giriş</div><div class="num">${_shrSonuc.girisToplam}</div></div>
-      <div class="finans-kart"><div class="lbl">Toplam Çıkış</div><div class="num">${_shrSonuc.cikisToplam}</div></div>
+      <div class="finans-kart"><div class="lbl">Toplam Giriş</div><div class="num">${miktarFormat(_shrSonuc.girisToplam)}</div></div>
+      <div class="finans-kart"><div class="lbl">Toplam Çıkış</div><div class="num">${miktarFormat(_shrSonuc.cikisToplam)}</div></div>
     </div>
     <table class="rapor-tbl">
-      <thead><tr><th>Tarih</th><th>Stok Kodu</th><th>Ürün</th><th>Tip</th><th>Miktar</th><th>Birim</th><th>Belge Tipi</th><th>Belge No</th><th>Açıklama</th><th></th></tr></thead>
+      <thead><tr>${basliklar}</tr></thead>
       <tbody>
         ${hareketler.map(h=>{
           const belgeliMi = STOK_HAREKET_BELGE_TIPLERI[h.belgeTipi] && h.belgeNo;
           const btn = belgeliMi ? `<button class="btn" style="font-size:11px;padding:4px 8px" onclick="stokHareketBelgeAc('${h.belgeTipi}','${h.belgeNo}')" title="İlgili belgeyi aç">📄 Aç</button>` : "";
-          return `<tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td>${h.hareketTipi}</td><td>${h.miktar}</td><td>${h.birim}</td><td>${h.belgeTipi||''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td><td>${btn}</td></tr>`;
+          const giris = h.hareketTipi==="Giriş" ? miktarFormat(h.miktar) : "";
+          const cikis = h.hareketTipi==="Çıkış" ? miktarFormat(h.miktar) : "";
+          return `<tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td class="hk-alacak">${giris}</td><td class="hk-borc">${cikis}</td><td>${miktarFormat(h.kalan)}</td><td>${h.birim}</td><td>${h.belgeTipi||''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td><td>${btn}</td></tr>`;
         }).join("")}
       </tbody>
     </table>`;
