@@ -66,6 +66,10 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 .homebtn{margin-left:auto;padding:6px 14px;border:1px solid var(--border);border-radius:20px;background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;display:none;transition:background var(--t),border-color var(--t),color var(--t)}
 .homebtn:hover{background:var(--blue-l);border-color:var(--blue);color:var(--blue)}
 .homebtn.show{display:inline-block}
+#modul-switcher-btn{margin-left:8px}
+.modul-switcher-liste{position:absolute;top:calc(100% + 6px);right:0;background:var(--bg2);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-md,0 6px 20px rgba(0,0,0,.15));min-width:190px;max-height:70vh;overflow-y:auto;z-index:50;padding:4px}
+.modul-switcher-satir{padding:8px 12px;font-size:13px;border-radius:7px;cursor:pointer;white-space:nowrap}
+.modul-switcher-satir:hover{background:var(--blue-l);color:var(--blue)}
 
 /* ── ANA ALAN ── */
 .main{flex:1;overflow:auto;position:relative}
@@ -308,6 +312,10 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
     <input id="global-ara" placeholder="Ürün ara (kod, isim, ebat)..." oninput="globalAraDegisti(this.value)">
   </div>
   <button class="homebtn" id="home-btn" onclick="gitAnaSayfa()">← Ana Sayfa</button>
+  <div id="modul-switcher-wrap" style="position:relative">
+    <button class="homebtn" id="modul-switcher-btn" onclick="modulSwitcherAcKapat(event)" title="Başka bir modülü yeni sekmede aç">⇄ Modül</button>
+    <div id="modul-switcher-liste" class="modul-switcher-liste" style="display:none"></div>
+  </div>
 </div>
 
 <div class="main">
@@ -984,19 +992,53 @@ function modulAc(id){
   const el = document.getElementById("mod-"+id);
   if(el) el.classList.add("active");
   document.getElementById("home-btn").classList.add("show");
+  document.getElementById("modul-switcher-btn").classList.add("show");
   const baslikEl = document.getElementById("sayfa-baslik");
   const modul = MODULLER.find(m=>m.id===id);
   if(baslikEl && modul){ baslikEl.textContent = modul.ic + " " + modul.lbl; baslikEl.classList.add("show"); }
+  // Tarayıcının kendi sekme şeridinde (üst tarafta) bu sekmenin hangi modül olduğu
+  // görünsün diye başlığı güncelliyoruz — birden çok modül farklı sekmelerde açıkken
+  // aralarında ayırt edebilmek için (bkz. modulAcYeniSekme).
+  if(modul) document.title = modul.ic + " " + modul.lbl + " · Fincanlar ERP";
+  modulSwitcherKapat();
 }
 
 function gitAnaSayfa(){
   document.querySelectorAll(".modview").forEach(v=>v.classList.remove("active"));
   document.getElementById("home").style.display = "block";
   document.getElementById("home-btn").classList.remove("show");
+  document.getElementById("modul-switcher-btn").classList.remove("show");
   document.getElementById("global-ara").value = "";
   const baslikEl = document.getElementById("sayfa-baslik");
   if(baslikEl) baslikEl.classList.remove("show");
+  document.title = "Fincanlar ERP";
+  modulSwitcherKapat();
 }
+
+// Bir modülün içindeyken Ana Sayfa'ya dönmeden, doğrudan başka bir modüle YENİ SEKMEDE
+// geçiş yapabilmek için topbar'daki "⇄ Modül" düğmesiyle açılan küçük seçim listesi.
+// Aynı isimli pencere (modulAcYeniSekme) mantığı sayesinde o modül için zaten bir sekme
+// açıksa tarayıcı otomatik o sekmeye geçer, yoksa yeni sekme açılır.
+function modulSwitcherAcKapat(ev){
+  if(ev) ev.stopPropagation();
+  const el = document.getElementById("modul-switcher-liste");
+  if(!el) return;
+  const aciliyor = el.style.display !== "block";
+  if(aciliyor){
+    el.innerHTML = MODULLER.map(m=>`<div class="modul-switcher-satir" onclick="modulAcYeniSekme('${m.id}')">${m.ic} ${m.lbl}</div>`).join("");
+    el.style.display = "block";
+  } else {
+    el.style.display = "none";
+  }
+}
+function modulSwitcherKapat(){
+  const el = document.getElementById("modul-switcher-liste");
+  if(el) el.style.display = "none";
+}
+document.addEventListener("click", (ev)=>{
+  const wrap = document.getElementById("modul-switcher-wrap");
+  if(wrap && !wrap.contains(ev.target)) modulSwitcherKapat();
+});
 
 // Arama kutusuna bir şey yazılınca Stok modülüne geçilir (liste orada, "şimdiki yerinde" açılır).
 let _aramaZamanlayici = null;
