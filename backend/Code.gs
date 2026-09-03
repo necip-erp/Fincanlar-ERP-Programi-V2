@@ -332,6 +332,7 @@ function handleRequest(e) {
       case "getMuhasebeRaporu": result = getMuhasebeRaporu(body); break;
       case "getStokHareketListesi": result = getStokHareketListesi(body); break;
       case "stokHareketGecmisiDoldur": result = stokHareketGecmisiDoldur(); break;
+      case "cariHareketGecmisiDoldur": result = cariHareketGecmisiDoldur(); break;
       case "stokHareketTopluEkle":  result = stokHareketTopluEkle(body); break;
       case "silStokHareket":        result = silStokHareket(body); break;
       case "getSeriTanimlari": result = getSeriTanimlari(); break;
@@ -3653,7 +3654,7 @@ function stokHareketGecmisiDoldur() {
     for (let j = 1; j < skData.length; j++) {
       if (String(skData[j][1]) === sId) {
         kalemler.push({ urunAdi: String(skData[j][2] || ""), miktar: parseFloat(skData[j][3]) || 0,
-          birim: String(skData[j][4] || "adet"), stokKodu: String(skData[j][10] || "") });
+          birim: String(skData[j][4] || "adet"), stokKodu: String(skData[j][10] || ""), birimFiyat: parseFloat(skData[j][5]) || 0 });
       }
     }
     if (kalemler.length) {
@@ -3678,7 +3679,7 @@ function stokHareketGecmisiDoldur() {
     for (let j = 1; j < akData.length; j++) {
       if (String(akData[j][1]) === aId) {
         kalemler.push({ urunAdi: String(akData[j][2] || ""), miktar: parseFloat(akData[j][3]) || 0,
-          birim: String(akData[j][4] || "adet"), stokKodu: String(akData[j][7] || "") });
+          birim: String(akData[j][4] || "adet"), stokKodu: String(akData[j][7] || ""), birimFiyat: parseFloat(akData[j][5]) || 0 });
       }
     }
     if (kalemler.length) {
@@ -3714,6 +3715,90 @@ function stokHareketGecmisiDoldur() {
 
   cacheTemizle(["stokHareketListesi"]);
   return { ok: true, eklenenBelgeSayisi: eklenen };
+}
+
+// ★ ONARIM FONKSİYONU (2 Eyl 2026'da MALIYET_FIYATI kolonu eklenirken oluşan bug için):
+// stokHareketOtomatikYaz o dönemde 12 sütunluk satır yazıp 13 sütunluk aralığa yazmaya
+// çalıştığından hata fırlatıyordu; bu hata Satış/Alış/Alış İade kaydı (başlık+kalemler)
+// SHEET'E YAZILDIKTAN SONRA oluştuğu için o kayıtlar "hata verdi" görünmesine rağmen
+// aslında kısmen kaydedilmiş olabilir: Stok Hareket satırı VE ona bağlı Cari Hareket
+// (Borç/Alacak) hiç oluşmamış olabilir. stokHareketGecmisiDoldur stok tarafını onarıyordu;
+// bu fonksiyon da aynı mantıkla eksik Cari Hareket (Borç/Alacak) kayıtlarını tamamlar.
+// Her belge için CariHareketler'de "PREFIX:id" ile başlayan bir ACIKLAMA zaten var mı diye
+// bakar, yoksa Satış/Alış/Alış İade'deki mevcut TOPLAM_TUTAR'ı kullanarak ekler.
+// Tekrar çalıştırmak güvenlidir (zaten var olan hareketler atlanır).
+function cariHareketGecmisiDoldur() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const hSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
+  const hData = hSheet.getDataRange().getValues();
+  const islenmisSet = {};
+  for (let i = 1; i < hData.length; i++) {
+    const aciklama = String(hData[i][5] || "");
+    const isaret = aciklama.split(" | ")[0]; // örn. "SATIS:st_12345"
+    if (isaret) islenmisSet[isaret] = true;
+  }
+
+  let eklenen = 0;
+
+  // Satış Faturaları (sadece belgeTipi==="Fatura", Sipariş/Teklif hariç)
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  ensureSatisBelgeTipiColonu(sSheet);
+  const sData = sSheet.getDataRange().getValues();
+  for (let i = 1; i < sData.length; i++) {
+    const sId = String(sData[i][0] || "");
+    const cariId = String(sData[i][2] || "");
+    const belgeTipi = String(sData[i][8] || "Fatura");
+    if (!sId || !cariId || belgeTipi !== "Fatura") continue;
+    if (islenmisSet["SATIS:" + sId]) continue;
+    const toplamTutar = parseFloat(sData[i][4]) || 0;
+    if (toplamTutar <= 0) continue;
+    cariHareketEkle({
+      cariId: cariId, tarih: hucreTarihStr(sData[i][1]), tip: "Borç", tutar: toplamTutar,
+      aciklama: cariHareketAciklamaOlustur("SATIS", sId, "satis_" + belgeTipi, String(sData[i][6] || "") + " (geriye dönük onarım)"),
+      vade: String(sData[i][5] || "") === "Açık Hesap" ? hucreTarihStr(sData[i][1]) : "",
+    });
+    eklenen++;
+  }
+
+  // Alış Faturaları
+  const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+  const aData = aSheet.getDataRange().getValues();
+  for (let i = 1; i < aData.length; i++) {
+    const aId = String(aData[i][0] || "");
+    const cariId = String(aData[i][2] || "");
+    if (!aId || !cariId) continue;
+    if (islenmisSet["ALIS:" + aId]) continue;
+    const toplamTutar = parseFloat(aData[i][4]) || 0;
+    if (toplamTutar <= 0) continue;
+    cariHareketEkle({
+      cariId: cariId, tarih: hucreTarihStr(aData[i][1]), tip: "Alacak", tutar: toplamTutar,
+      aciklama: cariHareketAciklamaOlustur("ALIS", aId, "alis", String(aData[i][6] || "") + " (geriye dönük onarım)"),
+    });
+    eklenen++;
+  }
+
+  // Alış İadeleri
+  const aiSheet = getOrCreateSheet(ss, SHEETS.alisIadeler,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
+  const aiData = aiSheet.getDataRange().getValues();
+  for (let i = 1; i < aiData.length; i++) {
+    const aiId = String(aiData[i][0] || "");
+    const cariId = String(aiData[i][2] || "");
+    if (!aiId || !cariId) continue;
+    if (islenmisSet["ALISIADE:" + aiId]) continue;
+    const toplamTutar = parseFloat(aiData[i][4]) || 0;
+    if (toplamTutar <= 0) continue;
+    cariHareketEkle({
+      cariId: cariId, tarih: hucreTarihStr(aiData[i][1]), tip: "Borç", tutar: toplamTutar,
+      aciklama: cariHareketAciklamaOlustur("ALISIADE", aiId, "alisiade", String(aiData[i][5] || "") + " (geriye dönük onarım)"),
+    });
+    eklenen++;
+  }
+
+  cacheTemizle(["cariListesi"]);
+  return { ok: true, eklenenHareketSayisi: eklenen };
 }
 
 // Sheet daha önce BELGE_TIPI/BELGE_NO kolonları olmadan oluşturulmuş olabilir; başlıkları tamamlar.

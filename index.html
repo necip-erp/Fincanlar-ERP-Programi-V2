@@ -5989,11 +5989,15 @@ function stokHareketUrunFiltreDoldur(){
 }
 
 function stokHareketGecmisiDoldurTikla(){
-  if(!confirm("Bu işlem, özellik eklenmeden önce kaydedilmiş TÜM Satış/Alış faturalarını ve Alış İadelerini tarayıp bu rapora geriye dönük olarak işler. Zaten işlenmiş faturalar tekrar eklenmez. Devam edilsin mi?")) return;
+  if(!confirm("Bu işlem, özellik eklenmeden önce kaydedilmiş TÜM Satış/Alış faturalarını ve Alış İadelerini tarayıp bu rapora ve Cari Hareketlere geriye dönük olarak işler (eksik Stok Hareket VE eksik Borç/Alacak kayıtları tamamlanır). Zaten işlenmiş olanlar tekrar eklenmez. Devam edilsin mi?")) return;
   cariApi("stokHareketGecmisiDoldur").then(res=>{
-    if(!res.ok){ alert("Hata: "+(res.hata||res.error||"bilinmiyor")); return; }
-    alert((res.eklenenBelgeSayisi||0)+" belge işlendi.");
-    stokHareketRaporuYukle();
+    if(!res.ok){ alert("Hata (stok hareket): "+(res.hata||res.error||"bilinmiyor")); return; }
+    return cariApi("cariHareketGecmisiDoldur").then(res2=>{
+      if(!res2.ok){ alert("Stok hareket tamamlandı ("+(res.eklenenBelgeSayisi||0)+" belge) ama Cari Hareket onarımında hata: "+(res2.hata||res2.error||"bilinmiyor")); return; }
+      alert("Tamamlandı — Stok Hareket: "+(res.eklenenBelgeSayisi||0)+" belge işlendi. Cari Hareket: "+(res2.eklenenHareketSayisi||0)+" eksik Borç/Alacak kaydı tamamlandı.");
+      stokHareketRaporuYukle();
+      cariListesiYukle();
+    });
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
