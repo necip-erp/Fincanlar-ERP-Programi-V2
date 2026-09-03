@@ -367,6 +367,7 @@ function handleRequest(e) {
       case "vadesiGecmisAlacaklar": result = vadesiGecmisAlacaklar(); break;
       case "getCekSenetListesi": result = getCekSenetListesi(); break;
       case "getBekleyenAlisFaturalari": result = getBekleyenAlisFaturalari(); break;
+      case "getFaturaOrijinalHtml": result = getFaturaOrijinalHtml(body.faturaNo); break;
       case "getSiparisDurumlari": result = getSiparisDurumlari(); break;
       case "saveSiparisDurumlari": result = saveSiparisDurumlari(body); break;
       case "onaylaAlisFaturasi": result = onaylaAlisFaturasi(body); break;
@@ -2525,6 +2526,27 @@ function cekSenetDurumGuncelle(body) {
 // Onaylandı/Reddedildi olarak işaretlenip bekleyen listeden düşer.
 // ════════════════════════════════════════════════
 const DIS_FIYAT_SHEET_ID  = "19t4MsvudC8X7knZ_dymBm5fghcbZcpAMwOmUXZxDPPQ";
+// ★ DÜZELTME (kullanıcı bildirimi: "Faturayı Gör" linki programdan tıklanınca açılmıyor,
+// kopyala-yapıştır çalışıyor): tarayıcı script.google.com linkine giderken bazen tarayıcıdaki
+// aktif Google hesabına göre (/u/1/ gibi) yönlendiriyor, o hesabın erişimi olmadığından
+// Drive'ın genel "dosya açılamıyor" hatası çıkıyor. Çözüm: tarayıcıyı hiç script.google.com'a
+// yönlendirmiyoruz — ERP backend'i (bu script) fatura-okuma-otomasyonu'nun web app'inden
+// ham HTML'i sunucu tarafında (UrlFetchApp ile, hesap/oturum bağlamı olmadan) çekip
+// doğrudan frontend'e döndürüyor, frontend de bunu yeni pencerede kendisi render ediyor.
+const FATURA_OKUMA_EXEC_URL = "https://script.google.com/macros/s/AKfycbysou4qEnAXeT1YFAuycdj3EA-eZ6alGlbHwQYe5SqmCq8jZCjJq2JGRYnyoTKk7VH9/exec";
+
+function getFaturaOrijinalHtml(faturaNo) {
+  if (!faturaNo) return { ok: false, hata: "Fatura no gerekli" };
+  try {
+    const resp = UrlFetchApp.fetch(
+      FATURA_OKUMA_EXEC_URL + "?faturaHtml=" + encodeURIComponent(faturaNo),
+      { muteHttpExceptions: true }
+    );
+    return { ok: true, html: resp.getContentText() };
+  } catch (e) {
+    return { ok: false, hata: e.message };
+  }
+}
 const DIS_FIYAT_SHEET_ADI = "FATURAFIYAT";
 const ALIS_FATURA_DURUM_BASLIKLAR = ["FATURA_NO","DURUM","ALIS_ID","ACIKLAMA","ISLEM_TARIHI"];
 
