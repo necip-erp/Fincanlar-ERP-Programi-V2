@@ -3597,6 +3597,7 @@ function stokHareketOtomatikYaz(ss, kalemler, tarih, hareketTipi, belgeTipi, bel
       tarih, stokKodu ? (koduIdMap[stokKodu] || "") : "", stokKodu,
       String(k.urunAdi || "").trim(), String(k.birim || "adet"), hareketTipi, miktar,
       aciklamaOnEk, kayitTarihi, belgeTipi, belgeNo,
+      parseFloat(k.birimFiyat) || 0,
     ]);
   });
   if (satirlar.length) {
@@ -3745,6 +3746,7 @@ function stokHareketSatiriNesneYap(row) {
     kayitTarihi: hucreTarihStr(row[9]),
     belgeTipi: String(row[10] || ""),
     belgeNo: String(row[11] || ""),
+    maliyetFiyati: parseFloat(row[12]) || 0,
   };
 }
 
