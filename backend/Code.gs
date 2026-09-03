@@ -111,6 +111,19 @@ function ensureAlisKalemStokKoduColonu(sheet) {
   }
 }
 
+// Alış kalemlerinde KDV oranı (9. kolon). Eskiden Alış modülünde KDV hiç
+// izlenmiyordu; BIRIM_FIYAT ve TUTAR her zaman KDV HARİÇ tutuluyordu — ama Bekleyen
+// Alış Faturaları (BFM) onay ekranı kullanıcıya KDV DAHİL bir "Genel Toplam" gösterip,
+// onaylayınca arkada KDV'siz tutarı kaydediyordu (kullanıcı bildirimi: "toplam tutarı
+// sisteme kdv siz olarak attı"). Artık TUTAR ve toplamTutar (dolayısıyla Cari Alacak)
+// KDV DAHİL hesaplanıyor; BIRIM_FIYAT hâlâ KDV HARİÇ birim maliyeti temsil ediyor.
+function ensureAlisKalemKdvColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 9).getValue();
+  if (String(mevcutBaslik || "") !== "KDV_ORANI") {
+    sheet.getRange(1, 9).setValue("KDV_ORANI").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
 // Bir cari hareketin vade tarihi (özellikle Açık Hesap satışlarında "ne zamana
 // kadar ödenmeli" bilgisini tutar). "Vadesi Geçmiş Alacaklar" raporunda kullanılır.
 function ensureCariHareketVadeColonu(sheet) {
@@ -1459,6 +1472,7 @@ function getAlisDetay(alisId) {
   const kSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
     ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
   ensureAlisKalemStokKoduColonu(kSheet);
+  ensureAlisKalemKdvColonu(kSheet);
 
   const data = aSheet.getDataRange().getValues();
   let alis = null;
@@ -1483,7 +1497,7 @@ function getAlisDetay(alisId) {
       id: String(row[0]), alisId: String(row[1]), urunAdi: String(row[2] || ""),
       miktar: parseFloat(row[3]) || 0, birim: String(row[4] || ""),
       birimFiyat: parseFloat(row[5]) || 0, tutar: parseFloat(row[6]) || 0,
-      stokKodu: String(row[7] || ""),
+      stokKodu: String(row[7] || ""), kdvOrani: parseFloat(row[8]) || 0,
     });
   }
   return { ok: true, alis: alis, kalemler: kalemler };
@@ -1508,6 +1522,7 @@ function saveAlis(body) {
   const kSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
     ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
   ensureAlisKalemStokKoduColonu(kSheet);
+  ensureAlisKalemKdvColonu(kSheet);
 
   // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
   // otomatik, minimal bir stok kartı oluşturulur (stok kodu + ürün adı ile).
@@ -1536,8 +1551,14 @@ function saveAlis(body) {
   }
   if (!cariAd) cariAd = "Peşin Tedarikçi";
 
+  // TUTAR ve toplamTutar artık KDV DAHİL hesaplanıyor (bkz. ensureAlisKalemKdvColonu
+  // yorumu). kdvOrani gönderilmeyen (örn. eski/manuel) kalemlerde 0 varsayılır, bu da
+  // eskisi gibi KDV'siz tutar demektir — geriye dönük uyumlu.
   let toplamTutar = 0;
-  kalemler.forEach(k => { toplamTutar += (parseFloat(k.miktar) || 0) * (parseFloat(k.birimFiyat) || 0); });
+  kalemler.forEach(k => {
+    const kdvOrani = parseFloat(k.kdvOrani) || 0;
+    toplamTutar += (parseFloat(k.miktar) || 0) * (parseFloat(k.birimFiyat) || 0) * (1 + kdvOrani / 100);
+  });
 
   const id = "al_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
@@ -1548,7 +1569,9 @@ function saveAlis(body) {
     const kId = "ak_" + Date.now() + "_" + idx;
     const miktar = parseFloat(k.miktar) || 0;
     const birimFiyat = parseFloat(k.birimFiyat) || 0;
-    kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, String(k.stokKodu || "").trim()]);
+    const kdvOrani = parseFloat(k.kdvOrani) || 0;
+    const kalemTutar = miktar * birimFiyat * (1 + kdvOrani / 100);
+    kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, kalemTutar, String(k.stokKodu || "").trim(), kdvOrani]);
   });
 
   // Stok Hareket Raporu'na Alış Faturası girişi otomatik yazılır (Alış modülünde
@@ -1662,6 +1685,7 @@ function updateAlis(body) {
   const kSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
     ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
   ensureAlisKalemStokKoduColonu(kSheet);
+  ensureAlisKalemKdvColonu(kSheet);
   const kData = kSheet.getDataRange().getValues();
   for (let i = kData.length - 1; i >= 1; i--) {
     if (String(kData[i][1]) === id) kSheet.deleteRow(i + 1);
@@ -1708,7 +1732,10 @@ function updateAlis(body) {
   if (!cariAd) cariAd = "Peşin Tedarikçi";
 
   let toplamTutar = 0;
-  kalemler.forEach(k => { toplamTutar += (parseFloat(k.miktar) || 0) * (parseFloat(k.birimFiyat) || 0); });
+  kalemler.forEach(k => {
+    const kdvOrani = parseFloat(k.kdvOrani) || 0;
+    toplamTutar += (parseFloat(k.miktar) || 0) * (parseFloat(k.birimFiyat) || 0) * (1 + kdvOrani / 100);
+  });
 
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = String(data[satirIdx - 1][7] || "");
@@ -1718,7 +1745,8 @@ function updateAlis(body) {
     const kId = "ak_" + Date.now() + "_" + idx;
     const miktar = parseFloat(k.miktar) || 0;
     const birimFiyat = parseFloat(k.birimFiyat) || 0;
-    kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, String(k.stokKodu || "").trim()]);
+    const kdvOrani = parseFloat(k.kdvOrani) || 0;
+    kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat * (1 + kdvOrani / 100), String(k.stokKodu || "").trim(), kdvOrani]);
   });
 
   stokHareketOtomatikYaz(ss, kalemler, tarih, "Giriş", "Alış Faturası", id, "Alış Faturası — " + cariAd);

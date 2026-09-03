@@ -2653,7 +2653,7 @@ function alisDetayCiz(res){
       <button class="btn btn-danger" onclick="alisSilOnay('${a.id}')">🗑 Alışı Sil</button>
     </div>
     <table class="hareket-tbl">
-      <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>Tutar</th></tr></thead>
+      <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat (Kdv Hariç)</th><th>Kdv%</th><th>Tutar (Kdv Dahil)</th></tr></thead>
       <tbody>
         ${kalemler.map(k=>`
           <tr>
@@ -2662,6 +2662,7 @@ function alisDetayCiz(res){
             <td>${miktarFormat(k.miktar)}</td>
             <td>${k.birim}</td>
             <td>${fiyatFormat(k.birimFiyat)}</td>
+            <td>${k.kdvOrani||0}</td>
             <td>${paraFormat(k.tutar)}</td>
           </tr>`).join("")}
       </tbody>
@@ -2686,8 +2687,8 @@ function alisSilOnay(id){
 function alisModalAc(duzenle){
   _alisDuzenleId = duzenle ? duzenle.alis.id : null;
   _yeniAlisKalemleri = duzenle
-    ? duzenle.kalemler.map(k=>({urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:k.birimFiyat, stokKodu:k.stokKodu||""}))
-    : [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0}];
+    ? duzenle.kalemler.map(k=>({urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:k.birimFiyat, stokKodu:k.stokKodu||"", kdvOrani:k.kdvOrani||0}))
+    : [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, kdvOrani:20}];
   if(!_cariYuklendi) cariListesiYukle();
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -2785,7 +2786,7 @@ function amCariSec(i){
 }
 
 function alisKalemEkleUI(){
-  _yeniAlisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0});
+  _yeniAlisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, kdvOrani:20});
   alisKalemlerCiz();
 }
 
@@ -2795,7 +2796,7 @@ function alisKalemSilUI(idx){
 }
 
 function alisKalemAlanDegisti(idx, alan, deger){
-  _yeniAlisKalemleri[idx][alan] = (alan==='miktar'||alan==='birimFiyat') ? (parseFloat(deger)||0) : deger;
+  _yeniAlisKalemleri[idx][alan] = (alan==='miktar'||alan==='birimFiyat'||alan==='kdvOrani') ? (parseFloat(deger)||0) : deger;
   alisToplamGuncelle();
 }
 
@@ -2816,6 +2817,7 @@ function alisKalemlerCiz(){
       <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="alisKalemAlanDegisti(${idx},'miktar',this.value)" onblur="kutuMiktarUyumKontrol('${k.stokKodu||''}', this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `alisKalemAlanDegisti(${idx},'birim',this.value)`)}
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
+      <input class="satis-kalem-fiyat" style="max-width:80px" type="number" min="0" step="0.01" placeholder="Kdv %" title="KDV oranı (%)" value="${k.kdvOrani===undefined?20:k.kdvOrani}" oninput="alisKalemAlanDegisti(${idx},'kdvOrani',this.value)">
       ${_yeniAlisKalemleri.length>1 ? `<span class="hk-sil" onclick="alisKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
   alisToplamGuncelle();
@@ -2860,9 +2862,9 @@ function alisUrunOneriSec(idx, oneriIdx){
 }
 
 function alisToplamGuncelle(){
-  const toplam = _yeniAlisKalemleri.reduce((t,k)=>t+(parseFloat(k.miktar)||0)*(parseFloat(k.birimFiyat)||0),0);
+  const toplam = _yeniAlisKalemleri.reduce((t,k)=>t+(parseFloat(k.miktar)||0)*(parseFloat(k.birimFiyat)||0)*(1+(parseFloat(k.kdvOrani)||0)/100),0);
   const el = document.getElementById("am-toplam");
-  if(el) el.textContent = paraFormat(toplam);
+  if(el) el.textContent = paraFormat(toplam) + " (KDV dahil)";
 }
 
 function alisKaydet(){
@@ -3489,17 +3491,18 @@ function alisBekleyenOnayla(faturaNo){
     const fiyat = parseFloat(document.getElementById(`bfm-fiyat-${i}`).value) || 0;
     const isk1 = parseFloat(document.getElementById(`bfm-isk1-${i}`).value) || 0;
     const isk2 = parseFloat(document.getElementById(`bfm-isk2-${i}`).value) || 0;
-    // ★ DÜZELTME: nakliyePayi (fatura-okuma-otomasyonu'nda Canyap için palet/nakliye
-    // bedelinin m²'ye dağıtılmış payı) önceden buraya hiç eklenmiyordu — onaylanan Alış
-    // kaydına yazılan birim fiyat gerçek maliyetten düşük çıkıyordu (nakliye bedeli hiç
-    // maliyete yansımıyordu). Artık bfmSatirGuncelle'deki toplam hesaplamasıyla aynı
-    // mantıkla ekleniyor.
+    // ★ DÜZELTME (bu oturumda bildirilen "toplam tutarı kdv siz attı" sorunu): bu ekranda
+    // "Genel Toplam" KDV DAHİL gösteriliyordu (bkz. bfmGenelToplamGuncelle) ama onaya
+    // kdvOrani hiç gönderilmiyordu — sistem KDV'siz tutarı kaydediyordu. Artık kdvOrani da
+    // gönderiliyor; saveAlis artık TUTAR/toplamTutar'ı (ve Cari Alacak'ı) KDV DAHİL hesaplıyor.
+    const kdvOrani = f.kalemler[i].kdvOrani || 0;
     const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100) + (f.kalemler[i].nakliyePayi || 0);
     kalemler.push({
       urunAdi: f.kalemler[i].urunAdi,
       miktar: miktar,
       birim: document.getElementById(`bfm-birim-${i}`).value,
       birimFiyat: netBirimFiyat,
+      kdvOrani: kdvOrani,
       stokKodu: document.getElementById(`bfm-stokkodu-${i}`).value.trim(),
       stokKartiOlustur: yeniStokEl ? yeniStokEl.checked : false,
     });
