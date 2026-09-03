@@ -1124,10 +1124,20 @@ let _cariYuklendi = false;
 let _cariListe = [];
 let _cariSecili = null;
 
+// Backend'de beklenmeyen bir istisna (bug, null erişimi vb.) fırlarsa, en dıştaki genel
+// catch bloğu bunu {error: "..."} biçiminde döner — ama uygulama genelinde tüm ekranlar
+// hata mesajını "ok:false, hata:'...'" biçiminde bekler (res.hata). Bu eşleşmezlik
+// yüzünden GERÇEK hata mesajı hiç görünmüyor, her yerde "Hata: bilinmiyor" çıkıyordu
+// (örn. Alış Faturası onaylarken). Burada normalize ederek tek yerden düzeltiyoruz.
 function cariApi(action, params){
   const body = Object.assign({action: action}, params || {});
   const url = CARI_API + "?payload=" + encodeURIComponent(JSON.stringify(body));
-  return fetch(url).then(r => r.json());
+  return fetch(url).then(r => r.json()).then(res=>{
+    if(res && res.error && res.ok===undefined){
+      return { ok:false, hata: res.error };
+    }
+    return res;
+  });
 }
 
 function paraFormat(n){
