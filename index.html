@@ -1149,45 +1149,35 @@ function paraFormat(n){
 // pencere açıyordu (mobil tarayıcıların popup davranışı güvenilir değil). Artık
 // script.google.com'a hiç gidilmiyor VE ayrı pencere de açılmıyor — mevcut modal
 // sistemiyle (modal-overlay/modal-box) sayfa içinde, bir iframe (srcdoc) ile gösteriliyor.
+// ★ DÜZELTME 3: Modal içi iframe'de içerik boş kalıyordu — muhtemelen EDM'nin fatura
+// HTML'inde çerçeve (iframe) içinde algılanınca içeriği gizleyen bir anti-framing script
+// var. Çözüm: içeriği hiç iframe'e koymuyoruz, tamamen bağımsız yeni bir sekmede
+// (window.top === window.self olacak şekilde) Blob URL ile açıyoruz. window.open()
+// tıklamayla SENKRON çağrılıyor (popup engelleyiciye takılmaması için), içerik gelince
+// o pencereyi Blob URL'e yönlendiriyoruz.
 function faturaOrijinalGoster(faturaNo){
-  const overlay = document.createElement("div");
-  overlay.className = "modal-overlay";
-  overlay.id = "fatura-goster-modal-overlay";
-  overlay.innerHTML = `
-    <div class="modal-box modal-box-xwide" style="padding:12px;display:flex;flex-direction:column;height:90vh">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0">
-        <h3 style="margin:0">📄 Fatura: ${faturaNo}</h3>
-        <button class="btn" onclick="document.getElementById('fatura-goster-modal-overlay').remove()">✖ Kapat</button>
-      </div>
-      <div id="fatura-goster-icerik" style="flex:1;overflow:auto;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#666;font-family:sans-serif">Yükleniyor...</div>
-    </div>`;
-  document.body.appendChild(overlay);
-
+  const w = window.open("about:blank", "_blank");
+  if (w) {
+    w.document.write("<p style='font-family:sans-serif;padding:20px;color:#666'>Yükleniyor...</p>");
+  }
   cariApi("getFaturaOrijinalHtml", { faturaNo: faturaNo }).then(res=>{
-    const el = document.getElementById("fatura-goster-icerik");
-    if(!el) return; // kullanıcı kapatmış olabilir
-    if(res && res.ok){
-      if(!res.html || res.html.trim().length === 0){
-        const d = res._debug || {};
-        el.innerHTML = "<p style='padding:20px;color:#c00'>Fatura HTML'i boş geldi (teşhis: httpKod=" + d.httpKod + ", uzunluk=" + d.uzunluk + ")</p>";
-        return;
-      }
-      el.style.display = "block";
-      el.innerHTML = "<div style='font-size:10px;color:#999;padding:2px 4px;flex-shrink:0'>alınan içerik: " + res.html.length + " karakter</div>";
+    if(!w || w.closed){ alert("Pencere açılamadı — tarayıcının pop-up engelleyicisini bu site için kapatman gerekebilir."); return; }
+    if(res && res.ok && res.html && res.html.trim().length > 0){
       const blob = new Blob([res.html], { type: "text/html" });
       const blobUrl = URL.createObjectURL(blob);
-      const iframe = document.createElement("iframe");
-      iframe.style.cssText = "width:100%;flex:1;border:0";
-      iframe.src = blobUrl;
-      el.style.display = "flex";
-      el.style.flexDirection = "column";
-      el.appendChild(iframe);
+      w.location.href = blobUrl;
     } else {
-      el.innerHTML = "<p style='padding:20px;color:#c00'>Fatura görseli alınamadı: " + (res && res.hata ? res.hata : "bilinmeyen hata") + "</p>";
+      const d = (res && res._debug) || {};
+      w.document.open();
+      w.document.write("<p style='font-family:sans-serif;padding:20px;color:#c00'>Fatura görseli alınamadı" + (res && res.hata ? (": " + res.hata) : (" (teşhis: httpKod=" + d.httpKod + ", uzunluk=" + d.uzunluk + ")")) + "</p>");
+      w.document.close();
     }
   }).catch(err=>{
-    const el = document.getElementById("fatura-goster-icerik");
-    if(el) el.innerHTML = "<p style='padding:20px;color:#c00'>Fatura görseli alınamadı: " + err.message + "</p>";
+    if(w && !w.closed){
+      w.document.open();
+      w.document.write("<p style='font-family:sans-serif;padding:20px;color:#c00'>Fatura görseli alınamadı: " + err.message + "</p>");
+      w.document.close();
+    }
   });
 }
 
