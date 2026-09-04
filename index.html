@@ -1167,6 +1167,11 @@ function faturaOrijinalGoster(faturaNo){
     const el = document.getElementById("fatura-goster-icerik");
     if(!el) return; // kullanıcı kapatmış olabilir
     if(res && res.ok){
+      if(!res.html || res.html.trim().length === 0){
+        const d = res._debug || {};
+        el.innerHTML = "<p style='padding:20px;color:#c00'>Fatura HTML'i boş geldi (teşhis: httpKod=" + d.httpKod + ", uzunluk=" + d.uzunluk + ")</p>";
+        return;
+      }
       el.style.display = "block";
       el.innerHTML = "";
       const iframe = document.createElement("iframe");
