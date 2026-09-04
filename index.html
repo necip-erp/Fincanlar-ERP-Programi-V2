@@ -1145,31 +1145,40 @@ function paraFormat(n){
   return sign + Math.abs(n).toLocaleString("tr-TR", {minimumFractionDigits:2, maximumFractionDigits:2}) + "\u00A0₺";
 }
 
-// ★ DÜZELTME: önceden "Faturayı Gör" doğrudan script.google.com linkine (href) gidiyordu;
-// tarayıcı bazen o linki aktif Google hesabına göre (/u/1/ gibi) açmaya çalışıp Drive'ın
-// genel "dosya açılamıyor" hatasını veriyordu. Artık ERP backend'i HTML'i sunucu tarafında
-// çekip döndürüyor, biz de burada yeni bir pencerede kendimiz render ediyoruz — hiçbir
-// Google hesap/oturum bağlamına gerek kalmıyor.
+// ★ DÜZELTME 2: window.open() mobil/PWA ortamında yeni sekme yerine küçük, boş bir
+// pencere açıyordu (mobil tarayıcıların popup davranışı güvenilir değil). Artık
+// script.google.com'a hiç gidilmiyor VE ayrı pencere de açılmıyor — mevcut modal
+// sistemiyle (modal-overlay/modal-box) sayfa içinde, bir iframe (srcdoc) ile gösteriliyor.
 function faturaOrijinalGoster(faturaNo){
-  const w = window.open("", "_blank");
-  if (w) w.document.write("<p style='font-family:sans-serif;padding:20px;color:#666'>Yükleniyor...</p>");
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "fatura-goster-modal-overlay";
+  overlay.innerHTML = `
+    <div class="modal-box modal-box-xwide" style="padding:12px;display:flex;flex-direction:column;height:90vh">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0">
+        <h3 style="margin:0">📄 Fatura: ${faturaNo}</h3>
+        <button class="btn" onclick="document.getElementById('fatura-goster-modal-overlay').remove()">✖ Kapat</button>
+      </div>
+      <div id="fatura-goster-icerik" style="flex:1;overflow:auto;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#666;font-family:sans-serif">Yükleniyor...</div>
+    </div>`;
+  document.body.appendChild(overlay);
+
   cariApi("getFaturaOrijinalHtml", { faturaNo: faturaNo }).then(res=>{
-    if(!w || w.closed){ alert("Pencere açılamadı (pop-up engelleyici olabilir)."); return; }
+    const el = document.getElementById("fatura-goster-icerik");
+    if(!el) return; // kullanıcı kapatmış olabilir
     if(res && res.ok){
-      w.document.open();
-      w.document.write(res.html);
-      w.document.close();
+      el.style.display = "block";
+      el.innerHTML = "";
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "width:100%;height:100%;border:0";
+      iframe.srcdoc = res.html;
+      el.appendChild(iframe);
     } else {
-      w.document.open();
-      w.document.write("<p style='font-family:sans-serif;padding:20px;color:#c00'>Fatura görseli alınamadı: " + (res && res.hata ? res.hata : "bilinmeyen hata") + "</p>");
-      w.document.close();
+      el.innerHTML = "<p style='padding:20px;color:#c00'>Fatura görseli alınamadı: " + (res && res.hata ? res.hata : "bilinmeyen hata") + "</p>";
     }
   }).catch(err=>{
-    if(w && !w.closed){
-      w.document.open();
-      w.document.write("<p style='font-family:sans-serif;padding:20px;color:#c00'>Fatura görseli alınamadı: " + err.message + "</p>");
-      w.document.close();
-    }
+    const el = document.getElementById("fatura-goster-icerik");
+    if(el) el.innerHTML = "<p style='padding:20px;color:#c00'>Fatura görseli alınamadı: " + err.message + "</p>";
   });
 }
 
