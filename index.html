@@ -1991,6 +1991,10 @@ function siparisFaturaModalAc(siparisId){
       <div class="modal-box modal-box-wide">
         <h3>Siparişten Fatura Oluştur</h3>
         <p style="color:var(--text3);font-size:13px;margin:0 0 14px">${s.cariAd} — aktarmak istediğin ürünler için miktar gir (0 = aktarma). Kalan miktarlar siparişte açık kalmaya devam eder.</p>
+        ${(s.dipIskontoYuzde>0 || s.tutarIskontosu>0) ? `<p style="background:var(--bg3);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--text2);margin:0 0 14px">
+          ℹ️ Bu siparişte fatura altı iskonto tanımlı${s.dipIskontoYuzde>0?` (Dip İskonto: %${s.dipIskontoYuzde})`:''}${s.tutarIskontosu>0?` (Tutar İskontosu: ${paraFormat(s.tutarIskontosu)})`:''}.
+          Dip İskonto % oranı her zaman faturaya aktarılır. Tutar İskontosu ise sadece siparişin TAMAMI bu faturaya aktarılıyorsa (kalan bırakılmıyorsa) aktarılır — kısmi aktarımda mükerrer düşülmesin diye bu faturaya yansıtılmaz.
+        </p>` : ''}
         <div id="sf-kalemler"></div>
         <div class="fld" style="margin-top:10px"><label>Fatura Tarihi</label><input id="sf-tarih" type="datetime-local" value="${bugun}"></div>
         <div class="fld"><label>Ödeme Tipi</label>

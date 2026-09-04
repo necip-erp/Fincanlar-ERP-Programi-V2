@@ -1124,7 +1124,8 @@ function siparistenFaturaOlustur(body) {
   let siparis = null;
   for (let i = 1; i < sData.length; i++) {
     if (String(sData[i][0]) === siparisId) {
-      siparis = { cariId: String(sData[i][2] || ""), cariAd: String(sData[i][3] || ""), belgeTipi: String(sData[i][8] || "") || "Fatura", durum: String(sData[i][12] || "") || "Beklemede" };
+      siparis = { cariId: String(sData[i][2] || ""), cariAd: String(sData[i][3] || ""), belgeTipi: String(sData[i][8] || "") || "Fatura", durum: String(sData[i][12] || "") || "Beklemede",
+        dipIskontoYuzde: parseFloat(sData[i][9]) || 0, tutarIskontosu: parseFloat(sData[i][13]) || 0, tutarIskontoKdvSonra: sData[i][14] == 1 };
       break;
     }
   }
@@ -1173,11 +1174,28 @@ function siparistenFaturaOlustur(body) {
   }
   if (yeniFaturaKalemleri.length === 0) return { ok: false, hata: "Aktarılacak geçerli bir miktar girilmedi" };
 
+  // ★ DÜZELTME (kullanıcı bildirimi: "fatura altı yaptığım iskonto faturalaştırdığım zaman
+  // siliniyor"): siparistenFaturaOlustur, oluşturduğu Fatura'ya siparişin belge düzeyi
+  // (fatura altı) Dip İskonto %'sini ve Tutar İskontosu'nu hiç aktarmıyordu — saveSatis'e
+  // bu alanlar hiç gönderilmediği için otomatik olarak 0'a düşüyordu. Dip İskonto % her
+  // zaman aktarılır (yüzde olduğu için bu faturanın kendi ara toplamına orantılı uygulanır).
+  // Sabit tutarlı Tutar İskontosu ise SADECE siparişin TÜMÜ bu faturaya aktarılıyorsa
+  // aktarılır — aksi halde kısmi faturalarda sabit tutar mükerrer düşülmüş olur.
+  const siparisTamamenAktariliyorMu = Object.keys(kalemBilgi).every(kId => {
+    const bilgi = kalemBilgi[kId];
+    const guncelleme = guncellenecekler.find(g => g.satirIdx === kalemSatirIdx[kId]);
+    const yeniFaturalanan = guncelleme ? guncelleme.yeniFaturalananMiktar : bilgi.faturalananMiktar;
+    return yeniFaturalanan >= bilgi.miktar - 0.0001;
+  });
+
   const faturaSonuc = saveSatis({
     cariId: siparis.cariId, cariAd: siparis.cariAd,
     tarih: body.tarih, odemeTipi: body.odemeTipi, bankaHesapId: body.bankaHesapId, vade: body.vade,
     aciklama: String(body.aciklama || ("Sipariş #" + siparisId.slice(-6) + "'den aktarıldı")),
     belgeTipi: "Fatura", kaynakSiparisId: siparisId,
+    dipIskontoYuzde: siparis.dipIskontoYuzde,
+    tutarIskontosu: siparisTamamenAktariliyorMu ? siparis.tutarIskontosu : 0,
+    tutarIskontoKdvSonra: siparis.tutarIskontoKdvSonra,
     kalemler: yeniFaturaKalemleri,
   });
   if (!faturaSonuc.ok) return faturaSonuc;
