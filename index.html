@@ -1138,7 +1138,7 @@ const CARI_API = "https://script.google.com/macros/s/AKfycbxlsbGdDPP42Cxm11jkDG7
 // hep çalışır ve stored link'teki olası bozukluktan etkilenmez.
 const FATURA_OKUMA_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbysou4qEnAXeT1YFAuycdj3EA-eZ6alGlbHwQYe5SqmCq8jZCjJq2JGRYnyoTKk7VH9/exec";
 function faturaGorLinki(faturaNo){
-  return FATURA_OKUMA_WEBAPP_URL + "?faturaHtml=" + encodeURIComponent(faturaNo);
+  return FATURA_OKUMA_WEBAPP_URL + "?faturaHtml=" + encodeURIComponent(faturaNo) + "&authuser=0";
 }
 
 let _cariYuklendi = false;
