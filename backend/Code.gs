@@ -2540,9 +2540,15 @@ function getFaturaOrijinalHtml(faturaNo) {
   try {
     const resp = UrlFetchApp.fetch(
       FATURA_OKUMA_EXEC_URL + "?faturaHtml=" + encodeURIComponent(faturaNo),
-      { muteHttpExceptions: true }
+      { muteHttpExceptions: true, followRedirects: true }
     );
-    return { ok: true, html: resp.getContentText() };
+    const kod = resp.getResponseCode();
+    const html = resp.getContentText();
+    return {
+      ok: true,
+      html: html,
+      _debug: { httpKod: kod, uzunluk: html.length, ilk200: html.substring(0, 200) }
+    };
   } catch (e) {
     return { ok: false, hata: e.message };
   }
