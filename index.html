@@ -977,6 +977,15 @@ function modulAcYeniSekme(id){
   window.open(url, "fincanlar-modul-" + id);
 }
 
+// Teklif/Sipariş/Fatura kalem satırlarındaki "📊" düğmesi bunu çağırır — o ürüne ait
+// Stok Hareket Raporu'nu (arama kutusu o ürünle önceden doldurulmuş halde) YENİ
+// SEKMEDE açar. Aynı ürün için tekrar tıklanırsa var olan sekmeye geçilir.
+function stokHareketYeniSekmedeAc(aramaMetni){
+  if(!aramaMetni) return;
+  const url = location.pathname + "?tab=stok&shrArama=" + encodeURIComponent(aramaMetni);
+  window.open(url, "fincanlar-shr-" + aramaMetni.replace(/[^a-zA-Z0-9]/g,"_"));
+}
+
 // Belirli bir kaydı (Satış/Alış/Alış İadesi/Tahsilat/Ödeme/Çek) yeni bir sekmede,
 // ilgili modülde detay olarak açar. tip: "SATIS"|"ALIS"|"ALISIADE"|"TAHSILAT"|"ODEME"|"CEK"
 // — cariHareketIslemeGit ile aynı yönlendirme mantığını kullanır (bkz. o fonksiyon).
@@ -1607,7 +1616,7 @@ function cariHareketSatirTiklandi(e, tr){
 
 function cariHareketIslemeGit(aciklama){
   if(!aciklama) return;
-  const m = aciklama.match(/^(SATIS|ALISIADE|ALIS|TAHSILAT|ODEME|CEK):([a-zA-Z0-9_]+)/);
+  const m = aciklama.match(/^(SATIS|ALISIADE|ALIS|TAHSILAT|ODEME|CEK|CARI):([a-zA-Z0-9_]+)/);
   if(!m) return;
   const tip = m[1], id = m[2];
   if(tip === "SATIS"){ modulAc("satis"); satisAc(id); }
@@ -1616,6 +1625,14 @@ function cariHareketIslemeGit(aciklama){
   else if(tip === "TAHSILAT"){ modulAc("tahsilat"); tahsilatAc(id); }
   else if(tip === "ODEME"){ modulAc("odeme"); odemeAc(id); }
   else if(tip === "CEK"){ modulAc("ceksenet"); cekSenetAc(id); }
+  else if(tip === "CARI"){ modulAc("cari"); cariAc(id); }
+}
+
+// Sipariş/Fatura/Tahsilat gibi ekranlardaki cari adının yanına konan "🔗 Cariyi Aç"
+// düğmesi bunu çağırır — ilgili carinin Cari Hareket (ekstre) ekranını YENİ SEKMEDE açar.
+function cariYeniSekmedeAc(cariId){
+  if(!cariId) return;
+  kayitYeniSekmedeAc("CARI", cariId);
 }
 
 // Cari detayındaki "📦 Siparişler" butonuyla açılıp kapanan, bu cariye ait
@@ -1930,7 +1947,7 @@ function satisDetayCiz(res){
     <button class="cari-back-btn" onclick="satisListeyeDon()">← Listeye dön</button>
     <div class="cari-detail-head">
       <div>
-        <h2>${s.cariAd}</h2>
+        <h2>${s.cariAd} ${s.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${s.cariId}')" title="Cari Hareket ekranını yeni sekmede aç">🔗 Cariyi Aç</button>` : ''}</h2>
         <span class="tip-badge">${s.belgeTipi||'Fatura'} · <b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${s.odemeTipi}</span>
         ${siparis ? ` <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}
       </div>
@@ -1957,7 +1974,7 @@ function satisDetayCiz(res){
       <button class="btn btn-danger" onclick="satisSilOnay('${s.id}')">🗑 Satışı Sil</button>
     </div>
     <table class="hareket-tbl">
-      <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th>${siparis?'<th>Faturalanan</th><th>Kalan</th>':''}<th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th></tr></thead>
+      <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th>${siparis?'<th>Faturalanan</th><th>Kalan</th>':''}<th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th><th></th></tr></thead>
       <tbody>
         ${kalemler.map(k=>`
           <tr>
@@ -1970,6 +1987,7 @@ function satisDetayCiz(res){
             <td>${k.iskontoYuzde||0}</td>
             <td>${k.kdvOrani===undefined?20:k.kdvOrani}</td>
             <td>${paraFormat(k.tutar)}</td>
+            <td>${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını yeni sekmede aç">📊</button>` : ''}</td>
           </tr>`).join("")}
       </tbody>
     </table>
@@ -2651,11 +2669,18 @@ function alisListeyeDon(){
 function alisDetayCiz(res){
   const a = res.alis, kalemler = res.kalemler;
   const panel = document.getElementById("alis-detail-panel");
+  // Fatura altı toplamlar: BRUT_FIYAT/ISKONTO_YUZDE eski kayıtlarda yok — o durumda
+  // brutFiyat=birimFiyat düştüğü için İskonto satırı otomatik olarak 0 çıkar (doğru).
+  const brutToplam = kalemler.reduce((t,k)=>t+(k.miktar||0)*(k.brutFiyat||k.birimFiyat||0),0);
+  const araToplam = kalemler.reduce((t,k)=>t+(k.miktar||0)*(k.birimFiyat||0),0);
+  const kdvToplam = kalemler.reduce((t,k)=>t+(k.miktar||0)*(k.birimFiyat||0)*((k.kdvOrani||0)/100),0);
+  const iskontoToplam = Math.max(0, brutToplam - araToplam);
+  const tutarIskontosu = a.tutarIskontosu || 0;
   panel.innerHTML = `
     <button class="cari-back-btn" onclick="alisListeyeDon()">← Listeye dön</button>
     <div class="cari-detail-head">
       <div>
-        <h2>${a.cariAd}</h2>
+        <h2>${a.cariAd} ${a.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${a.cariId}')" title="Cari Hareket ekranını yeni sekmede aç">🔗 Cariyi Aç</button>` : ''}</h2>
         <span class="tip-badge"><b class="tarih-vurgu">${tarihGoster(a.tarih)}</b> · ${a.odemeTipi}</span>
       </div>
       <div class="cari-bakiye-box">
@@ -2683,6 +2708,14 @@ function alisDetayCiz(res){
           </tr>`).join("")}
       </tbody>
     </table>
+    <table class="fis-toplam-tbl">
+      <tr><td>Brüt Toplam</td><td>${paraFormat(brutToplam)}</td></tr>
+      <tr><td>İskonto</td><td>${paraFormat(iskontoToplam)}</td></tr>
+      <tr><td>Ara Toplam</td><td>${paraFormat(araToplam)}</td></tr>
+      <tr><td>Kdv Toplam</td><td>${paraFormat(kdvToplam)}</td></tr>
+      <tr><td>Tutar İskontosu</td><td>${paraFormat(tutarIskontosu)}</td></tr>
+      <tr class="genel"><td>Genel Toplam</td><td>${paraFormat(a.toplamTutar)}</td></tr>
+    </table>
   `;
 }
 
@@ -2703,7 +2736,7 @@ function alisSilOnay(id){
 function alisModalAc(duzenle){
   _alisDuzenleId = duzenle ? duzenle.alis.id : null;
   _yeniAlisKalemleri = duzenle
-    ? duzenle.kalemler.map(k=>({urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:k.birimFiyat, stokKodu:k.stokKodu||"", kdvOrani:k.kdvOrani||0}))
+    ? duzenle.kalemler.map(k=>({urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:k.birimFiyat, stokKodu:k.stokKodu||"", kdvOrani:k.kdvOrani||0, brutFiyat:k.brutFiyat, iskontoYuzde:k.iskontoYuzde}))
     : [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, kdvOrani:20}];
   if(!_cariYuklendi) cariListesiYukle();
   const overlay = document.createElement("div");
@@ -2740,7 +2773,10 @@ function alisModalAc(duzenle){
       <div id="am-kalemler" style="margin:8px 0"></div>
       <button class="btn" onclick="alisKalemEkleUI()">+ Ürün Ekle</button>
 
-      <div class="satis-toplam">Toplam: <span id="am-toplam">0,00 ₺</span></div>
+      <div style="display:flex;justify-content:flex-end;align-items:flex-end;gap:16px">
+        <div class="fld" style="max-width:170px;margin-bottom:0"><label>Tutar İskontosu (fatura altı, ops.)</label><input id="am-tutar-iskontosu" type="number" min="0" step="0.01" value="${a?a.tutarIskontosu||0:0}" oninput="alisToplamGuncelle()"></div>
+        <div class="satis-toplam">Toplam: <span id="am-toplam">0,00 ₺</span></div>
+      </div>
 
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('alis-modal-overlay').remove()">İptal</button>
@@ -2878,7 +2914,10 @@ function alisUrunOneriSec(idx, oneriIdx){
 }
 
 function alisToplamGuncelle(){
-  const toplam = _yeniAlisKalemleri.reduce((t,k)=>t+(parseFloat(k.miktar)||0)*(parseFloat(k.birimFiyat)||0)*(1+(parseFloat(k.kdvOrani)||0)/100),0);
+  const kalemToplam = _yeniAlisKalemleri.reduce((t,k)=>t+(parseFloat(k.miktar)||0)*(parseFloat(k.birimFiyat)||0)*(1+(parseFloat(k.kdvOrani)||0)/100),0);
+  const tutarIskontosuEl = document.getElementById("am-tutar-iskontosu");
+  const tutarIskontosu = tutarIskontosuEl ? (parseFloat(tutarIskontosuEl.value)||0) : 0;
+  const toplam = Math.max(0, kalemToplam - tutarIskontosu);
   const el = document.getElementById("am-toplam");
   if(el) el.textContent = paraFormat(toplam) + " (KDV dahil)";
 }
@@ -2888,12 +2927,14 @@ function alisKaydet(){
   const serbestAd = document.getElementById("am-serbest-ad").value.trim();
   const kalemler = _yeniAlisKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
   if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
+  const tutarIskontosuEl = document.getElementById("am-tutar-iskontosu");
   const body = {
     cariId: cariId || undefined,
     cariAd: !cariId ? serbestAd : undefined,
     tarih: document.getElementById("am-tarih").value,
     odemeTipi: document.getElementById("am-odeme").value,
     aciklama: document.getElementById("am-aciklama").value,
+    tutarIskontosu: tutarIskontosuEl ? (parseFloat(tutarIskontosuEl.value)||0) : 0,
     kalemler,
   };
   const duzenleId = _alisDuzenleId;
@@ -3373,7 +3414,8 @@ function alisBekleyenOnayModalAc(faturaNo){
       </tbody></table>
       </div>
 
-      <div style="display:flex;justify-content:flex-end;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <div style="display:flex;justify-content:flex-end;align-items:flex-end;gap:16px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div class="fld" style="max-width:170px;margin-bottom:0"><label>Tutar İskontosu (fatura altı, ops.)</label><input id="bfm-tutar-iskontosu" type="number" min="0" step="0.01" value="0" oninput="bfmGenelToplamGuncelle()"></div>
         <div style="text-align:right">
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase">Fatura Tutarı (KDV Dahil)</div>
           <div style="font-size:20px;font-weight:700" id="bfm-genel-toplam">${paraFormat(f.genelToplam)}</div>
@@ -3464,6 +3506,8 @@ function bfmGenelToplamGuncelle(){
     const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100) + nakliyePayi;
     toplam += miktar * netBirimFiyat * (1 + kdvOrani/100);
   });
+  const tutarIskontosuEl = document.getElementById("bfm-tutar-iskontosu");
+  toplam = Math.max(0, toplam - (tutarIskontosuEl ? (parseFloat(tutarIskontosuEl.value)||0) : 0));
   const el = document.getElementById("bfm-genel-toplam");
   if(el) el.textContent = paraFormat(toplam);
 }
@@ -3513,11 +3557,16 @@ function alisBekleyenOnayla(faturaNo){
     // gönderiliyor; saveAlis artık TUTAR/toplamTutar'ı (ve Cari Alacak'ı) KDV DAHİL hesaplıyor.
     const kdvOrani = f.kalemler[i].kdvOrani || 0;
     const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100) + (f.kalemler[i].nakliyePayi || 0);
+    // Fatura altı "Brüt Toplam / İskonto" gösterimi için satır düzeyi liste fiyatı ve
+    // birleşik indirim %'si de gönderiliyor (BIRIM_FIYAT hesaplarda hâlâ net kalıyor).
+    const birlesikIskontoYuzde = 100 * (1 - (1 - isk1/100) * (1 - isk2/100));
     kalemler.push({
       urunAdi: f.kalemler[i].urunAdi,
       miktar: miktar,
       birim: document.getElementById(`bfm-birim-${i}`).value,
       birimFiyat: netBirimFiyat,
+      brutFiyat: fiyat,
+      iskontoYuzde: birlesikIskontoYuzde,
       kdvOrani: kdvOrani,
       stokKodu: document.getElementById(`bfm-stokkodu-${i}`).value.trim(),
       stokKartiOlustur: yeniStokEl ? yeniStokEl.checked : false,
@@ -3527,6 +3576,7 @@ function alisBekleyenOnayla(faturaNo){
   const cariId = document.getElementById("bfm-cari").value;
   const serbestAd = document.getElementById("bfm-cari-arama").value.trim();
   if(!cariId && !serbestAd){ alert("Bu faturayı hangi cariye işleyeceğimizi belirtmelisiniz"); return; }
+  const tutarIskontosuEl = document.getElementById("bfm-tutar-iskontosu");
   const body = {
     faturaNo,
     cariId: cariId || undefined,
@@ -3535,6 +3585,7 @@ function alisBekleyenOnayla(faturaNo){
     tarih: document.getElementById("bfm-tarih").value,
     odemeTipi: document.getElementById("bfm-odeme").value,
     aciklama: document.getElementById("bfm-aciklama").value,
+    tutarIskontosu: tutarIskontosuEl ? (parseFloat(tutarIskontosuEl.value)||0) : 0,
     kalemler,
   };
   cariApi("onaylaAlisFaturasi", body).then(res=>{
@@ -3614,7 +3665,7 @@ function tahsilatAc(id){
     <button class="cari-back-btn" onclick="tahsilatListeyeDon()">← Listeye dön</button>
     <div class="cari-detail-head">
       <div>
-        <h2>${t.cariAd}</h2>
+        <h2>${t.cariAd} ${t.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${t.cariId}')" title="Cari Hareket ekranını yeni sekmede aç">🔗 Cariyi Aç</button>` : ''}</h2>
         <span class="tip-badge">${tarihGoster(t.tarih)} · ${t.yontem}</span>
       </div>
       <div class="cari-bakiye-box">
@@ -6153,9 +6204,16 @@ function stokHareketRaporuTemizle(){
   const params = new URLSearchParams(location.search);
   const tab = params.get("tab");
   const islem = params.get("islem");
+  const shrArama = params.get("shrArama");
   if(islem){ cariHareketIslemeGit(islem); }
   else if(tab && MODULLER.some(m=>m.id===tab)) modulAc(tab);
   else acilisSayfasinaGit();
+  if(shrArama && tab === "stok"){
+    const el = document.getElementById("shr-arama");
+    if(el) el.value = shrArama;
+    stokAltModulAc("raporlar");
+    stokRaporAltAc("hareket");
+  }
 })();
 </script>
 
