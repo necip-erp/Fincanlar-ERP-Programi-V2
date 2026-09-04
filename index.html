@@ -1145,42 +1145,6 @@ function paraFormat(n){
   return sign + Math.abs(n).toLocaleString("tr-TR", {minimumFractionDigits:2, maximumFractionDigits:2}) + "\u00A0₺";
 }
 
-// ★ DÜZELTME 2: window.open() mobil/PWA ortamında yeni sekme yerine küçük, boş bir
-// pencere açıyordu (mobil tarayıcıların popup davranışı güvenilir değil). Artık
-// script.google.com'a hiç gidilmiyor VE ayrı pencere de açılmıyor — mevcut modal
-// sistemiyle (modal-overlay/modal-box) sayfa içinde, bir iframe (srcdoc) ile gösteriliyor.
-// ★ DÜZELTME 3: Modal içi iframe'de içerik boş kalıyordu — muhtemelen EDM'nin fatura
-// HTML'inde çerçeve (iframe) içinde algılanınca içeriği gizleyen bir anti-framing script
-// var. Çözüm: içeriği hiç iframe'e koymuyoruz, tamamen bağımsız yeni bir sekmede
-// (window.top === window.self olacak şekilde) Blob URL ile açıyoruz. window.open()
-// tıklamayla SENKRON çağrılıyor (popup engelleyiciye takılmaması için), içerik gelince
-// o pencereyi Blob URL'e yönlendiriyoruz.
-function faturaOrijinalGoster(faturaNo){
-  const w = window.open("about:blank", "_blank");
-  if (w) {
-    w.document.write("<p style='font-family:sans-serif;padding:20px;color:#666'>Yükleniyor...</p>");
-  }
-  cariApi("getFaturaOrijinalHtml", { faturaNo: faturaNo }).then(res=>{
-    if(!w || w.closed){ alert("Pencere açılamadı — tarayıcının pop-up engelleyicisini bu site için kapatman gerekebilir."); return; }
-    if(res && res.ok && res.html && res.html.trim().length > 0){
-      const blob = new Blob([res.html], { type: "text/html" });
-      const blobUrl = URL.createObjectURL(blob);
-      w.location.href = blobUrl;
-    } else {
-      const d = (res && res._debug) || {};
-      w.document.open();
-      w.document.write("<p style='font-family:sans-serif;padding:20px;color:#c00'>Fatura görseli alınamadı" + (res && res.hata ? (": " + res.hata) : (" (teşhis: httpKod=" + d.httpKod + ", uzunluk=" + d.uzunluk + ")")) + "</p>");
-      w.document.close();
-    }
-  }).catch(err=>{
-    if(w && !w.closed){
-      w.document.open();
-      w.document.write("<p style='font-family:sans-serif;padding:20px;color:#c00'>Fatura görseli alınamadı: " + err.message + "</p>");
-      w.document.close();
-    }
-  });
-}
-
 // Miktar (ürün adedi/ölçüsü) gösterimi — virgülden sonra 4 hane (Sipariş/Teklif/Fatura/
 // Alış/Alış İade/Stok Hareket kalemlerinde). Alt hesaplamalar (ara toplam, kdv, genel
 // toplam) hâlâ paraFormat ile 2 hane gösterilir, bu fonksiyon SADECE miktar alanı içindir.
@@ -3291,7 +3255,7 @@ function alisBekleyenListesiCiz(){
         <tbody>${f.kalemler.map(k=>`<tr><td>${k.stokKodu||'—'}${k.stokVarMi===false?' <span class=\"hk-borc\">yeni</span>':''}</td><td>${k.urunAdi}</td><td>${k.miktar>0?k.miktar:'—'}</td><td>${paraFormat(k.birimFiyat)}</td><td>%${k.iskonto}</td><td>${paraFormat(k.netFiyat)}</td><td>%${k.kdvOrani}</td></tr>`).join("")}</tbody></table>
       </div>
       <div class="btnrow" style="margin-top:8px">
-        ${f.faturaLink ? `<button class="btn" onclick="faturaOrijinalGoster('${f.faturaNo}')">📄 Faturayı Gör</button>` : ""}
+        ${f.faturaLink ? `<a class="btn" href="${f.faturaLink}" target="_blank" style="text-decoration:none">📄 Faturayı Gör</a>` : ""}
         ${islendi ? `
         <button class="btn" onclick="alisBekleyenDurumSifirla('${f.faturaNo}')">↺ Durumu Sıfırla</button>` : `
         <button class="btn btn-primary" onclick="alisBekleyenOnayModalAc('${f.faturaNo}')">✅ İncele ve Onayla</button>
