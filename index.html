@@ -244,9 +244,10 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .bfm-2col-sag-govde{flex:1;min-height:0;overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--bg3)}
 .bfm-2col-sag-govde iframe{width:100%;height:100%;border:0;display:block}
 @media (max-width:1100px){ .bfm-2col{flex-direction:column} .modal-box-onay2col{max-height:96vh} .bfm-2col-sol{max-height:40vh} .bfm-2col-sag-govde{height:50vh} }
-.fatura-yan-panel{position:fixed;top:0;right:0;height:100vh;width:480px;max-width:92vw;background:var(--bg2);box-shadow:-10px 0 28px rgba(16,18,30,.18);z-index:60;display:flex;flex-direction:column;padding:14px;animation:fincanPanelIn .16s var(--ease)}
-.fatura-yan-panel iframe{flex:1;width:100%;border:1px solid var(--border);border-radius:10px;background:var(--bg3)}
-.fatura-yan-panel .fyp-ust{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.fatura-yan-panel{position:fixed;top:0;right:0;height:100vh;width:640px;max-width:92vw;background:var(--bg2);box-shadow:-10px 0 28px rgba(16,18,30,.18);z-index:60;display:flex;flex-direction:column;padding:14px;animation:fincanPanelIn .16s var(--ease)}
+.fatura-yan-panel .fyp-govde{flex:1;min-height:0;overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--bg3)}
+.fatura-yan-panel .fyp-govde iframe{width:100%;height:100%;border:0;display:block}
+.fatura-yan-panel .fyp-ust{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap}
 @media (max-width:700px){ .fatura-yan-panel{width:100vw;max-width:100vw} }
 .satis-kalem-basliklar{display:flex;gap:6px;margin-bottom:4px;font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:700}
 .satis-kalem-basliklar>span{padding:0 9px}
@@ -1006,6 +1007,14 @@ function stokHareketYeniSekmedeAc(aramaMetni){
   window.open(url, "fincanlar-shr-" + aramaMetni.replace(/[^a-zA-Z0-9]/g,"_"));
 }
 
+// Kalem satırlarındaki "📇" düğmesi bunu çağırır — o ürüne ait Stok Tanımları sayfasını
+// (arama kutusu o ürünle önceden doldurulmuş halde) YENİ SEKMEDE açar.
+function stokTaniminaGitYeniSekmede(stokKodu){
+  if(!stokKodu) return;
+  const url = location.pathname + "?tab=stok&stanimAra=" + encodeURIComponent(stokKodu);
+  window.open(url, "fincanlar-stanim-" + stokKodu.replace(/[^a-zA-Z0-9]/g,"_"));
+}
+
 // Belirli bir kaydı (Satış/Alış/Alış İadesi/Tahsilat/Ödeme/Çek) yeni bir sekmede,
 // ilgili modülde detay olarak açar. tip: "SATIS"|"ALIS"|"ALISIADE"|"TAHSILAT"|"ODEME"|"CEK"
 // — cariHareketIslemeGit ile aynı yönlendirme mantığını kullanır (bkz. o fonksiyon).
@@ -1205,13 +1214,14 @@ function fiyatFormat(n){
 // Genel tarih gösterim biçimi: gün/ay/yıl [saat:dakika] (uygulama genelinde kullanılır).
 // "yyyy-MM-dd" (tarih inputlarından) -> "dd/MM/yyyy". "yyyy-MM-ddTHH:mm" -> "dd/MM/yyyy HH:mm".
 // Zaten "dd/MM/yyyy..." biçiminde olan (kayıt tarihi gibi) değerler olduğu gibi bırakılır.
+// ★ DÜZELTME: İstenen tarih formatı her yerde gün/ay/yıl - saat:dakika (örn. 05/09/2026 - 15:27).
 function tarihGoster(deger){
   if(!deger) return "";
   const s = String(deger);
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
   if(!m) return s;
   const gun = m[1] && m[2] && m[3] ? `${m[3]}/${m[2]}/${m[1]}` : s;
-  return m[4] && m[5] ? `${gun} ${m[4]}:${m[5]}` : gun;
+  return m[4] && m[5] ? `${gun} - ${m[4]}:${m[5]}` : gun;
 }
 
 // datetime-local input'ları için tarayıcının YEREL saatine göre "YYYY-MM-DDTHH:mm" üretir.
@@ -2007,7 +2017,7 @@ function satisDetayCiz(res){
             <td>${k.iskontoYuzde||0}</td>
             <td>${k.kdvOrani===undefined?20:k.kdvOrani}</td>
             <td>${paraFormat(k.tutar)}</td>
-            <td>${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını yeni sekmede aç">📊</button>` : ''}</td>
+            <td style="white-space:nowrap">${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını yeni sekmede aç">📊</button>` : ''}${k.stokKodu ? ` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokTaniminaGitYeniSekmede('${k.stokKodu.replace(/'/g,"\\'")}')" title="Bu ürünün Stok Tanımını yeni sekmede aç">📇</button>` : ''}</td>
           </tr>`).join("")}
       </tbody>
     </table>
@@ -2199,12 +2209,12 @@ function siparisFormuCiz(s, kalemler, t, c){
     </table>
     <div style="display:flex;justify-content:flex-end;margin-top:16px">
       <table style="border-collapse:collapse;font-size:13.5px">
-        <tr><td style="padding:2px 10px 2px 0;color:#555">BRÜT TUTAR</td><td>: ${paraFormat(t.brutToplam||0)}</td></tr>
-        <tr><td style="padding:2px 10px 2px 0;color:#555">İSKONTO</td><td>: ${paraFormat(t.iskontoToplam||0)}</td></tr>
-        <tr><td style="padding:2px 10px 2px 0;color:#555">ARA TOPLAM</td><td>: ${paraFormat(t.araToplam||0)}</td></tr>
-        <tr><td style="padding:2px 10px 2px 0;color:#555">KDV TOPLAM</td><td>: ${paraFormat(t.kdvToplam||0)}</td></tr>
-        ${t.tutarIskontosu>0 ? `<tr><td style="padding:2px 10px 2px 0;color:#555">Tutar İskontosu</td><td>: -${paraFormat(t.tutarIskontosu)}</td></tr>` : ""}
-        <tr style="font-weight:800;font-size:15px"><td style="padding:6px 10px 0 0">GENEL TOPLAM</td><td style="padding:6px 0 0">: ${paraFormat(t.genelToplam||0)}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">BRÜT TUTAR</td><td style="text-align:right">: ${paraFormat(t.brutToplam||0)}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">İSKONTO</td><td style="text-align:right">: ${paraFormat(t.iskontoToplam||0)}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">ARA TOPLAM</td><td style="text-align:right">: ${paraFormat(t.araToplam||0)}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">KDV TOPLAM</td><td style="text-align:right">: ${paraFormat(t.kdvToplam||0)}</td></tr>
+        ${t.tutarIskontosu>0 ? `<tr><td style="padding:2px 10px 2px 0;color:#555">Tutar İskontosu</td><td style="text-align:right">: -${paraFormat(t.tutarIskontosu)}</td></tr>` : ""}
+        <tr style="font-weight:800;font-size:15px"><td style="padding:6px 10px 0 0">GENEL TOPLAM</td><td style="padding:6px 0 0;text-align:right">: ${paraFormat(t.genelToplam||0)}</td></tr>
       </table>
     </div>`;
   document.body.appendChild(div);
@@ -2817,7 +2827,7 @@ function alisDetayCiz(res){
       <button class="btn btn-danger" onclick="alisSilOnay('${a.id}')">🗑 Alışı Sil</button>
     </div>
     <table class="hareket-tbl">
-      <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat (Kdv Hariç)</th><th>Kdv%</th><th>Tutar (Kdv Dahil)</th></tr></thead>
+      <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat (Kdv Hariç)</th><th>Kdv%</th><th>Tutar (Kdv Dahil)</th><th></th></tr></thead>
       <tbody>
         ${kalemler.map(k=>`
           <tr>
@@ -2828,6 +2838,7 @@ function alisDetayCiz(res){
             <td>${fiyatFormat(k.birimFiyat)}</td>
             <td>${k.kdvOrani||0}</td>
             <td>${paraFormat(k.tutar)}</td>
+            <td style="white-space:nowrap">${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını yeni sekmede aç">📊</button>` : ''}${k.stokKodu ? ` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokTaniminaGitYeniSekmede('${k.stokKodu.replace(/'/g,"\\'")}')" title="Bu ürünün Stok Tanımını yeni sekmede aç">📇</button>` : ''}</td>
           </tr>`).join("")}
       </tbody>
     </table>
@@ -3384,10 +3395,19 @@ function bfmGorselZoomAyarla(iframeId, etiketId, delta){
   const et = document.getElementById(etiketId);
   if(et) et.textContent = Math.round(yeni*100)+"%";
 }
+// Panel/gömülü görünüm ilk açıldığında, tipik bir fatura görselinin panele daha rahat
+// sığması için varsayılan zoom seviyesini biraz küçük (%75) başlatır.
+function bfmZoomIlkDegerAta(iframeId, etiketId, deger){
+  _bfmZoomSeviyeleri[iframeId] = deger;
+  const ifr = document.getElementById(iframeId);
+  if(ifr) ifr.style.zoom = deger;
+  const et = document.getElementById(etiketId);
+  if(et) et.textContent = Math.round(deger*100)+"%";
+}
 function bfmZoomKontrolHTML(iframeId, etiketId){
   return `<div class="bfm-zoom-ctrl">
     <button type="button" onclick="bfmGorselZoomAyarla('${iframeId}','${etiketId}',-1)" title="Uzaklaştır">🔍−</button>
-    <span id="${etiketId}">100%</span>
+    <span id="${etiketId}">75%</span>
     <button type="button" onclick="bfmGorselZoomAyarla('${iframeId}','${etiketId}',1)" title="Yakınlaştır">🔍+</button>
   </div>`;
 }
@@ -3412,8 +3432,9 @@ function bfmYanPanelAc(faturaNo){
       ${bfmZoomKontrolHTML("fyp-iframe","fyp-zoom-yuzde")}
       <button class="btn" onclick="bfmYanPanelKapat()">✕ Kapat</button>
     </div>
-    <iframe id="fyp-iframe" src="${faturaGorLinki(faturaNo, true)}" title="Fatura görseli"></iframe>`;
+    <div class="fyp-govde"><iframe id="fyp-iframe" src="${faturaGorLinki(faturaNo, true)}" title="Fatura görseli"></iframe></div>`;
   document.body.appendChild(panel);
+  bfmZoomIlkDegerAta("fyp-iframe","fyp-zoom-yuzde",0.75);
 }
 function bfmYanPanelKapat(){
   const eski = document.getElementById("fatura-yan-panel");
@@ -3621,6 +3642,7 @@ function alisBekleyenOnayModalAc(faturaNo){
   window._bfmAktifFatura = f;
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
   f.kalemler.forEach((k,i)=>bfmSatirGuncelle(i));
+  if(yanda && f.faturaNo) bfmZoomIlkDegerAta("bfm-onay-iframe","bfm-onay-zoom-yuzde",0.75);
 }
 
 // Bir bfm kalem satırının <tr> HTML'ini üretir. Normal kalemler eski davranışıyla aynı
@@ -6574,6 +6596,7 @@ function stokHareketRaporuTemizle(){
   const tab = params.get("tab");
   const islem = params.get("islem");
   const shrArama = params.get("shrArama");
+  const stanimAra = params.get("stanimAra");
   if(islem){ cariHareketIslemeGit(islem); }
   else if(tab && MODULLER.some(m=>m.id===tab)) modulAc(tab);
   else acilisSayfasinaGit();
@@ -6582,6 +6605,22 @@ function stokHareketRaporuTemizle(){
     if(el) el.value = shrArama;
     stokAltModulAc("raporlar");
     stokRaporAltAc("hareket");
+  }
+  if(stanimAra && tab === "stok"){
+    stokAltModulAc("tanimlar");
+    stokTanimAltAc("tanim");
+    const el = document.getElementById("stoktanim-ara");
+    if(el) el.value = stanimAra;
+    // Liste ilk yüklenirken (ağ isteği) henüz hazır olmayabilir — hazır olana kadar
+    // kısa aralıklarla filtreyi tekrar uygular (en fazla ~5 sn).
+    let deneme = 0;
+    const zamanlayici = setInterval(()=>{
+      deneme++;
+      if(_stokTanimListe && _stokTanimListe.length){
+        stokTanimAramaFiltrele(stanimAra);
+        clearInterval(zamanlayici);
+      } else if(deneme > 25) clearInterval(zamanlayici);
+    }, 200);
   }
 })();
 </script>
