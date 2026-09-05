@@ -3388,31 +3388,20 @@ function alisBekleyenOnayModalAc(faturaNo){
 
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase;display:block;margin-top:14px">Ürün Kalemleri</label>
       ${yeniStokSayisi>0 ? `<p style="font-size:12px;color:var(--red);margin:4px 0 8px">⚠️ ${yeniStokSayisi} üründe stok kartı bulunamadı — yanındaki kutuyu işaretli bırakırsan onaylayınca otomatik stok kartı oluşturulur.</p>` : ""}
+      <p style="font-size:12px;color:var(--text3);margin:4px 0 8px">Birden fazla kalemi tek stok olarak işlemek istersen (örn. klozet+rezervuar+kapak+iç takım), aynı sayıyı "Grup" kutusuna yaz (1,1,2,2 gibi), sonra "🔗 Grupla" butonuna bas.</p>
       <div style="overflow:auto;max-height:44vh;border:1px solid var(--border);border-radius:10px;margin-top:6px">
       <table class="hk-tablo"><thead><tr>
+        <th style="width:56px">Grup</th>
         <th style="min-width:130px">Stok Kodu</th><th style="min-width:200px">Ürün</th>
         <th style="width:80px">Miktar</th><th style="width:80px">Birim</th>
         <th style="width:100px">Birim Fiyat</th><th style="width:80px">İsk.1 %</th><th style="width:80px">İsk.2 %</th>
         <th style="width:70px">KDV%</th><th style="width:110px">Tutar</th>
       </tr></thead>
       <tbody id="bfm-kalemler">
-        ${f.kalemler.map((k,i)=>`
-        <tr>
-          <td>
-            <input id="bfm-stokkodu-${i}" type="text" value="${k.stokKodu||''}" style="width:110px">
-            ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" checked style="width:auto"> yeni stok kartı</label>` : ""}
-          </td>
-          <td>${k.urunAdi}</td>
-          <td><input id="bfm-miktar-${i}" type="number" min="0" step="0.01" value="${k.miktar>0?k.miktar:''}" placeholder="0" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
-          <td><select id="bfm-birim-${i}">${bfmBirimSecenekleriHTML(k.stokKodu, k.urunAdi)}</select></td>
-          <td><input id="bfm-fiyat-${i}" type="number" min="0" step="0.01" value="${k.birimFiyat||k.netFiyat}" style="width:100px" oninput="bfmSatirGuncelle(${i})"></td>
-          <td><input id="bfm-isk1-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
-          <td><input id="bfm-isk2-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto2||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
-          <td>%${k.kdvOrani}</td>
-          <td id="bfm-tutar-${i}" style="font-weight:600;text-align:right;padding-right:8px"></td>
-        </tr>`).join("")}
+        ${f.kalemler.map((k,i)=>bfmKalemSatiriHTML(k,i)).join("")}
       </tbody></table>
       </div>
+      <div style="margin-top:8px"><button class="btn" onclick="bfmKalemleriGrupla()">🔗 Grupla</button></div>
 
       <div style="display:flex;justify-content:flex-end;align-items:flex-end;gap:16px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
         <div class="fld" style="max-width:170px;margin-bottom:0"><label>Tutar İskontosu (fatura altı, ops.)</label><input id="bfm-tutar-iskontosu" type="number" min="0" step="0.01" value="0" oninput="bfmGenelToplamGuncelle()"></div>
@@ -3430,7 +3419,134 @@ function alisBekleyenOnayModalAc(faturaNo){
     </div>`;
   document.body.appendChild(overlay);
   window._bfmAktifFatura = f;
+  if(!_stokTanimYuklendi) stokTanimListesiYukle();
   f.kalemler.forEach((k,i)=>bfmSatirGuncelle(i));
+}
+
+// Bir bfm kalem satırının <tr> HTML'ini üretir. Normal kalemler eski davranışıyla aynı
+// (Stok Kodu elle yazılan düz metin kutusu). "Grupla" ile birleştirilmiş kalemler
+// (k.birlesikMi===true) için Stok Kodu hücresi, mevcut stok tanımları içinden arayıp
+// seçebileceğin bir arama kutusuna dönüşür — birleştirilmiş bir üründe zaten var olan bir
+// stok kartını seçmen beklenir, bu yüzden "yeni stok kartı oluştur" seçeneği hiç gösterilmez.
+function bfmKalemSatiriHTML(k, i){
+  const stokKoduHucre = k.birlesikMi ? `
+      <div style="position:relative">
+        <input id="bfm-stokara-${i}" type="text" placeholder="Stok ara..." autocomplete="off" value="${k.stokKoduAdi||''}" style="width:110px"
+               oninput="bfmStokAramaDegisti(${i})" onfocus="bfmStokOneriGoster(${i})" onblur="setTimeout(()=>bfmStokOneriKapat(${i}),200)">
+        <input type="hidden" id="bfm-stokkodu-${i}" value="${k.stokKodu||''}">
+        <div id="bfm-stokoneri-${i}" class="fiyat-gecmis-kutu" style="display:none;position:absolute;z-index:20"></div>
+      </div>` : `
+      <input id="bfm-stokkodu-${i}" type="text" value="${k.stokKodu||''}" style="width:110px">
+      ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" checked style="width:auto"> yeni stok kartı</label>` : ""}`;
+  return `
+        <tr>
+          <td>${k.birlesikMi ? `<span title="Birleştirildi: ${k.urunAdi}" style="font-size:11px;color:var(--amber)">🔗</span>` : `<input id="bfm-grup-${i}" type="text" inputmode="numeric" placeholder="-" style="width:40px;text-align:center">`}</td>
+          <td>${stokKoduHucre}</td>
+          <td>${k.urunAdi}</td>
+          <td><input id="bfm-miktar-${i}" type="number" min="0" step="0.01" value="${k.miktar>0?k.miktar:''}" placeholder="0" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
+          <td><select id="bfm-birim-${i}">${bfmBirimSecenekleriHTML(k.stokKodu, k.urunAdi)}</select></td>
+          <td><input id="bfm-fiyat-${i}" type="number" min="0" step="0.01" value="${k.birimFiyat||k.netFiyat}" style="width:100px" oninput="bfmSatirGuncelle(${i})"></td>
+          <td><input id="bfm-isk1-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
+          <td><input id="bfm-isk2-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto2||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
+          <td>%${k.kdvOrani}</td>
+          <td id="bfm-tutar-${i}" style="font-weight:600;text-align:right;padding-right:8px"></td>
+        </tr>`;
+}
+
+// tbody'yi window._bfmAktifFatura.kalemler'in GÜNCEL hâline göre yeniden çizer (gruplama
+// sonrası kalem sayısı değiştiği için index'lerin baştan kurulması gerekir).
+function bfmKalemlerYenidenCiz(){
+  const f = window._bfmAktifFatura;
+  if(!f) return;
+  document.getElementById("bfm-kalemler").innerHTML = f.kalemler.map((k,i)=>bfmKalemSatiriHTML(k,i)).join("");
+  f.kalemler.forEach((k,i)=>bfmSatirGuncelle(i));
+}
+
+// Aynı "Grup" numarası yazılan kalemleri tek bir kaleme birleştirir:
+//  • Miktar: gruptaki İLK kalemin miktarı esas alınır (onaylamadan önce elle düzeltilebilir).
+//  • Tutar: gruptaki kalemlerin (KDV hariç) tutarları toplanır, fatura toplamı korunur —
+//    birleşik Birim Fiyat, bu toplamın esas alınan miktara bölünmesiyle geriye hesaplanır,
+//    İsk.1/İsk.2 sıfırlanır (indirim zaten birim fiyata gömülü).
+//  • KDV oranı: gruptaki ilk kalemden alınır.
+//  • Stok Kodu boş bırakılır — birleşik satır için mevcut stok tanımları arasından arama
+//    kutusuyla bir stok SEÇİLMESİ istenir (yeni stok kartı önerilmez).
+function bfmKalemleriGrupla(){
+  const f = window._bfmAktifFatura;
+  if(!f) return;
+  // Önce ekrandaki güncel değerleri (elle yapılan düzeltmeler dahil) kalemlere geri yazıyoruz.
+  const guncel = f.kalemler.map((k,i)=>{
+    const grupEl = document.getElementById(`bfm-grup-${i}`);
+    return {
+      ...k,
+      miktar: parseFloat((document.getElementById(`bfm-miktar-${i}`)||{}).value) || 0,
+      birimFiyat: parseFloat((document.getElementById(`bfm-fiyat-${i}`)||{}).value) || 0,
+      iskonto: parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0,
+      iskonto2: parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0,
+      stokKodu: k.birlesikMi ? k.stokKodu : (document.getElementById(`bfm-stokkodu-${i}`)||{}).value,
+      grup: grupEl ? grupEl.value.trim() : "",
+    };
+  });
+  const gruplar = {};
+  guncel.forEach((k,i)=>{ if(k.grup){ (gruplar[k.grup] = gruplar[k.grup]||[]).push(k); } });
+  const islenenGrupNo = new Set();
+  const yeniKalemler = [];
+  guncel.forEach(k=>{
+    if(!k.grup || !gruplar[k.grup] || gruplar[k.grup].length < 2){ yeniKalemler.push(k); return; }
+    if(islenenGrupNo.has(k.grup)) return; // bu grubun birleşik satırı zaten eklendi
+    islenenGrupNo.add(k.grup);
+    const grupKalemleri = gruplar[k.grup];
+    const tutarKdvHaricToplam = grupKalemleri.reduce((top,x)=>{
+      const netBirimFiyat = (x.birimFiyat||0) * (1-(x.iskonto||0)/100) * (1-(x.iskonto2||0)/100) + (x.nakliyePayi||0);
+      return top + (x.miktar||0) * netBirimFiyat;
+    }, 0);
+    const ilk = grupKalemleri[0];
+    const miktarBirlesik = ilk.miktar > 0 ? ilk.miktar : 1;
+    yeniKalemler.push({
+      urunAdi: grupKalemleri.map(x=>x.urunAdi).join(" + "),
+      miktar: miktarBirlesik,
+      birim: ilk.birim,
+      birimFiyat: tutarKdvHaricToplam / miktarBirlesik,
+      iskonto: 0, iskonto2: 0,
+      kdvOrani: ilk.kdvOrani || 0,
+      nakliyePayi: 0,
+      stokKodu: "", stokKoduAdi: "",
+      stokVarMi: true, // "yeni stok kartı" kutusu gösterilmesin — mevcut bir stok seçilmesi bekleniyor
+      birlesikMi: true,
+    });
+  });
+  f.kalemler = yeniKalemler;
+  bfmKalemlerYenidenCiz();
+}
+
+function bfmStokAramaDegisti(i){ document.getElementById(`bfm-stokkodu-${i}`).value = ""; bfmStokOneriGoster(i); }
+function bfmStokOneriGoster(i){
+  const kutu = document.getElementById(`bfm-stokoneri-${i}`);
+  if(!kutu) return;
+  const q = (document.getElementById(`bfm-stokara-${i}`).value || "").trim().toLocaleLowerCase('tr');
+  if(q.length < 1){ kutu.style.display = "none"; return; }
+  const eslesenler = (_stokTanimListe || []).filter(s =>
+    (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q)
+  ).slice(0, 8);
+  if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
+  kutu.innerHTML = eslesenler.map((s,j)=>`
+    <div class="fiyat-gecmis-satir" onclick="bfmStokSec(${i},${j})" data-oneri-idx="${j}">
+      <span>${s.stokAdi}</span><b>${s.stokKodu||''}</b>
+    </div>`).join("");
+  kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+  kutu.style.display = "block";
+}
+function bfmStokOneriKapat(i){ const kutu = document.getElementById(`bfm-stokoneri-${i}`); if(kutu) kutu.style.display = "none"; }
+function bfmStokSec(i,j){
+  const kutu = document.getElementById(`bfm-stokoneri-${i}`);
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const s = eslesenler[j];
+  if(!s) return;
+  document.getElementById(`bfm-stokkodu-${i}`).value = s.stokKodu;
+  document.getElementById(`bfm-stokara-${i}`).value = s.stokAdi;
+  const f = window._bfmAktifFatura;
+  if(f && f.kalemler[i]) f.kalemler[i].stokKoduAdi = s.stokAdi;
+  kutu.style.display = "none";
+  bfmSatirGuncelle(i);
 }
 
 // Bir bfm satırının Tutar'ını (Miktar × (Birim Fiyat × (1-İsk.1%) × (1-İsk.2%) + Nakliye Payı)
@@ -3547,6 +3663,11 @@ function alisBekleyenOnayla(faturaNo){
   for(let i=0; i<f.kalemler.length; i++){
     const miktar = parseFloat(document.getElementById(`bfm-miktar-${i}`).value) || 0;
     if(miktar <= 0) continue; // Miktarı boş bırakılan satırlar alışa dahil edilmez.
+    const stokKoduDeger = document.getElementById(`bfm-stokkodu-${i}`).value.trim();
+    if(f.kalemler[i].birlesikMi && !stokKoduDeger){
+      alert(`"${f.kalemler[i].urunAdi}" birleşik kalemi için bir stok seçmelisiniz.`);
+      return;
+    }
     const yeniStokEl = document.getElementById(`bfm-yenistok-${i}`);
     const fiyat = parseFloat(document.getElementById(`bfm-fiyat-${i}`).value) || 0;
     const isk1 = parseFloat(document.getElementById(`bfm-isk1-${i}`).value) || 0;
