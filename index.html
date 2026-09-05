@@ -675,6 +675,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
         <div class="cari-list-head">
           <input id="alis-ara" placeholder="Alış ara (tedarikçi)..." oninput="alisAramaFiltrele(this.value)">
           <button class="cari-add-btn" onclick="alisModalAc()" title="Yeni alış">+</button>
+          <button class="cari-add-btn" style="background:var(--red)" onclick="alisTumunuSilOnaySureci()" title="TÜM Alış faturalarını sil ve yeniden başla">🗑️</button>
         </div>
         <div class="cari-items" id="alis-items"><div class="cari-empty">Yükleniyor...</div></div>
       </div>
@@ -2660,6 +2661,29 @@ function alisAc(id){
     panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>Bağlantı hatası: '+err.message+'</p></div>';
   });
   alisListesiCiz(_alisListe);
+}
+
+// ★ EKLENDİ: Kullanıcının "mükerrer stok" sorunu nedeniyle istediği, TÜM Alış Faturalarını
+// (bağlı Stok Hareketi + Cari Hareketi ile birlikte) silip Bekleyen Alış Faturaları'ndan
+// yeniden işlemeye başlama işlemi. GERİ ALINAMAZ bir işlem olduğu için 2 adımlı onay ister;
+// backend ayrıca silmeden önce ilgili sayfaların bir "_YEDEK_<tarih>" kopyasını alır.
+function alisTumunuSilOnaySureci(){
+  cariApi("tumAlislariSilVeSifirla", {onay:false}).then(res=>{
+    if(!res.ok){ alert("Hata: " + (res.hata||"bilinmiyor")); return; }
+    if(res.silinecekSayi === 0){ alert("Silinecek Alış Faturası yok."); return; }
+    const yazilan = prompt(
+      `Bu işlem sistemdeki TÜM ${res.silinecekSayi} Alış Faturasını, bunlara bağlı Stok Hareketi ve Cari Hareketi (borç/alacak) kayıtlarıyla BİRLİKTE silecek.\n\n`+
+      `Faturaların kendisi Bekleyen Alış Faturaları listesinde "Bekliyor" durumuna dönecek, oradan tek tek yeniden onaylayabilirsin.\n\n`+
+      `Silme öncesi otomatik bir yedek sayfası alınacak ama işlem GERİ ALINAMAZ.\n\n`+
+      `Devam etmek için kutuya tam olarak SİL yaz:`
+    );
+    if(yazilan !== "SİL"){ if(yazilan!==null) alert("Onay metni eşleşmedi, işlem iptal edildi."); return; }
+    cariApi("tumAlislariSilVeSifirla", {onay:true}).then(res2=>{
+      if(!res2.ok){ alert("Hata: " + (res2.hata||"bilinmiyor")); return; }
+      alert(`${res2.silinen}/${res2.toplam} Alış Faturası silindi. Yedek sayfaları: "_YEDEK_${res2.yedekEki}" ekiyle Sheets'te duruyor. Şimdi Bekleyen Alış Faturaları'ndan yeniden işleyebilirsin.`);
+      alisListesiYukle();
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
 function alisListeyeDon(){

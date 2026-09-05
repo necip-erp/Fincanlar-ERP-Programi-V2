@@ -335,6 +335,7 @@ function handleRequest(e) {
       case "siparisDurumGuncelle": result = siparisDurumGuncelle(body); break;
       case "getCariSiparisListesi": result = getCariSiparisListesi(body.cariId); break;
       case "silAlis":         result = silAlis(body); break;
+      case "tumAlislariSilVeSifirla": result = tumAlislariSilVeSifirla(body); break;
       case "getAlisIadeListesi": result = getAlisIadeListesi(); break;
       case "getAlisIadeDetay":   result = getAlisIadeDetay(body.iadeId); break;
       case "saveAlisIade":       result = saveAlisIade(body); break;
@@ -1733,7 +1734,44 @@ function silAlis(body) {
   return { ok: true };
 }
 
-// body: { id, cariId (opsiyonel), cariAd, tarih, odemeTipi, aciklama,
+// ★ EKLENDİ: Kullanıcının isteği üzerine — sistemdeki mükerrer stok kalemi sorunlu Alış
+// Faturalarını toplu silip Bekleyen Alış Faturaları'ndan yeniden işlemek için.
+// GÜVENLİK: Silmeden önce Alislar/AlisKalemleri/AlisFaturaDurum sayfalarının TAMAMININ ve
+// StokHareketleri/CariHareketler sayfalarındaki Alışla ilgili satırların bir kopyasını
+// "_YEDEK_<zaman damgası>" son ekli yeni sayfalara alır (silmez, sadece kopyalar) — bir
+// şey ters giderse bu yedek sayfalardan elle geri yüklenebilir. body.onay !== true ise
+// hiçbir şey silmeden sadece kaç kayıt etkileneceğini döndürür (kuru çalıştırma).
+function tumAlislariSilVeSifirla(body) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+  const aData = aSheet.getDataRange().getValues();
+  const idler = [];
+  for (let i = 1; i < aData.length; i++) {
+    const id = String(aData[i][0] || "");
+    if (id) idler.push(id);
+  }
+  if (idler.length === 0) return { ok: true, silinen: 0, mesaj: "Silinecek Alış kaydı yok." };
+
+  if (body && body.onay === true) {
+    // Yedek: mevcut Alislar/AlisKalemleri/AlisFaturaDurum sayfalarını kopyala.
+    const damga = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyyMMdd_HHmmss");
+    [SHEETS.alislar, SHEETS.alisKalemleri, SHEETS.alisFaturaDurum].forEach(adi => {
+      const kaynak = ss.getSheetByName(adi);
+      if (kaynak) kaynak.copyTo(ss).setName(adi + "_YEDEK_" + damga);
+    });
+
+    let silinen = 0;
+    idler.forEach(id => {
+      const sonuc = silAlis({ id: id });
+      if (sonuc.ok) silinen++;
+    });
+    cacheTemizle(["alisListesi", "stokHareketListesi", "cariListesi"]);
+    return { ok: true, silinen: silinen, toplam: idler.length, yedekEki: damga };
+  }
+  // Kuru çalıştırma: sadece bilgi ver, hiçbir şey silme.
+  return { ok: true, kuruCalisma: true, silinecekSayi: idler.length };
+}
 //         kalemler: [{urunAdi,miktar,birim,birimFiyat,stokKodu (opsiyonel),
 //                     stokKartiOlustur (opsiyonel)}] }
 // Onaylanmış/aktarılmış bir Alış Faturası'nı ID'sini koruyarak günceller: önce
