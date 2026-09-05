@@ -1564,6 +1564,20 @@ function getAlisDetay(alisId) {
   }
   if (!alis) return { ok: false, hata: "Alış bulunamadı" };
 
+  // ★ EKLENDİ: Alış detayında da "Faturayı Gör" butonu gösterebilmek için faturaNo.
+  let faturaNo = "";
+  const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
+  const durumData = durumSheet.getDataRange().getValues();
+  for (let i = 1; i < durumData.length; i++) {
+    if (String(durumData[i][2] || "") === String(alisId)) { faturaNo = String(durumData[i][0] || ""); break; }
+  }
+  if (!faturaNo) {
+    const m = String(alis.aciklama || "").match(/Fatura No:\s*(\S+)/i);
+    if (m) faturaNo = m[1];
+  }
+  alis.faturaNo = faturaNo;
+
+
   const kData = kSheet.getDataRange().getValues();
   const kalemler = [];
   for (let i = 1; i < kData.length; i++) {

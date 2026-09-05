@@ -58,7 +58,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 .tarih-vurgu{font-weight:800;font-size:1.08em;color:var(--text)}
 .brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;cursor:pointer;user-select:none;transition:opacity var(--t)}
 .brand:hover{opacity:.7}
-.brand img{width:26px;height:26px;transition:transform var(--t)}
+.brand img{height:26px;width:auto;max-width:150px;transition:transform var(--t)}
 .brand:hover img{transform:rotate(-6deg) scale(1.06)}
 .searchwrap{flex:1;max-width:480px;position:relative;margin-left:8px}
 .searchwrap input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--border);border-radius:20px;background:var(--bg3);font-size:14px;color:var(--text);outline:none;transition:border-color var(--t),background var(--t),box-shadow var(--t)}
@@ -233,12 +233,17 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .rehber-ac-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--bg3);border:1px solid var(--border);border-radius:6px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;transition:background var(--t),border-color var(--t)}
 .rehber-ac-btn:hover{background:var(--blue-l);border-color:var(--blue)}
 .modal-box-xwide{max-width:1180px}
-.modal-box-onay2col{max-width:1580px}
-.bfm-2col{display:flex;gap:18px;align-items:flex-start}
-.bfm-2col-sol{flex:1.35;min-width:0}
-.bfm-2col-sag{flex:1;min-width:340px;position:sticky;top:0}
-.bfm-2col-sag iframe{width:100%;height:78vh;border:1px solid var(--border);border-radius:10px;background:var(--bg3)}
-@media (max-width:1100px){ .bfm-2col{flex-direction:column} .bfm-2col-sag{position:static;width:100%} .bfm-2col-sag iframe{height:60vh} }
+.modal-box-onay2col{max-width:1580px;max-height:92vh;display:flex;flex-direction:column}
+.modal-box-onay2col > h3, .modal-box-onay2col > p{flex-shrink:0}
+.bfm-2col{display:flex;gap:18px;align-items:stretch;flex:1;min-height:0}
+.bfm-2col-sol{flex:1.35;min-width:0;overflow-y:auto;padding-right:4px}
+.bfm-2col-sag{flex:1;min-width:340px;display:flex;flex-direction:column;min-height:0}
+.bfm-2col-sag-ust{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-shrink:0}
+.bfm-zoom-ctrl{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3)}
+.bfm-zoom-ctrl button{padding:2px 8px;font-size:13px;line-height:1;border:1px solid var(--border);border-radius:6px;background:var(--bg3);cursor:pointer}
+.bfm-2col-sag-govde{flex:1;min-height:0;overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--bg3)}
+.bfm-2col-sag-govde iframe{width:100%;height:100%;border:0;display:block}
+@media (max-width:1100px){ .bfm-2col{flex-direction:column} .modal-box-onay2col{max-height:96vh} .bfm-2col-sol{max-height:40vh} .bfm-2col-sag-govde{height:50vh} }
 .fatura-yan-panel{position:fixed;top:0;right:0;height:100vh;width:480px;max-width:92vw;background:var(--bg2);box-shadow:-10px 0 28px rgba(16,18,30,.18);z-index:60;display:flex;flex-direction:column;padding:14px;animation:fincanPanelIn .16s var(--ease)}
 .fatura-yan-panel iframe{flex:1;width:100%;border:1px solid var(--border);border-radius:10px;background:var(--bg3)}
 .fatura-yan-panel .fyp-ust{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
@@ -314,8 +319,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 
 <div class="topbar">
   <div class="brand" onclick="gitAnaSayfa()">
-    <img src="./icon-192.png" alt="">
-    <span>Fincanlar ERP</span>
+    <img src="./fincanlar-logo.png" alt="Fincanlar" style="height:28px;width:auto;object-fit:contain">
   </div>
   <span id="sayfa-baslik" class="sayfa-baslik"></span>
   <div class="searchwrap">
@@ -1153,8 +1157,8 @@ const CARI_API = "https://script.google.com/macros/s/AKfycbxlsbGdDPP42Cxm11jkDG7
 // deployment'a göre taze bir link kuruyoruz; bu link mevcut deployment değiştiği sürece
 // hep çalışır ve stored link'teki olası bozukluktan etkilenmez.
 const FATURA_OKUMA_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbysou4qEnAXeT1YFAuycdj3EA-eZ6alGlbHwQYe5SqmCq8jZCjJq2JGRYnyoTKk7VH9/exec";
-function faturaGorLinki(faturaNo){
-  return FATURA_OKUMA_WEBAPP_URL + "?faturaHtml=" + encodeURIComponent(faturaNo) + "&authuser=0";
+function faturaGorLinki(faturaNo, kompakt){
+  return FATURA_OKUMA_WEBAPP_URL + "?faturaHtml=" + encodeURIComponent(faturaNo) + "&authuser=0" + (kompakt ? "&kompakt=1" : "");
 }
 
 let _cariYuklendi = false;
@@ -2096,6 +2100,7 @@ function siparisFaturaKaydet(){
 function satisFisYazdir(id){
   cariApi("getSatisDetay", {satisId:id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    if(res.satis.belgeTipi === "Sipariş"){ siparisFormuYazdir(res); return; }
     const s = res.satis, kalemler = res.kalemler, t = s.toplamlar || {};
     const eski = document.getElementById("fis-yazdirilacak");
     if(eski) eski.remove();
@@ -2103,7 +2108,10 @@ function satisFisYazdir(id){
     div.id = "fis-yazdirilacak";
     div.style.cssText = "max-width:700px;margin:30px auto;font-family:inherit;color:#111";
     div.innerHTML = `
-      <h2 style="margin:0 0 4px">${s.belgeTipi||'Fatura'}</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <img src="./fincanlar-logo.png" alt="Fincanlar" style="height:46px;width:auto">
+        <h2 style="margin:0">${s.belgeTipi||'Fatura'}</h2>
+      </div>
       <p style="margin:0 0 16px;color:#555">${s.cariAd} · ${tarihGoster(s.tarih)} · ${s.odemeTipi}</p>
       <table style="width:100%;border-collapse:collapse" border="1" cellpadding="6">
         <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th></tr></thead>
@@ -2127,6 +2135,81 @@ function satisFisYazdir(id){
     window.print();
     setTimeout(()=>{ div.remove(); }, 500);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ★ EKLENDİ: Sipariş Formu çıktısı, kullanıcının paylaştığı eski (referans) görsele
+// birebir uyacak şekilde: logo + "SİPARİŞ FORMU" başlığı, solda cari bilgileri (Cari Kodu,
+// Firma Adı, Adres, Telefon/GSM, Vergi D-No), sağda belge bilgileri (Sipariş No, Teklif
+// Tarihi, Vade Günü), kalem tablosunda Miktar 2 (Ambalaj Tanımlama'daki ambalaj miktarına
+// göre çevrilmiş miktar+birim, örn. m²'den kutu/koli adedine), ve sağ altta toplamlar.
+function siparisFormuYazdir(res){
+  const s = res.satis, kalemler = res.kalemler, t = s.toplamlar || {};
+  const cariP = cariApi("getCariDetay", {cariId: s.cariId}).catch(()=>({ok:false}));
+  const stokP = (_stokTanimListe && _stokTanimListe.length) ? Promise.resolve({ok:true, kalemler:_stokTanimListe}) : cariApi("getStokTanimListesi").catch(()=>({ok:false}));
+  Promise.all([cariP, stokP]).then(([cres, sres])=>{
+    const c = cres.ok ? cres.cari : {};
+    if(sres.ok) _stokTanimListe = sres.kalemler;
+    siparisFormuCiz(s, kalemler, t, c);
+  });
+}
+function siparisFormuMiktar2(k){
+  const stok = (_stokTanimListe||[]).find(x=>x.stokKodu===k.stokKodu);
+  if(!stok || !(stok.ambalajMiktari>0)) return { miktar: k.miktar, birim: k.birim };
+  return { miktar: Math.ceil((parseFloat(k.miktar)||0) / stok.ambalajMiktari), birim: stok.ambalajBirimi || k.birim };
+}
+function siparisFormuCiz(s, kalemler, t, c){
+  const eski = document.getElementById("fis-yazdirilacak");
+  if(eski) eski.remove();
+  const div = document.createElement("div");
+  div.id = "fis-yazdirilacak";
+  div.style.cssText = "max-width:1000px;margin:20px auto;font-family:inherit;color:#111";
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+      <img src="./fincanlar-logo.png" alt="Fincanlar" style="height:64px;width:auto">
+      <h2 style="margin:6px 0 0;letter-spacing:1px">=== SİPARİŞ FORMU ===</h2>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:24px;margin-bottom:14px;font-size:13.5px">
+      <table style="border-collapse:collapse">
+        <tr><td style="padding:2px 10px 2px 0;color:#555">CARİ KODU</td><td>: <b>${c.cariKodu||'—'}</b></td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">FİRMA ADI</td><td>: <b>${s.cariAd||''}</b></td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555;vertical-align:top">ADRES</td><td>: ${c.adres||'—'}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">TELEFON / GSM</td><td>: ${c.telefon||'—'}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">VERGİ D-NO</td><td>: <b>${c.vergiNo||'—'}</b></td></tr>
+      </table>
+      <table style="border-collapse:collapse;align-self:flex-start">
+        <tr><td style="padding:2px 10px 2px 0;color:#555">SİPARİŞ NO</td><td>: <b>${s.siparisNo||'—'}</b></td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">TEKLİF TARİHİ</td><td>: ${tarihGoster(s.tarih)}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">VADE GÜNÜ</td><td>: ${s.vade?tarihGoster(s.vade):'—'}</td></tr>
+      </table>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px" border="1" cellpadding="7">
+      <thead><tr style="background:#f2f2f2">
+        <th>KODU</th><th>ÜRÜN ADI</th><th>MİKTARI</th><th>MİKTAR 2</th><th>FİYAT</th><th>İSK %</th><th>TUTAR</th>
+      </tr></thead>
+      <tbody>
+        ${kalemler.map(k=>{ const m2 = siparisFormuMiktar2(k); return `<tr>
+          <td>${k.stokKodu||'—'}</td><td>${k.urunAdi}</td>
+          <td style="text-align:right">${miktarFormat(k.miktar)} ${k.birim||''}</td>
+          <td style="text-align:right">${miktarFormat(m2.miktar)} ${m2.birim||''}</td>
+          <td style="text-align:right">${fiyatFormat(k.birimFiyat)}</td>
+          <td style="text-align:right">${k.iskontoYuzde||0}</td>
+          <td style="text-align:right">${miktarFormat(k.tutar)}</td>
+        </tr>`; }).join("")}
+      </tbody>
+    </table>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+      <table style="border-collapse:collapse;font-size:13.5px">
+        <tr><td style="padding:2px 10px 2px 0;color:#555">BRÜT TUTAR</td><td>: ${paraFormat(t.brutToplam||0)}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">İSKONTO</td><td>: ${paraFormat(t.iskontoToplam||0)}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">ARA TOPLAM</td><td>: ${paraFormat(t.araToplam||0)}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">KDV TOPLAM</td><td>: ${paraFormat(t.kdvToplam||0)}</td></tr>
+        ${t.tutarIskontosu>0 ? `<tr><td style="padding:2px 10px 2px 0;color:#555">Tutar İskontosu</td><td>: -${paraFormat(t.tutarIskontosu)}</td></tr>` : ""}
+        <tr style="font-weight:800;font-size:15px"><td style="padding:6px 10px 0 0">GENEL TOPLAM</td><td style="padding:6px 0 0">: ${paraFormat(t.genelToplam||0)}</td></tr>
+      </table>
+    </div>`;
+  document.body.appendChild(div);
+  window.print();
+  setTimeout(()=>{ div.remove(); }, 500);
 }
 
 function satisSilOnay(id){
@@ -2730,6 +2813,7 @@ function alisDetayCiz(res){
     ${a.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${a.aciklama}</div></div></div>` : ""}
     <div class="btnrow">
       <button class="btn btn-primary" onclick="alisDuzenleAc('${a.id}')">✏️ Düzenle</button>
+      ${a.faturaNo ? `<button class="btn" onclick="faturaGorsalAc('${a.faturaNo}')">📄 Faturayı Gör</button>` : ``}
       <button class="btn btn-danger" onclick="alisSilOnay('${a.id}')">🗑 Alışı Sil</button>
     </div>
     <table class="hareket-tbl">
@@ -3278,17 +3362,40 @@ function alisIadeKaydet(){
 let _alisBekleyenListe = [];
 
 // ★ EKLENDİ: "Fatura görselini yanda aç" tercihi — kullanıcı isteğiyle localStorage'a
-// kaydediliyor, sayfa yenilense de/tekrar girse de hatırlanıyor. Varsayılan: kapalı
-// (yani eski davranış: yeni sekmede açılır) — kullanıcı tikleyince "yanda" moduna geçer.
-function bfmFaturaYandaMi(){ return localStorage.getItem("bfmFaturaYanda") === "1"; }
+// kaydediliyor, sayfa yenilense de/tekrar girse de hatırlanıyor. Varsayılan: AÇIK
+// (kullanıcı "tik işaretli gelsin" dedi) — sadece kullanıcı bilerek kapatırsa yeni
+// sekmede açma moduna döner.
+function bfmFaturaYandaMi(){ return localStorage.getItem("bfmFaturaYanda") !== "0"; }
 function bfmFaturaYandaAyarKaydet(acikMi){ localStorage.setItem("bfmFaturaYanda", acikMi ? "1" : "0"); }
 function bfmFaturaYandaTikSenkronize(){
   const el = document.getElementById("bfm-yanda-ac-tik");
   if(el) el.checked = bfmFaturaYandaMi();
 }
 
+// ★ EKLENDİ: Yanda/panelde gösterilen fatura görseli için yakınlaştırma (CSS zoom).
+// Her görsel kutusu kendi zoom seviyesini id'sine göre hatırlar (_bfmZoomSeviyeleri).
+let _bfmZoomSeviyeleri = {};
+function bfmGorselZoomAyarla(iframeId, etiketId, delta){
+  const mevcut = _bfmZoomSeviyeleri[iframeId] || 1;
+  const yeni = Math.max(0.4, Math.min(2.5, Math.round((mevcut + delta*0.1)*100)/100));
+  _bfmZoomSeviyeleri[iframeId] = yeni;
+  const ifr = document.getElementById(iframeId);
+  if(ifr) ifr.style.zoom = yeni;
+  const et = document.getElementById(etiketId);
+  if(et) et.textContent = Math.round(yeni*100)+"%";
+}
+function bfmZoomKontrolHTML(iframeId, etiketId){
+  return `<div class="bfm-zoom-ctrl">
+    <button type="button" onclick="bfmGorselZoomAyarla('${iframeId}','${etiketId}',-1)" title="Uzaklaştır">🔍−</button>
+    <span id="${etiketId}">100%</span>
+    <button type="button" onclick="bfmGorselZoomAyarla('${iframeId}','${etiketId}',1)" title="Yakınlaştır">🔍+</button>
+  </div>`;
+}
+
 // "Faturayı Gör" tıklandığında tercihe göre ya sağda kayan bir panelde (iframe) ya da
-// (eski davranış) yeni sekmede açar.
+// (eski davranış) yeni sekmede açar. Panel/gömülü görünümde "kompakt" bayrağıyla,
+// faturanın alt kısmındaki banka hesap bilgisi bölümü sunucu tarafında kırpılıyor
+// (yeni sekmede tam/orijinal hâliyle açıldığında kırpma uygulanmıyor).
 function faturaGorsalAc(faturaNo){
   if(!faturaNo) return;
   if(bfmFaturaYandaMi()){ bfmYanPanelAc(faturaNo); }
@@ -3302,9 +3409,10 @@ function bfmYanPanelAc(faturaNo){
   panel.innerHTML = `
     <div class="fyp-ust">
       <b style="font-size:13px">📄 Fatura — ${faturaNo}</b>
+      ${bfmZoomKontrolHTML("fyp-iframe","fyp-zoom-yuzde")}
       <button class="btn" onclick="bfmYanPanelKapat()">✕ Kapat</button>
     </div>
-    <iframe src="${faturaGorLinki(faturaNo)}" title="Fatura görseli"></iframe>`;
+    <iframe id="fyp-iframe" src="${faturaGorLinki(faturaNo, true)}" title="Fatura görseli"></iframe>`;
   document.body.appendChild(panel);
 }
 function bfmYanPanelKapat(){
@@ -3499,8 +3607,13 @@ function alisBekleyenOnayModalAc(faturaNo){
 
       ${yanda ? `</div>
       <div class="bfm-2col-sag">
-        <label style="font-size:10px;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:6px">Kaynak Fatura Görseli</label>
-        ${f.faturaNo ? `<iframe src="${faturaGorLinki(f.faturaNo)}" title="Fatura görseli"></iframe>` : `<div style="font-size:12px;color:var(--text3)">Bu fatura için görsel bulunamadı.</div>`}
+        <div class="bfm-2col-sag-ust">
+          <label style="font-size:10px;color:var(--text3);text-transform:uppercase;margin:0">Kaynak Fatura Görseli</label>
+          ${f.faturaNo ? bfmZoomKontrolHTML("bfm-onay-iframe","bfm-onay-zoom-yuzde") : ``}
+        </div>
+        <div class="bfm-2col-sag-govde">
+          ${f.faturaNo ? `<iframe id="bfm-onay-iframe" src="${faturaGorLinki(f.faturaNo, true)}" title="Fatura görseli"></iframe>` : `<div style="font-size:12px;color:var(--text3);padding:10px">Bu fatura için görsel bulunamadı.</div>`}
+        </div>
       </div>
       </div>` : ``}
     </div>`;
