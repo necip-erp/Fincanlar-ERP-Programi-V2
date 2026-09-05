@@ -3430,12 +3430,18 @@ function alisBekleyenOnayModalAc(faturaNo){
 // stok kartını seçmen beklenir, bu yüzden "yeni stok kartı oluştur" seçeneği hiç gösterilmez.
 function bfmKalemSatiriHTML(k, i){
   const stokKoduHucre = k.birlesikMi ? `
-      <div style="position:relative">
-        <input id="bfm-stokara-${i}" type="text" placeholder="Stok ara..." autocomplete="off" value="${k.stokKoduAdi||''}" style="width:110px"
-               oninput="bfmStokAramaDegisti(${i})" onfocus="bfmStokOneriGoster(${i})" onblur="setTimeout(()=>bfmStokOneriKapat(${i}),200)">
-        <input type="hidden" id="bfm-stokkodu-${i}" value="${k.stokKodu||''}">
-        <div id="bfm-stokoneri-${i}" class="fiyat-gecmis-kutu" style="display:none;position:absolute;z-index:20"></div>
-      </div>` : `
+      <div style="display:flex;align-items:center;gap:4px">
+        <div style="position:relative;flex:1">
+          <input id="bfm-stokara-${i}" type="text" placeholder="Stok ara..." autocomplete="off" value="${k.stokKoduAdi||''}" style="width:100%"
+                 oninput="bfmStokAramaDegisti(${i})" onfocus="bfmStokOneriGoster(${i})" onblur="setTimeout(()=>bfmStokOneriKapat(${i}),200)">
+          <input type="hidden" id="bfm-stokkodu-${i}" value="${k.stokKodu||''}">
+          <div id="bfm-stokoneri-${i}" class="fiyat-gecmis-kutu" style="display:none;position:absolute;z-index:20"></div>
+        </div>
+        <button type="button" class="btn" style="padding:2px 6px;font-size:11px" onclick="bfmStokKartiAc(${i})" title="Seçili stok kartını aç">📇</button>
+      </div>
+      <label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text3);margin-top:3px;white-space:nowrap">
+        <input type="checkbox" id="bfm-yenistokac-${i}" style="width:auto" onchange="bfmYeniStokAc(${i})"> yeni stok aç
+      </label>` : `
       <input id="bfm-stokkodu-${i}" type="text" value="${k.stokKodu||''}" style="width:110px">
       ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" checked style="width:auto"> yeni stok kartı</label>` : ""}`;
   return `
@@ -3547,6 +3553,31 @@ function bfmStokSec(i,j){
   if(f && f.kalemler[i]) f.kalemler[i].stokKoduAdi = s.stokAdi;
   kutu.style.display = "none";
   bfmSatirGuncelle(i);
+}
+
+// Birleştirilmiş satırın yanındaki "yeni stok aç" kutusu işaretlenince tetiklenir: kutuyu
+// hemen geri bırakıp (kalıcı bir durum değil, tek seferlik tetikleyici) Yeni Stok Tanımı
+// modalını açar; kaydedilince oluşan stoğun kodu/adı doğrudan bu satıra yazılır.
+function bfmYeniStokAc(i){
+  const kutu = document.getElementById(`bfm-yenistokac-${i}`);
+  if(kutu) kutu.checked = false;
+  stokTanimModalAc(null, (yeni)=>{
+    document.getElementById(`bfm-stokkodu-${i}`).value = yeni.stokKodu || "";
+    document.getElementById(`bfm-stokara-${i}`).value = yeni.stokAdi || "";
+    const f = window._bfmAktifFatura;
+    if(f && f.kalemler[i]) f.kalemler[i].stokKoduAdi = yeni.stokAdi;
+    bfmSatirGuncelle(i);
+  });
+}
+
+// Birleştirilmiş satırda o an seçili/girilmiş olan stok kodunun aktif stok kartını
+// (Stok Tanımı düzenleme modalı) açar — satisKalemStokKartiAc ile aynı mantık.
+function bfmStokKartiAc(i){
+  const kod = String((document.getElementById(`bfm-stokkodu-${i}`)||{}).value||"").trim();
+  if(!kod){ alert("Önce bir stok seçmeli ya da yeni stok açmalısınız."); return; }
+  const s = (_stokTanimListe||[]).find(x=>x.stokKodu===kod);
+  if(!s){ alert("'"+kod+"' kodlu aktif bir stok kartı bulunamadı."); return; }
+  stokTanimModalAc(s.id);
 }
 
 // Bir bfm satırının Tutar'ını (Miktar × (Birim Fiyat × (1-İsk.1%) × (1-İsk.2%) + Nakliye Payı)
@@ -5793,7 +5824,8 @@ function stokTanimAramaFiltrele(deger){
   stokTanimListesiCiz(filtreli);
 }
 
-function stokTanimModalAc(editId){
+function stokTanimModalAc(editId, onKaydedildi){
+  window._stokTanimKaydedildiCB = onKaydedildi || null;
   if(_birimListe.length===0) birimListesiYukle();
   if(!_markaYuklendi) markaListesiYukle();
   ["urunGrubu","altUrunGrubu","ebat","renk","ambalaj"].forEach(tip=>{ if(!_tanimListeYuklendi[tip]) tanimListesiYukle(tip); });
@@ -5875,6 +5907,12 @@ function stokTanimKaydet(id){
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("stoktanim-modal-overlay").remove();
     stokTanimListesiYukle();
+    // Bu modal başka bir ekrandan (örn. Bekleyen Alış Faturaları gruplama) "yeni stok aç"
+    // tetikleyicisiyle açıldıysa, oluşan stoğun kodu/adı çağıran ekrana geri bildirilir.
+    if(window._stokTanimKaydedildiCB){
+      window._stokTanimKaydedildiCB({id: res.id, stokKodu: body.stokKodu, stokAdi: body.stokAdi});
+      window._stokTanimKaydedildiCB = null;
+    }
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
