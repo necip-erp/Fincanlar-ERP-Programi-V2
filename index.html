@@ -3443,14 +3443,14 @@ function bfmKalemSatiriHTML(k, i){
         <input type="checkbox" id="bfm-yenistokac-${i}" style="width:auto" onchange="bfmYeniStokAc(${i})"> yeni stok aç
       </label>` : `
       <input id="bfm-stokkodu-${i}" type="text" value="${k.stokKodu||''}" style="width:110px">
-      ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" checked style="width:auto"> yeni stok kartı</label>` : ""}`;
+      ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" ${k.yeniStokIsaretli===false?'':'checked'} style="width:auto"> yeni stok kartı</label>` : ""}`;
   return `
         <tr>
-          <td>${k.birlesikMi ? `<span title="Birleştirildi: ${k.urunAdi}" style="font-size:11px;color:var(--amber)">🔗</span>` : `<input id="bfm-grup-${i}" type="text" inputmode="numeric" placeholder="-" style="width:40px;text-align:center">`}</td>
+          <td>${k.birlesikMi ? `<span title="Birleştirildi: ${k.urunAdi}" style="font-size:11px;color:var(--amber)">🔗</span>` : `<input id="bfm-grup-${i}" type="text" inputmode="numeric" placeholder="-" value="${k.grup||''}" style="width:40px;text-align:center">`}</td>
           <td>${stokKoduHucre}</td>
           <td>${k.urunAdi}</td>
           <td><input id="bfm-miktar-${i}" type="number" min="0" step="0.01" value="${k.miktar>0?k.miktar:''}" placeholder="0" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
-          <td><select id="bfm-birim-${i}">${bfmBirimSecenekleriHTML(k.stokKodu, k.urunAdi)}</select></td>
+          <td><select id="bfm-birim-${i}">${bfmBirimSecenekleriHTML(k.stokKodu, k.urunAdi, k.birim)}</select></td>
           <td><input id="bfm-fiyat-${i}" type="number" min="0" step="0.01" value="${k.birimFiyat||k.netFiyat}" style="width:100px" oninput="bfmSatirGuncelle(${i})"></td>
           <td><input id="bfm-isk1-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
           <td><input id="bfm-isk2-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto2||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
@@ -3482,6 +3482,8 @@ function bfmKalemleriGrupla(){
   // Önce ekrandaki güncel değerleri (elle yapılan düzeltmeler dahil) kalemlere geri yazıyoruz.
   const guncel = f.kalemler.map((k,i)=>{
     const grupEl = document.getElementById(`bfm-grup-${i}`);
+    const birimEl = document.getElementById(`bfm-birim-${i}`);
+    const yeniStokEl = document.getElementById(`bfm-yenistok-${i}`);
     return {
       ...k,
       miktar: parseFloat((document.getElementById(`bfm-miktar-${i}`)||{}).value) || 0,
@@ -3489,6 +3491,8 @@ function bfmKalemleriGrupla(){
       iskonto: parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0,
       iskonto2: parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0,
       stokKodu: k.birlesikMi ? k.stokKodu : (document.getElementById(`bfm-stokkodu-${i}`)||{}).value,
+      birim: birimEl ? birimEl.value : k.birim,
+      yeniStokIsaretli: yeniStokEl ? yeniStokEl.checked : k.yeniStokIsaretli,
       grup: grupEl ? grupEl.value.trim() : "",
     };
   });
@@ -3618,9 +3622,9 @@ function bfmM2Uygun(stokKodu, urunAdi){
   }
   return false;
 }
-function bfmBirimSecenekleriHTML(stokKodu, urunAdi){
-  const m2 = bfmM2Uygun(stokKodu, urunAdi);
-  return `<option value="adet" ${!m2?'selected':''}>adet</option><option value="m2" ${m2?'selected':''}>m²</option><option value="paket">paket</option><option value="kg">kg</option>`;
+function bfmBirimSecenekleriHTML(stokKodu, urunAdi, seciliBirim){
+  const secili = seciliBirim || (bfmM2Uygun(stokKodu, urunAdi) ? "m2" : "adet");
+  return `<option value="adet" ${secili==="adet"?'selected':''}>adet</option><option value="m2" ${secili==="m2"?'selected':''}>m²</option><option value="paket" ${secili==="paket"?'selected':''}>paket</option><option value="kg" ${secili==="kg"?'selected':''}>kg</option>`;
 }
 
 function bfmSatirGuncelle(i){
