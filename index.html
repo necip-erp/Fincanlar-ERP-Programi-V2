@@ -2635,10 +2635,10 @@ function alisListesiCiz(liste){
   el.innerHTML = liste.map(a=>`
     <div class="cari-item ${_alisSecili===a.id?'sel':''}" onclick="alisAc('${a.id}')">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${a.cariAd}</span>
+        <span class="cari-item-ad">${a.cariAd}${a.cariKodu?` <span style="font-weight:400;color:var(--text3);font-size:11px">(${a.cariKodu})</span>`:""}</span>
         <span class="cari-item-bakiye">${paraFormat(a.toplamTutar)}</span>
       </div>
-      <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(a.tarih)}</b> · ${a.odemeTipi}</span>
+      <span class="cari-item-tip">${a.faturaNo?`<b style="color:var(--blue)">#${a.faturaNo}</b> · `:""}<b class="tarih-vurgu">${tarihGoster(a.tarih)}</b> · ${a.odemeTipi}</span>
     </div>`).join("");
 }
 
@@ -3443,12 +3443,12 @@ function bfmKalemSatiriHTML(k, i){
         <input type="checkbox" id="bfm-yenistokac-${i}" style="width:auto" onchange="bfmYeniStokAc(${i})"> yeni stok aç
       </label>` : `
       <input id="bfm-stokkodu-${i}" type="text" value="${k.stokKodu||''}" style="width:110px">
-      ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" ${k.yeniStokIsaretli===false?'':'checked'} style="width:auto"> yeni stok kartı</label>` : ""}`;
+      ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" ${k.yeniStokIsaretli===true?'checked':''} style="width:auto"> yeni stok kartı</label>` : ""}`;
   return `
         <tr>
-          <td>${k.birlesikMi ? `<span title="Birleştirildi: ${k.urunAdi}" style="font-size:11px;color:var(--amber)">🔗</span>` : `<input id="bfm-grup-${i}" type="text" inputmode="numeric" placeholder="-" value="${k.grup||''}" style="width:40px;text-align:center">`}</td>
+          <td>${k.birlesikMi ? `<span title="Birleştirildi" style="font-size:11px;color:var(--amber)">🔗</span>` : `<input id="bfm-grup-${i}" type="text" inputmode="numeric" placeholder="-" value="${k.grup||''}" style="width:40px;text-align:center">`}</td>
           <td>${stokKoduHucre}</td>
-          <td>${k.urunAdi}</td>
+          <td>${k.birlesikMi ? `<input id="bfm-ad-${i}" type="text" value="${(k.urunAdi||'').replace(/"/g,'&quot;')}" style="width:160px">` : k.urunAdi}</td>
           <td><input id="bfm-miktar-${i}" type="number" min="0" step="0.01" value="${k.miktar>0?k.miktar:''}" placeholder="0" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
           <td><select id="bfm-birim-${i}">${bfmBirimSecenekleriHTML(k.stokKodu, k.urunAdi, k.birim)}</select></td>
           <td><input id="bfm-fiyat-${i}" type="number" min="0" step="0.01" value="${k.birimFiyat||k.netFiyat}" style="width:100px" oninput="bfmSatirGuncelle(${i})"></td>
@@ -3490,7 +3490,12 @@ function bfmKalemleriGrupla(){
       birimFiyat: parseFloat((document.getElementById(`bfm-fiyat-${i}`)||{}).value) || 0,
       iskonto: parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0,
       iskonto2: parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0,
-      stokKodu: k.birlesikMi ? k.stokKodu : (document.getElementById(`bfm-stokkodu-${i}`)||{}).value,
+      // ★ DÜZELTME: daha önce birleştirilmiş (birlesikMi) satırlarda stok kodu DOM'dan değil
+      // eski k.stokKodu'ndan okunuyordu — bfmStokSec/bfmYeniStokAc sadece DOM'u güncellediği
+      // için, ikinci bir "Grupla" tıklamasında seçilen kod kayboluyor ve tekrar soruluyordu.
+      // Artık her satırda (birleşik olsun olmasın) DOM'daki güncel değer esas alınıyor.
+      stokKodu: (document.getElementById(`bfm-stokkodu-${i}`)||{}).value,
+      urunAdi: k.birlesikMi ? ((document.getElementById(`bfm-ad-${i}`)||{}).value || k.urunAdi) : k.urunAdi,
       birim: birimEl ? birimEl.value : k.birim,
       yeniStokIsaretli: yeniStokEl ? yeniStokEl.checked : k.yeniStokIsaretli,
       grup: grupEl ? grupEl.value.trim() : "",
@@ -3554,7 +3559,7 @@ function bfmStokSec(i,j){
   document.getElementById(`bfm-stokkodu-${i}`).value = s.stokKodu;
   document.getElementById(`bfm-stokara-${i}`).value = s.stokAdi;
   const f = window._bfmAktifFatura;
-  if(f && f.kalemler[i]) f.kalemler[i].stokKoduAdi = s.stokAdi;
+  if(f && f.kalemler[i]){ f.kalemler[i].stokKoduAdi = s.stokAdi; f.kalemler[i].stokKodu = s.stokKodu; }
   kutu.style.display = "none";
   bfmSatirGuncelle(i);
 }
@@ -3569,7 +3574,7 @@ function bfmYeniStokAc(i){
     document.getElementById(`bfm-stokkodu-${i}`).value = yeni.stokKodu || "";
     document.getElementById(`bfm-stokara-${i}`).value = yeni.stokAdi || "";
     const f = window._bfmAktifFatura;
-    if(f && f.kalemler[i]) f.kalemler[i].stokKoduAdi = yeni.stokAdi;
+    if(f && f.kalemler[i]){ f.kalemler[i].stokKoduAdi = yeni.stokAdi; f.kalemler[i].stokKodu = yeni.stokKodu; }
     bfmSatirGuncelle(i);
   });
 }
@@ -3716,8 +3721,9 @@ function alisBekleyenOnayla(faturaNo){
     // Fatura altı "Brüt Toplam / İskonto" gösterimi için satır düzeyi liste fiyatı ve
     // birleşik indirim %'si de gönderiliyor (BIRIM_FIYAT hesaplarda hâlâ net kalıyor).
     const birlesikIskontoYuzde = 100 * (1 - (1 - isk1/100) * (1 - isk2/100));
+    const adInputEl = f.kalemler[i].birlesikMi ? document.getElementById(`bfm-ad-${i}`) : null;
     kalemler.push({
-      urunAdi: f.kalemler[i].urunAdi,
+      urunAdi: (adInputEl && adInputEl.value.trim()) || f.kalemler[i].urunAdi,
       miktar: miktar,
       birim: document.getElementById(`bfm-birim-${i}`).value,
       birimFiyat: netBirimFiyat,

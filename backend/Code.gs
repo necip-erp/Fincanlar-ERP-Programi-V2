@@ -1492,15 +1492,44 @@ function getAlisListesi() {
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const data = aSheet.getDataRange().getValues();
 
+  // ★ EKLENDİ: soldaki listede fatura no + cari kodu belirgin gösterilsin diye
+  // AlisFaturaDurum'dan (ALIS_ID -> FATURA_NO) ve CariHesaplar'dan (CARI_ID -> CARI_KODU) eşleme.
+  const faturaNoMap = {};
+  const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
+  const durumData = durumSheet.getDataRange().getValues();
+  for (let i = 1; i < durumData.length; i++) {
+    const alisId = String(durumData[i][2] || "");
+    if (alisId) faturaNoMap[alisId] = String(durumData[i][0] || "");
+  }
+  const cariKoduMap = {};
+  const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
+    ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
+  const hData = hSheet.getDataRange().getValues();
+  for (let i = 1; i < hData.length; i++) {
+    const cariId = String(hData[i][0] || "");
+    if (cariId) cariKoduMap[cariId] = String(hData[i][8] || "");
+  }
+
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const id = String(row[0] || "");
     if (!id) continue;
+    const cariId = String(row[2] || "");
+    // Fatura no önce AlisFaturaDurum'dan (Bekleyenden onaylanan faturalar), yoksa ACIKLAMA
+    // içindeki "Fatura No: X" kalıbından (manuel girişte de faturaNo yazılmışsa) çekiliyor.
+    let faturaNo = faturaNoMap[id] || "";
+    if (!faturaNo) {
+      const ac = String(row[6] || "");
+      const m = ac.match(/Fatura No:\s*(\S+)/i);
+      if (m) faturaNo = m[1];
+    }
     sonuc.push({
-      id: id, tarih: hucreTarihStr(row[1]), cariId: String(row[2] || ""), cariAd: String(row[3] || ""),
+      id: id, tarih: hucreTarihStr(row[1]), cariId: cariId, cariAd: String(row[3] || ""),
+      cariKodu: cariKoduMap[cariId] || "",
       toplamTutar: parseFloat(row[4]) || 0, odemeTipi: String(row[5] || ""),
       aciklama: String(row[6] || ""), kayitTarihi: hucreTarihStr(row[7]),
+      faturaNo: faturaNo,
     });
   }
   sonuc.reverse();
