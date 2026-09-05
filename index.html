@@ -53,6 +53,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 
 /* ── ÜST ÇUBUK ── */
 .topbar{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);box-shadow:var(--shadow-sm);flex-shrink:0;position:relative;z-index:2}
+.topbar-saat{margin-left:auto;font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap;padding-left:10px}
 .sayfa-baslik{font-size:13px;font-weight:700;color:var(--text2);padding:4px 12px;background:var(--bg3);border-radius:20px;white-space:nowrap;display:none}
 .sayfa-baslik.show{display:inline-block}
 .tarih-vurgu{font-weight:800;font-size:1.08em;color:var(--text)}
@@ -332,7 +333,20 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
     <button class="homebtn" id="modul-switcher-btn" onclick="modulSwitcherAcKapat(event)" title="Başka bir modülü yeni sekmede aç">⇄ Modül</button>
     <div id="modul-switcher-liste" class="modul-switcher-liste" style="display:none"></div>
   </div>
+  <span id="topbar-saat" class="topbar-saat"></span>
 </div>
+<script>
+// Topbar sağ üstteki canlı saat: gün/ay/yıl - Saat:Dakika (örn. 05/09/2026 - 16:47), her 10 sn'de güncellenir.
+function topbarSaatGuncelle(){
+  const el = document.getElementById("topbar-saat");
+  if(!el) return;
+  const d = new Date();
+  const p = n => String(n).padStart(2,"0");
+  el.textContent = `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} - ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+topbarSaatGuncelle();
+setInterval(topbarSaatGuncelle, 10000);
+</script>
 
 <div class="main">
   <div id="home">
@@ -2252,7 +2266,10 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   overlay.className = "modal-overlay";
   overlay.id = "satis-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
-  const bugun = s ? s.tarih : simdiTarihSaat();
+  // s.tarih backend'den "yyyy-MM-dd" veya "yyyy-MM-dd HH:mm" biçiminde gelir (hucreTarihStr);
+  // <input type="datetime-local"> ise "yyyy-MM-ddTHH:mm" bekler, bu yüzden boşluk yerine T
+  // konur ve saat yoksa 00:00 eklenir.
+  const bugun = s ? (/^\d{4}-\d{2}-\d{2}$/.test(s.tarih) ? s.tarih + "T00:00" : s.tarih.replace(" ", "T")) : simdiTarihSaat();
   const belgeTipiBaslangic = s ? s.belgeTipi : (onBelgeTipi || _satisAktifBelgeTipi);
   overlay.innerHTML = `
     <div class="modal-box modal-box-xwide">
@@ -2878,7 +2895,8 @@ function alisModalAc(duzenle){
   overlay.id = "alis-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   const a = duzenle ? duzenle.alis : null;
-  const bugun = (a && a.tarih) ? a.tarih : simdiTarihSaat();
+  // s.tarih ile aynı sebep: backend "yyyy-MM-dd"/"yyyy-MM-dd HH:mm" döner, datetime-local "T" ister.
+  const bugun = (a && a.tarih) ? (/^\d{4}-\d{2}-\d{2}$/.test(a.tarih) ? a.tarih + "T00:00" : a.tarih.replace(" ", "T")) : simdiTarihSaat();
   overlay.innerHTML = `
     <div class="modal-box modal-box-wide">
       <h3>${duzenle ? 'Alışı Düzenle' : 'Yeni Alış'}</h3>

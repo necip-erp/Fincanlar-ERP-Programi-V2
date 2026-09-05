@@ -914,9 +914,9 @@ function getSatisDetay(satisId) {
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(satisId)) {
       satis = {
-        id: String(data[i][0]), tarih: String(data[i][1] || ""), cariId: String(data[i][2] || ""),
+        id: String(data[i][0]), tarih: hucreTarihStr(data[i][1]), cariId: String(data[i][2] || ""),
         cariAd: String(data[i][3] || ""), toplamTutar: parseFloat(data[i][4]) || 0,
-        odemeTipi: String(data[i][5] || ""), aciklama: String(data[i][6] || ""), kayitTarihi: String(data[i][7] || ""),
+        odemeTipi: String(data[i][5] || ""), aciklama: String(data[i][6] || ""), kayitTarihi: hucreTarihStr(data[i][7]),
         belgeTipi: String(data[i][8] || "") || "Fatura",
         dipIskontoYuzde: parseFloat(data[i][9]) || 0, bankaHesapId: String(data[i][10] || ""),
         kaynakSiparisId: String(data[i][11] || ""),
@@ -1554,9 +1554,9 @@ function getAlisDetay(alisId) {
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(alisId)) {
       alis = {
-        id: String(data[i][0]), tarih: String(data[i][1] || ""), cariId: String(data[i][2] || ""),
+        id: String(data[i][0]), tarih: hucreTarihStr(data[i][1]), cariId: String(data[i][2] || ""),
         cariAd: String(data[i][3] || ""), toplamTutar: parseFloat(data[i][4]) || 0,
-        odemeTipi: String(data[i][5] || ""), aciklama: String(data[i][6] || ""), kayitTarihi: String(data[i][7] || ""),
+        odemeTipi: String(data[i][5] || ""), aciklama: String(data[i][6] || ""), kayitTarihi: hucreTarihStr(data[i][7]),
         tutarIskontosu: parseFloat(data[i][8]) || 0,
       };
       break;
