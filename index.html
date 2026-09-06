@@ -854,6 +854,14 @@ setInterval(topbarSaatGuncelle, 10000);
       <div id="plasiyer-liste" style="margin-top:12px"></div>
     </div>
     <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Genel Görünüm</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer">
+        <input id="ayarlar-olcu-basa-al" type="checkbox" onchange="olcuBasaAlToggle()" style="width:auto">
+        Ölçüyü ürün adının başına al (60X120, 50X50 vb. — Kalde/PVC-PPRC (94) marka grubu hariç)
+      </label>
+      <p style="color:var(--text3);font-size:12px;margin:6px 0 0">Sadece Stok Tanımları listesi ve Stok Rehberi'ndeki görünümü değiştirir; Stok Adı verisi Sheets'te değişmez.</p>
+    </div>
+    <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Açılışta Gelecek Sayfa</div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 14px">
         Programı her açtığında hangi ekranla karşılaşacağını seçersin. Bu tercih tarayıcının
@@ -1243,6 +1251,39 @@ function miktarFormat(n){
   return n.toLocaleString("tr-TR", {minimumFractionDigits:0, maximumFractionDigits:4});
 }
 
+// ── ÖLÇÜ BAŞA ALMA (stok-panel projesindeki "Ölçüyü ürün adının başına al" özelliğinin
+// birebir aynısı) — Ayarlar'dan açılıp kapatılabilir, GÖRSEL/GEÇİCİ bir gösterim
+// dönüşümüdür: Stok Adı verisi Sheets'te hiç değiştirilmez, sadece listede/rehberde
+// gösterilirken "ÖLÇÜ Kalan İsim" biçiminde yeniden sıralanır. 94 (Kalde/PVC-PPRC)
+// marka grubunda ölçü gibi görünen sayılar aslında bağlantı parçası ölçüsü olduğu
+// için bu gruba hiçbir zaman uygulanmaz.
+function olcuBasaAlAcikMi(){ return localStorage.getItem("fincanlar_olcu_basa_al") === "1"; }
+function olcuBasaAlMuaf(markaKodu){ return String(markaKodu||"") === "94"; }
+function olcuBasaAlGoster(stokAdi, markaKodu){
+  if(!olcuBasaAlAcikMi()) return stokAdi;
+  if(olcuBasaAlMuaf(markaKodu)) return stokAdi;
+  const ad = String(stokAdi||"");
+  const m = ad.match(/\d+(?:[.,]\d+)?\s*[xX]\s*\d+(?:[.,]\d+)?/);
+  if(!m) return ad;
+  const ebat = m[0].replace(/\s+/g,"").toUpperCase();
+  const kalan = (ad.slice(0,m.index) + ad.slice(m.index+m[0].length)).replace(/\s{2,}/g," ").trim();
+  return kalan ? (ebat + " " + kalan) : ebat;
+}
+function olcuBasaAlToggle(){
+  const chk = document.getElementById("ayarlar-olcu-basa-al");
+  if(!chk) return;
+  localStorage.setItem("fincanlar_olcu_basa_al", chk.checked ? "1" : "0");
+  // Açık ekranlarda anında yansısın diye Stok Tanımları listesi (yüklüyse, mevcut
+  // filtresi korunarak) yeniden çiziliyor.
+  if(_stokTanimSonGosterilenListe && _stokTanimSonGosterilenListe.length && typeof stokTanimListesiCiz === "function") {
+    stokTanimListesiCiz(_stokTanimSonGosterilenListe);
+  }
+}
+function olcuBasaAlAyarYukle(){
+  const chk = document.getElementById("ayarlar-olcu-basa-al");
+  if(chk) chk.checked = olcuBasaAlAcikMi();
+}
+
 // Birim (ürün) fiyatı gösterimi — virgülden sonra 4 hane + ₺. Ara toplam/Kdv/Genel
 // Toplam gibi belge alt hesaplamaları bunu KULLANMAZ, onlar paraFormat (2 hane) kullanır.
 function fiyatFormat(n){
@@ -1435,7 +1476,7 @@ function rehberTabloCiz(){
         <tbody>
           ${liste.length===0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
           liste.map((s,i)=>`<tr class="${i===_rehberState.aktifIdx?'rehber-aktif':''}" onclick="rehberSecReal(${i})" ondblclick="rehberSecReal(${i})">
-            <td>${s.markaKodu?`<span class="tip-badge">${s.markaKodu}</span>`:'—'}</td><td>${s.stokKodu||'—'}</td><td>${s.stokAdi}</td><td>${s.birim1||'—'}</td>
+            <td>${s.markaKodu?`<span class="tip-badge">${s.markaKodu}</span>`:'—'}</td><td>${s.stokKodu||'—'}</td><td>${olcuBasaAlGoster(s.stokAdi, s.markaKodu)}</td><td>${s.birim1||'—'}</td>
             <td>${s.minStok>0 && s.guncelStok<=s.minStok?`<span class="hk-borc">${miktarFormat(s.guncelStok)}</span>`:miktarFormat(s.guncelStok||0)}</td><td>${fiyatFormat(s.satisFiyati)}</td>
           </tr>`).join("")}
         </tbody>
@@ -2319,7 +2360,14 @@ function satisFisYazdir(id){
 function belgeFormuYazdir(res){
   const s = res.satis, kalemler = res.kalemler, t = s.toplamlar || {};
   const cariP = cariApi("getCariDetay", {cariId: s.cariId}).catch(()=>({ok:false}));
-  const stokP = (_stokTanimListe && _stokTanimListe.length) ? Promise.resolve({ok:true, kalemler:_stokTanimListe}) : cariApi("getStokTanimListesi").catch(()=>({ok:false}));
+  // ★ DÜZELTME (kullanıcı bildirimi: "sipariş yazıldıktan sonra stoğun paket verisi
+  // girişi olunca da siparişi o veriye göre güncelle"): önceden burada _stokTanimListe
+  // önbellekte VARSA hiç yeniden çekilmiyordu — bir stoğun Ambalaj Miktarı/Birimi
+  // sonradan girilse veya değiştirilse bile, bu sekmede daha önce yüklenmiş eski liste
+  // kullanıldığı için yazdırılan Sipariş Formu'ndaki Miktar 2/paket sayısı güncel
+  // ambalaj bilgisini yansıtmıyordu. Artık yazdırmadan hemen önce HER ZAMAN backend'den
+  // taze stok tanım listesi çekiliyor ki paket hesabı o anki en güncel veriyle yapılsın.
+  const stokP = cariApi("getStokTanimListesi").catch(()=>({ok:false, kalemler:_stokTanimListe}));
   Promise.all([cariP, stokP]).then(([cres, sres])=>{
     const c = cres.ok ? cres.cari : {};
     if(sres.ok) _stokTanimListe = sres.kalemler;
@@ -2415,6 +2463,15 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
     : [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""}];
   if(!_cariYuklendi) cariListesiYukle();
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
+  // ★ Sipariş formundaki "Paket" sütunu (siparisPaketBilgisi) Ambalaj Tanımlama'daki
+  // ambalajMiktari/ambalajBirimi'ne göre CANLI hesaplanır (_stokTanimListe'den okur).
+  // _stokTanimYuklendi bayrağı sadece İLK yüklemeyi engellediği için, bir stoğun paket
+  // verisi bu oturumda DAHA SONRA girildiyse eski (paketsiz) hâl görünmeye devam
+  // edebiliyordu. Bu yüzden Sipariş/Satış modalı her açıldığında stok tanım listesi
+  // ayrıca arka planda tazelenip mevcut kalemler yeniden çiziliyor.
+  cariApi("getStokTanimListesi").then(r=>{
+    if(r.ok){ _stokTanimListe = r.kalemler; if(document.getElementById("sm-kalemler")) satisKalemlerCiz(); }
+  }).catch(()=>{});
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "satis-modal-overlay";
@@ -5452,6 +5509,7 @@ function ayarlarYukle(){
   siparisDurumlariYukle();
   seriTanimlariYukle();
   plasiyerListesiYukle();
+  olcuBasaAlAyarYukle();
   acilisSayfasiYukle();
   if(!_tanimListeYuklendi.giderUstGrup) tanimListesiYukle("giderUstGrup");
   if(!_tanimListeYuklendi.giderAltGrup) tanimListesiYukle("giderAltGrup");
@@ -6321,7 +6379,7 @@ function stokTanimListesiCiz(liste){
           <tr class="hk-row" onclick="stokTanimModalAc('${k.id}')" title="Düzenlemek için tıklayın">
             <td>${k.markaKodu ? `<span class="tip-badge">${k.markaKodu}</span>` : "—"}</td>
             <td>${k.stokKodu||"—"}</td>
-            <td>${k.stokAdi}</td>
+            <td>${olcuBasaAlGoster(k.stokAdi, k.markaKodu)}</td>
             <td>${k.birim1||"—"}</td>
             <td>${(()=>{
               if(!k.ambalajMiktari) return "—";
