@@ -361,28 +361,7 @@ setInterval(topbarSaatGuncelle, 10000);
     <!-- KADEME 1 -->
     <div id="stok-secim" class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Stok — Hangisini açmak istersin?</div>
-      <div class="modgrid" style="margin-top:14px">
-        <div class="modtile" onclick="stokAltModulAc('panel')">
-          <span class="ic">📦</span>
-          <div class="lbl">Stok Paneli</div>
-          <div class="desc">Mevcut canlı stok listesi ve takip</div>
-        </div>
-        <div class="modtile" onclick="stokAltModulAc('islemler')">
-          <span class="ic">🔄</span>
-          <div class="lbl">İşlemler</div>
-          <div class="desc">Stok giriş, çıkış, toplu hareket</div>
-        </div>
-        <div class="modtile" onclick="stokAltModulAc('tanimlar')">
-          <span class="ic">🏷️</span>
-          <div class="lbl">Tanımlar</div>
-          <div class="desc">Stok ve birim tanımları</div>
-        </div>
-        <div class="modtile" onclick="stokAltModulAc('raporlar')">
-          <span class="ic">📊</span>
-          <div class="lbl">Raporlar</div>
-          <div class="desc">Stok hareket ve sipariş raporları</div>
-        </div>
-      </div>
+      <div class="modgrid" id="stok-secim-grid" style="margin-top:14px"></div>
     </div>
 
     <!-- KADEME 2: İşlemler -->
@@ -680,23 +659,7 @@ setInterval(topbarSaatGuncelle, 10000);
   <div class="modview" id="mod-alis">
     <div id="alis-secim" class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Alış — Hangisini açmak istersin?</div>
-      <div class="modgrid" style="margin-top:14px">
-        <div class="modtile" onclick="alisAltModulAc('giris')">
-          <span class="ic">📥</span>
-          <div class="lbl">Alış Girişi</div>
-          <div class="desc">Tedarikçiden mal/hizmet alışı</div>
-        </div>
-        <div class="modtile" onclick="alisAltModulAc('iade')">
-          <span class="ic">↩️</span>
-          <div class="lbl">İade</div>
-          <div class="desc">Tedarikçiye yapılan iade kayıtları</div>
-        </div>
-        <div class="modtile" onclick="alisAltModulAc('bekleyen')">
-          <span class="ic">📨</span>
-          <div class="lbl">Bekleyen Faturalar</div>
-          <div class="desc">Gelen e-Fatura'lardan onay bekleyenler</div>
-        </div>
-      </div>
+      <div class="modgrid" id="alis-secim-grid" style="margin-top:14px"></div>
     </div>
 
     <div id="alis-giris-view" style="display:none;height:100%;flex-direction:row">
@@ -759,23 +722,7 @@ setInterval(topbarSaatGuncelle, 10000);
   <div class="modview" id="mod-satis">
     <div id="satis-secim" class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Satış — Hangisini açmak istersin?</div>
-      <div class="modgrid" style="margin-top:14px">
-        <div class="modtile" onclick="satisAltModulAc('Fatura')">
-          <span class="ic">🧾</span>
-          <div class="lbl">Fatura</div>
-          <div class="desc">Kesilen satış faturaları</div>
-        </div>
-        <div class="modtile" onclick="satisAltModulAc('Teklif')">
-          <span class="ic">📝</span>
-          <div class="lbl">Teklif</div>
-          <div class="desc">Müşteriye verilen teklifler</div>
-        </div>
-        <div class="modtile" onclick="satisAltModulAc('Sipariş')">
-          <span class="ic">📦</span>
-          <div class="lbl">Sipariş</div>
-          <div class="desc">Müşteri siparişleri</div>
-        </div>
-      </div>
+      <div class="modgrid" id="satis-secim-grid" style="margin-top:14px"></div>
     </div>
 
     <div id="satis-view" style="display:none;height:100%;flex-direction:row">
@@ -1004,6 +951,72 @@ function modulSiraDegistir(hedefId){
   modgridCiz();
 }
 modgridCiz();
+
+// ── Alt modül sırası (Stok/Alış/Satış hub ekranlarındaki kartlar — aynı sürükle-bırak
+// deseni, her modül için ayrı localStorage anahtarıyla) ──
+const ALT_MODUL_TANIM = {
+  stok: [
+    {alt:"panel",    ic:"📦", lbl:"Stok Paneli", desc:"Mevcut canlı stok listesi ve takip"},
+    {alt:"islemler", ic:"🔄", lbl:"İşlemler",     desc:"Stok giriş, çıkış, toplu hareket"},
+    {alt:"tanimlar", ic:"🏷️", lbl:"Tanımlar",     desc:"Stok ve birim tanımları"},
+    {alt:"raporlar", ic:"📊", lbl:"Raporlar",     desc:"Stok hareket ve sipariş raporları"},
+  ],
+  alis: [
+    {alt:"giris",    ic:"📥", lbl:"Alış Girişi",      desc:"Tedarikçiden mal/hizmet alışı"},
+    {alt:"iade",     ic:"↩️", lbl:"İade",             desc:"Tedarikçiye yapılan iade kayıtları"},
+    {alt:"bekleyen", ic:"📨", lbl:"Bekleyen Faturalar", desc:"Gelen e-Fatura'lardan onay bekleyenler"},
+  ],
+  satis: [
+    {alt:"Fatura",   ic:"🧾", lbl:"Fatura",   desc:"Kesilen satış faturaları"},
+    {alt:"Teklif",   ic:"📝", lbl:"Teklif",   desc:"Müşteriye verilen teklifler"},
+    {alt:"Sipariş",  ic:"📦", lbl:"Sipariş",  desc:"Müşteri siparişleri"},
+  ],
+};
+const ALT_MODUL_FN = { stok:"stokAltModulAc", alis:"alisAltModulAc", satis:"satisAltModulAc" };
+const ALT_MODUL_GRID = { stok:"stok-secim-grid", alis:"alis-secim-grid", satis:"satis-secim-grid" };
+let _altSurukleneAnahtar = null, _altSurukleneAlt = null;
+function altModulSirasiniAl(anahtar){
+  const ogeler = ALT_MODUL_TANIM[anahtar];
+  try{
+    const kayitli = JSON.parse(localStorage.getItem("fincanlar_altmodul_sira_"+anahtar) || "null");
+    if(Array.isArray(kayitli) && kayitli.length){
+      const gecerli = ogeler.map(o=>o.alt);
+      const sirali = kayitli.filter(a=>gecerli.includes(a));
+      gecerli.forEach(a=>{ if(!sirali.includes(a)) sirali.push(a); });
+      return sirali.map(a=>ogeler.find(o=>o.alt===a));
+    }
+  }catch(e){}
+  return ogeler.slice();
+}
+function altModgridCiz(anahtar){
+  const sirali = altModulSirasiniAl(anahtar);
+  const fn = ALT_MODUL_FN[anahtar];
+  const el = document.getElementById(ALT_MODUL_GRID[anahtar]);
+  if(!el) return;
+  el.innerHTML = sirali.map(o => `
+    <div class="modtile" draggable="true" data-alt="${o.alt}"
+         onclick="${fn}('${o.alt}')"
+         ondragstart="_altSurukleneAnahtar='${anahtar}'; _altSurukleneAlt='${o.alt}'; event.stopPropagation(); this.classList.add('surukleniyor')"
+         ondragend="this.classList.remove('surukleniyor')"
+         ondragover="event.preventDefault()"
+         ondrop="event.stopPropagation(); altModulSiraDegistir('${anahtar}','${o.alt}')">
+      <span class="ic">${o.ic}</span>
+      <div class="lbl">${o.lbl}</div>
+      <div class="desc">${o.desc}</div>
+    </div>`).join("");
+}
+function altModulSiraDegistir(anahtar, hedefAlt){
+  if(!_altSurukleneAlt || _altSurukleneAnahtar !== anahtar || _altSurukleneAlt === hedefAlt) return;
+  const sirali = altModulSirasiniAl(anahtar).map(o=>o.alt);
+  const eskiIdx = sirali.indexOf(_altSurukleneAlt);
+  const yeniIdx = sirali.indexOf(hedefAlt);
+  sirali.splice(eskiIdx, 1);
+  sirali.splice(yeniIdx, 0, _altSurukleneAlt);
+  localStorage.setItem("fincanlar_altmodul_sira_"+anahtar, JSON.stringify(sirali));
+  _altSurukleneAlt = null; _altSurukleneAnahtar = null;
+  altModgridCiz(anahtar);
+}
+Object.keys(ALT_MODUL_TANIM).forEach(altModgridCiz);
 
 // Tıklanan modülü kendi tarayıcı sekmesinde açar; o modül için zaten bir sekme
 // açıksa (aynı isimli pencere) tarayıcı otomatik olarak o sekmeye geçer.
@@ -1601,6 +1614,7 @@ function cariDetayCiz(res){
   `;
   _cariGuncelHareketler = hareketler;
   _cariGuncelId = c.id;
+  _hkSiralamaKolon = null; _hkSiralamaYon = "asc"; // yeni cari açılınca varsayılan Tarih artan sıraya dön
   document.getElementById("hk-tablo-yeri").innerHTML = hareketTabloCiz(hareketler, c.id);
 }
 
@@ -1618,15 +1632,23 @@ function hkAciklamaGoster(aciklama){
 }
 
 const HK_SUTUNLAR = {
-  tarih:    { baslik:"Tarih",     render: h => tarihGoster(h.tarih) },
-  tip:      { baslik:"Tip",       render: h => `<span class="${h.tip==='Borç'?'hk-borc':'hk-alacak'}">${h.tip}</span>` },
-  tutar:    { baslik:"Tutar",     render: h => paraFormat(h.tutar) },
-  vade:     { baslik:"Vade",      render: h => { if(!h.vade) return "—"; const gecti = h.tip==='Borç' && h.vade < new Date().toISOString().slice(0,10); return gecti ? `<span class="hk-borc">${tarihGoster(h.vade)}</span>` : tarihGoster(h.vade); } },
-  aciklama: { baslik:"Açıklama",  render: h => hkAciklamaGoster(h.aciklama) },
-  bakiye:   { baslik:"Bakiye",    render: h => `<span class="${bakiyeSinifi(h.bakiyeSonrasi)}">${paraFormat(h.bakiyeSonrasi)}</span>` },
+  tarih:    { baslik:"Tarih",     render: h => tarihGoster(h.tarih), sortDeger: h => h.tarih || "" },
+  tip:      { baslik:"Tip",       render: h => `<span class="${h.tip==='Borç'?'hk-borc':'hk-alacak'}">${h.tip}</span>`, sortDeger: h => h.tip || "" },
+  tutar:    { baslik:"Tutar",     render: h => paraFormat(h.tutar), sortDeger: h => parseFloat(h.tutar) || 0 },
+  vade:     { baslik:"Vade",      render: h => { if(!h.vade) return "—"; const gecti = h.tip==='Borç' && h.vade < new Date().toISOString().slice(0,10); return gecti ? `<span class="hk-borc">${tarihGoster(h.vade)}</span>` : tarihGoster(h.vade); }, sortDeger: h => h.vade || "" },
+  aciklama: { baslik:"Açıklama",  render: h => hkAciklamaGoster(h.aciklama), sortDeger: h => hkAciklamaGoster(h.aciklama) || "" },
+  bakiye:   { baslik:"Bakiye",    render: h => `<span class="${bakiyeSinifi(h.bakiyeSonrasi)}">${paraFormat(h.bakiyeSonrasi)}</span>`, sortDeger: h => parseFloat(h.bakiyeSonrasi) || 0 },
 };
 let _cariGuncelHareketler = [];
 let _cariGuncelId = null;
+// Sütun başlığına tıklayınca artan/azalan sıralama — orijinal (backend'den gelen) sıra her
+// zaman Tarih artan olduğu için, hiç tıklanmamışken/cari değiştiğinde bu sıfırlanır.
+let _hkSiralamaKolon = null, _hkSiralamaYon = "asc";
+function hkBasliktaTiklandi(kolon){
+  if(_hkSiralamaKolon === kolon){ _hkSiralamaYon = (_hkSiralamaYon === "asc") ? "desc" : "asc"; }
+  else { _hkSiralamaKolon = kolon; _hkSiralamaYon = "asc"; }
+  document.getElementById("hk-tablo-yeri").innerHTML = hareketTabloCiz(_cariGuncelHareketler, _cariGuncelId);
+}
 
 function hkSutunSirasiAl(){
   try{
@@ -1639,12 +1661,21 @@ function hkSutunSirasiKaydet(sira){ localStorage.setItem("hkSutunSirasi", JSON.s
 
 function hareketTabloCiz(hareketler, cariId){
   const sira = hkSutunSirasiAl();
-  const basliklar = sira.map(k => `<th draggable="true" data-kol="${k}"
+  const basliklar = sira.map(k => {
+    const ok = _hkSiralamaKolon === k ? (_hkSiralamaYon === "asc" ? " ▲" : " ▼") : "";
+    return `<th draggable="true" data-kol="${k}"
       ondragstart="hkKolonDragStart(event)" ondragover="event.preventDefault()" ondrop="hkKolonDrop(event)"
-      title="Sürükleyerek sütun sırasını değiştir" style="cursor:grab">${HK_SUTUNLAR[k].baslik}</th>`).join("") + "<th></th>";
-  const govde = hareketler.length===0
+      onclick="hkBasliktaTiklandi('${k}')"
+      title="Sürükleyerek sütun sırasını, tıklayarak artan/azalan sıralamayı değiştir" style="cursor:pointer">${HK_SUTUNLAR[k].baslik}${ok}</th>`;
+  }).join("") + "<th></th>";
+  const gosterilecek = _hkSiralamaKolon ? hareketler.slice().sort((a,b)=>{
+    const av = HK_SUTUNLAR[_hkSiralamaKolon].sortDeger(a), bv = HK_SUTUNLAR[_hkSiralamaKolon].sortDeger(b);
+    const cmp = av < bv ? -1 : (av > bv ? 1 : 0);
+    return _hkSiralamaYon === "asc" ? cmp : -cmp;
+  }) : hareketler; // hiç tıklanmamışsa: orijinal (backend'den gelen, Tarih artan) sıra korunur
+  const govde = gosterilecek.length===0
     ? `<tr><td colspan="${sira.length+1}" style="text-align:center;color:var(--text3);padding:20px">Henüz hareket yok</td></tr>`
-    : hareketler.map(h => `<tr class="hk-row" data-aciklama="${(h.aciklama||"").replace(/"/g,"&quot;")}" onclick="cariHareketSatirTiklandi(event,this)" title="İlgili işlemi açmak için tıklayın">` +
+    : gosterilecek.map(h => `<tr class="hk-row" data-aciklama="${(h.aciklama||"").replace(/"/g,"&quot;")}" onclick="cariHareketSatirTiklandi(event,this)" title="İlgili işlemi açmak için tıklayın">` +
         sira.map(k => `<td>${HK_SUTUNLAR[k].render(h)}</td>`).join("") +
         `<td><span class="hk-sil" onclick="event.stopPropagation();hareketSil('${h.id}','${cariId}')" title="Sil">🗑</span></td></tr>`).join("");
   return `<table class="hareket-tbl"><thead><tr>${basliklar}</tr></thead><tbody>${govde}</tbody></table>`;
@@ -2124,73 +2155,43 @@ function siparisFaturaKaydet(){
 function satisFisYazdir(id){
   cariApi("getSatisDetay", {satisId:id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
-    if(res.satis.belgeTipi === "Sipariş"){ siparisFormuYazdir(res); return; }
-    const s = res.satis, kalemler = res.kalemler, t = s.toplamlar || {};
-    const eski = document.getElementById("fis-yazdirilacak");
-    if(eski) eski.remove();
-    const div = document.createElement("div");
-    div.id = "fis-yazdirilacak";
-    div.style.cssText = "max-width:700px;margin:30px auto;font-family:inherit;color:#111";
-    div.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <img src="./fincanlar-logo.png" alt="Fincanlar" style="height:46px;width:auto">
-        <h2 style="margin:0">${s.belgeTipi||'Fatura'}</h2>
-      </div>
-      <p style="margin:0 0 16px;color:#555">${s.cariAd} · ${tarihGoster(s.tarih)} · ${s.odemeTipi}</p>
-      <table style="width:100%;border-collapse:collapse" border="1" cellpadding="6">
-        <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>Kdv%</th><th>Tutar</th></tr></thead>
-        <tbody>
-          ${kalemler.map(k=>`<tr>
-            <td>${k.stokKodu||'—'}</td><td>${k.urunAdi}</td><td>${miktarFormat(k.miktar)}</td><td>${k.birim}</td>
-            <td>${fiyatFormat(k.birimFiyat)}</td><td>${k.iskontoYuzde||0}</td>
-            <td>${k.kdvOrani===undefined?20:k.kdvOrani}</td><td>${paraFormat(k.tutar)}</td>
-          </tr>`).join("")}
-        </tbody>
-      </table>
-      <table class="fis-toplam-tbl">
-        <tr><td>Brüt Toplam</td><td>${paraFormat(t.brutToplam||0)}</td></tr>
-        <tr><td>İskonto</td><td>-${paraFormat(t.iskontoToplam||0)}</td></tr>
-        <tr><td>Ara Toplam</td><td>${paraFormat(t.araToplam||0)}</td></tr>
-        <tr><td>Kdv Toplam</td><td>${paraFormat(t.kdvToplam||0)}</td></tr>
-        ${t.tutarIskontosu>0 ? `<tr><td>Tutar İskontosu</td><td>-${paraFormat(t.tutarIskontosu)}</td></tr>` : ""}
-        <tr class="genel"><td>Genel Toplam</td><td>${paraFormat(t.genelToplam||0)}</td></tr>
-      </table>`;
-    document.body.appendChild(div);
-    window.print();
-    setTimeout(()=>{ div.remove(); }, 500);
+    belgeFormuYazdir(res);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
-// ★ EKLENDİ: Sipariş Formu çıktısı, kullanıcının paylaştığı eski (referans) görsele
-// birebir uyacak şekilde: logo + "SİPARİŞ FORMU" başlığı, solda cari bilgileri (Cari Kodu,
-// Firma Adı, Adres, Telefon/GSM, Vergi D-No), sağda belge bilgileri (Sipariş No, Teklif
-// Tarihi, Vade Günü), kalem tablosunda Miktar 2 (Ambalaj Tanımlama'daki ambalaj miktarına
-// göre çevrilmiş miktar+birim, örn. m²'den kutu/koli adedine), ve sağ altta toplamlar.
-function siparisFormuYazdir(res){
+// ★ Fatura/Teklif/Sipariş çıktısı — üçü de aynı görsele (kullanıcının paylaştığı eski
+// referans görsele) uyacak şekilde ortak fonksiyonla çiziliyor: logo + "=== {TİP} ==="
+// başlığı, solda cari bilgileri (Cari Kodu, Firma Adı, Adres, Telefon/GSM, Vergi D-No),
+// sağda belge bilgileri (Sipariş No — sadece Sipariş'te, {TİP} Tarihi, Vade Günü, Ödeme
+// Tipi), kalem tablosunda Miktar 2 (Ambalaj Tanımlama'daki ambalaj miktarına göre çevrilmiş
+// miktar+birim, örn. m²'den kutu/koli adedine), ve sağ altta toplamlar.
+function belgeFormuYazdir(res){
   const s = res.satis, kalemler = res.kalemler, t = s.toplamlar || {};
   const cariP = cariApi("getCariDetay", {cariId: s.cariId}).catch(()=>({ok:false}));
   const stokP = (_stokTanimListe && _stokTanimListe.length) ? Promise.resolve({ok:true, kalemler:_stokTanimListe}) : cariApi("getStokTanimListesi").catch(()=>({ok:false}));
   Promise.all([cariP, stokP]).then(([cres, sres])=>{
     const c = cres.ok ? cres.cari : {};
     if(sres.ok) _stokTanimListe = sres.kalemler;
-    siparisFormuCiz(s, kalemler, t, c);
+    belgeFormuCiz(s, kalemler, t, c);
   });
 }
-function siparisFormuMiktar2(k){
+function belgeFormuMiktar2(k){
   const stok = (_stokTanimListe||[]).find(x=>x.stokKodu===k.stokKodu);
   if(!stok || !(stok.ambalajMiktari>0)) return { miktar: k.miktar, birim: k.birim };
   return { miktar: Math.ceil((parseFloat(k.miktar)||0) / stok.ambalajMiktari), birim: stok.ambalajBirimi || k.birim };
 }
-function siparisFormuCiz(s, kalemler, t, c){
+function belgeFormuCiz(s, kalemler, t, c){
   const eski = document.getElementById("fis-yazdirilacak");
   if(eski) eski.remove();
+  const tip = s.belgeTipi || "Fatura";
+  const baslik = tip === "Sipariş" ? "SİPARİŞ FORMU" : (tip === "Teklif" ? "TEKLİF FORMU" : "FATURA");
   const div = document.createElement("div");
   div.id = "fis-yazdirilacak";
   div.style.cssText = "max-width:1000px;margin:20px auto;font-family:inherit;color:#111";
   div.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
       <img src="./fincanlar-logo.png" alt="Fincanlar" style="height:64px;width:auto">
-      <h2 style="margin:6px 0 0;letter-spacing:1px">=== SİPARİŞ FORMU ===</h2>
+      <h2 style="margin:6px 0 0;letter-spacing:1px">=== ${baslik} ===</h2>
     </div>
     <div style="display:flex;justify-content:space-between;gap:24px;margin-bottom:14px;font-size:13.5px">
       <table style="border-collapse:collapse">
@@ -2201,9 +2202,10 @@ function siparisFormuCiz(s, kalemler, t, c){
         <tr><td style="padding:2px 10px 2px 0;color:#555">VERGİ D-NO</td><td>: <b>${c.vergiNo||'—'}</b></td></tr>
       </table>
       <table style="border-collapse:collapse;align-self:flex-start">
-        <tr><td style="padding:2px 10px 2px 0;color:#555">SİPARİŞ NO</td><td>: <b>${s.siparisNo||'—'}</b></td></tr>
-        <tr><td style="padding:2px 10px 2px 0;color:#555">TEKLİF TARİHİ</td><td>: ${tarihGoster(s.tarih)}</td></tr>
+        ${tip === "Sipariş" ? `<tr><td style="padding:2px 10px 2px 0;color:#555">SİPARİŞ NO</td><td>: <b>${s.siparisNo||'—'}</b></td></tr>` : ""}
+        <tr><td style="padding:2px 10px 2px 0;color:#555">${tip.toUpperCase()} TARİHİ</td><td>: ${tarihGoster(s.tarih)}</td></tr>
         <tr><td style="padding:2px 10px 2px 0;color:#555">VADE GÜNÜ</td><td>: ${s.vade?tarihGoster(s.vade):'—'}</td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">ÖDEME TİPİ</td><td>: ${s.odemeTipi||'—'}</td></tr>
       </table>
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:13px" border="1" cellpadding="7">
@@ -2211,7 +2213,7 @@ function siparisFormuCiz(s, kalemler, t, c){
         <th>KODU</th><th>ÜRÜN ADI</th><th>MİKTARI</th><th>MİKTAR 2</th><th>FİYAT</th><th>İSK %</th><th>TUTAR</th>
       </tr></thead>
       <tbody>
-        ${kalemler.map(k=>{ const m2 = siparisFormuMiktar2(k); return `<tr>
+        ${kalemler.map(k=>{ const m2 = belgeFormuMiktar2(k); return `<tr>
           <td>${k.stokKodu||'—'}</td><td>${k.urunAdi}</td>
           <td style="text-align:right">${miktarFormat(k.miktar)} ${k.birim||''}</td>
           <td style="text-align:right">${miktarFormat(m2.miktar)} ${m2.birim||''}</td>
@@ -3079,6 +3081,12 @@ function alisKaydet(){
   const serbestAd = document.getElementById("am-serbest-ad").value.trim();
   const kalemler = _yeniAlisKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
   if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
+  // ★ Stok kodu tüm modüller arası ana bağlantı — manuel Alış girişinde de zorunlu.
+  const kodsuz = kalemler.find(k=>!String(k.stokKodu||"").trim());
+  if(kodsuz){
+    alert(`"${kodsuz.urunAdi}" için stok kodu seçilmemiş. Lütfen 🔍 Stok Rehberi'nden mevcut bir stok seçin, ya da önce Stok > Tanımlar'dan yeni bir stok kartı açıp buradan seçin.`);
+    return;
+  }
   const tutarIskontosuEl = document.getElementById("am-tutar-iskontosu");
   const body = {
     cariId: cariId || undefined,
@@ -3682,8 +3690,11 @@ function bfmKalemSatiriHTML(k, i){
       <label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text3);margin-top:3px;white-space:nowrap">
         <input type="checkbox" id="bfm-yenistokac-${i}" style="width:auto" onchange="bfmYeniStokAc(${i})"> yeni stok aç
       </label>` : `
-      <input id="bfm-stokkodu-${i}" type="text" value="${k.stokKodu||''}" style="width:110px">
-      ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" ${k.yeniStokIsaretli===true?'checked':''} style="width:auto"> yeni stok kartı</label>` : ""}`;
+      <input id="bfm-stokkodu-${i}" type="text" value="${k.stokKodu||''}" style="width:110px" placeholder="zorunlu">
+      ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" ${k.yeniStokIsaretli===true?'checked':''} style="width:auto"> yeni stok kartı</label>` : ""}
+      <label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text3);margin-top:3px;white-space:nowrap">
+        <input type="checkbox" id="bfm-yenistokac-${i}" style="width:auto" onchange="bfmYeniStokAc(${i})"> yeni stok aç
+      </label>`;
   return `
         <tr>
           <td>${k.birlesikMi ? `<span title="Birleştirildi" style="font-size:11px;color:var(--amber)">🔗</span>` : `<input id="bfm-grup-${i}" type="text" inputmode="numeric" placeholder="-" value="${k.grup||''}" style="width:40px;text-align:center">`}</td>
@@ -3812,7 +3823,8 @@ function bfmYeniStokAc(i){
   if(kutu) kutu.checked = false;
   stokTanimModalAc(null, (yeni)=>{
     document.getElementById(`bfm-stokkodu-${i}`).value = yeni.stokKodu || "";
-    document.getElementById(`bfm-stokara-${i}`).value = yeni.stokAdi || "";
+    const aramaEl = document.getElementById(`bfm-stokara-${i}`);
+    if(aramaEl) aramaEl.value = yeni.stokAdi || "";
     const f = window._bfmAktifFatura;
     if(f && f.kalemler[i]){ f.kalemler[i].stokKoduAdi = yeni.stokAdi; f.kalemler[i].stokKodu = yeni.stokKodu; }
     bfmSatirGuncelle(i);
@@ -3944,8 +3956,11 @@ function alisBekleyenOnayla(faturaNo){
     const miktar = parseFloat(document.getElementById(`bfm-miktar-${i}`).value) || 0;
     if(miktar <= 0) continue; // Miktarı boş bırakılan satırlar alışa dahil edilmez.
     const stokKoduDeger = document.getElementById(`bfm-stokkodu-${i}`).value.trim();
-    if(f.kalemler[i].birlesikMi && !stokKoduDeger){
-      alert(`"${f.kalemler[i].urunAdi}" birleşik kalemi için bir stok seçmelisiniz.`);
+    // ★ Stok kodu tüm modüller arası ana bağlantı — bir kalem stok kodu olmadan Alış'a
+    // asla dahil edilmiyor. Boşsa onaya izin verilmez; kullanıcı ya mevcut bir kod yazmalı/
+    // seçmeli ya da "yeni stok aç" ile (kod boş bırakılırsa otomatik atanır) bir kart açmalı.
+    if(!stokKoduDeger){
+      alert(`"${f.kalemler[i].urunAdi}" için stok kodu girilmemiş. Lütfen bir stok kodu yazın/seçin ya da "yeni stok aç" ile bir stok kartı oluşturun.`);
       return;
     }
     const yeniStokEl = document.getElementById(`bfm-yenistok-${i}`);
@@ -6090,7 +6105,12 @@ function stokTanimModalAc(editId, onKaydedildi){
     <div class="modal-box modal-box-xwide">
       <h3>${k ? 'Stok Tanımını Düzenle' : 'Yeni Stok Tanımı'}</h3>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Stok Kodu</label><input id="st-stokkodu" type="text" value="${k?k.stokKodu:''}" placeholder="İsteğe bağlı (ilk 2 hane marka kodu)"></div>
+        <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Stok Kodu</label>
+          <div style="display:flex;gap:4px">
+            <input id="st-stokkodu" type="text" value="${k?k.stokKodu:''}" placeholder="İsteğe bağlı (ilk 2 hane marka kodu)" ${k?'readonly title="Var olan bir stok kartının kodu, bağlı tüm hareketleri de taşımak için sadece \'Değiştir\' ile güncellenebilir"':''}>
+            ${k ? `<button type="button" class="btn" style="padding:6px 10px;white-space:nowrap" onclick="stokKoduDegistirSureci('${k.id}')">✏️ Değiştir</button>` : ``}
+          </div>
+        </div>
         <div class="fld" style="flex:2;min-width:220px;margin-bottom:0"><label>Stok Adı *</label><input id="st-stokadi" type="text" value="${k?k.stokAdi:''}"></div>
         <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Barkod</label><input id="st-barkod" type="text" value="${k?k.barkod||'':''}" placeholder="İsteğe bağlı"></div>
       </div>
@@ -6131,6 +6151,26 @@ function stokTanimModalAc(editId, onKaydedildi){
   setTimeout(()=>document.getElementById("st-stokadi").focus(), 50);
 }
 
+// ★ EKLENDİ: Var olan bir stok kartının kodunu değiştirme — backend stokKoduDegistir,
+// yeni kod başka açık bir kartta kullanılıyorsa reddedip uyarı döndürür; başarılıysa bağlı
+// tüm Satış/Alış kalemleri ve Stok Hareketleri de otomatik yeni koda taşınır.
+function stokKoduDegistirSureci(id){
+  const k = _stokTanimListe.find(x=>x.id===id);
+  if(!k) return;
+  const yeniKod = prompt(`"${k.stokAdi}" için yeni stok kodu (mevcut: ${k.stokKodu||'—'}):`, k.stokKodu||"");
+  if(yeniKod === null) return; // vazgeçildi
+  const temiz = yeniKod.trim();
+  if(!temiz){ alert("Yeni stok kodu boş olamaz."); return; }
+  if(temiz === k.stokKodu){ return; }
+  cariApi("stokKoduDegistir", {id, yeniKod: temiz}).then(res=>{
+    if(!res.ok){ alert("Değiştirilemedi: "+(res.hata||"bilinmiyor")); return; }
+    k.stokKodu = temiz;
+    const el = document.getElementById("st-stokkodu");
+    if(el) el.value = temiz;
+    stokTanimListesiYukle();
+    alert(`Stok kodu "${temiz}" olarak güncellendi${res.tasinanKayitSayisi ? " ("+res.tasinanKayitSayisi+" bağlı kayıt yeni koda taşındı)" : ""}.`);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
 function stokTanimKaydet(id){
   const stokAdi = document.getElementById("st-stokadi").value.trim();
   if(!stokAdi){ alert("Stok adı gerekli"); return; }

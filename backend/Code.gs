@@ -360,6 +360,7 @@ function handleRequest(e) {
       case "silKrediKarti":   result = silKrediKarti(body); break;
       case "getStokTanimListesi": result = getStokTanimListesi(); break;
       case "saveStokTanim":       result = saveStokTanim(body); break;
+      case "stokKoduDegistir":    result = stokKoduDegistir(body); break;
       case "saveStokTanimTopluce": result = saveStokTanimTopluce(body); break;
       case "silStokTanim":        result = silStokTanim(body); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
@@ -3623,11 +3624,26 @@ function saveStokTanim(body) {
       if (String(data[i][0]) === id) { satirIdx = i + 1; break; }
     }
   }
-  if (!id) id = "sk_" + Date.now();
+  const yeniKayitMi = !id;
+  if (yeniKayitMi) id = "sk_" + Date.now();
+
+  // ★ Stok kodu tüm modüller arası ana bağlantı olduğu için: MEVCUT bir kaydın kodu bu
+  // genel kaydetme fonksiyonuyla asla değiştirilmez (frontend'de alan salt-okunur olsa da
+  // burada da güvenceye alınıyor) — kod değişikliği SADECE bağlı tüm hareketleri de
+  // taşıyan stokKoduDegistir() üzerinden yapılabilir. Yeni kayıtta boş bırakılırsa
+  // ("gerekirse sen ata" — kritik bir alan boş kalmasın diye) otomatik, biricik bir kod
+  // atanır; kullanıcı isterse sonradan stokKoduDegistir ile kendi kodunu verebilir.
+  let stokKodu;
+  if (!yeniKayitMi) {
+    stokKodu = String(data[satirIdx - 1][1] || "");
+  } else {
+    stokKodu = String(body.stokKodu || "").trim();
+    if (!stokKodu) stokKodu = "OTO" + Date.now();
+  }
 
   const satir = [
     id,
-    String(body.stokKodu || ""),
+    stokKodu,
     stokAdi,
     String(body.birim1 || "adet"),
     parseFloat(body.ambalajMiktari) || 0,
@@ -3648,8 +3664,62 @@ function saveStokTanim(body) {
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);
   cacheTemizle(["stokTanimListesi"]);
-  return { ok: true, id: id };
+  return { ok: true, id: id, stokKodu: stokKodu };
 }
+
+// ★ EKLENDİ: Stok kodu değişikliği — StokTanımları'nda kendi kodu, ve bağlı TÜM veri
+// akışında (SatisKalemleri, AlisKalemleri, StokHareketleri — bu üçünde de STOK_KODU
+// denormalize edilmiş halde ayrıca tutuluyor) eski kod geçen her satırı yeni koda taşır.
+// Yeni kod BAŞKA açık bir stok kartında zaten kullanılıyorsa işlem reddedilir (kullanıcı
+// farklı/boş bir kod seçmeli) — iki kartın aynı kodu paylaşması "stok kodu ana bağlantı"
+// ilkesini bozar.
+function stokKoduDegistir(body) {
+  const id = String(body.id || "").trim();
+  const yeniKod = String(body.yeniKod || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  if (!yeniKod) return { ok: false, hata: "Yeni stok kodu boş olamaz" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  let satirIdx = -1, eskiKod = "";
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) { satirIdx = i + 1; eskiKod = String(data[i][1] || ""); break; }
+  }
+  if (satirIdx === -1) return { ok: false, hata: "Stok tanımı bulunamadı" };
+  if (yeniKod === eskiKod) return { ok: true, degisiklikYok: true };
+  for (let i = 1; i < data.length; i++) {
+    if (i + 1 === satirIdx) continue;
+    if (String(data[i][1] || "") === yeniKod) {
+      return { ok: false, hata: `"${yeniKod}" kodu zaten "${data[i][2]}" adlı açık bir stok kartında kullanılıyor. Lütfen başka/boş bir kod seçin.` };
+    }
+  }
+  sheet.getRange(satirIdx, 2).setValue(yeniKod); // STOK_KODU kolonu (2. sütun)
+
+  // Bağlı veri akışlarını taşı (sadece eskiKod dolu değilse — boştan boşa taşımaya gerek yok).
+  let tasinanSayisi = 0;
+  if (eskiKod) {
+    const guncelle = (sheetAdi, kolonBasligi) => {
+      const sh = ss.getSheetByName(sheetAdi);
+      if (!sh) return;
+      const d = sh.getDataRange().getValues();
+      if (d.length === 0) return;
+      const kolIdx = d[0].indexOf(kolonBasligi);
+      if (kolIdx === -1) return;
+      for (let i = 1; i < d.length; i++) {
+        if (String(d[i][kolIdx] || "") === eskiKod) {
+          sh.getRange(i + 1, kolIdx + 1).setValue(yeniKod);
+          tasinanSayisi++;
+        }
+      }
+    };
+    guncelle(SHEETS.satisKalemleri, "STOK_KODU");
+    guncelle(SHEETS.alisKalemleri, "STOK_KODU");
+    guncelle(SHEETS.stokHareketleri, "STOK_KODU");
+  }
+  cacheTemizle(["stokTanimListesi"]);
+  return { ok: true, eskiKod: eskiKod, yeniKod: yeniKod, tasinanKayitSayisi: tasinanSayisi };
+}
+
 
 function silStokTanim(body) {
   const id = String(body.id || "").trim();
