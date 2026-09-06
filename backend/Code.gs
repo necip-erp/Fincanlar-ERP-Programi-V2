@@ -41,6 +41,7 @@ const SHEETS = {
   cekSenetHareketleri: "CekSenetHareketleri",
   alisFaturaDurum: "AlisFaturaDurum",
   siparisDurumlari: "SiparisDurumlari",
+  plasiyerler: "Plasiyerler",
 };
 
 // ── YARDIMCI FONKSİYONLAR ──
@@ -100,6 +101,44 @@ function ensureCariKrediLimitiColonu(sheet) {
   if (String(mevcutBaslik || "") !== "KREDI_LIMITI") {
     sheet.getRange(1, 11).setValue("KREDI_LIMITI").setFontWeight("bold").setBackground("#e8edf5");
   }
+}
+
+// EDM/e-fatura entegrasyonuyla YANLIŞLIKLA bağlantı kurulmasını önlemek için:
+// carinin GİB nezdinde e-Fatura mükellefi olup olmadığı. STANDART DEĞER "Hayır" —
+// bir cari için bu alan "Hayır" olduğu sürece BFM/EDM eşleştirme akışlarına HİÇBİR
+// ŞEKİLDE dahil edilmemelidir (bkz. edmBaglantisiVarMi()).
+function ensureCariEFaturaColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 12).getValue();
+  if (String(mevcutBaslik || "") !== "E_FATURA") {
+    sheet.getRange(1, 12).setValue("E_FATURA").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
+// Carinin e-Arşiv mükellefi olup olmadığı (e-Fatura'ya kayıtlı DEĞİLSE e-Arşiv
+// kullanılır). STANDART DEĞER "Hayır" — bkz. ensureCariEFaturaColonu üstteki not.
+function ensureCariEArsivColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 13).getValue();
+  if (String(mevcutBaslik || "") !== "E_ARSIV") {
+    sheet.getRange(1, 13).setValue("E_ARSIV").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
+// Cariye atanan plasiyer (Plasiyerler tanım tablosundaki ID). Ayarlar > Plasiyer
+// Tanımlama'da yönetilir.
+function ensureCariPlasiyerColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 14).getValue();
+  if (String(mevcutBaslik || "") !== "PLASIYER_ID") {
+    sheet.getRange(1, 14).setValue("PLASIYER_ID").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
+// EDM/e-fatura ile ilgili HERHANGİ bir işlem (BFM eşleştirme, otomatik fatura
+// gönderimi vb.) öncesinde bu fonksiyonla kontrol edilmeli. Cari E_FATURA veya
+// E_ARSIV alanlarından biri "Evet" değilse (yani ikisi de "Hayır"/boşsa) EDM
+// bağlantısı KURULMAMALIDIR.
+function edmBaglantisiVarMi(cari) {
+  if (!cari) return false;
+  return String(cari.eFatura || "") === "Evet" || String(cari.eArsiv || "") === "Evet";
 }
 
 // Stok kodu, Alış/Satış/Sipariş kalemleri arasındaki ana bağlantı — ürün adı yerine
@@ -385,6 +424,11 @@ function handleRequest(e) {
       case "getMarkaListesi": result = getMarkaListesi(); break;
       case "saveMarka":       result = saveMarka(body); break;
       case "silMarka":        result = silMarka(body); break;
+      case "getPlasiyerListesi": result = getPlasiyerListesi(); break;
+      case "savePlasiyer":       result = savePlasiyer(body); break;
+      case "silPlasiyer":        result = silPlasiyer(body); break;
+      case "plasiyerSiraGuncelle": result = plasiyerSiraGuncelle(body); break;
+      case "edmCariSorgula":  result = edmCariSorgula(body); break;
       case "birimSiraGuncelle":     result = birimSiraGuncelle(body); break;
       case "basitTanimSiraGuncelle": result = basitTanimSiraGuncelle(body); break;
       case "markaSiraGuncelle":     result = markaSiraGuncelle(body); break;
@@ -424,6 +468,9 @@ function getCariListesi() {
   ensureCariKoduColonu(hSheet);
   ensureCariIskontoColonu(hSheet);
   ensureCariKrediLimitiColonu(hSheet);
+  ensureCariEFaturaColonu(hSheet);
+  ensureCariEArsivColonu(hSheet);
+  ensureCariPlasiyerColonu(hSheet);
   const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
 
   const hData = hSheet.getDataRange().getValues();
@@ -458,6 +505,9 @@ function getCariListesi() {
       cariKodu: String(row[8] || ""),
       iskontoOrani: parseFloat(row[9]) || 0,
       krediLimiti: parseFloat(row[10]) || 0,
+      eFatura: String(row[11] || "Hayır") || "Hayır",
+      eArsiv: String(row[12] || "Hayır") || "Hayır",
+      plasiyerId: String(row[13] || ""),
       bakiye: bakiyeMap[id] || 0,
     });
   }
@@ -473,6 +523,9 @@ function getCariDetay(cariId) {
   ensureCariKoduColonu(hSheet);
   ensureCariIskontoColonu(hSheet);
   ensureCariKrediLimitiColonu(hSheet);
+  ensureCariEFaturaColonu(hSheet);
+  ensureCariEArsivColonu(hSheet);
+  ensureCariPlasiyerColonu(hSheet);
   const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
   ensureCariHareketVadeColonu(hkSheet);
 
@@ -486,6 +539,9 @@ function getCariDetay(cariId) {
         vergiNo: String(hData[i][5] || ""), not: String(hData[i][6] || ""), tarih: String(hData[i][7] || ""),
         cariKodu: String(hData[i][8] || ""), iskontoOrani: parseFloat(hData[i][9]) || 0,
         krediLimiti: parseFloat(hData[i][10]) || 0,
+        eFatura: String(hData[i][11] || "Hayır") || "Hayır",
+        eArsiv: String(hData[i][12] || "Hayır") || "Hayır",
+        plasiyerId: String(hData[i][13] || ""),
       };
       break;
     }
@@ -526,6 +582,9 @@ function saveCari(body) {
   ensureCariKoduColonu(sheet);
   ensureCariIskontoColonu(sheet);
   ensureCariKrediLimitiColonu(sheet);
+  ensureCariEFaturaColonu(sheet);
+  ensureCariEArsivColonu(sheet);
+  ensureCariPlasiyerColonu(sheet);
   const data = sheet.getDataRange().getValues();
 
   let id = String(body.id || "").trim();
@@ -549,6 +608,12 @@ function saveCari(body) {
     String(body.cariKodu || (satirIdx > 0 ? (data[satirIdx - 1][8] || "") : "")),
     parseFloat(body.iskontoOrani) || 0,
     parseFloat(body.krediLimiti) || 0,
+    // STANDART DEĞER "Hayır": body.eFatura/eArsiv tam olarak "Evet" gelmediği sürece
+    // (yanlış/eksik veri, undefined vb.) her zaman "Hayır" olarak kaydedilir — EDM
+    // bağlantısı sadece kullanıcı açıkça "Evet" seçtiğinde kurulabilsin diye.
+    String(body.eFatura) === "Evet" ? "Evet" : "Hayır",
+    String(body.eArsiv) === "Evet" ? "Evet" : "Hayır",
+    String(body.plasiyerId || ""),
   ];
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);
@@ -4660,6 +4725,98 @@ function markaSiraGuncelle(body) {
   });
   cacheTemizle(["markaListesi"]);
   return { ok: true };
+}
+
+// ════════════════════════════════════════════════
+// PLASİYER TANIMLARI (Ayarlar > Plasiyer Tanımlama) — Cari tanımında bir
+// carinin sorumlu plasiyeri buradaki listeden seçilir.
+// ════════════════════════════════════════════════
+const PLASIYER_BASLIKLAR = ["ID", "AD", "SIRA", "TELEFON"];
+
+function getPlasiyerListesi() {
+  return cacheOkuVeyaHesapla("plasiyerListesi", 300, function () {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = getOrCreateSheet(ss, SHEETS.plasiyerler, PLASIYER_BASLIKLAR);
+    const data = sheet.getDataRange().getValues();
+    const sonuc = [];
+    for (let i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      sonuc.push({ id: String(data[i][0]), ad: String(data[i][1] || ""), sira: parseFloat(data[i][2]) || 0, telefon: String(data[i][3] || "") });
+    }
+    return { ok: true, plasiyerler: siraliDizile(sonuc) };
+  });
+}
+
+// body: { id (varsa güncelleme), ad, telefon (opsiyonel) }
+function savePlasiyer(body) {
+  const ad = String(body.ad || "").trim();
+  if (!ad) return { ok: false, hata: "Plasiyer adı gerekli" };
+  const telefon = String(body.telefon || "").trim();
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.plasiyerler, PLASIYER_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  let id = String(body.id || "").trim();
+  if (id) {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === id) {
+        sheet.getRange(i + 1, 1, 1, 4).setValues([[id, ad, data[i][2], telefon]]);
+        cacheTemizle(["plasiyerListesi"]);
+        return { ok: true, id: id };
+      }
+    }
+  }
+  const maxSira = data.slice(1).reduce((m, r) => Math.max(m, parseFloat(r[2]) || 0), 0);
+  id = "pls_" + Date.now();
+  sheet.appendRow([id, ad, maxSira + 1, telefon]);
+  cacheTemizle(["plasiyerListesi"]);
+  return { ok: true, id: id };
+}
+
+function silPlasiyer(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.plasiyerler, PLASIYER_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["plasiyerListesi"]); return { ok: true }; }
+  }
+  return { ok: false, hata: "Plasiyer bulunamadı" };
+}
+
+// body: { sirali: [id1, id2, ...] }
+function plasiyerSiraGuncelle(body) {
+  const sirali = Array.isArray(body.sirali) ? body.sirali : [];
+  if (sirali.length === 0) return { ok: false, hata: "sirali gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.plasiyerler, PLASIYER_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  sirali.forEach((id, idx) => {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(id)) { sheet.getRange(i + 1, 3).setValue(idx + 1); break; }
+    }
+  });
+  cacheTemizle(["plasiyerListesi"]);
+  return { ok: true };
+}
+
+// ════════════════════════════════════════════════
+// EDM/e-FATURA SORGULAMA — PLACEHOLDER. Mevcut (Akınsoft) sistemde VKN/TCKN
+// girilip "sistemden veri çek" dendiğinde firmanın e-Fatura mı e-Arşiv mi
+// olduğu otomatik sorgulanıp cariye işleniyor; aynı davranış burada da
+// istendi. EDM Bilişim'den test ortamı/API bilgileri henüz alınamadığı için
+// bu fonksiyon şimdilik GERÇEK BİR SORGU YAPMAZ — sadece net bir hata döner.
+// EDM API bilgileri elimize geçince: body.vergiNo ile EDM'in mükellef sorgu
+// servisi (örn. GİB kullanıcı listesi / gibuser sorgusu) çağrılıp sonucuna
+// göre { ok:true, eFatura:"Evet"|"Hayır", eArsiv:"Evet"|"Hayır" } dönülecek.
+// body: { vergiNo }
+function edmCariSorgula(body) {
+  const vergiNo = String(body.vergiNo || "").trim();
+  if (!vergiNo) return { ok: false, hata: "Vergi/Kimlik No gerekli" };
+  return {
+    ok: false,
+    hata: "EDM bağlantı bilgileri henüz tanımlı değil. Test ortamı/API bilgileri alındıktan sonra bu buton VKN/TCKN'ye göre otomatik e-Fatura/e-Arşiv sorgusu yapacaktır. Şimdilik seçimi elle yapın."
+  };
 }
 
 // ════════════════════════════════════════════════

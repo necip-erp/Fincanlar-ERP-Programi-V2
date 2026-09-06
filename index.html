@@ -842,6 +842,18 @@ setInterval(topbarSaatGuncelle, 10000);
       </div>
     </div>
     <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Plasiyer Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">
+        Burada tanımladığınız plasiyerler, Cari tanımı ekranındaki "Plasiyer" alanında seçilebilir hale gelir.
+      </p>
+      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="flex:1"><label>Plasiyer Adı</label><input id="plasiyer-yeni-ad" type="text" placeholder="Örn. Ahmet Yılmaz"></div>
+        <div style="flex:1"><label>Telefon (opsiyonel)</label><input id="plasiyer-yeni-tel" type="text" placeholder="05XX XXX XX XX"></div>
+        <button class="btn btn-primary" onclick="plasiyerEkleUI()">+ Ekle</button>
+      </div>
+      <div id="plasiyer-liste" style="margin-top:12px"></div>
+    </div>
+    <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Açılışta Gelecek Sayfa</div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 14px">
         Programı her açtığında hangi ekranla karşılaşacağını seçersin. Bu tercih tarayıcının
@@ -1124,6 +1136,7 @@ modulAc = function(id){
   _origModulAc(id);
   try{
     if(id === "cari" && !_cariYuklendi){ cariListesiYukle(); }
+    if(id === "cari" && !_plasiyerYuklendi){ plasiyerListesiYukle(); }
     if(id === "satis"){ satisAnaSecimeDon(); }
     if(id === "alis"){ alisAnaSecimeDon(); }
     if(id === "tahsilat" && !_tahsilatYuklendi){ tahsilatListesiYukle(); }
@@ -1806,7 +1819,31 @@ function cariModalAc(editId){
       </div>
       <div class="fld"><label>Telefon</label><input id="cm-telefon" type="text" value="${c?c.telefon:''}"></div>
       <div class="fld"><label>Adres</label><input id="cm-adres" type="text" value="${c?c.adres:''}"></div>
-      <div class="fld"><label>Vergi No</label><input id="cm-vergino" type="text" value="${c?c.vergiNo:''}"></div>
+      <div class="fld"><label>Vergi No</label>
+        <div style="display:flex;gap:6px">
+          <input id="cm-vergino" type="text" value="${c?c.vergiNo:''}" style="flex:1">
+          <button type="button" class="btn" title="EDM üzerinden VKN/TCKN'ye göre e-Fatura/e-Arşiv durumunu sorgula" onclick="cmEdmSorgula()">🔍 Sistemden Veri Çek</button>
+        </div>
+      </div>
+      <div class="fld"><label>E-Fatura Mükellefi</label>
+        <select id="cm-efatura">
+          <option value="Hayır" ${(!c||c.eFatura!=='Evet')?'selected':''}>Hayır</option>
+          <option value="Evet" ${c&&c.eFatura==='Evet'?'selected':''}>Evet</option>
+        </select>
+      </div>
+      <div class="fld"><label>E-Arşiv Mükellefi</label>
+        <select id="cm-earsiv">
+          <option value="Hayır" ${(!c||c.eArsiv!=='Evet')?'selected':''}>Hayır</option>
+          <option value="Evet" ${c&&c.eArsiv==='Evet'?'selected':''}>Evet</option>
+        </select>
+      </div>
+      <p style="color:var(--text3);font-size:12px;margin:-6px 0 4px">E-Fatura/E-Arşiv "Hayır" olan cariler EDM ile hiçbir şekilde eşleştirilmez. Standart değer: Hayır.</p>
+      <div class="fld"><label>Plasiyer</label>
+        <select id="cm-plasiyer">
+          <option value="">— Seçilmedi —</option>
+          ${(_plasiyerListe||[]).map(p=>`<option value="${p.id}" ${c&&c.plasiyerId===p.id?'selected':''}>${p.ad}</option>`).join("")}
+        </select>
+      </div>
       <div class="fld"><label>Genel İskonto Oranı (%)</label><input id="cm-iskonto" type="number" min="0" max="100" step="0.01" value="${c?(c.iskontoOrani||''):''}" placeholder="0 = iskonto yok"></div>
       <div class="fld"><label>Kredi Limiti (₺)</label><input id="cm-kredilimiti" type="number" min="0" step="0.01" value="${c?(c.krediLimiti||''):''}" placeholder="0 = limitsiz"></div>
       <div class="fld"><label>Not</label><textarea id="cm-not" rows="2">${c?c.not:''}</textarea></div>
@@ -1867,6 +1904,9 @@ function cariKaydet(id){
     telefon: document.getElementById("cm-telefon").value,
     adres: document.getElementById("cm-adres").value,
     vergiNo: document.getElementById("cm-vergino").value,
+    eFatura: (document.getElementById("cm-efatura")||{}).value || "Hayır",
+    eArsiv: (document.getElementById("cm-earsiv")||{}).value || "Hayır",
+    plasiyerId: (document.getElementById("cm-plasiyer")||{}).value || "",
     iskontoOrani: document.getElementById("cm-iskonto").value,
     krediLimiti: document.getElementById("cm-kredilimiti").value,
     not: document.getElementById("cm-not").value,
@@ -1876,6 +1916,21 @@ function cariKaydet(id){
     document.getElementById("cari-modal-overlay").remove();
     cariListesiYukle();
     if(id) cariAc(id); else cariAc(res.id);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// Cari modalındaki "🔍 Sistemden Veri Çek" butonu: mevcut (Akınsoft) sistemdeki
+// davranışın karşılığı — VKN/TCKN'ye göre firmanın e-Fatura mı e-Arşiv mi olduğunu
+// sorgulayıp E-Fatura/E-Arşiv alanlarını otomatik dolduracak. EDM Bilişim'den test
+// ortamı/API bilgileri gelene kadar backend bilinçli olarak sadece bilgilendirici
+// bir hata döner; hiçbir şekilde cari otomatik "Evet"e çekilmez.
+function cmEdmSorgula(){
+  const vergiNo = document.getElementById("cm-vergino").value.trim();
+  if(!vergiNo){ alert("Önce Vergi/Kimlik No girin."); return; }
+  cariApi("edmCariSorgula", {vergiNo}).then(res=>{
+    if(!res.ok){ alert(res.hata||"Sorgulanamadı."); return; }
+    document.getElementById("cm-efatura").value = res.eFatura || "Hayır";
+    document.getElementById("cm-earsiv").value = res.eArsiv || "Hayır";
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 </script>
@@ -5280,6 +5335,7 @@ function ayarlarYukle(){
   aciklamaSablonlariYukle();
   siparisDurumlariYukle();
   seriTanimlariYukle();
+  plasiyerListesiYukle();
   acilisSayfasiYukle();
   if(!_tanimListeYuklendi.giderUstGrup) tanimListesiYukle("giderUstGrup");
   if(!_tanimListeYuklendi.giderAltGrup) tanimListesiYukle("giderAltGrup");
@@ -5877,6 +5933,98 @@ function markaSiraTasi(idx, yon){
   _markaListe = yeniListe;
   markaListesiCiz();
   cariApi("markaSiraGuncelle", {sirali: yeniListe.map(m=>m.id)}).then(res=>{
+    if(!res.ok) alert("Hata: "+(res.hata||"bilinmiyor"));
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ── Plasiyer Tanımlama (Ayarlar sayfası) ──
+let _plasiyerListe = [];
+let _plasiyerYuklendi = false;
+function plasiyerListesiYukle(){
+  const el = document.getElementById("plasiyer-liste");
+  if(el) el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getPlasiyerListesi").then(res=>{
+    if(!res.ok){ if(el) el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _plasiyerListe = res.plasiyerler;
+    _plasiyerYuklendi = true;
+    plasiyerListesiCiz();
+  }).catch(err=>{ if(el) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+function plasiyerListesiCiz(){
+  const el = document.getElementById("plasiyer-liste");
+  if(!el) return;
+  if(_plasiyerListe.length===0){ el.innerHTML = '<div class="cari-empty">Henüz plasiyer tanımlanmadı.</div>'; return; }
+  el.innerHTML = `
+    <table class="rapor-tbl">
+      <thead><tr><th style="width:70px"></th><th>Plasiyer</th><th>Telefon</th><th style="width:90px"></th></tr></thead>
+      <tbody>
+        ${_plasiyerListe.map((p,idx)=>`
+        <tr id="plasiyer-satir-${p.id}">
+          <td>
+            <span class="hk-sil" style="font-size:11px;${idx===0?'opacity:.25;pointer-events:none':''}" onclick="plasiyerSiraTasi(${idx},-1)" title="Yukarı taşı">▲</span>
+            <span class="hk-sil" style="font-size:11px;margin-left:4px;${idx===_plasiyerListe.length-1?'opacity:.25;pointer-events:none':''}" onclick="plasiyerSiraTasi(${idx},1)" title="Aşağı taşı">▼</span>
+          </td>
+          <td id="plasiyer-metin-${p.id}">${p.ad}</td>
+          <td>${p.telefon||''}</td>
+          <td>
+            <span class="hk-sil" onclick="plasiyerDuzenleAc('${p.id}')" title="Düzenle">✏️</span>
+            <span class="hk-sil" onclick="plasiyerSilOnay('${p.id}')" title="Sil">🗑</span>
+          </td>
+        </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+function plasiyerEkleUI(){
+  const adInput = document.getElementById("plasiyer-yeni-ad");
+  const telInput = document.getElementById("plasiyer-yeni-tel");
+  const ad = adInput.value.trim();
+  const telefon = telInput ? telInput.value.trim() : "";
+  if(!ad){ alert("Plasiyer adı girin"); return; }
+  cariApi("savePlasiyer", {ad, telefon}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    adInput.value = ""; if(telInput) telInput.value = "";
+    plasiyerListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+function plasiyerDuzenleAc(id){
+  const p = _plasiyerListe.find(x=>x.id===id);
+  if(!p) return;
+  const satir = document.getElementById("plasiyer-satir-"+id);
+  if(!satir) return;
+  satir.innerHTML = `
+    <td></td>
+    <td><input id="plasiyer-duzenle-ad-${id}" type="text" value="${p.ad}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2)"></td>
+    <td><input id="plasiyer-duzenle-tel-${id}" type="text" value="${p.telefon||''}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2)"></td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-primary" style="padding:4px 10px" onclick="plasiyerDuzenleKaydet('${id}')">Kaydet</button>
+      <button class="btn" style="padding:4px 10px" onclick="plasiyerListesiCiz()">Vazgeç</button>
+    </td>`;
+}
+function plasiyerDuzenleKaydet(id){
+  const ad = document.getElementById("plasiyer-duzenle-ad-"+id).value.trim();
+  const telEl = document.getElementById("plasiyer-duzenle-tel-"+id);
+  const telefon = telEl ? telEl.value.trim() : "";
+  if(!ad){ alert("Plasiyer adı girin"); return; }
+  cariApi("savePlasiyer", {id, ad, telefon}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    plasiyerListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+function plasiyerSilOnay(id){
+  if(!confirm("Bu plasiyeri silmek istediğinize emin misiniz?")) return;
+  cariApi("silPlasiyer", {id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    plasiyerListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+function plasiyerSiraTasi(idx, yon){
+  const hedef = idx + yon;
+  if(hedef < 0 || hedef >= _plasiyerListe.length) return;
+  const yeniListe = _plasiyerListe.slice();
+  const gecici = yeniListe[idx]; yeniListe[idx] = yeniListe[hedef]; yeniListe[hedef] = gecici;
+  _plasiyerListe = yeniListe;
+  plasiyerListesiCiz();
+  cariApi("plasiyerSiraGuncelle", {sirali: yeniListe.map(p=>p.id)}).then(res=>{
     if(!res.ok) alert("Hata: "+(res.hata||"bilinmiyor"));
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
