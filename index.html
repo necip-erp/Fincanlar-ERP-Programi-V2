@@ -8,6 +8,9 @@
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#4338ca">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   /* ── Nötrler: hafif soğuk gri tonu (klasik "SaaS beyazı" değil) ── */
@@ -51,9 +54,15 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 @keyframes fincanPanelIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
 @keyframes fincanPulse{0%,100%{opacity:.35}50%{opacity:1}}
 
+/* ── Arka fon filigranı: "FİNCANLAR YAPI MUHASEBE PROGRAMI" — sabit, tüm ekranın
+   arkasında, çok silik; sadece içerik olmayan/boşluk kalan alanlarda görünür
+   (kart/panel arka planları zaten opak olduğu için üstlerini örtmez). ── */
+.arkaplan-filigran{position:fixed;inset:-25% -60%;z-index:0;display:flex;flex-wrap:wrap;align-content:space-around;justify-content:space-around;pointer-events:none;user-select:none;overflow:hidden;transform:rotate(-14deg)}
+.arkaplan-filigran span{font-family:'Oswald',-apple-system,sans-serif;font-weight:700;font-size:26px;letter-spacing:2.5px;color:var(--blue);opacity:.05;white-space:nowrap;text-transform:uppercase;margin:34px 46px}
+
 /* ── ÜST ÇUBUK ── */
 .topbar{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);box-shadow:var(--shadow-sm);flex-shrink:0;position:relative;z-index:2}
-.topbar-saat{margin-left:auto;font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap;padding-left:10px}
+.topbar-saat{margin-left:auto;font-size:13px;font-weight:800;color:var(--blue);white-space:nowrap;padding-left:10px;letter-spacing:.2px}
 .sayfa-baslik{font-size:13px;font-weight:700;color:var(--text2);padding:4px 12px;background:var(--bg3);border-radius:20px;white-space:nowrap;display:none}
 .sayfa-baslik.show{display:inline-block}
 .tarih-vurgu{font-weight:800;font-size:1.08em;color:var(--text)}
@@ -318,6 +327,21 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
+
+<div class="arkaplan-filigran" aria-hidden="true" id="arkaplan-filigran"></div>
+<script>
+// Filigran metnini ekrana yaymak için yeterince tekrar oluşturuyoruz (JS ile, tek tek
+// HTML'e yazmak yerine — hem daha temiz hem ekran boyutuna göre otomatik "taşıp"
+// devam edecek kadar bol tekrar sağlıyor).
+(function(){
+  const kapsayici = document.getElementById("arkaplan-filigran");
+  for(let i=0;i<40;i++){
+    const s = document.createElement("span");
+    s.textContent = "FİNCANLAR YAPI MUHASEBE PROGRAMI";
+    kapsayici.appendChild(s);
+  }
+})();
+</script>
 
 <div class="topbar">
   <div class="brand" onclick="gitAnaSayfa()">
@@ -1125,14 +1149,19 @@ document.addEventListener("click", (ev)=>{
   if(wrap && !wrap.contains(ev.target)) modulSwitcherKapat();
 });
 
-// Arama kutusuna bir şey yazılınca Stok modülüne geçilir (liste orada, "şimdiki yerinde" açılır).
+// Arama kutusuna bir şey yazılınca doğrudan Stok > Tanımlar > Stok Tanımları listesine
+// geçilir VE yazılan terim otomatik olarak o listenin arama kutusuna uygulanıp filtrelenir
+// (önceden sadece Stok modülüne geçiyordu, gerçek bir arama yapmıyordu).
 let _aramaZamanlayici = null;
 function globalAraDegisti(deger){
   clearTimeout(_aramaZamanlayici);
   if(!deger.trim()) return;
   _aramaZamanlayici = setTimeout(()=>{
     modulAc("stok");
-    // Not: arama terimini otomatik stok paneline aktarmak (iframe postMessage) sonraki adımda eklenebilir.
+    stokAltModulAc("tanimlar");
+    stokTanimAltAc("tanim");
+    const araInput = document.getElementById("stoktanim-ara");
+    if(araInput){ araInput.value = deger; stokTanimAramaFiltrele(deger); }
   }, 250);
 }
 
@@ -1187,6 +1216,14 @@ document.addEventListener("keydown", function(e){
   const kisayollar = kisayollariAl();
   const basilan = kisayolMetni(e);
   if(basilan === kisayollar._geri){
+    e.preventDefault();
+    gitAnaSayfa();
+    return;
+  }
+  // Sabit kısayol: Ctrl+A → Ana Sayfa (yazı alanı dışındayken; input/textarea/select
+  // içindeyken normal "tümünü seç" davranışı bozulmasın diye yukarıdaki erken çıkış zaten
+  // bu durumda fonksiyonu çalıştırmıyor).
+  if(basilan === "Ctrl+A"){
     e.preventDefault();
     gitAnaSayfa();
     return;
@@ -6337,16 +6374,24 @@ function stokKritikRaporuYukle(){
 let _stokTanimYuklendi = false;
 let _stokTanimListe = [];
 
+// Not: liste (yeniden) çizilirken, kullanıcı arama kutusuna zaten bir terim yazmışsa
+// (örn. global aramadan gelip veri henüz yüklenmemişken filtre uygulanmak istendiğinde)
+// o terimi kaybetmeden filtreli halini gösteriyoruz.
+function _stokTanimGuncelAramaTerimiIleCiz(){
+  const arama = (document.getElementById("stoktanim-ara")||{}).value || "";
+  if(arama.trim()) stokTanimAramaFiltrele(arama);
+  else stokTanimListesiCiz(_stokTanimListe);
+}
 function stokTanimListesiYukle(){
   _stokTanimYuklendi = true;
   const onbellek = onbellekOku("stokTanimListesi", 60000);
-  if(onbellek){ _stokTanimListe = onbellek; stokTanimListesiCiz(_stokTanimListe); }
+  if(onbellek){ _stokTanimListe = onbellek; _stokTanimGuncelAramaTerimiIleCiz(); }
   else document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getStokTanimListesi").then(res=>{
     if(!res.ok){ if(!onbellek) document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _stokTanimListe = res.kalemler;
     onbellekYaz("stokTanimListesi", res.kalemler);
-    stokTanimListesiCiz(_stokTanimListe);
+    _stokTanimGuncelAramaTerimiIleCiz();
   }).catch(err=>{
     if(!onbellek) document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
