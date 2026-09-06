@@ -1075,12 +1075,19 @@ function saveSatis(body) {
   const cariId = String(body.cariId || "").trim();
   if (!cariId) return { ok: false, hata: "Cari (müşteri) seçimi zorunludur" };
   let cariAd = "";
+  let cariEdmVar = false; // Cari E-Fatura veya E-Arşiv mükellefiyse true — KDV sonrası Tutar İskontosu'na izin verilmez.
   {
     const cSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
       ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH"]);
+    ensureCariEFaturaColonu(cSheet);
+    ensureCariEArsivColonu(cSheet);
     const cData = cSheet.getDataRange().getValues();
     for (let i = 1; i < cData.length; i++) {
-      if (String(cData[i][0]) === cariId) { cariAd = String(cData[i][2] || ""); break; }
+      if (String(cData[i][0]) === cariId) {
+        cariAd = String(cData[i][2] || "");
+        cariEdmVar = String(cData[i][11] || "") === "Evet" || String(cData[i][12] || "") === "Evet";
+        break;
+      }
     }
   }
   if (!cariAd) return { ok: false, hata: "Seçilen cari bulunamadı" };
@@ -1105,7 +1112,11 @@ function saveSatis(body) {
   // KDV'den ÖNCE (ara toplamdan düşülür, kalemlerin ağırlıklı ortalama KDV oranı bu
   // düşülmüş tabana yeniden uygulanarak KDV de orantılı azalır).
   const tutarIskontosu = Math.max(0, parseFloat(body.tutarIskontosu) || 0);
-  const tutarIskontoKdvSonra = body.tutarIskontoKdvSonra !== false; // varsayılan: KDV'den sonra
+  // Cari E-Fatura veya E-Arşiv mükellefiyse (EDM bağlantısı olabilecek cari) KDV
+  // sonrası sabit tutar iskontosuna İZİN VERİLMEZ — GİB'e giden faturada iskonto her
+  // zaman KDV matrahına (KDV'den ÖNCE) yansıtılmalı. Böyle bir caride bu tik ne
+  // gelirse gelsin (arayüz zaten devre dışı bırakıyor, burada ikinci güvenlik katmanı) false'a zorlanır.
+  const tutarIskontoKdvSonra = cariEdmVar ? false : (body.tutarIskontoKdvSonra !== false); // varsayılan: KDV'den sonra
   let toplamTutar;
   if (tutarIskontosu > 0 && !tutarIskontoKdvSonra) {
     const araToplamNet = Math.max(0, kalemAraToplam - dipIskontoTutari - tutarIskontosu);
@@ -1280,13 +1291,38 @@ function siparistenFaturaOlustur(body) {
     return yeniFaturalanan >= bilgi.miktar - 0.0001;
   });
 
+  // ★ GÜNCELLEME (kullanıcı isteği: "tutar iskontosu içinde miktarda değişiklik oluyor
+  // ise ilgili oranda iskonto faturaya yansıtılsın"): sipariş TAMAMEN değil KISMEN
+  // faturaya aktarılıyorsa artık Tutar İskontosu 0'a düşürülmüyor — bu faturaya
+  // aktarılan tutarın, siparişin toplam (KDV hariç) tutarına oranı kadarı Tutar
+  // İskontosu'ndan bu faturaya pay olarak veriliyor. Örn. sipariş tutarının %40'ı bu
+  // faturaya aktarılıyorsa, Tutar İskontosu'nun da %40'ı bu faturaya yansır; kalan
+  // %60'lık pay, sonraki kısmi faturalarda kendi oranınca aktarılmaya devam eder.
+  let tutarIskontosuBuFaturaya = 0;
+  if (siparis.tutarIskontosu > 0) {
+    if (siparisTamamenAktariliyorMu) {
+      tutarIskontosuBuFaturaya = siparis.tutarIskontosu;
+    } else {
+      let siparisToplamNet = 0, buFaturaNet = 0;
+      Object.keys(kalemBilgi).forEach(kId => {
+        const b = kalemBilgi[kId];
+        siparisToplamNet += b.miktar * b.birimFiyat * (1 - (b.iskontoYuzde || 0) / 100);
+      });
+      yeniFaturaKalemleri.forEach(k => {
+        buFaturaNet += k.miktar * k.birimFiyat * (1 - (k.iskontoYuzde || 0) / 100);
+      });
+      const oran = siparisToplamNet > 0 ? (buFaturaNet / siparisToplamNet) : 0;
+      tutarIskontosuBuFaturaya = Math.round(siparis.tutarIskontosu * oran * 100) / 100;
+    }
+  }
+
   const faturaSonuc = saveSatis({
     cariId: siparis.cariId, cariAd: siparis.cariAd,
     tarih: body.tarih, odemeTipi: body.odemeTipi, bankaHesapId: body.bankaHesapId, vade: body.vade,
     aciklama: String(body.aciklama || ("Sipariş #" + siparisId.slice(-6) + "'den aktarıldı")),
     belgeTipi: "Fatura", kaynakSiparisId: siparisId,
     dipIskontoYuzde: siparis.dipIskontoYuzde,
-    tutarIskontosu: siparisTamamenAktariliyorMu ? siparis.tutarIskontosu : 0,
+    tutarIskontosu: tutarIskontosuBuFaturaya,
     tutarIskontoKdvSonra: siparis.tutarIskontoKdvSonra,
     kalemler: yeniFaturaKalemleri,
   });
@@ -1448,10 +1484,19 @@ function updateSatis(body) {
 
   const cAdKontrolSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
     ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH"]);
+  ensureCariEFaturaColonu(cAdKontrolSheet);
+  ensureCariEArsivColonu(cAdKontrolSheet);
+  let cariEdmVar = false; // Cari E-Fatura veya E-Arşiv mükellefiyse true — KDV sonrası Tutar İskontosu'na izin verilmez.
   {
     const cData = cAdKontrolSheet.getDataRange().getValues();
     let bulundu = false;
-    for (let i = 1; i < cData.length; i++) { if (String(cData[i][0]) === cariId) { bulundu = true; break; } }
+    for (let i = 1; i < cData.length; i++) {
+      if (String(cData[i][0]) === cariId) {
+        bulundu = true;
+        cariEdmVar = String(cData[i][11] || "") === "Evet" || String(cData[i][12] || "") === "Evet";
+        break;
+      }
+    }
     if (!bulundu) return { ok: false, hata: "Seçilen cari bulunamadı" };
   }
 
@@ -1506,7 +1551,7 @@ function updateSatis(body) {
   const dipIskontoYuzde = parseFloat(body.dipIskontoYuzde) || 0;
   const dipIskontoTutari = kalemAraToplam * (dipIskontoYuzde / 100);
   const tutarIskontosu = Math.max(0, parseFloat(body.tutarIskontosu) || 0);
-  const tutarIskontoKdvSonra = body.tutarIskontoKdvSonra !== false;
+  const tutarIskontoKdvSonra = cariEdmVar ? false : (body.tutarIskontoKdvSonra !== false);
   let toplamTutar;
   if (tutarIskontosu > 0 && !tutarIskontoKdvSonra) {
     const araToplamNet = Math.max(0, kalemAraToplam - dipIskontoTutari - tutarIskontosu);

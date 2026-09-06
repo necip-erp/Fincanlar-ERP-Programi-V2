@@ -1522,6 +1522,7 @@ function cariListesiYukle(){
     _cariListe = res.cariler.sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
     onbellekYaz("cariListesi", res.cariler);
     cariListesiCiz(_cariListe);
+    if(typeof smKdvSonraKisitiUygula === "function") smKdvSonraKisitiUygula(); // cari listesi satış modalı açıkken geç geldiyse kısıtı tazele
   }).catch(err=>{
     if(!onbellek) document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
@@ -2134,36 +2135,61 @@ function satisDetayCiz(res){
 }
 
 // ── Siparişten kısmi/ürün-miktar bazlı Fatura oluşturma ──
-let _siparisFaturaState = { siparisId:null, kalemler:[] };
+let _siparisFaturaState = { siparisId:null, kalemler:[], siparis:null };
 
 function siparisFaturaModalAc(siparisId){
   cariApi("getSatisDetay", {satisId:siparisId}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
-    const s = res.satis, kalemler = res.kalemler.filter(k=>k.kalanMiktar>0);
-    if(kalemler.length===0){ alert("Bu siparişte aktarılacak kalan miktar yok."); return; }
-    _siparisFaturaState = { siparisId, kalemler: kalemler.map(k=>({...k, aktarilacak: k.kalanMiktar})) };
+    const s = res.satis;
+    if(res.kalemler.every(k=>k.kalanMiktar<=0)){ alert("Bu siparişte aktarılacak kalan miktar yok — tüm kalemler zaten faturalandı."); return; }
+    // TÜM kalemler gösterilir (zaten faturalanmış olanlar dahil, salt-okunur) ki sipariş
+    // hakkında eksiksiz bir tablo görülsün; sadece kalanı olanlar için giriş açık.
+    _siparisFaturaState = { siparisId, siparis: s, kalemler: res.kalemler.map(k=>({...k, aktarilacak: k.kalanMiktar>0 ? k.kalanMiktar : 0})) };
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.id = "siparis-fatura-modal-overlay";
     overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
     const bugun = simdiTarihSaat();
+    const t = s.toplamlar || {};
     overlay.innerHTML = `
-      <div class="modal-box modal-box-wide">
-        <h3>Siparişten Fatura Oluştur</h3>
-        <p style="color:var(--text3);font-size:13px;margin:0 0 14px">${s.cariAd} — aktarmak istediğin ürünler için miktar gir (0 = aktarma). Kalan miktarlar siparişte açık kalmaya devam eder.</p>
+      <div class="modal-box modal-box-xwide">
+        <h3 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span>Siparişten Fatura Oluştur</span>
+          ${s.siparisNo ? `<span style="font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px">#${s.siparisNo}</span>` : ''}
+        </h3>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:var(--bg3);border-radius:10px;font-size:13px;color:var(--text2)">
+          <div><b>Cari:</b> ${s.cariAd}</div>
+          <div><b>Sipariş Tarihi:</b> ${tarihGoster(s.tarih)}</div>
+          ${s.siparisDurumu ? `<div><b>Durum:</b> <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span></div>` : ''}
+          <div><b>Sipariş Ödeme Tipi:</b> ${s.odemeTipi||'—'}</div>
+          ${s.aciklama ? `<div><b>Açıklama:</b> ${s.aciklama}</div>` : ''}
+        </div>
+        <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Aktarmak istediğin ürünler için miktar gir (0 = aktarma). Kalan miktarlar siparişte açık kalmaya devam eder. Zaten tamamı faturalanmış kalemler bilgi amaçlı gösterilir.</p>
         ${(s.dipIskontoYuzde>0 || s.tutarIskontosu>0) ? `<p style="background:var(--bg3);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--text2);margin:0 0 14px">
-          ℹ️ Bu siparişte fatura altı iskonto tanımlı${s.dipIskontoYuzde>0?` (Dip İskonto: %${s.dipIskontoYuzde})`:''}${s.tutarIskontosu>0?` (Tutar İskontosu: ${paraFormat(s.tutarIskontosu)})`:''}.
-          Dip İskonto % oranı her zaman faturaya aktarılır. Tutar İskontosu ise sadece siparişin TAMAMI bu faturaya aktarılıyorsa (kalan bırakılmıyorsa) aktarılır — kısmi aktarımda mükerrer düşülmesin diye bu faturaya yansıtılmaz.
+          ℹ️ Bu siparişte fatura altı iskonto tanımlı${s.dipIskontoYuzde>0?` (Dip İskonto: %${s.dipIskontoYuzde})`:''}${s.tutarIskontosu>0?` (Tutar İskontosu: ${paraFormat(s.tutarIskontosu)}${s.tutarIskontoKdvSonra?', KDV sonrası':', KDV öncesi'})`:''}.
+          Dip İskonto % oranı her zaman faturaya aktarılır. Tutar İskontosu ise, siparişin TAMAMI bu faturaya aktarılıyorsa tamamen, KISMEN aktarılıyorsa bu faturaya aktarılan tutarın sipariş toplamına oranı kadar bu faturaya yansır — kalan pay, sonraki kısmi faturalarda kendi oranınca uygulanır.
         </p>` : ''}
-        <div id="sf-kalemler"></div>
-        <div class="fld" style="margin-top:10px"><label>Fatura Tarihi</label><input id="sf-tarih" type="datetime-local" value="${bugun}"></div>
-        <div class="fld"><label>Ödeme Tipi</label>
-          <select id="sf-odeme">
-            <option value="Peşin">Peşin</option>
-            <option value="Havale">Havale</option>
-            <option value="Kredi Kartı">Kredi Kartı</option>
-            <option value="Açık Hesap">Açık Hesap</option>
-          </select>
+        <div style="overflow-x:auto">
+          <table class="rapor-tbl">
+            <thead><tr>
+              <th>Stok Kodu</th><th>Ürün</th><th style="text-align:right">Sipariş Miktarı</th><th style="text-align:right">Kalan</th>
+              <th style="text-align:right">Birim Fiyat</th><th style="text-align:right">İsk.%</th><th style="text-align:right">Kdv%</th>
+              <th style="text-align:right">Satır Tutarı</th><th style="text-align:right;min-width:110px">Aktarılacak</th>
+            </tr></thead>
+            <tbody id="sf-kalemler"></tbody>
+          </table>
+        </div>
+        <div id="sf-toplam-onizleme" style="margin-top:12px"></div>
+        <div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap">
+          <div class="fld" style="flex:1;min-width:180px"><label>Fatura Tarihi</label><input id="sf-tarih" type="datetime-local" value="${bugun}"></div>
+          <div class="fld" style="flex:1;min-width:180px"><label>Ödeme Tipi</label>
+            <select id="sf-odeme">
+              <option value="Peşin">Peşin</option>
+              <option value="Havale">Havale</option>
+              <option value="Kredi Kartı">Kredi Kartı</option>
+              <option value="Açık Hesap">Açık Hesap</option>
+            </select>
+          </div>
         </div>
         <div class="modal-actions">
           <button class="btn" onclick="document.getElementById('siparis-fatura-modal-overlay').remove()">İptal</button>
@@ -2178,12 +2204,82 @@ function siparisFaturaModalAc(siparisId){
 function siparisFaturaKalemlerCiz(){
   const el = document.getElementById("sf-kalemler");
   if(!el) return;
-  el.innerHTML = _siparisFaturaState.kalemler.map((k,idx)=>`
-    <div class="satis-kalem-satir" style="align-items:center">
-      <span style="flex:1">${k.stokKodu?`<b>${k.stokKodu}</b> · `:''}${k.urunAdi} <span style="color:var(--text3);font-size:11px">(kalan: ${k.kalanMiktar} ${k.birim})</span></span>
-      <input type="number" min="0" max="${k.kalanMiktar}" step="1" value="${k.aktarilacak}" style="max-width:90px"
-             oninput="_siparisFaturaState.kalemler[${idx}].aktarilacak = Math.min(parseFloat(this.value)||0, ${k.kalanMiktar})">
-    </div>`).join("");
+  el.innerHTML = _siparisFaturaState.kalemler.map((k,idx)=>{
+    const devamEdiyor = k.kalanMiktar > 0;
+    return `
+    <tr style="${devamEdiyor?'':'opacity:.5'}">
+      <td>${k.stokKodu||'—'}</td>
+      <td>${k.urunAdi}</td>
+      <td style="text-align:right">${miktarFormat(k.miktar)} ${k.birim}</td>
+      <td style="text-align:right">${miktarFormat(k.kalanMiktar)} ${k.birim}</td>
+      <td style="text-align:right">${paraFormat(k.birimFiyat)}</td>
+      <td style="text-align:right">%${k.iskontoYuzde||0}</td>
+      <td style="text-align:right">%${k.kdvOrani}</td>
+      <td style="text-align:right">${paraFormat(k.kalemGenelToplam)}</td>
+      <td style="text-align:right">
+        ${devamEdiyor
+          ? `<input type="number" min="0" max="${k.kalanMiktar}" step="1" value="${k.aktarilacak}" style="max-width:90px;text-align:right"
+                    oninput="_siparisFaturaState.kalemler[${idx}].aktarilacak = Math.min(parseFloat(this.value)||0, ${k.kalanMiktar}); siparisFaturaOnizlemeGuncelle();">`
+          : `<span style="font-size:11px;color:var(--text3)">Tamamı faturalandı</span>`}
+      </td>
+    </tr>`;
+  }).join("");
+  siparisFaturaOnizlemeGuncelle();
+}
+
+// Kullanıcı miktar girdikçe: bu faturaya aktarılan tutarın, siparişin (KDV hariç)
+// toplamına oranını hesaplayıp Tutar İskontosu'ndan bu faturaya düşecek payı ve
+// tahmini fatura toplamını canlı gösterir. Kesin/nihai hesap backend'de yapılır
+// (bkz. siparistenFaturaOlustur) — burası bir önizlemedir.
+function siparisFaturaOnizlemeGuncelle(){
+  const el = document.getElementById("sf-toplam-onizleme");
+  if(!el) return;
+  const s = _siparisFaturaState.siparis;
+  const tumKalemler = _siparisFaturaState.kalemler;
+  let siparisToplamNet = 0;
+  tumKalemler.forEach(k=>{ siparisToplamNet += k.miktar * k.birimFiyat * (1 - (k.iskontoYuzde||0)/100); });
+
+  let buFaturaBrut=0, buFaturaIsk=0, buFaturaKdv=0, buFaturaNet=0, aktarilanVarMi=false;
+  tumKalemler.forEach(k=>{
+    const miktar = parseFloat(k.aktarilacak)||0;
+    if(miktar<=0) return;
+    aktarilanVarMi = true;
+    const h = satisKalemHesaplaJS({miktar, birimFiyat:k.birimFiyat, iskontoYuzde:k.iskontoYuzde, kdvOrani:k.kdvOrani});
+    buFaturaBrut += h.brut; buFaturaIsk += h.iskTutar; buFaturaKdv += h.kdvTutar; buFaturaNet += h.araToplam;
+  });
+
+  if(!aktarilanVarMi){ el.innerHTML = '<p style="color:var(--text3);font-size:12px">Aktarılacak bir miktar girilmedi.</p>'; return; }
+
+  const tumuTamamenAktariliyorMu = tumKalemler.every(k => (parseFloat(k.aktarilacak)||0) + 0.0001 >= k.kalanMiktar);
+  const dipIskontoYuzde = s.dipIskontoYuzde || 0;
+  const dipIskontoTutari = buFaturaNet * (dipIskontoYuzde/100);
+  let tutarIskontosuPay = 0;
+  if(s.tutarIskontosu > 0){
+    tutarIskontosuPay = tumuTamamenAktariliyorMu ? s.tutarIskontosu
+      : Math.round(s.tutarIskontosu * (siparisToplamNet>0 ? (buFaturaNet/siparisToplamNet) : 0) * 100)/100;
+  }
+  const araToplamDipSonrasi = Math.max(0, buFaturaNet - dipIskontoTutari);
+  let nihaiAraToplam = araToplamDipSonrasi, nihaiKdv = buFaturaKdv * (araToplamDipSonrasi / (buFaturaNet||1)), nihaiGenel;
+  if(tutarIskontosuPay > 0 && s.tutarIskontoKdvSonra){
+    nihaiGenel = Math.max(0, (araToplamDipSonrasi + nihaiKdv) - tutarIskontosuPay);
+  } else if(tutarIskontosuPay > 0){
+    nihaiAraToplam = Math.max(0, araToplamDipSonrasi - tutarIskontosuPay);
+    const ortKdvOrani = araToplamDipSonrasi>0 ? (nihaiKdv/araToplamDipSonrasi) : 0;
+    nihaiKdv = nihaiAraToplam * ortKdvOrani;
+    nihaiGenel = nihaiAraToplam + nihaiKdv;
+  } else {
+    nihaiGenel = araToplamDipSonrasi + nihaiKdv;
+  }
+
+  el.innerHTML = `
+    <div class="satis-toplam-detay" style="background:var(--bg3);border-radius:10px;padding:10px 14px">
+      <div class="satis-toplam-satir"><span>Bu Faturaya Aktarılan Brüt</span><b>${paraFormat(buFaturaBrut)}</b></div>
+      <div class="satis-toplam-satir"><span>Kalem İskontosu</span><b>-${paraFormat(buFaturaIsk)}</b></div>
+      ${dipIskontoYuzde>0?`<div class="satis-toplam-satir"><span>Dip İskonto (%${dipIskontoYuzde})</span><b>-${paraFormat(dipIskontoTutari)}</b></div>`:''}
+      ${tutarIskontosuPay>0?`<div class="satis-toplam-satir"><span>Tutar İskontosu Payı${tumuTamamenAktariliyorMu?'':' (orantılı)'}</span><b>-${paraFormat(tutarIskontosuPay)}</b></div>`:''}
+      <div class="satis-toplam-satir"><span>KDV</span><b>${paraFormat(nihaiKdv)}</b></div>
+      <div class="satis-toplam-satir" style="font-weight:700;font-size:15px;border-top:1px solid var(--border);margin-top:6px;padding-top:6px"><span>Tahmini Fatura Toplamı</span><b>${paraFormat(nihaiGenel)}</b></div>
+    </div>`;
 }
 
 function siparisFaturaKaydet(){
@@ -2360,7 +2456,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
                  onfocus="smCariOneriGoster()"
                  onblur="setTimeout(()=>smCariOneriKapat(),200)"
                  onkeydown="oneriKlavyeYonet(event,'sm-cari-oneri')">
-          <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('sm-cari').value=c.id; document.getElementById('sm-cari-arama').value=c.ad; if(c.iskontoOrani>0){ _yeniSatisKalemleri.forEach(k=>{ if(!k.iskontoYuzde) k.iskontoYuzde=c.iskontoOrani; }); satisKalemlerCiz(); satisToplamGuncelle(); } })">🔍</button>
+          <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('sm-cari').value=c.id; document.getElementById('sm-cari-arama').value=c.ad; smKdvSonraKisitiUygula(); if(c.iskontoOrani>0){ _yeniSatisKalemleri.forEach(k=>{ if(!k.iskontoYuzde) k.iskontoYuzde=c.iskontoOrani; }); satisKalemlerCiz(); satisToplamGuncelle(); } })">🔍</button>
           <input type="hidden" id="sm-cari" value="${s ? (s.cariId||'') : (onCariId||'')}">
           <div id="sm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
         </div>
@@ -2405,6 +2501,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
             <input id="sm-tutar-iskonto-kdv-sonra" type="checkbox" ${!s || s.tutarIskontoKdvSonra?'checked':''} onchange="satisToplamGuncelle()" style="width:auto">
             KDV'den sonra düş (tik yoksa KDV'den önce düşülür)
           </label>
+          <p id="sm-kdv-sonra-not" style="display:none;color:var(--warn,#c77);font-size:11px;margin:4px 0 0">⚠️ Bu cari E-Fatura/E-Arşiv mükellefi olduğu için KDV sonrası iskontoya izin verilmiyor — iskonto KDV'den önce (matrahtan) düşülecek.</p>
         </div>
 
         <div class="fld" style="flex:1;min-width:180px;max-width:220px;margin-bottom:0"><label>Dip İskonto (%)</label>
@@ -2423,7 +2520,25 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   satisKalemlerCiz();
   satisBankaSecenekleriYukle(s ? s.bankaHesapId : undefined);
   satisOdemeTipiDegisti();
+  smKdvSonraKisitiUygula();
   if(!duzenle && belgeTipiBaslangic === "Sipariş") siparisNumarasiOnizlemeYukle();
+}
+
+// Cari E-Fatura veya E-Arşiv mükellefiyse (bkz. edmBaglantisiVarMi backend) KDV
+// sonrası Tutar İskontosu'na İZİN VERİLMEZ — GİB'e giden faturada iskontonun her
+// zaman KDV matrahına (KDV'den ÖNCE) yansıması gerekir. Cari değiştikçe (ilk açılış,
+// arama/seçim, rehberden seçim) bu fonksiyon tekrar çağrılıp checkbox'ı kilitler.
+function smKdvSonraKisitiUygula(){
+  const chk = document.getElementById("sm-tutar-iskonto-kdv-sonra");
+  const not = document.getElementById("sm-kdv-sonra-not");
+  if(!chk) return;
+  const cariId = (document.getElementById("sm-cari")||{}).value;
+  const c = (_cariListe||[]).find(x=>x.id===cariId);
+  const edmVar = !!(c && (c.eFatura==='Evet' || c.eArsiv==='Evet'));
+  chk.disabled = edmVar;
+  if(edmVar) chk.checked = false;
+  if(not) not.style.display = edmVar ? 'block' : 'none';
+  satisToplamGuncelle();
 }
 
 // Satış/Sipariş/Teklif detayındaki "✏️ Düzenle" butonu (SADECE Sipariş/Teklif'te
@@ -2507,6 +2622,7 @@ function smCariSec(i){
   document.getElementById("sm-cari").value = c.id;
   document.getElementById("sm-cari-arama").value = c.ad;
   kutu.style.display = "none";
+  smKdvSonraKisitiUygula();
   // Carinin genel iskonto oranı varsa, henüz elle değiştirilmemiş kalemlere otomatik uygula.
   if(c.iskontoOrani > 0){
     _yeniSatisKalemleri.forEach(k=>{ if(!k.iskontoYuzde) k.iskontoYuzde = c.iskontoOrani; });
