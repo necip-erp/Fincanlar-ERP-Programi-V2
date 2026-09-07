@@ -132,6 +132,23 @@ function ensureCariPlasiyerColonu(sheet) {
   }
 }
 
+// PERF: yukarıdaki 6 ensureCari*Colonu fonksiyonunu tek tek çağırmak yerine (her biri
+// ayrı bir getRange(1,N).getValue() çağrısı = 6 ayrı Sheets servis isteği), başlık
+// satırının 9-14. kolonlarını TEK okuma ile alıp sadece eksik olanları tek seferde yazar.
+// Davranış aynı; sadece Cari sayfası açılışında (liste/detay/kayıt) daha az servis çağrısı.
+function ensureCariEkKolonlariHepsi(sheet) {
+  const beklenen = ["CARI_KODU", "ISKONTO_ORANI", "KREDI_LIMITI", "E_FATURA", "E_ARSIV", "PLASIYER_ID"];
+  const mevcut = sheet.getRange(1, 9, 1, 6).getValues()[0];
+  let degisti = false;
+  const yeni = beklenen.map((ad, i) => {
+    if (String(mevcut[i] || "") !== ad) { degisti = true; return ad; }
+    return mevcut[i];
+  });
+  if (degisti) {
+    sheet.getRange(1, 9, 1, 6).setValues([yeni]).setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
 // EDM/e-fatura ile ilgili HERHANGİ bir işlem (BFM eşleştirme, otomatik fatura
 // gönderimi vb.) öncesinde bu fonksiyonla kontrol edilmeli. Cari E_FATURA veya
 // E_ARSIV alanlarından biri "Evet" değilse (yani ikisi de "Hayır"/boşsa) EDM
@@ -466,12 +483,7 @@ function getCariListesi() {
   return cacheOkuVeyaHesapla("cariListesi", 180, function () {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
-  ensureCariKoduColonu(hSheet);
-  ensureCariIskontoColonu(hSheet);
-  ensureCariKrediLimitiColonu(hSheet);
-  ensureCariEFaturaColonu(hSheet);
-  ensureCariEArsivColonu(hSheet);
-  ensureCariPlasiyerColonu(hSheet);
+  ensureCariEkKolonlariHepsi(hSheet);
   const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
 
   const hData = hSheet.getDataRange().getValues();
@@ -521,12 +533,7 @@ function getCariDetay(cariId) {
   if (!cariId) return { ok: false, hata: "cariId gerekli" };
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
-  ensureCariKoduColonu(hSheet);
-  ensureCariIskontoColonu(hSheet);
-  ensureCariKrediLimitiColonu(hSheet);
-  ensureCariEFaturaColonu(hSheet);
-  ensureCariEArsivColonu(hSheet);
-  ensureCariPlasiyerColonu(hSheet);
+  ensureCariEkKolonlariHepsi(hSheet);
   const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
   ensureCariHareketVadeColonu(hkSheet);
 
@@ -580,12 +587,7 @@ function saveCari(body) {
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
-  ensureCariKoduColonu(sheet);
-  ensureCariIskontoColonu(sheet);
-  ensureCariKrediLimitiColonu(sheet);
-  ensureCariEFaturaColonu(sheet);
-  ensureCariEArsivColonu(sheet);
-  ensureCariPlasiyerColonu(sheet);
+  ensureCariEkKolonlariHepsi(sheet);
   const data = sheet.getDataRange().getValues();
 
   let id = String(body.id || "").trim();
@@ -3138,15 +3140,11 @@ function getRaporOzet(body) {
 // hareketlerini (Satış Faturası/Alış Faturası/Tahsilat/Ödeme) toplar. Hem "Tarih
 // Aralıklı" hem "Günlük" Kasa Raporu modları ve devir (önceki gün bakiyesi)
 // hesaplaması bu fonksiyonu kullanır.
-function kasaHareketleriTopla(ss, baslangic, bitis) {
-  function araligaDahilMi(tarih) {
-    const gun = String(tarih || "").slice(0, 10);
-    if (baslangic && gun < baslangic) return false;
-    if (bitis && gun > bitis) return false;
-    return true;
-  }
-  const satirlar = [];
-  let toplamGiris = 0, toplamCikis = 0;
+// Kasa (nakit) hareketlerini 4 sayfadan TEK SEFERDE, tarih filtresi olmadan okur.
+// Böylece "günlük" modda (devir + bugün) aynı sayfaları iki kez okumak gerekmez —
+// kasaHareketleriTopla ve getMuhasebeRaporu bu ham listeyi birden çok kez agregeleyebilir.
+function kasaNakitHamListesiOku(ss) {
+  const liste = [];
 
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
@@ -3154,13 +3152,11 @@ function kasaHareketleriTopla(ss, baslangic, bitis) {
   const sData = sSheet.getDataRange().getValues();
   for (let i = 1; i < sData.length; i++) {
     const row = sData[i];
-    if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
+    if (!row[0]) continue;
     const belgeTipi = String(row[8] || "") || "Fatura";
     if (belgeTipi !== "Fatura" || String(row[5] || "") !== "Nakit") continue;
-    const tutar = parseFloat(row[4]) || 0;
-    toplamGiris += tutar;
-    satirlar.push({ id: String(row[0]), tip: "SATIS", tarih: hucreTarihStr(row[1]), yon: "Giriş", kaynak: "Satış Faturası",
-      cariAd: String(row[3] || ""), tutar: tutar, aciklama: String(row[6] || "") });
+    liste.push({ id: String(row[0]), tip: "SATIS", tarih: hucreTarihStr(row[1]), yon: "Giriş", kaynak: "Satış Faturası",
+      cariAd: String(row[3] || ""), tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
   }
 
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
@@ -3168,12 +3164,10 @@ function kasaHareketleriTopla(ss, baslangic, bitis) {
   const aData = aSheet.getDataRange().getValues();
   for (let i = 1; i < aData.length; i++) {
     const row = aData[i];
-    if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
+    if (!row[0]) continue;
     if (String(row[5] || "") !== "Nakit") continue;
-    const tutar = parseFloat(row[4]) || 0;
-    toplamCikis += tutar;
-    satirlar.push({ id: String(row[0]), tip: "ALIS", tarih: hucreTarihStr(row[1]), yon: "Çıkış", kaynak: "Alış Faturası",
-      cariAd: String(row[3] || ""), tutar: tutar, aciklama: String(row[6] || "") });
+    liste.push({ id: String(row[0]), tip: "ALIS", tarih: hucreTarihStr(row[1]), yon: "Çıkış", kaynak: "Alış Faturası",
+      cariAd: String(row[3] || ""), tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
   }
 
   const tSheet = getOrCreateSheet(ss, SHEETS.tahsilatlar,
@@ -3181,12 +3175,10 @@ function kasaHareketleriTopla(ss, baslangic, bitis) {
   const tData = tSheet.getDataRange().getValues();
   for (let i = 1; i < tData.length; i++) {
     const row = tData[i];
-    if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
+    if (!row[0]) continue;
     if (String(row[5] || "") !== "Nakit") continue;
-    const tutar = parseFloat(row[4]) || 0;
-    toplamGiris += tutar;
-    satirlar.push({ id: String(row[0]), tip: "TAHSILAT", tarih: hucreTarihStr(row[1]), yon: "Giriş", kaynak: "Tahsilat",
-      cariAd: String(row[3] || ""), tutar: tutar, aciklama: String(row[6] || "") });
+    liste.push({ id: String(row[0]), tip: "TAHSILAT", tarih: hucreTarihStr(row[1]), yon: "Giriş", kaynak: "Tahsilat",
+      cariAd: String(row[3] || ""), tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
   }
 
   const oSheet = getOrCreateSheet(ss, SHEETS.odemeler,
@@ -3195,21 +3187,41 @@ function kasaHareketleriTopla(ss, baslangic, bitis) {
   const oData = oSheet.getDataRange().getValues();
   for (let i = 1; i < oData.length; i++) {
     const row = oData[i];
-    if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
+    if (!row[0]) continue;
     if (String(row[5] || "") !== "Nakit") continue;
-    const tutar = parseFloat(row[4]) || 0;
-    toplamCikis += tutar;
     const cariAd = String(row[3] || "");
     const hedefTipi = String(row[10] || "") || "Cari";
     const hedefAd = String(row[13] || "");
     const gosterilecekAd = cariAd || hedefAd || "—";
-    satirlar.push({ id: String(row[0]), tip: "ODEME", tarih: hucreTarihStr(row[1]), yon: "Çıkış",
+    liste.push({ id: String(row[0]), tip: "ODEME", tarih: hucreTarihStr(row[1]), yon: "Çıkış",
       kaynak: hedefTipi === "Cari" ? "Ödeme" : "Ödeme (" + hedefTipi + ")",
-      cariAd: gosterilecekAd, tutar: tutar, aciklama: String(row[6] || "") });
+      cariAd: gosterilecekAd, tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
   }
 
+  return liste;
+}
+
+// Ham kasa listesini bir tarih aralığına göre süzüp toplar (sayfa erişimi yok, bellek içi).
+function kasaAgregatOlustur(hamListe, baslangic, bitis) {
+  function araligaDahilMi(tarih) {
+    const gun = String(tarih || "").slice(0, 10);
+    if (baslangic && gun < baslangic) return false;
+    if (bitis && gun > bitis) return false;
+    return true;
+  }
+  const satirlar = [];
+  let toplamGiris = 0, toplamCikis = 0;
+  hamListe.forEach(h => {
+    if (!araligaDahilMi(h.tarih)) return;
+    if (h.yon === "Giriş") toplamGiris += h.tutar; else toplamCikis += h.tutar;
+    satirlar.push(h);
+  });
   satirlar.sort((a, b) => a.tarih < b.tarih ? 1 : (a.tarih > b.tarih ? -1 : 0));
   return { satirlar: satirlar, toplamGiris: toplamGiris, toplamCikis: toplamCikis, bakiye: toplamGiris - toplamCikis };
+}
+
+function kasaHareketleriTopla(ss, baslangic, bitis) {
+  return kasaAgregatOlustur(kasaNakitHamListesiOku(ss), baslangic, bitis);
 }
 
 // "YYYY-MM-DD" formatındaki bir tarihten bir gün öncesini aynı formatta döndürür.
@@ -3236,8 +3248,9 @@ function getMuhasebeRaporu(body) {
     const mod = String(body.mod || "aralik");
     if (mod === "gunluk") {
       const gun = String(body.gun || baslangic || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
-      const devirSonuc = kasaHareketleriTopla(ss, "", birGunOncesi(gun));
-      const gunSonuc = kasaHareketleriTopla(ss, gun, gun);
+      const hamListe = kasaNakitHamListesiOku(ss);
+      const devirSonuc = kasaAgregatOlustur(hamListe, "", birGunOncesi(gun));
+      const gunSonuc = kasaAgregatOlustur(hamListe, gun, gun);
       return {
         ok: true, tip: tip, mod: "gunluk", gun: gun,
         devir: devirSonuc.bakiye,
