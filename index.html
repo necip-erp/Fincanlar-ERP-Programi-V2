@@ -401,7 +401,10 @@ setInterval(topbarSaatGuncelle, 10000);
     </div>
 
     <div class="home-yan home-sag">
-      <div class="home-yan-baslik"><span>🕘 Son Yapılan İşlemler</span></div>
+      <div class="home-yan-baslik">
+        <span>🕘 Son Yapılan İşlemler</span>
+        <button class="btn" style="padding:2px 8px;font-size:11px" onclick="sonIslemlerYukle()" title="Yenile">↻</button>
+      </div>
       <div id="son-islemler-liste"></div>
     </div>
   </div>
@@ -1210,7 +1213,11 @@ function sonIslemlerYukle(){
   const el = document.getElementById("son-islemler-liste");
   if(!el) return;
   el.innerHTML = `<div class="son-islem-bos">Yükleniyor...</div>`;
-  cariApi("getSonIslemler", {limit:20}).then(res=>{
+  // Apps Script ilk (soğuk) istekte birkaç saniye gecikebilir — 15 sn içinde
+  // cevap gelmezse kullanıcıyı sonsuza dek "Yükleniyor..." ekranında bırakmak
+  // yerine "Tekrar Dene" seçeneği gösteriyoruz.
+  const zamanAsimi = new Promise((_,reddet)=>setTimeout(()=>reddet(new Error("zaman aşımı")), 15000));
+  Promise.race([cariApi("getSonIslemler", {limit:20}), zamanAsimi]).then(res=>{
     if(!res || !res.ok || !res.islemler || res.islemler.length===0){
       el.innerHTML = `<div class="son-islem-bos">Henüz işlem yok.</div>`;
       return;
@@ -1228,7 +1235,7 @@ function sonIslemlerYukle(){
         </div>
       </div>`;
     }).join("");
-  }).catch(()=>{ el.innerHTML = `<div class="son-islem-bos">Yüklenemedi.</div>`; });
+  }).catch(()=>{ el.innerHTML = `<div class="son-islem-bos">Yüklenemedi. <span style="color:var(--accent);cursor:pointer;font-weight:700" onclick="sonIslemlerYukle()">↻ Tekrar dene</span></div>`; });
 }
 // cariHareketIslemeGit fonksiyonundaki tip yönlendirmesiyle aynı deseni kullanır.
 function sonIslemAc(tip, id){
@@ -1339,7 +1346,7 @@ function modulAc(id){
 
 function gitAnaSayfa(){
   document.querySelectorAll(".modview").forEach(v=>v.classList.remove("active"));
-  document.getElementById("home").style.display = "block";
+  document.getElementById("home").style.display = "flex";
   document.getElementById("home-btn").classList.remove("show");
   document.getElementById("modul-switcher-btn").classList.remove("show");
   document.getElementById("global-ara").value = "";
@@ -1347,6 +1354,11 @@ function gitAnaSayfa(){
   if(baslikEl) baslikEl.classList.remove("show");
   document.title = "Fincanlar ERP";
   modulSwitcherKapat();
+  // Ana Sayfa'ya her dönüşte Son Yapılan İşlemler'i tazele (aradan yeni satış/tahsilat vb.
+  // girilmiş olabilir) ve Hızlı Erişim'i de yeniden çiz (ilk yükleme sırasında bir sorun
+  // olduysa burada kendini toparlamış olur).
+  if(typeof sonIslemlerYukle === "function") sonIslemlerYukle();
+  if(typeof hizliErisimCiz === "function") hizliErisimCiz();
   // Ana Sayfa'ya dönmek diğer açık sekmeleri KAPATMAZ — tıpkı tarayıcıda başka bir
   // sekmeye geçmek gibi, o modüller sekme şeridinde açık kalmaya devam eder.
   _aktifSekme = null;
