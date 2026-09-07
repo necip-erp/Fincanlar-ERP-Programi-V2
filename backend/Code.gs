@@ -3067,6 +3067,7 @@ function getFinansOzet() {
 function getRaporOzet(body) {
   const baslangic = String(body.baslangic || "");
   const bitis = String(body.bitis || "");
+  return cacheOkuVeyaHesapla("raporOzet_" + baslangic + "_" + bitis, 45, function () {
   // yyyy-MM-dd formatında string karşılaştırması kronolojik sıralamayla aynı sonucu verir.
   // tarih artık saat de içerebildiğinden (yyyy-MM-ddTHH:mm), karşılaştırmadan önce sadece
   // gün kısmını (ilk 10 karakter) alıyoruz — yoksa "2026-08-30T14:30" gibi bir değer,
@@ -3131,6 +3132,7 @@ function getRaporOzet(body) {
     satis: satis, alis: alis, tahsilat: tahsilat, odeme: odeme,
     enCokSatilanlar: enCokSatilanlar,
   };
+  });
 }
 
 // Muhasebe programlarında bulunan klasik raporlar: Alış Fatura Raporu, Satış Fatura Raporu,
@@ -3233,6 +3235,7 @@ function birGunOncesi(gunStr) {
 }
 
 function getMuhasebeRaporu(body) {
+  return cacheOkuVeyaHesapla("muhasebeRaporu_" + JSON.stringify(body), 45, function () {
   const tip = String(body.tip || "");
   const baslangic = String(body.baslangic || "");
   const bitis = String(body.bitis || "");
@@ -3475,6 +3478,7 @@ function getMuhasebeRaporu(body) {
   }
 
   return { ok: false, hata: "Bilinmeyen rapor tipi" };
+  });
 }
 
 // ════════════════════════════════════════════════
