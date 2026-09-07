@@ -3019,6 +3019,7 @@ function sifirlaAlisFaturaDurum(body) {
 }
 
 function getFinansOzet() {
+  return cacheOkuVeyaHesapla("finansOzet", 30, function () {
   const ss = SpreadsheetApp.openById(SHEET_ID);
 
   function toplamAl(sheetName, headers, kolonIdx) {
@@ -3053,6 +3054,7 @@ function getFinansOzet() {
     cariAlacaklarToplami: cariAlacaklarToplami,
     cariBorclarToplami: cariBorclarToplami,
   };
+  });
 }
 
 // ════════════════════════════════════════════════
