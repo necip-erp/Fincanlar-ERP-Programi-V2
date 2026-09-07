@@ -8,9 +8,6 @@
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#4338ca">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   /* ── Nötrler: hafif soğuk gri tonu (klasik "SaaS beyazı" değil) ── */
@@ -54,15 +51,19 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 @keyframes fincanPanelIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
 @keyframes fincanPulse{0%,100%{opacity:.35}50%{opacity:1}}
 
-/* ── Arka fon filigranı: "FİNCANLAR YAPI MUHASEBE PROGRAMI" — sabit, tüm ekranın
-   arkasında, çok silik; sadece içerik olmayan/boşluk kalan alanlarda görünür
-   (kart/panel arka planları zaten opak olduğu için üstlerini örtmez). ── */
-.arkaplan-filigran{position:fixed;inset:-25% -60%;z-index:0;display:flex;flex-wrap:wrap;align-content:space-around;justify-content:space-around;pointer-events:none;user-select:none;overflow:hidden;transform:rotate(-14deg)}
-.arkaplan-filigran span{font-family:'Oswald',-apple-system,sans-serif;font-weight:700;font-size:26px;letter-spacing:2.5px;color:var(--blue);opacity:.05;white-space:nowrap;text-transform:uppercase;margin:34px 46px}
-
 /* ── ÜST ÇUBUK ── */
 .topbar{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);box-shadow:var(--shadow-sm);flex-shrink:0;position:relative;z-index:2}
 .topbar-saat{margin-left:auto;font-size:13px;font-weight:800;color:var(--blue);white-space:nowrap;padding-left:10px;letter-spacing:.2px}
+
+/* ── SEKME ŞERİDİ: her modül tarayıcı sekmesi/yeni pencere yerine burada, uygulamanın
+   kendi içinde bir "sekme" olarak açılır (PWA kurulu haldeyken window.open görev
+   çubuğunda ayrı bir program penceresi gibi göründüğü için bu yönteme geçildi). ── */
+.sekme-seridi{display:flex;align-items:stretch;gap:2px;padding:0 10px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:thin}
+.sekme{display:flex;align-items:center;gap:7px;padding:8px 10px 7px;font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;cursor:pointer;border-bottom:2px solid transparent;user-select:none;transition:background var(--t),color var(--t)}
+.sekme:hover{background:var(--bg2);color:var(--text)}
+.sekme.aktif{color:var(--blue);border-bottom-color:var(--blue);background:var(--bg2)}
+.sekme .sekme-kapat{font-size:13px;line-height:1;padding:2px 4px;border-radius:5px;color:var(--text3,#9ca3af);opacity:.7}
+.sekme .sekme-kapat:hover{background:var(--red-l,#fee2e2);color:var(--red,#dc2626);opacity:1}
 .sayfa-baslik{font-size:13px;font-weight:700;color:var(--text2);padding:4px 12px;background:var(--bg3);border-radius:20px;white-space:nowrap;display:none}
 .sayfa-baslik.show{display:inline-block}
 .tarih-vurgu{font-weight:800;font-size:1.08em;color:var(--text)}
@@ -328,21 +329,6 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 </head>
 <body>
 
-<div class="arkaplan-filigran" aria-hidden="true" id="arkaplan-filigran"></div>
-<script>
-// Filigran metnini ekrana yaymak için yeterince tekrar oluşturuyoruz (JS ile, tek tek
-// HTML'e yazmak yerine — hem daha temiz hem ekran boyutuna göre otomatik "taşıp"
-// devam edecek kadar bol tekrar sağlıyor).
-(function(){
-  const kapsayici = document.getElementById("arkaplan-filigran");
-  for(let i=0;i<40;i++){
-    const s = document.createElement("span");
-    s.textContent = "FİNCANLAR YAPI MUHASEBE PROGRAMI";
-    kapsayici.appendChild(s);
-  }
-})();
-</script>
-
 <div class="topbar">
   <div class="brand" onclick="gitAnaSayfa()">
     <img src="./fincanlar-logo.png" alt="Fincanlar" style="height:28px;width:auto;object-fit:contain">
@@ -354,11 +340,12 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
   </div>
   <button class="homebtn" id="home-btn" onclick="gitAnaSayfa()">← Ana Sayfa</button>
   <div id="modul-switcher-wrap" style="position:relative">
-    <button class="homebtn" id="modul-switcher-btn" onclick="modulSwitcherAcKapat(event)" title="Başka bir modülü yeni sekmede aç">⇄ Modül</button>
+    <button class="homebtn" id="modul-switcher-btn" onclick="modulSwitcherAcKapat(event)" title="Başka bir modülü sekme olarak aç">⇄ Modül</button>
     <div id="modul-switcher-liste" class="modul-switcher-liste" style="display:none"></div>
   </div>
   <span id="topbar-saat" class="topbar-saat"></span>
 </div>
+<div class="sekme-seridi" id="sekme-seridi"></div>
 <script>
 // Topbar sağ üstteki canlı saat: gün/ay/yıl - Saat:Dakika (örn. 05/09/2026 - 16:47), her 10 sn'de güncellenir.
 function topbarSaatGuncelle(){
@@ -1062,37 +1049,82 @@ function altModulSiraDegistir(anahtar, hedefAlt){
 }
 Object.keys(ALT_MODUL_TANIM).forEach(altModgridCiz);
 
-// Tıklanan modülü kendi tarayıcı sekmesinde açar; o modül için zaten bir sekme
-// açıksa (aynı isimli pencere) tarayıcı otomatik olarak o sekmeye geçer.
+// Tıklanan modülü UYGULAMANIN KENDİ İÇİNDE bir sekme olarak açar (bkz. sekme şeridi).
+// Not: Daha önce bu, window.open ile gerçek bir tarayıcı sekmesi/pencere açıyordu;
+// PWA olarak kurulduğunda bu, görev çubuğunda ayrı bir program gibi görünüyordu —
+// bu yüzden tamamen uygulama-içi geçişe (modulAc) çevrildi.
 function modulAcYeniSekme(id){
-  const url = location.pathname + "?tab=" + id;
-  window.open(url, "fincanlar-modul-" + id);
+  modulAc(id);
 }
 
 // Teklif/Sipariş/Fatura kalem satırlarındaki "📊" düğmesi bunu çağırır — o ürüne ait
-// Stok Hareket Raporu'nu (arama kutusu o ürünle önceden doldurulmuş halde) YENİ
-// SEKMEDE açar. Aynı ürün için tekrar tıklanırsa var olan sekmeye geçilir.
+// Stok Hareket Raporu'nu (arama kutusu o ürünle önceden doldurulmuş halde), uygulamanın
+// kendi içinde Stok sekmesinde açar.
 function stokHareketYeniSekmedeAc(aramaMetni){
   if(!aramaMetni) return;
-  const url = location.pathname + "?tab=stok&shrArama=" + encodeURIComponent(aramaMetni);
-  window.open(url, "fincanlar-shr-" + aramaMetni.replace(/[^a-zA-Z0-9]/g,"_"));
+  modulAc("stok");
+  const el = document.getElementById("shr-arama");
+  if(el) el.value = aramaMetni;
+  stokAltModulAc("raporlar");
+  stokRaporAltAc("hareket");
 }
 
 // Kalem satırlarındaki "📇" düğmesi bunu çağırır — o ürüne ait Stok Tanımları sayfasını
-// (arama kutusu o ürünle önceden doldurulmuş halde) YENİ SEKMEDE açar.
+// (arama kutusu o ürünle önceden doldurulmuş halde), uygulamanın kendi içinde Stok
+// sekmesinde açar.
 function stokTaniminaGitYeniSekmede(stokKodu){
   if(!stokKodu) return;
-  const url = location.pathname + "?tab=stok&stanimAra=" + encodeURIComponent(stokKodu);
-  window.open(url, "fincanlar-stanim-" + stokKodu.replace(/[^a-zA-Z0-9]/g,"_"));
+  modulAc("stok");
+  stokAltModulAc("tanimlar");
+  stokTanimAltAc("tanim");
+  const el = document.getElementById("stoktanim-ara");
+  if(el) el.value = stokKodu;
+  // Liste ilk yüklenirken (ağ isteği) henüz hazır olmayabilir — hazır olana kadar
+  // kısa aralıklarla filtreyi tekrar uygular (en fazla ~5 sn).
+  let deneme = 0;
+  const zamanlayici = setInterval(()=>{
+    deneme++;
+    if(_stokTanimListe && _stokTanimListe.length){
+      stokTanimAramaFiltrele(stokKodu);
+      clearInterval(zamanlayici);
+    } else if(deneme > 25) clearInterval(zamanlayici);
+  }, 200);
 }
 
-// Belirli bir kaydı (Satış/Alış/Alış İadesi/Tahsilat/Ödeme/Çek) yeni bir sekmede,
-// ilgili modülde detay olarak açar. tip: "SATIS"|"ALIS"|"ALISIADE"|"TAHSILAT"|"ODEME"|"CEK"
-// — cariHareketIslemeGit ile aynı yönlendirme mantığını kullanır (bkz. o fonksiyon).
+// Belirli bir kaydı (Satış/Alış/Alış İadesi/Tahsilat/Ödeme/Çek) ilgili modülde,
+// uygulamanın kendi içinde detay olarak açar. tip: "SATIS"|"ALIS"|"ALISIADE"|"TAHSILAT"|"ODEME"|"CEK"
 function kayitYeniSekmedeAc(tip, id){
   if(!tip || !id) return;
-  const url = location.pathname + "?islem=" + encodeURIComponent(tip + ":" + id);
-  window.open(url, "_blank");
+  cariHareketIslemeGit(tip + ":" + id);
+}
+
+// ── Sekme şeridi: modüller artık ayrı tarayıcı sekmesi/pencere yerine uygulamanın
+// kendi içinde bir "sekme" olarak açılıyor. _acikSekmeler: şu ana kadar açılmış
+// modül id'lerinin sırası; _aktifSekme: şu an gösterilen modül (Ana Sayfa'daysa null).
+let _acikSekmeler = [];
+let _aktifSekme = null;
+function sekmeSeridiCiz(){
+  const el = document.getElementById("sekme-seridi");
+  if(!el) return;
+  const anaPill = `<div class="sekme${_aktifSekme===null?" aktif":""}" onclick="gitAnaSayfa()">🏠 Ana Sayfa</div>`;
+  const digerleri = _acikSekmeler.map(id=>{
+    const m = MODULLER.find(x=>x.id===id);
+    if(!m) return "";
+    return `<div class="sekme${id===_aktifSekme?" aktif":""}" onclick="modulAc('${id}')">
+      <span>${m.ic} ${m.lbl}</span>
+      <span class="sekme-kapat" onclick="event.stopPropagation(); sekmeKapat('${id}')">✕</span>
+    </div>`;
+  }).join("");
+  el.innerHTML = anaPill + digerleri;
+}
+function sekmeKapat(id){
+  _acikSekmeler = _acikSekmeler.filter(x=>x!==id);
+  if(_aktifSekme === id){
+    const kalan = _acikSekmeler[_acikSekmeler.length-1];
+    if(kalan) modulAc(kalan); else gitAnaSayfa();
+    return;
+  }
+  sekmeSeridiCiz();
 }
 
 function modulAc(id){
@@ -1105,11 +1137,12 @@ function modulAc(id){
   const baslikEl = document.getElementById("sayfa-baslik");
   const modul = MODULLER.find(m=>m.id===id);
   if(baslikEl && modul){ baslikEl.textContent = modul.ic + " " + modul.lbl; baslikEl.classList.add("show"); }
-  // Tarayıcının kendi sekme şeridinde (üst tarafta) bu sekmenin hangi modül olduğu
-  // görünsün diye başlığı güncelliyoruz — birden çok modül farklı sekmelerde açıkken
-  // aralarında ayırt edebilmek için (bkz. modulAcYeniSekme).
   if(modul) document.title = modul.ic + " " + modul.lbl + " · Fincanlar ERP";
   modulSwitcherKapat();
+  // Bu modül için sekme şeridinde henüz bir sekme yoksa eklenir, varsa sadece aktif hale getirilir.
+  if(!_acikSekmeler.includes(id)) _acikSekmeler.push(id);
+  _aktifSekme = id;
+  sekmeSeridiCiz();
 }
 
 function gitAnaSayfa(){
@@ -1122,6 +1155,10 @@ function gitAnaSayfa(){
   if(baslikEl) baslikEl.classList.remove("show");
   document.title = "Fincanlar ERP";
   modulSwitcherKapat();
+  // Ana Sayfa'ya dönmek diğer açık sekmeleri KAPATMAZ — tıpkı tarayıcıda başka bir
+  // sekmeye geçmek gibi, o modüller sekme şeridinde açık kalmaya devam eder.
+  _aktifSekme = null;
+  sekmeSeridiCiz();
 }
 
 // Bir modülün içindeyken Ana Sayfa'ya dönmeden, doğrudan başka bir modüle YENİ SEKMEDE
@@ -2156,7 +2193,7 @@ function satisDetayCiz(res){
     <button class="cari-back-btn" onclick="satisListeyeDon()">← Listeye dön</button>
     <div class="cari-detail-head">
       <div>
-        <h2>${s.cariAd} ${s.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${s.cariId}')" title="Cari Hareket ekranını yeni sekmede aç">🔗 Cariyi Aç</button>` : ''}</h2>
+        <h2>${s.cariAd} ${s.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${s.cariId}')" title="Cari Hareket ekranını sekme olarak aç">🔗 Cariyi Aç</button>` : ''}</h2>
         <span class="tip-badge">${s.belgeTipi||'Fatura'} · <b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${s.odemeTipi}</span>
         ${siparis ? ` <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}
       </div>
@@ -2196,7 +2233,7 @@ function satisDetayCiz(res){
             <td>${k.iskontoYuzde||0}</td>
             <td>${k.kdvOrani===undefined?20:k.kdvOrani}</td>
             <td>${paraFormat(k.tutar)}</td>
-            <td style="white-space:nowrap">${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını yeni sekmede aç">📊</button>` : ''}${k.stokKodu ? ` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokTaniminaGitYeniSekmede('${k.stokKodu.replace(/'/g,"\\'")}')" title="Bu ürünün Stok Tanımını yeni sekmede aç">📇</button>` : ''}</td>
+            <td style="white-space:nowrap">${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını sekme olarak aç">📊</button>` : ''}${k.stokKodu ? ` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokTaniminaGitYeniSekmede('${k.stokKodu.replace(/'/g,"\\'")}')" title="Bu ürünün Stok Tanımını sekme olarak aç">📇</button>` : ''}</td>
           </tr>`).join("")}
       </tbody>
     </table>
@@ -3096,7 +3133,7 @@ function alisDetayCiz(res){
     <button class="cari-back-btn" onclick="alisListeyeDon()">← Listeye dön</button>
     <div class="cari-detail-head">
       <div>
-        <h2>${a.cariAd} ${a.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${a.cariId}')" title="Cari Hareket ekranını yeni sekmede aç">🔗 Cariyi Aç</button>` : ''}</h2>
+        <h2>${a.cariAd} ${a.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${a.cariId}')" title="Cari Hareket ekranını sekme olarak aç">🔗 Cariyi Aç</button>` : ''}</h2>
         <span class="tip-badge"><b class="tarih-vurgu">${tarihGoster(a.tarih)}</b> · ${a.odemeTipi}</span>
       </div>
       <div class="cari-bakiye-box">
@@ -3122,7 +3159,7 @@ function alisDetayCiz(res){
             <td>${fiyatFormat(k.birimFiyat)}</td>
             <td>${k.kdvOrani||0}</td>
             <td>${paraFormat(k.tutar)}</td>
-            <td style="white-space:nowrap">${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını yeni sekmede aç">📊</button>` : ''}${k.stokKodu ? ` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokTaniminaGitYeniSekmede('${k.stokKodu.replace(/'/g,"\\'")}')" title="Bu ürünün Stok Tanımını yeni sekmede aç">📇</button>` : ''}</td>
+            <td style="white-space:nowrap">${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını sekme olarak aç">📊</button>` : ''}${k.stokKodu ? ` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokTaniminaGitYeniSekmede('${k.stokKodu.replace(/'/g,"\\'")}')" title="Bu ürünün Stok Tanımını sekme olarak aç">📇</button>` : ''}</td>
           </tr>`).join("")}
       </tbody>
     </table>
@@ -4347,7 +4384,7 @@ function tahsilatAc(id){
     <button class="cari-back-btn" onclick="tahsilatListeyeDon()">← Listeye dön</button>
     <div class="cari-detail-head">
       <div>
-        <h2>${t.cariAd} ${t.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${t.cariId}')" title="Cari Hareket ekranını yeni sekmede aç">🔗 Cariyi Aç</button>` : ''}</h2>
+        <h2>${t.cariAd} ${t.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${t.cariId}')" title="Cari Hareket ekranını sekme olarak aç">🔗 Cariyi Aç</button>` : ''}</h2>
         <span class="tip-badge">${tarihGoster(t.tarih)} · ${t.yontem}</span>
       </div>
       <div class="cari-bakiye-box">
@@ -5294,7 +5331,7 @@ function kasaSatirTipiBul(kaynak){
 function kasaRaporuSatirlariHtml(satirlar){
   return satirlar.map(s=>{
     const tip = kasaSatirTipiBul(s.kaynak);
-    const tiklanabilir = tip ? `style="cursor:pointer" onclick="kayitYeniSekmedeAc('${tip}','${s.id}')" title="İlgili kaydı yeni sekmede aç"` : "";
+    const tiklanabilir = tip ? `style="cursor:pointer" onclick="kayitYeniSekmedeAc('${tip}','${s.id}')" title="İlgili kaydı sekme olarak aç"` : "";
     return `<tr ${tiklanabilir}><td>${tarihGoster(s.tarih)}</td><td class="${s.yon==='Giriş'?'hk-alacak':'hk-borc'}">${s.yon}</td><td>${s.kaynak}</td><td>${s.cariAd||''}</td><td>${paraFormat(s.tutar)}</td><td>${s.aciklama||''}</td></tr>`;
   }).join("");
 }
