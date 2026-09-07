@@ -59,7 +59,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
    kendi içinde bir "sekme" olarak açılır (PWA kurulu haldeyken window.open görev
    çubuğunda ayrı bir program penceresi gibi göründüğü için bu yönteme geçildi). ── */
 .sekme-seridi{display:flex;align-items:stretch;gap:2px;padding:0 10px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:thin}
-.sekme{display:flex;align-items:center;gap:7px;padding:8px 10px 7px;font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;cursor:pointer;border-bottom:2px solid transparent;user-select:none;transition:background var(--t),color var(--t)}
+.sekme{display:flex;align-items:center;justify-content:center;gap:9px;padding:8px 20px 7px;min-width:140px;font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;cursor:pointer;border-bottom:2px solid transparent;user-select:none;transition:background var(--t),color var(--t)}
 .sekme:hover{background:var(--bg2);color:var(--text)}
 .sekme.aktif{color:var(--blue);border-bottom-color:var(--blue);background:var(--bg2)}
 .sekme .sekme-kapat{font-size:13px;line-height:1;padding:2px 4px;border-radius:5px;color:var(--text3,#9ca3af);opacity:.7}
@@ -87,11 +87,32 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 .main{flex:1;overflow:auto;position:relative}
 
 /* Karşılama ekranı — modül ikonları */
-#home{max-width:960px;margin:0 auto;padding:56px 20px 40px}
+#home{max-width:1360px;margin:0 auto;padding:48px 20px 40px;display:flex;align-items:flex-start;gap:22px}
+#home .home-orta{flex:1;min-width:0}
 #home .greet-ic{font-size:34px;display:block;text-align:center;margin-bottom:10px;animation:fincanFadeIn .4s var(--ease)}
 #home h1{font-size:26px;font-weight:800;margin:0 0 6px;text-align:center;letter-spacing:-.02em}
 #home p.sub{color:var(--text3);text-align:center;margin:0 0 40px;font-size:14px}
 .modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
+/* ── Ana sayfa yan panelleri: solda Hızlı Erişim (kullanıcının seçtiği ekranlara tek
+   tıkla gitme + sürükle-bırakla sıralama), sağda Son Yapılan İşlemler (salt okunur akış). ── */
+.home-yan{width:250px;flex-shrink:0;padding-top:6px}
+.home-yan-baslik{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px;padding:0 2px}
+.hizli-erisim-satir{display:flex;align-items:center;gap:9px;padding:9px 10px;margin-bottom:6px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:background var(--t),border-color var(--t)}
+.hizli-erisim-satir:hover{background:var(--bg3);border-color:var(--accent)}
+.hizli-erisim-satir.surukleniyor{opacity:.4}
+.hizli-erisim-satir .ic{font-size:15px;flex-shrink:0}
+.hizli-erisim-satir .lbl{font-size:12.5px;font-weight:600;color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hizli-erisim-satir .cikar{font-size:12px;color:var(--text3);opacity:0;padding:2px 4px;border-radius:5px;flex-shrink:0}
+.hizli-erisim-satir:hover .cikar{opacity:.7}
+.hizli-erisim-satir .cikar:hover{background:var(--red-l,#fee2e2);color:var(--red,#dc2626);opacity:1}
+.hizli-erisim-bos, .son-islem-bos{font-size:12px;color:var(--text3);padding:8px 2px}
+.son-islem-satir{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;margin-bottom:6px;background:var(--bg2);border:1px solid var(--border);border-radius:10px}
+.son-islem-satir .ic{font-size:15px;flex-shrink:0;margin-top:1px}
+.son-islem-satir .govde{flex:1;min-width:0}
+.son-islem-satir .baslik{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.son-islem-satir .alt{font-size:11px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.son-islem-satir .tarih{font-size:10px;color:var(--text3);margin-top:3px}
+@media (max-width:1180px){#home{flex-direction:column}.home-yan{width:100%}}
 .modtile{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:24px 16px 28px;text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
 .modtile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--blue),var(--amber));transform:scaleX(0);transform-origin:left;transition:transform .22s var(--ease)}
 .modtile:hover{transform:translateY(-4px);box-shadow:var(--shadow-md);border-color:transparent}
@@ -361,10 +382,25 @@ setInterval(topbarSaatGuncelle, 10000);
 
 <div class="main">
   <div id="home">
-    <span class="greet-ic" id="greet-ic">👋</span>
-    <h1 id="greet-baslik">Hoş geldin</h1>
-    <p class="sub">Bir modül seç, ya da yukarıdan ürün ara</p>
-    <div class="modgrid" id="modgrid"></div>
+    <div class="home-yan home-sol">
+      <div class="home-yan-baslik">
+        <span>⚡ Hızlı Erişim</span>
+        <button class="btn" style="padding:2px 8px;font-size:11px" onclick="hizliErisimDuzenleAc()" title="Listeye ekle/çıkar">✎ Düzenle</button>
+      </div>
+      <div id="hizli-erisim-liste"></div>
+    </div>
+
+    <div class="home-orta">
+      <span class="greet-ic" id="greet-ic">👋</span>
+      <h1 id="greet-baslik">Hoş geldin</h1>
+      <p class="sub">Bir modül seç, ya da yukarıdan ürün ara</p>
+      <div class="modgrid" id="modgrid"></div>
+    </div>
+
+    <div class="home-yan home-sag">
+      <div class="home-yan-baslik"><span>🕘 Son Yapılan İşlemler</span></div>
+      <div id="son-islemler-liste"></div>
+    </div>
   </div>
 
   <!-- Stok modülü: 3 kademeli — Stok → (Stok Paneli / İşlemler / Tanımlar / Raporlar) → alt seçenek -->
@@ -1049,6 +1085,159 @@ function altModulSiraDegistir(anahtar, hedefAlt){
 }
 Object.keys(ALT_MODUL_TANIM).forEach(altModgridCiz);
 
+// ── Ana Sayfa SOL: Hızlı Erişim ──────────────────────────────────────────────
+// Kullanıcının en sık kullandığı alt ekranlara (Satış-Sipariş, Alış-Bekleyen
+// Faturalar, Stok-Stok Tanımlama vb.) tek tıkla gitmesini sağlayan, sürükle-bırakla
+// sıralanabilen bir kısayol listesi. Katalogdaki "git" fonksiyonu ilgili modülü
+// açıp gerekiyorsa alt/üçüncü kademeye kadar iniyor (ör. Stok→Tanımlar→Stok Tanımları).
+const HIZLI_ERISIM_KATALOG = [
+  {id:"satis-siparis",  ic:"📦", lbl:"Satış - Sipariş",              git:()=>{modulAc("satis"); satisAltModulAc("Sipariş");}},
+  {id:"satis-fatura",   ic:"🧾", lbl:"Satış - Fatura",               git:()=>{modulAc("satis"); satisAltModulAc("Fatura");}},
+  {id:"satis-teklif",   ic:"📝", lbl:"Satış - Teklif",               git:()=>{modulAc("satis"); satisAltModulAc("Teklif");}},
+  {id:"alis-giris",     ic:"📥", lbl:"Alış - Giriş",                 git:()=>{modulAc("alis"); alisAltModulAc("giris");}},
+  {id:"alis-iade",      ic:"↩️", lbl:"Alış - İade",                  git:()=>{modulAc("alis"); alisAltModulAc("iade");}},
+  {id:"alis-bekleyen",  ic:"📨", lbl:"Alış - Bekleyen Faturalar",     git:()=>{modulAc("alis"); alisAltModulAc("bekleyen");}},
+  {id:"stok-panel",     ic:"📦", lbl:"Stok - Stok Paneli",            git:()=>{modulAc("stok"); stokAltModulAc("panel");}},
+  {id:"stok-tanim",     ic:"🏷️", lbl:"Stok - Stok Tanımlama",        git:()=>{modulAc("stok"); stokAltModulAc("tanimlar"); stokTanimAltAc("tanim");}},
+  {id:"stok-birim",     ic:"📏", lbl:"Stok - Birim Tanımları",        git:()=>{modulAc("stok"); stokAltModulAc("tanimlar"); stokTanimAltAc("birim");}},
+  {id:"stok-ambalaj",   ic:"📦", lbl:"Stok - Ambalaj Tanımları",      git:()=>{modulAc("stok"); stokAltModulAc("tanimlar"); stokTanimAltAc("ambalaj");}},
+  {id:"stok-hareket",   ic:"📈", lbl:"Stok - Stok Hareket Raporu",    git:()=>{modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("hareket");}},
+  {id:"stok-kritik",    ic:"⚠️", lbl:"Stok - Kritik Stok Uyarıları",  git:()=>{modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("kritik");}},
+  {id:"tahsilat",       ic:"💰", lbl:"Tahsilat",                     git:()=>{modulAc("tahsilat");}},
+  {id:"odeme",          ic:"💳", lbl:"Ödeme",                        git:()=>{modulAc("odeme");}},
+  {id:"ceksenet",       ic:"🧾", lbl:"Çek/Senet",                    git:()=>{modulAc("ceksenet");}},
+  {id:"cari",           ic:"👥", lbl:"Cari",                         git:()=>{modulAc("cari");}},
+  {id:"finans",         ic:"📊", lbl:"Finans",                       git:()=>{modulAc("finans");}},
+  {id:"rapor",          ic:"📈", lbl:"Rapor",                        git:()=>{modulAc("rapor");}},
+];
+const HIZLI_ERISIM_VARSAYILAN = ["satis-siparis","satis-fatura","alis-bekleyen","stok-tanim","stok-hareket","tahsilat"];
+
+function hizliErisimSeciliAl(){
+  try{
+    const kayitli = JSON.parse(localStorage.getItem("fincanlar_hizli_erisim") || "null");
+    if(Array.isArray(kayitli)){
+      const gecerli = HIZLI_ERISIM_KATALOG.map(h=>h.id);
+      return kayitli.filter(id=>gecerli.includes(id));
+    }
+  }catch(e){}
+  return HIZLI_ERISIM_VARSAYILAN.slice();
+}
+function hizliErisimKaydet(idListesi){
+  localStorage.setItem("fincanlar_hizli_erisim", JSON.stringify(idListesi));
+}
+let _hizliSurukleneId = null;
+function hizliErisimCiz(){
+  const el = document.getElementById("hizli-erisim-liste");
+  if(!el) return;
+  const secili = hizliErisimSeciliAl().map(id=>HIZLI_ERISIM_KATALOG.find(h=>h.id===id)).filter(Boolean);
+  if(secili.length === 0){ el.innerHTML = `<div class="hizli-erisim-bos">Henüz kısayol eklenmedi — "✎ Düzenle" ile ekleyebilirsin.</div>`; return; }
+  el.innerHTML = secili.map(h => `
+    <div class="hizli-erisim-satir" draggable="true" data-id="${h.id}"
+         onclick="hizliErisimGit('${h.id}')"
+         ondragstart="_hizliSurukleneId='${h.id}'; this.classList.add('surukleniyor')"
+         ondragend="this.classList.remove('surukleniyor')"
+         ondragover="event.preventDefault()"
+         ondrop="hizliErisimSiraDegistir('${h.id}')">
+      <span class="ic">${h.ic}</span>
+      <span class="lbl">${h.lbl}</span>
+      <span class="cikar" onclick="event.stopPropagation(); hizliErisimCikar('${h.id}')" title="Listeden çıkar">✕</span>
+    </div>`).join("");
+}
+function hizliErisimGit(id){
+  const h = HIZLI_ERISIM_KATALOG.find(x=>x.id===id);
+  if(h) h.git();
+}
+function hizliErisimSiraDegistir(hedefId){
+  if(!_hizliSurukleneId || _hizliSurukleneId === hedefId) return;
+  const sirali = hizliErisimSeciliAl();
+  const eskiIdx = sirali.indexOf(_hizliSurukleneId);
+  const yeniIdx = sirali.indexOf(hedefId);
+  if(eskiIdx<0 || yeniIdx<0) return;
+  sirali.splice(eskiIdx, 1);
+  sirali.splice(yeniIdx, 0, _hizliSurukleneId);
+  hizliErisimKaydet(sirali);
+  _hizliSurukleneId = null;
+  hizliErisimCiz();
+}
+function hizliErisimCikar(id){
+  const sirali = hizliErisimSeciliAl().filter(x=>x!==id);
+  hizliErisimKaydet(sirali);
+  hizliErisimCiz();
+}
+function hizliErisimEkle(id){
+  const sirali = hizliErisimSeciliAl();
+  if(!sirali.includes(id)) sirali.push(id);
+  hizliErisimKaydet(sirali);
+  hizliErisimCiz();
+  hizliErisimDuzenleAc(); // modal açıksa listeyi tazele
+}
+// "✎ Düzenle" — henüz eklenmemiş katalog öğelerini gösterip tek tıkla eklemeyi sağlayan
+// küçük bir seçim penceresi (mevcut modal-overlay deseniyle aynı).
+function hizliErisimDuzenleAc(){
+  const mevcut = document.getElementById("hizli-erisim-duzenle-overlay");
+  if(mevcut) mevcut.remove();
+  const secili = hizliErisimSeciliAl();
+  const eklenebilir = HIZLI_ERISIM_KATALOG.filter(h=>!secili.includes(h.id));
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "hizli-erisim-duzenle-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:380px">
+      <h3 style="margin-top:0">⚡ Hızlı Erişime Ekle</h3>
+      <p style="font-size:12px;color:var(--text3);margin:0 0 12px">Ana sayfada solda görünmesini istediğin ekranı seç. Sıralamayı listede sürükleyerek, çıkarmayı ise ✕ ile yapabilirsin.</p>
+      <div style="max-height:50vh;overflow:auto">
+        ${eklenebilir.length ? eklenebilir.map(h=>`
+          <div class="hizli-erisim-satir" onclick="hizliErisimEkle('${h.id}')" style="cursor:pointer">
+            <span class="ic">${h.ic}</span><span class="lbl">${h.lbl}</span>
+            <span style="font-size:11px;color:var(--accent);font-weight:700">+ Ekle</span>
+          </div>`).join("") : `<div class="hizli-erisim-bos">Kataloğun tamamı zaten listende.</div>`}
+      </div>
+      <div class="modal-actions"><button class="btn" onclick="document.getElementById('hizli-erisim-duzenle-overlay').remove()">Kapat</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+hizliErisimCiz();
+
+// ── Ana Sayfa SAĞ: Son Yapılan İşlemler ──────────────────────────────────────
+// Tüm modüllerden (Satış, Alış, Tahsilat, Ödeme, Çek/Senet, elle girilen Stok
+// Hareketi) en son 20 kaydı KAYIT_TARİHİ'ne göre karışık gösterir; her satır o
+// kaydın ait olduğu ekranı sekme olarak açar.
+function sonIslemlerYukle(){
+  const el = document.getElementById("son-islemler-liste");
+  if(!el) return;
+  el.innerHTML = `<div class="son-islem-bos">Yükleniyor...</div>`;
+  cariApi("getSonIslemler", {limit:20}).then(res=>{
+    if(!res || !res.ok || !res.islemler || res.islemler.length===0){
+      el.innerHTML = `<div class="son-islem-bos">Henüz işlem yok.</div>`;
+      return;
+    }
+    el.innerHTML = res.islemler.map(k=>{
+      const tutarStr = k.tutar ? paraFormat(k.tutar) : "";
+      const alt = [k.cariAd, tutarStr].filter(Boolean).join(" · ");
+      return `
+      <div class="son-islem-satir" style="cursor:pointer" onclick="sonIslemAc('${k.tip}','${k.id}')">
+        <span class="ic">${k.ic||"📄"}</span>
+        <div class="govde">
+          <div class="baslik">${k.baslik||""}</div>
+          <div class="alt">${alt}</div>
+          <div class="tarih">${k.kayitTarihi||""}</div>
+        </div>
+      </div>`;
+    }).join("");
+  }).catch(()=>{ el.innerHTML = `<div class="son-islem-bos">Yüklenemedi.</div>`; });
+}
+// cariHareketIslemeGit fonksiyonundaki tip yönlendirmesiyle aynı deseni kullanır.
+function sonIslemAc(tip, id){
+  if(tip === "SATIS"){ modulAc("satis"); satisAc(id); }
+  else if(tip === "ALIS"){ modulAc("alis"); alisAltModulAc("giris"); alisAc(id); }
+  else if(tip === "TAHSILAT"){ modulAc("tahsilat"); tahsilatAc(id); }
+  else if(tip === "ODEME"){ modulAc("odeme"); odemeAc(id); }
+  else if(tip === "CEK"){ modulAc("ceksenet"); cekSenetAc(id); }
+  else if(tip === "STOK"){ modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("hareket"); }
+}
+sonIslemlerYukle();
+
 // Tıklanan modülü UYGULAMANIN KENDİ İÇİNDE bir sekme olarak açar (bkz. sekme şeridi).
 // Not: Daha önce bu, window.open ile gerçek bir tarayıcı sekmesi/pencere açıyordu;
 // PWA olarak kurulduğunda bu, görev çubuğunda ayrı bir program gibi görünüyordu —
@@ -1110,7 +1299,7 @@ function sekmeSeridiCiz(){
   const digerleri = _acikSekmeler.map(id=>{
     const m = MODULLER.find(x=>x.id===id);
     if(!m) return "";
-    return `<div class="sekme${id===_aktifSekme?" aktif":""}" onclick="modulAc('${id}')">
+    return `<div class="sekme${id===_aktifSekme?" aktif":""}" onclick="modulAc('${id}')" onmousedown="if(event.button===1){event.preventDefault();}" onauxclick="if(event.button===1){event.preventDefault(); sekmeKapat('${id}');}">
       <span>${m.ic} ${m.lbl}</span>
       <span class="sekme-kapat" onclick="event.stopPropagation(); sekmeKapat('${id}')">✕</span>
     </div>`;
@@ -3929,7 +4118,7 @@ function alisBekleyenOnayModalAc(faturaNo){
         <th style="min-width:130px">Stok Kodu</th><th style="min-width:200px">Ürün</th>
         <th style="width:80px">Miktar</th><th style="width:80px">Birim</th>
         <th style="width:100px">Birim Fiyat</th><th style="width:80px">İsk.1 %</th><th style="width:80px">İsk.2 %</th>
-        <th style="width:70px">KDV%</th><th style="width:110px">Tutar</th>
+        <th style="width:70px">KDV%</th><th style="width:110px">Tutar</th><th style="width:36px"></th>
       </tr></thead>
       <tbody id="bfm-kalemler">
         ${f.kalemler.map((k,i)=>bfmKalemSatiriHTML(k,i)).join("")}
@@ -4009,7 +4198,21 @@ function bfmKalemSatiriHTML(k, i){
           <td><input id="bfm-isk2-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto2||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
           <td>%${k.kdvOrani}</td>
           <td id="bfm-tutar-${i}" style="font-weight:600;text-align:right;padding-right:8px"></td>
+          <td style="text-align:center"><button type="button" class="btn btn-danger" style="padding:2px 7px;font-size:12px" onclick="bfmKalemSil(${i})" title="Bu satırı sil">🗑️</button></td>
         </tr>`;
+}
+
+// Ürün Kalemleri tablosundan tek bir satırı siler (ör. faturada gerçekte olmayan/hatalı
+// okunmuş bir kalem). En az 1 kalem kalması istenir — son kalem silinemez, en az bir
+// satır boş bırakılmak yerine fatura Reddedilmelidir.
+function bfmKalemSil(i){
+  const f = window._bfmAktifFatura;
+  if(!f || !f.kalemler[i]) return;
+  if(f.kalemler.length <= 1){ alert("Faturada en az bir kalem kalmalı. Faturanın tamamını iptal etmek istiyorsan \"✖ Reddet\" seçeneğini kullan."); return; }
+  const ad = f.kalemler[i].urunAdi || "bu kalemi";
+  if(!confirm(`"${ad}" satırını silmek istediğine emin misin?`)) return;
+  f.kalemler.splice(i,1);
+  bfmKalemlerYenidenCiz();
 }
 
 // tbody'yi window._bfmAktifFatura.kalemler'in GÜNCEL hâline göre yeniden çizer (gruplama

@@ -410,6 +410,7 @@ function handleRequest(e) {
       case "getBankaHesapHareketleri": result = getBankaHesapHareketleri(body.bankaHesapId); break;
       case "getMuhasebeRaporu": result = getMuhasebeRaporu(body); break;
       case "getStokHareketListesi": result = getStokHareketListesi(body); break;
+      case "getSonIslemler": result = getSonIslemler(body); break;
       case "stokHareketGecmisiDoldur": result = stokHareketGecmisiDoldur(); break;
       case "cariHareketGecmisiDoldur": result = cariHareketGecmisiDoldur(); break;
       case "stokHareketTopluEkle":  result = stokHareketTopluEkle(body); break;
@@ -4493,6 +4494,101 @@ function getStokHareketListesi(body) {
   sonuc.forEach(h => { if (h.hareketTipi === "Giriş") girisToplam += h.miktar; else cikisToplam += h.miktar; });
 
   return { ok: true, hareketler: sonuc, girisToplam: girisToplam, cikisToplam: cikisToplam };
+}
+
+// ════════════════════════════════════════════════
+// SON YAPILAN İŞLEMLER (Ana Sayfa sağ paneli) — Satış, Alış, Tahsilat, Ödeme,
+// Çek/Senet ve elle yapılan (Satış/Alış'tan otomatik gelmeyen) Stok Hareketlerinden
+// en son kayıtları KAYIT_TARIHI'ne göre birleştirip döner. Her modülden biraz daha
+// fazla satır çekilip birleştirildikten sonra son `limit` kadarı kesilir; bu yüzden
+// tek bir modülde çok sayıda işlem olsa bile diğer modüllerin son işlemleri kaybolmaz.
+// body: { limit (varsayılan 20) }
+function getSonIslemler(body) {
+  const limit = parseInt((body && body.limit) || 20) || 20;
+  const parcaBasi = Math.max(limit, 20);
+  return cacheOkuVeyaHesapla("sonIslemler_" + limit, 20, function () {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const liste = [];
+
+    function sonSatirlar(sheet, adet) {
+      const sonSatir = sheet.getLastRow();
+      if (sonSatir < 2) return [];
+      const baslangic = Math.max(2, sonSatir - adet + 1);
+      return sheet.getRange(baslangic, 1, sonSatir - baslangic + 1, sheet.getLastColumn()).getValues();
+    }
+
+    const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+    sonSatirlar(sSheet, parcaBasi).forEach(row => {
+      if (!row[0]) return;
+      const belgeTipi = String(row[8] || "") || "Fatura";
+      liste.push({
+        tip: "SATIS", ic: belgeTipi === "Sipariş" ? "📦" : (belgeTipi === "Teklif" ? "📝" : "📤"),
+        baslik: "Satış " + belgeTipi, cariAd: String(row[3] || ""), tutar: parseFloat(row[4]) || 0,
+        kayitTarihi: hucreTarihStr(row[7]), id: String(row[0]),
+      });
+    });
+
+    const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+    sonSatirlar(aSheet, parcaBasi).forEach(row => {
+      if (!row[0]) return;
+      liste.push({
+        tip: "ALIS", ic: "📥", baslik: "Alış Faturası", cariAd: String(row[3] || ""),
+        tutar: parseFloat(row[4]) || 0, kayitTarihi: hucreTarihStr(row[7]), id: String(row[0]),
+      });
+    });
+
+    const tSheet = getOrCreateSheet(ss, SHEETS.tahsilatlar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI","POS_HESAP_ID"]);
+    sonSatirlar(tSheet, parcaBasi).forEach(row => {
+      if (!row[0]) return;
+      liste.push({
+        tip: "TAHSILAT", ic: "💰", baslik: "Tahsilat (" + String(row[5] || "") + ")", cariAd: String(row[3] || ""),
+        tutar: parseFloat(row[4]) || 0, kayitTarihi: hucreTarihStr(row[7]), id: String(row[0]),
+      });
+    });
+
+    const oSheet = getOrCreateSheet(ss, SHEETS.odemeler,
+      ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI","POS_HESAP_ID","BANKA_HESAP_ID"]);
+    sonSatirlar(oSheet, parcaBasi).forEach(row => {
+      if (!row[0]) return;
+      liste.push({
+        tip: "ODEME", ic: "💳", baslik: "Ödeme (" + String(row[5] || "") + ")",
+        cariAd: String(row[3] || "") || "—",
+        tutar: parseFloat(row[4]) || 0, kayitTarihi: hucreTarihStr(row[7]), id: String(row[0]),
+      });
+    });
+
+    const cSheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
+    sonSatirlar(cSheet, parcaBasi).forEach(row => {
+      if (!row[0]) return;
+      liste.push({
+        tip: "CEK", ic: "🧾", baslik: (String(row[1] || "") || "Çek/Senet") + " kaydı", cariAd: String(row[3] || ""),
+        tutar: parseFloat(row[4]) || 0, kayitTarihi: hucreTarihStr(row[12]), id: String(row[0]),
+      });
+    });
+
+    // Stok hareketlerinden sadece ELLE girilenler (Devir/Stok Düzeltme/Giriş/Çıkış/Toplu) —
+    // Satış/Alış/Alış İadesi'nden otomatik yazılanlar zaten yukarıda o kalemler üzerinden
+    // temsil ediliyor, burada tekrar göstermek mükerrer olur.
+    const shSheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+    const OTOMATIK_BELGE_TIPLERI = { "Satış Faturası": 1, "Alış Faturası": 1, "Alış İadesi": 1 };
+    sonSatirlar(shSheet, parcaBasi * 2).forEach(row => {
+      if (!row[0]) return;
+      const belgeTipi = String(row[10] || "");
+      if (OTOMATIK_BELGE_TIPLERI[belgeTipi]) return;
+      const hareketTipi = String(row[6] || "");
+      liste.push({
+        tip: "STOK", ic: hareketTipi === "Giriş" ? "⬇️" : "⬆️", baslik: (belgeTipi || "Stok Hareketi"),
+        cariAd: String(row[4] || ""), tutar: parseFloat(row[7]) || 0, birim: String(row[5] || ""),
+        kayitTarihi: hucreTarihStr(row[9]), id: String(row[0]),
+      });
+    });
+
+    liste.sort((a, b) => (a.kayitTarihi < b.kayitTarihi ? 1 : (a.kayitTarihi > b.kayitTarihi ? -1 : 0)));
+    return { ok: true, islemler: liste.slice(0, limit) };
+  });
 }
 
 // ════════════════════════════════════════════════
