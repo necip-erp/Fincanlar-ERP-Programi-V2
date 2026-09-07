@@ -86,43 +86,47 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
 /* ── ANA ALAN ── */
 .main{flex:1;overflow:auto;position:relative}
 
-/* Karşılama ekranı — modül ikonları */
-#home{max-width:1360px;margin:0 auto;padding:48px 20px 40px;display:flex;align-items:flex-start;gap:22px}
+/* Karşılama ekranı — modül ikonları. Home artık üç sütun: sol=Hızlı Erişim,
+   orta=Modüller, sağ=Son İşlemler — hepsi aşağı kaydırmadan tek ekranda görünsün
+   diye başlık/tile boşlukları sıkıştırıldı ve yan paneller kendi içinde kayar. */
+#home{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;align-items:flex-start;gap:18px}
 #home .home-orta{flex:1;min-width:0}
-#home .greet-ic{font-size:34px;display:block;text-align:center;margin-bottom:10px;animation:fincanFadeIn .4s var(--ease)}
-#home h1{font-size:26px;font-weight:800;margin:0 0 6px;text-align:center;letter-spacing:-.02em}
-#home p.sub{color:var(--text3);text-align:center;margin:0 0 40px;font-size:14px}
-.modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
+#home .greet-row{display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:2px}
+#home .greet-ic{font-size:19px;animation:fincanFadeIn .4s var(--ease)}
+#home h1{font-size:16px;font-weight:800;margin:0;letter-spacing:-.02em}
+#home p.sub{color:var(--text3);text-align:center;margin:0 0 14px;font-size:11.5px}
+.modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:10px}
 /* ── Ana sayfa yan panelleri: solda Hızlı Erişim (kullanıcının seçtiği ekranlara tek
-   tıkla gitme + sürükle-bırakla sıralama), sağda Son Yapılan İşlemler (salt okunur akış). ── */
-.home-yan{width:250px;flex-shrink:0;padding-top:6px}
-.home-yan-baslik{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px;padding:0 2px}
-.hizli-erisim-satir{display:flex;align-items:center;gap:9px;padding:9px 10px;margin-bottom:6px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:background var(--t),border-color var(--t)}
+   tıkla gitme + sürükle-bırakla sıralama), sağda Son Yapılan İşlemler (salt okunur akış).
+   İkisi de topbar dışındaki dikey alanı aşarsa sayfayı değil kendini kaydırır. ── */
+.home-yan{width:228px;flex-shrink:0;max-height:calc(100vh - 96px);overflow-y:auto}
+.home-yan-baslik{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;padding:0 2px}
+.hizli-erisim-satir{display:flex;align-items:center;gap:8px;padding:7px 9px;margin-bottom:5px;background:var(--bg2);border:1px solid var(--border);border-radius:9px;cursor:pointer;transition:background var(--t),border-color var(--t)}
 .hizli-erisim-satir:hover{background:var(--bg3);border-color:var(--accent)}
 .hizli-erisim-satir.surukleniyor{opacity:.4}
-.hizli-erisim-satir .ic{font-size:15px;flex-shrink:0}
-.hizli-erisim-satir .lbl{font-size:12.5px;font-weight:600;color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hizli-erisim-satir .ic{font-size:14px;flex-shrink:0}
+.hizli-erisim-satir .lbl{font-size:12px;font-weight:600;color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hizli-erisim-satir .cikar{font-size:12px;color:var(--text3);opacity:0;padding:2px 4px;border-radius:5px;flex-shrink:0}
 .hizli-erisim-satir:hover .cikar{opacity:.7}
 .hizli-erisim-satir .cikar:hover{background:var(--red-l,#fee2e2);color:var(--red,#dc2626);opacity:1}
-.hizli-erisim-bos, .son-islem-bos{font-size:12px;color:var(--text3);padding:8px 2px}
-.son-islem-satir{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;margin-bottom:6px;background:var(--bg2);border:1px solid var(--border);border-radius:10px}
-.son-islem-satir .ic{font-size:15px;flex-shrink:0;margin-top:1px}
+.hizli-erisim-bos, .son-islem-bos{font-size:11.5px;color:var(--text3);padding:6px 2px}
+.son-islem-satir{display:flex;align-items:flex-start;gap:8px;padding:7px 9px;margin-bottom:5px;background:var(--bg2);border:1px solid var(--border);border-radius:9px}
+.son-islem-satir .ic{font-size:14px;flex-shrink:0;margin-top:1px}
 .son-islem-satir .govde{flex:1;min-width:0}
-.son-islem-satir .baslik{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.son-islem-satir .alt{font-size:11px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.son-islem-satir .tarih{font-size:10px;color:var(--text3);margin-top:3px}
-@media (max-width:1180px){#home{flex-direction:column}.home-yan{width:100%}}
-.modtile{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:24px 16px 28px;text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
+.son-islem-satir .baslik{font-size:11.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.son-islem-satir .alt{font-size:10.5px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.son-islem-satir .tarih{font-size:9.5px;color:var(--text3);margin-top:2px}
+@media (max-width:1180px){#home{flex-direction:column}.home-yan{width:100%;max-height:none}}
+.modtile{background:var(--bg2);border:1px solid var(--border);border-radius:13px;padding:12px 8px 13px;text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
 .modtile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--blue),var(--amber));transform:scaleX(0);transform-origin:left;transition:transform .22s var(--ease)}
-.modtile:hover{transform:translateY(-4px);box-shadow:var(--shadow-md);border-color:transparent}
+.modtile:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:transparent}
 .modtile:hover::before{transform:scaleX(1)}
-.modtile::after{content:"→";position:absolute;right:14px;bottom:10px;font-size:13px;color:var(--text3);opacity:0;transform:translateX(-4px);transition:opacity .18s var(--ease),transform .18s var(--ease)}
+.modtile::after{content:"→";position:absolute;right:9px;bottom:6px;font-size:11px;color:var(--text3);opacity:0;transform:translateX(-4px);transition:opacity .18s var(--ease),transform .18s var(--ease)}
 .modtile:hover::after{opacity:1;transform:translateX(0)}
-.modtile .ic{font-size:22px;width:50px;height:50px;display:flex;align-items:center;justify-content:center;border-radius:14px;background:var(--blue-l);margin:0 auto 12px;transition:transform .2s var(--ease)}
+.modtile .ic{font-size:17px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--blue-l);margin:0 auto 7px;transition:transform .2s var(--ease)}
 .modtile:hover .ic{transform:scale(1.08) rotate(-4deg)}
-.modtile .lbl{font-weight:700;font-size:14px}
-.modtile .desc{color:var(--text3);font-size:11px;margin-top:4px;line-height:1.4}
+.modtile .lbl{font-weight:700;font-size:12.5px}
+.modtile .desc{color:var(--text3);font-size:9.5px;margin-top:2px;line-height:1.3}
 
 /* Modül içerik alanı */
 .modview{position:absolute;inset:0;display:none;flex-direction:column}
@@ -391,8 +395,7 @@ setInterval(topbarSaatGuncelle, 10000);
     </div>
 
     <div class="home-orta">
-      <span class="greet-ic" id="greet-ic">👋</span>
-      <h1 id="greet-baslik">Hoş geldin</h1>
+      <div class="greet-row"><span class="greet-ic" id="greet-ic">👋</span><h1 id="greet-baslik">Hoş geldin</h1></div>
       <p class="sub">Bir modül seç, ya da yukarıdan ürün ara</p>
       <div class="modgrid" id="modgrid"></div>
     </div>
@@ -5806,7 +5809,7 @@ const ACILIS_SAYFA_SECENEKLERI = [
   {v:"rapor",      t:"📈 Rapor"},
 ];
 function acilisSayfasiniAl(){
-  return localStorage.getItem("fincanlar_acilis_sayfa") || "stok-panel";
+  return localStorage.getItem("fincanlar_acilis_sayfa") || "anasayfa";
 }
 function acilisSayfasiYukle(){
   const sel = document.getElementById("ayarlar-acilis-sayfa");
