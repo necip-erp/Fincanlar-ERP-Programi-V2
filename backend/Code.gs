@@ -1600,6 +1600,7 @@ function updateSatis(body) {
 // ════════════════════════════════════════════════
 
 function getAlisListesi() {
+  return cacheOkuVeyaHesapla("alisListesi", 60, function () {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
@@ -1647,6 +1648,7 @@ function getAlisListesi() {
   }
   sonuc.reverse();
   return { ok: true, alislar: sonuc };
+  });
 }
 
 function getAlisDetay(alisId) {
@@ -1801,6 +1803,7 @@ function saveAlis(body) {
     });
   }
 
+  cacheTemizle(["alisListesi"]);
   return { ok: true, id: id, toplamTutar: toplamTutar };
 }
 
@@ -1857,6 +1860,7 @@ function silAlis(body) {
     if (String(durumData[i][2] || "") === id) { durumSheet.deleteRow(i + 1); break; }
   }
 
+  cacheTemizle(["alisListesi"]);
   return { ok: true };
 }
 
@@ -2016,6 +2020,7 @@ function updateAlis(body) {
     });
   }
 
+  cacheTemizle(["alisListesi"]);
   return { ok: true, id: id, toplamTutar: toplamTutar };
 }
 
@@ -2204,6 +2209,7 @@ function ensureTahsilatPosColonu(sheet) {
 }
 
 function getTahsilatListesi() {
+  return cacheOkuVeyaHesapla("tahsilatListesi", 60, function () {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const tSheet = getOrCreateSheet(ss, SHEETS.tahsilatlar,
     ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI","POS_HESAP_ID"]);
@@ -2223,6 +2229,7 @@ function getTahsilatListesi() {
   }
   sonuc.reverse();
   return { ok: true, tahsilatlar: sonuc };
+  });
 }
 
 // body: { cariId, tarih, tutar, yontem, aciklama, posHesapId (yöntem "Kredi Kartı" ise) }
@@ -2269,6 +2276,7 @@ function saveTahsilat(body) {
     bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", tutar, cariHareketAciklamaOlustur("TAHSILAT", id, "tahsilat_" + yontem, body.aciklama));
   }
 
+  cacheTemizle(["tahsilatListesi"]);
   return { ok: true, id: id };
 }
 
@@ -2323,6 +2331,7 @@ function silTahsilat(body) {
   posHareketSilByAciklamaOnPrefix("TAHSILAT:" + id);
   bankaHesapHareketSilByAciklamaOnPrefix("TAHSILAT:" + id);
 
+  cacheTemizle(["tahsilatListesi"]);
   return { ok: true };
 }
 
@@ -2356,6 +2365,7 @@ function ensureOdemePosBankaColonlari(sheet) {
 }
 
 function getOdemeListesi() {
+  return cacheOkuVeyaHesapla("odemeListesi", 60, function () {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const oSheet = getOrCreateSheet(ss, SHEETS.odemeler,
     ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI","POS_HESAP_ID","BANKA_HESAP_ID"]);
@@ -2379,6 +2389,7 @@ function getOdemeListesi() {
   }
   sonuc.reverse();
   return { ok: true, odemeler: sonuc };
+  });
 }
 
 // body: { cariId (hedefTipi="Cari" ise zorunlu), tarih, tutar, yontem, aciklama, posHesapId, bankaHesapId,
@@ -2492,6 +2503,7 @@ function saveOdeme(body) {
     bankaHesapHareketEkle(bankaHesapId, tarih, "Çıkış", tutar, cariHareketAciklamaOlustur("ODEME", id, "odeme_" + yontem, body.aciklama));
   }
 
+  cacheTemizle(["odemeListesi"]);
   return { ok: true, id: id };
 }
 
@@ -2534,6 +2546,7 @@ function silOdeme(body) {
   posHareketSilByAciklamaOnPrefix("ODEME:" + id);
   bankaHesapHareketSilByAciklamaOnPrefix("ODEME:" + id);
 
+  cacheTemizle(["odemeListesi"]);
   return { ok: true };
 }
 
@@ -2555,6 +2568,7 @@ const CEK_SENET_BASLIKLAR = ["ID","TIP","CARI_ID","CARI_AD","TUTAR","KALAN_TUTAR
 const CEK_SENET_HAREKET_BASLIKLAR = ["ID","CEK_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI"];
 
 function getCekSenetListesi() {
+  return cacheOkuVeyaHesapla("cekSenetListesi", 60, function () {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
@@ -2583,6 +2597,7 @@ function getCekSenetListesi() {
     return (a.vade || "9999") < (b.vade || "9999") ? -1 : 1;
   });
   return { ok: true, cekSenetler: sonuc };
+  });
 }
 
 function getCekSenetDetay(id) {
@@ -2655,6 +2670,7 @@ function saveCekSenet(body) {
     vade: vade,
   });
 
+  cacheTemizle(["cekSenetListesi"]);
   return { ok: true, id: id };
 }
 
@@ -2699,6 +2715,7 @@ function silCekSenet(body) {
     if (String(hData[i][1]) === id) hSheet.deleteRow(i + 1);
   }
 
+  cacheTemizle(["cekSenetListesi"]);
   return { ok: true };
 }
 
@@ -2737,6 +2754,7 @@ function cekSenetIslemYap(body) {
   hSheet.appendRow([hId, id, tarih, tip === "Alınan" ? "Tahsilat" : "Ödeme", tutar, String(body.aciklama || ""),
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
 
+  cacheTemizle(["cekSenetListesi"]);
   return { ok: true, kalanTutar: yeniKalan, durum: yeniDurum };
 }
 
@@ -2767,6 +2785,7 @@ function cekSenetDurumGuncelle(body) {
   hSheet.appendRow([hId, id, Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"), durum, 0,
     String(body.aciklama || ""), Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
 
+  cacheTemizle(["cekSenetListesi"]);
   return { ok: true };
 }
 
