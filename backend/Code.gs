@@ -481,52 +481,60 @@ function handleRequest(e) {
 // Tüm cari hesapları, her birinin güncel bakiyesiyle birlikte döndürür.
 // Bakiye = toplam BORÇ - toplam ALACAK (pozitifse cari bize borçlu, negatifse biz ona borçluyuz).
 function getCariListesi() {
-  return cacheOkuVeyaHesapla("cariListesi_v2", 180, function () {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
-  ensureCariEkKolonlariHepsi(hSheet);
-  const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
+  try {
+    return cacheOkuVeyaHesapla("cariListesi_v3", 180, function () {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
+    ensureCariEkKolonlariHepsi(hSheet);
+    const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
 
-  const hData = hSheet.getDataRange().getValues();
-  const hkData = hkSheet.getDataRange().getValues();
+    const hData = hSheet.getDataRange().getValues();
+    const hkData = hkSheet.getDataRange().getValues();
 
-  // Her cari için bakiyeyi tek geçişte hesapla
-  const bakiyeMap = {};
-  for (let i = 1; i < hkData.length; i++) {
-    const row = hkData[i];
-    const cariId = String(row[1] || "");
-    if (!cariId) continue;
-    const tip = String(row[3] || "");
-    const tutar = parseFloat(row[4]) || 0;
-    if (!bakiyeMap[cariId]) bakiyeMap[cariId] = 0;
-    bakiyeMap[cariId] += (tip === "Borç") ? tutar : -tutar;
-  }
+    // Her cari için bakiyeyi tek geçişte hesapla
+    const bakiyeMap = {};
+    for (let i = 1; i < hkData.length; i++) {
+      const row = hkData[i];
+      const cariId = String(row[1] || "");
+      if (!cariId) continue;
+      const tip = String(row[3] || "");
+      const tutar = parseFloat(row[4]) || 0;
+      if (!bakiyeMap[cariId]) bakiyeMap[cariId] = 0;
+      bakiyeMap[cariId] += (tip === "Borç") ? tutar : -tutar;
+    }
 
-  const sonuc = [];
-  for (let i = 1; i < hData.length; i++) {
-    const row = hData[i];
-    const id = String(row[0] || "");
-    if (!id) continue;
-    sonuc.push({
-      id: id,
-      tip: String(row[1] || ""),
-      ad: String(row[2] || ""),
-      telefon: String(row[3] || ""),
-      adres: String(row[4] || ""),
-      vergiNo: String(row[5] || ""),
-      not: String(row[6] || ""),
-      tarih: hucreTarihStr(row[7]),
-      cariKodu: String(row[8] || ""),
-      iskontoOrani: parseFloat(row[9]) || 0,
-      krediLimiti: parseFloat(row[10]) || 0,
-      eFatura: String(row[11] || "Hayır") || "Hayır",
-      eArsiv: String(row[12] || "Hayır") || "Hayır",
-      plasiyerId: String(row[13] || ""),
-      bakiye: bakiyeMap[id] || 0,
+    const sonuc = [];
+    for (let i = 1; i < hData.length; i++) {
+      const row = hData[i];
+      const id = String(row[0] || "");
+      if (!id) continue;
+      sonuc.push({
+        id: id,
+        tip: String(row[1] || ""),
+        ad: String(row[2] || ""),
+        telefon: String(row[3] || ""),
+        adres: String(row[4] || ""),
+        vergiNo: String(row[5] || ""),
+        not: String(row[6] || ""),
+        tarih: hucreTarihStr(row[7]),
+        cariKodu: String(row[8] || ""),
+        iskontoOrani: parseFloat(row[9]) || 0,
+        krediLimiti: parseFloat(row[10]) || 0,
+        eFatura: String(row[11] || "Hayır") || "Hayır",
+        eArsiv: String(row[12] || "Hayır") || "Hayır",
+        plasiyerId: String(row[13] || ""),
+        bakiye: bakiyeMap[id] || 0,
+      });
+    }
+    // TEŞHİS: sonuc boşsa ama fiziksel satır varsa (hData.length>1) bunu ayırt
+    // edebilmek için satır sayılarını da dönüyoruz (frontend şimdilik göstermiyor
+    // ama tarayıcı Network sekmesinde Response'ta görülebilir).
+    return { ok: true, cariler: sonuc, _teshisHDataUzunluk: hData.length, _teshisSheetAdi: hSheet.getName() };
     });
+  } catch (teshisErr) {
+    // Hata ASLA önbelleğe yazılmasın diye cacheOkuVeyaHesapla'nın DIŞINDA yakalanıyor.
+    return { ok: false, hata: "getCariListesi hata: " + teshisErr.message };
   }
-  return { ok: true, cariler: sonuc };
-  });
 }
 
 // Tek bir cari hesabın bilgisini + tüm hareket geçmişini (tarihe göre sıralı, kümülatif bakiyeli) döndürür.
@@ -622,7 +630,7 @@ function saveCari(body) {
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);
 
-  cacheTemizle(["cariListesi_v2"]);
+  cacheTemizle(["cariListesi_v3"]);
   return { ok: true, id: id };
 }
 
@@ -643,7 +651,7 @@ function silCari(body) {
   const sheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH"]);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["cariListesi_v2"]); return { ok: true }; }
+    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["cariListesi_v3"]); return { ok: true }; }
   }
   return { ok: false, hata: "Cari bulunamadı" };
 }
@@ -665,7 +673,7 @@ function cariHareketEkle(body) {
   sheet.appendRow([id, cariId, tarih, tip, tutar, String(body.aciklama || ""),
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), String(body.vade || "")]);
 
-  cacheTemizle(["cariListesi_v2"]); // bakiye değişti, liste önbelleği bayatladı
+  cacheTemizle(["cariListesi_v3"]); // bakiye değişti, liste önbelleği bayatladı
   return { ok: true, id: id };
 }
 
@@ -729,7 +737,7 @@ function cariHareketSil(body) {
   const sheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["cariListesi_v2"]); return { ok: true }; }
+    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["cariListesi_v3"]); return { ok: true }; }
   }
   return { ok: false, hata: "Hareket bulunamadı" };
 }
@@ -1435,7 +1443,7 @@ function silSatis(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("SATIS:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v2"]);
+        cacheTemizle(["cariListesi_v3"]);
         break;
       }
     }
@@ -1849,7 +1857,7 @@ function silAlis(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("ALIS:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v2"]);
+        cacheTemizle(["cariListesi_v3"]);
         break;
       }
     }
@@ -1899,7 +1907,7 @@ function tumAlislariSilVeSifirla(body) {
       const sonuc = silAlis({ id: id });
       if (sonuc.ok) silinen++;
     });
-    cacheTemizle(["alisListesi", "stokHareketListesi", "cariListesi_v2"]);
+    cacheTemizle(["alisListesi", "stokHareketListesi", "cariListesi_v3"]);
     return { ok: true, silinen: silinen, toplam: idler.length, yedekEki: damga };
   }
   // Kuru çalıştırma: sadece bilgi ver, hiçbir şey silme.
@@ -1956,7 +1964,7 @@ function updateAlis(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === eskiCariId && String(hkData[i][5] || "").indexOf("ALIS:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v2"]);
+        cacheTemizle(["cariListesi_v3"]);
         break;
       }
     }
@@ -2189,7 +2197,7 @@ function silAlisIade(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("ALISIADE:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v2"]);
+        cacheTemizle(["cariListesi_v3"]);
         break;
       }
     }
@@ -2324,7 +2332,7 @@ function silTahsilat(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("TAHSILAT:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v2"]);
+        cacheTemizle(["cariListesi_v3"]);
         break;
       }
     }
@@ -2539,7 +2547,7 @@ function silOdeme(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("ODEME:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v2"]);
+        cacheTemizle(["cariListesi_v3"]);
         break;
       }
     }
@@ -2705,7 +2713,7 @@ function silCekSenet(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("CEK:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v2"]);
+        cacheTemizle(["cariListesi_v3"]);
         break;
       }
     }
@@ -4221,7 +4229,7 @@ function cariHareketGecmisiDoldur() {
     eklenen++;
   }
 
-  cacheTemizle(["cariListesi_v2"]);
+  cacheTemizle(["cariListesi_v3"]);
   return { ok: true, eklenenHareketSayisi: eklenen };
 }
 

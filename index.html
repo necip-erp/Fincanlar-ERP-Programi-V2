@@ -2035,13 +2035,16 @@ function cariListesiYukle(){
     document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   }
   cariApi("getCariListesi").then(res=>{
-    if(!res.ok){ if(!onbellek) document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(!res.ok){ document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _cariListe = res.cariler.sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
     onbellekYaz("cariListesi", res.cariler);
     cariListesiCiz(_cariListe);
+    if(_cariListe.length === 0){
+      console.log("CARİ TEŞHİS: sayfa adı=", res._teshisSheetAdi, "okunan satır sayısı (başlık dahil)=", res._teshisHDataUzunluk);
+    }
     if(typeof smKdvSonraKisitiUygula === "function") smKdvSonraKisitiUygula(); // cari listesi satış modalı açıkken geç geldiyse kısıtı tazele
   }).catch(err=>{
-    if(!onbellek) document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+    document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
 }
 
