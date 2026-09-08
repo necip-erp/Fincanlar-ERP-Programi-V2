@@ -38,6 +38,15 @@
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+/* ── Arka fon deseni: büyük ERP programlarında (Netsis/Logo/Uyumsoft) görülen sessiz,
+   "mühendislik/blueprint" hissi veren çok ince nokta ızgarası. Marka rengiyle (indigo)
+   uyumlu, %3.5 opaklıkta — dikkat dağıtmaması için bilinçli olarak çok hafif tutuldu.
+   Ayarlar > Genel Görünüm'den anında açılıp kapatılabilir (bkz. arkaplanDeseniToggle). ── */
+body.desen-acik{
+  background-image: radial-gradient(circle, rgba(67,56,202,.09) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-color: var(--bg);
+}
 
 /* ── İnce, sekmesiz kaydırma çubuğu ── */
 ::-webkit-scrollbar{width:9px;height:9px}
@@ -919,6 +928,10 @@ setInterval(topbarSaatGuncelle, 10000);
         Ölçüyü ürün adının başına al (60X120, 50X50 vb. — Kalde/PVC-PPRC (94) marka grubu hariç)
       </label>
       <p style="color:var(--text3);font-size:12px;margin:6px 0 0">Sadece Stok Tanımları listesi ve Stok Rehberi'ndeki görünümü değiştirir; Stok Adı verisi Sheets'te değişmez.</p>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer;margin-top:14px">
+        <input id="ayarlar-arkaplan-deseni" type="checkbox" onchange="arkaplanDeseniToggle()" style="width:auto">
+        Arka fonda ince nokta deseni göster
+      </label>
     </div>
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Açılışta Gelecek Sayfa</div>
@@ -1599,6 +1612,26 @@ function olcuBasaAlAyarYukle(){
   const chk = document.getElementById("ayarlar-olcu-basa-al");
   if(chk) chk.checked = olcuBasaAlAcikMi();
 }
+
+// ── Arka fon deseni: varsayılan AÇIK (ilk deploy'da kullanıcı görüp karar versin diye);
+// tercih localStorage'da tutulup her sayfa açılışında (aşağıdaki hemen-çalışan blokta) uygulanıyor.
+function arkaplanDeseniAcikMi(){
+  return localStorage.getItem("fincanlar_arkaplan_deseni") !== "0"; // "0" dışında her şey (ilk kurulum dahil) = açık
+}
+function arkaplanDeseniUygula(acik){
+  document.body.classList.toggle("desen-acik", acik);
+}
+function arkaplanDeseniToggle(){
+  const chk = document.getElementById("ayarlar-arkaplan-deseni");
+  if(!chk) return;
+  localStorage.setItem("fincanlar_arkaplan_deseni", chk.checked ? "1" : "0");
+  arkaplanDeseniUygula(chk.checked);
+}
+function arkaplanDeseniAyarYukle(){
+  const chk = document.getElementById("ayarlar-arkaplan-deseni");
+  if(chk) chk.checked = arkaplanDeseniAcikMi();
+}
+arkaplanDeseniUygula(arkaplanDeseniAcikMi());
 
 // Birim (ürün) fiyatı gösterimi — virgülden sonra 4 hane + ₺. Ara toplam/Kdv/Genel
 // Toplam gibi belge alt hesaplamaları bunu KULLANMAZ, onlar paraFormat (2 hane) kullanır.
@@ -5840,6 +5873,7 @@ function ayarlarYukle(){
   seriTanimlariYukle();
   plasiyerListesiYukle();
   olcuBasaAlAyarYukle();
+  arkaplanDeseniAyarYukle();
   acilisSayfasiYukle();
   if(!_tanimListeYuklendi.giderUstGrup) tanimListesiYukle("giderUstGrup");
   if(!_tanimListeYuklendi.giderAltGrup) tanimListesiYukle("giderAltGrup");
