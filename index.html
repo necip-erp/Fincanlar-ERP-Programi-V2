@@ -14,6 +14,11 @@
   --bg:#f4f5f8; --bg2:#fff; --bg3:#eef0f5;
   --border:#e2e5eb; --text:#161a22; --text2:#555e6d; --text3:#8991a1;
 
+  /* ── Modül kartı boyutu (Ayarlar > Genel Görünüm'den Küçük/Orta/Büyük seçilir).
+     "Orta" = özgün tasarım değerleri; body.modul-boyut-kucuk/buyuk bunları geçersiz kılar. ── */
+  --mod-min:126px; --mod-gap:10px; --mod-pad:12px 8px 13px;
+  --mod-ic:36px; --mod-icfont:17px; --mod-lblfont:12.5px; --mod-descfont:9.5px;
+
   /* ── Marka rengi: indigo — jenerik Tailwind mavisinden (#2563eb) bilinçli olarak
      uzaklaştırıldı, daha karakterli/güven veren bir ton ── */
   --blue:#4338ca; --blue-l:#eeecfc;
@@ -38,6 +43,9 @@
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+/* ── Modül kartı boyutu presetleri (varsayılan = yukarıdaki :root değerleri, "Orta") ── */
+body.modul-boyut-kucuk{--mod-min:98px;--mod-gap:8px;--mod-pad:8px 6px 9px;--mod-ic:28px;--mod-icfont:14px;--mod-lblfont:11px;--mod-descfont:8.5px}
+body.modul-boyut-buyuk{--mod-min:158px;--mod-gap:13px;--mod-pad:16px 10px 18px;--mod-ic:46px;--mod-icfont:21px;--mod-lblfont:14px;--mod-descfont:10.5px}
 /* ── Arka fon deseni: büyük ERP programlarında (Netsis/Logo/Uyumsoft) görülen sessiz,
    "mühendislik/blueprint" hissi veren çok ince nokta ızgarası. Marka rengiyle (indigo)
    uyumlu, %3.5 opaklıkta — dikkat dağıtmaması için bilinçli olarak çok hafif tutuldu.
@@ -104,11 +112,22 @@ body.desen-acik{
 #home .greet-ic{font-size:19px;animation:fincanFadeIn .4s var(--ease)}
 #home h1{font-size:16px;font-weight:800;margin:0;letter-spacing:-.02em}
 #home p.sub{color:var(--text3);text-align:center;margin:0 0 14px;font-size:11.5px}
-.modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:10px}
+.modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--mod-min),1fr));gap:var(--mod-gap)}
+/* ── Ana sayfa, modüllerin altında: "Bugünkü Özet" kartları (Ayarlar'dan hangilerinin
+   görüneceği seçilir). Salt bilgilendirme amaçlı, tıklanamaz. ── */
+.bugun-ozet-satir{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.bugun-ozet-satir:empty{display:none}
+.bugun-ozet-kart{flex:1;min-width:150px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;display:flex;align-items:center;gap:10px}
+.bugun-ozet-kart .ic{font-size:18px;width:34px;height:34px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--blue-l)}
+.bugun-ozet-kart .metin{min-width:0}
+.bugun-ozet-kart .lbl{font-size:10.5px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.02em;white-space:nowrap}
+.bugun-ozet-kart .deger{font-size:14.5px;font-weight:800;color:var(--text);white-space:nowrap}
 /* ── Ana sayfa yan panelleri: solda Hızlı Erişim (kullanıcının seçtiği ekranlara tek
    tıkla gitme + sürükle-bırakla sıralama), sağda Son Yapılan İşlemler (salt okunur akış).
    İkisi de topbar dışındaki dikey alanı aşarsa sayfayı değil kendini kaydırır. ── */
 .home-yan{width:228px;flex-shrink:0;max-height:calc(100vh - 96px);overflow-y:auto}
+#home-son-islemler-panel.katli #son-islemler-liste{display:none}
+#home-son-islemler-panel.katli #son-islemler-katla-btn{transform:rotate(-90deg)}
 .home-yan-baslik{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;padding:0 2px}
 .hizli-erisim-satir{display:flex;align-items:center;gap:8px;padding:7px 9px;margin-bottom:5px;background:var(--bg2);border:1px solid var(--border);border-radius:9px;cursor:pointer;transition:background var(--t),border-color var(--t)}
 .hizli-erisim-satir:hover{background:var(--bg3);border-color:var(--accent)}
@@ -126,16 +145,16 @@ body.desen-acik{
 .son-islem-satir .alt{font-size:10.5px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .son-islem-satir .tarih{font-size:9.5px;color:var(--text3);margin-top:2px}
 @media (max-width:1180px){#home{flex-direction:column}.home-yan{width:100%;max-height:none}}
-.modtile{background:var(--bg2);border:1px solid var(--border);border-radius:13px;padding:12px 8px 13px;text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
+.modtile{background:var(--bg2);border:1px solid var(--border);border-radius:13px;padding:var(--mod-pad);text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
 .modtile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--blue),var(--amber));transform:scaleX(0);transform-origin:left;transition:transform .22s var(--ease)}
 .modtile:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:transparent}
 .modtile:hover::before{transform:scaleX(1)}
 .modtile::after{content:"→";position:absolute;right:9px;bottom:6px;font-size:11px;color:var(--text3);opacity:0;transform:translateX(-4px);transition:opacity .18s var(--ease),transform .18s var(--ease)}
 .modtile:hover::after{opacity:1;transform:translateX(0)}
-.modtile .ic{font-size:17px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--blue-l);margin:0 auto 7px;transition:transform .2s var(--ease)}
+.modtile .ic{font-size:var(--mod-icfont);width:var(--mod-ic);height:var(--mod-ic);display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--blue-l);margin:0 auto 7px;transition:transform .2s var(--ease)}
 .modtile:hover .ic{transform:scale(1.08) rotate(-4deg)}
-.modtile .lbl{font-weight:700;font-size:12.5px}
-.modtile .desc{color:var(--text3);font-size:9.5px;margin-top:2px;line-height:1.3}
+.modtile .lbl{font-weight:700;font-size:var(--mod-lblfont)}
+.modtile .desc{color:var(--text3);font-size:var(--mod-descfont);margin-top:2px;line-height:1.3}
 
 /* Modül içerik alanı */
 .modview{position:absolute;inset:0;display:none;flex-direction:column}
@@ -413,12 +432,16 @@ setInterval(topbarSaatGuncelle, 10000);
       <div class="greet-row"><span class="greet-ic" id="greet-ic">👋</span><h1 id="greet-baslik">Hoş geldin</h1></div>
       <p class="sub">Bir modül seç, ya da yukarıdan ürün ara</p>
       <div class="modgrid" id="modgrid"></div>
+      <div class="bugun-ozet-satir" id="bugun-ozet-satir"></div>
     </div>
 
-    <div class="home-yan home-sag">
+    <div class="home-yan home-sag" id="home-son-islemler-panel">
       <div class="home-yan-baslik">
         <span>🕘 Son Yapılan İşlemler</span>
-        <button class="btn" style="padding:2px 8px;font-size:11px" onclick="sonIslemlerYukle()" title="Yenile">↻</button>
+        <span style="display:flex;gap:4px">
+          <button class="btn" style="padding:2px 8px;font-size:11px" onclick="sonIslemlerYukle()" title="Yenile">↻</button>
+          <button class="btn" style="padding:2px 8px;font-size:11px" id="son-islemler-katla-btn" onclick="sonIslemlerKatlaAc()" title="Aç/Kapat">▾</button>
+        </span>
       </div>
       <div id="son-islemler-liste"></div>
     </div>
@@ -932,6 +955,14 @@ setInterval(topbarSaatGuncelle, 10000);
         <input id="ayarlar-arkaplan-deseni" type="checkbox" onchange="arkaplanDeseniToggle()" style="width:auto">
         Arka fonda ince nokta deseni göster
       </label>
+      <div class="fld" style="margin-top:14px;max-width:320px">
+        <label>Modül Kartı Boyutu</label>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="belge-tab" id="mod-boyut-kucuk-btn" style="flex:1;padding:7px 10px" onclick="modulBoyutuSec('kucuk')">Küçük</button>
+          <button type="button" class="belge-tab" id="mod-boyut-orta-btn" style="flex:1;padding:7px 10px" onclick="modulBoyutuSec('orta')">Orta</button>
+          <button type="button" class="belge-tab" id="mod-boyut-buyuk-btn" style="flex:1;padding:7px 10px" onclick="modulBoyutuSec('buyuk')">Büyük</button>
+        </div>
+      </div>
     </div>
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Açılışta Gelecek Sayfa</div>
@@ -953,6 +984,14 @@ setInterval(topbarSaatGuncelle, 10000);
       <div class="fld" style="max-width:320px">
         <label>Sekme Genişliği: <span id="sekme-genislik-deger">140px</span></label>
         <input type="range" id="ayarlar-sekme-genislik" min="90" max="240" step="10" oninput="sekmeGenisligiOnizle(this.value)" onchange="sekmeGenisligiKaydet(this.value)">
+      </div>
+    </div>
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Ana Sayfa Bugünkü Özet</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Ana sayfada modüllerin altında hangi "bugünkü tutar" kartlarının görüneceğini seç.</p>
+      <div id="ayarlar-bugun-ozet-liste"></div>
+      <div class="modal-actions" style="justify-content:flex-start;margin-top:16px">
+        <button class="btn btn-primary" onclick="bugunOzetAyariKaydet()">Kaydet</button>
       </div>
     </div>
     <div class="finans-panel">
@@ -1051,6 +1090,47 @@ function modulSiraDegistir(hedefId){
   modgridCiz();
 }
 modgridCiz();
+
+// ── Ana sayfa "Bugünkü Özet" kartları: hangilerinin gösterileceği Ayarlar >
+// Ana Sayfa Bugünkü Özet'ten seçilir (localStorage). Varsayılan: kullanıcının
+// ilk istediği 4 kalem (Sipariş/Teklif/Satış Fatura/Alış Fatura).
+const BUGUN_OZET_KATALOG = [
+  {id:"siparisTutari",     ic:"📝", lbl:"Bugünkü Sipariş Tutarı"},
+  {id:"teklifTutari",      ic:"📄", lbl:"Bugünkü Teklif Tutarı"},
+  {id:"satisFaturaTutari", ic:"🧾", lbl:"Bugünkü Satış Fatura Tutarı"},
+  {id:"alisFaturaTutari",  ic:"📥", lbl:"Bugünkü Alış Fatura Tutarı"},
+  {id:"tahsilatTutari",    ic:"💰", lbl:"Bugünkü Tahsilat Tutarı"},
+  {id:"odemeTutari",       ic:"💳", lbl:"Bugünkü Ödeme Tutarı"},
+];
+const BUGUN_OZET_VARSAYILAN = ["siparisTutari","teklifTutari","satisFaturaTutari","alisFaturaTutari"];
+function bugunOzetSeciliAl(){
+  try{
+    const kayitli = JSON.parse(localStorage.getItem("fincanlar_bugun_ozet_secili") || "null");
+    if(Array.isArray(kayitli)) return kayitli;
+  }catch(e){}
+  return BUGUN_OZET_VARSAYILAN.slice();
+}
+function bugunOzetKaydet(idListesi){
+  localStorage.setItem("fincanlar_bugun_ozet_secili", JSON.stringify(idListesi));
+}
+function bugunOzetCiz(){
+  const el = document.getElementById("bugun-ozet-satir");
+  if(!el) return;
+  const secili = bugunOzetSeciliAl();
+  if(secili.length === 0){ el.innerHTML = ""; return; }
+  cariApi("getBugunOzet", {}).then(res=>{
+    if(!res || !res.ok) return;
+    el.innerHTML = secili.map(id=>{
+      const k = BUGUN_OZET_KATALOG.find(x=>x.id===id);
+      if(!k) return "";
+      return `<div class="bugun-ozet-kart">
+        <span class="ic">${k.ic}</span>
+        <div class="metin"><div class="lbl">${k.lbl}</div><div class="deger">${paraFormat(res[id] || 0)}</div></div>
+      </div>`;
+    }).join("");
+  }).catch(()=>{});
+}
+bugunOzetCiz();
 
 // ── Alt modül sırası (Stok/Alış/Satış hub ekranlarındaki kartlar — aynı sürükle-bırak
 // deseni, her modül için ayrı localStorage anahtarıyla) ──
@@ -1236,6 +1316,22 @@ hizliErisimCiz();
 // Tüm modüllerden (Satış, Alış, Tahsilat, Ödeme, Çek/Senet, elle girilen Stok
 // Hareketi) en son 20 kaydı KAYIT_TARİHİ'ne göre karışık gösterir; her satır o
 // kaydın ait olduğu ekranı sekme olarak açar.
+// Ana sayfadaki "Son Yapılan İşlemler" panelinin açık/kapalı durumu localStorage'da
+// tutulur, sayfa her açıldığında (bkz. aşağıdaki hemen-çalışan blok) geri yüklenir.
+function sonIslemlerKatliMi(){
+  return localStorage.getItem("fincanlar_son_islemler_katli") === "1";
+}
+function sonIslemlerKatlaAc(){
+  const panel = document.getElementById("home-son-islemler-panel");
+  if(!panel) return;
+  const yeniDurum = !panel.classList.contains("katli");
+  panel.classList.toggle("katli", yeniDurum);
+  localStorage.setItem("fincanlar_son_islemler_katli", yeniDurum ? "1" : "0");
+}
+(function(){
+  const panel = document.getElementById("home-son-islemler-panel");
+  if(panel && sonIslemlerKatliMi()) panel.classList.add("katli");
+})();
 function sonIslemlerYukle(){
   const el = document.getElementById("son-islemler-liste");
   if(!el) return;
@@ -1400,6 +1496,7 @@ function gitAnaSayfa(){
   // olduysa burada kendini toparlamış olur).
   if(typeof sonIslemlerYukle === "function") sonIslemlerYukle();
   if(typeof hizliErisimCiz === "function") hizliErisimCiz();
+  if(typeof bugunOzetCiz === "function") bugunOzetCiz();
   // Ana Sayfa'ya dönmek diğer açık sekmeleri KAPATMAZ — tıpkı tarayıcıda başka bir
   // sekmeye geçmek gibi, o modüller sekme şeridinde açık kalmaya devam eder.
   _aktifSekme = null;
@@ -1632,6 +1729,32 @@ function arkaplanDeseniAyarYukle(){
   if(chk) chk.checked = arkaplanDeseniAcikMi();
 }
 arkaplanDeseniUygula(arkaplanDeseniAcikMi());
+
+// ── Modül kartı boyutu: Küçük/Orta/Büyük. "Orta" localStorage'da hiç değer olmaması
+// durumudur (özgün tasarım) — body'ye ekstra sınıf eklenmez.
+function modulBoyutuAl(){
+  return localStorage.getItem("fincanlar_modul_boyutu") || "orta";
+}
+function modulBoyutuUygula(deger){
+  document.body.classList.remove("modul-boyut-kucuk","modul-boyut-buyuk");
+  if(deger === "kucuk") document.body.classList.add("modul-boyut-kucuk");
+  if(deger === "buyuk") document.body.classList.add("modul-boyut-buyuk");
+}
+function modulBoyutuSec(deger){
+  localStorage.setItem("fincanlar_modul_boyutu", deger);
+  modulBoyutuUygula(deger);
+  modulBoyutuButonlariGuncelle(deger);
+}
+function modulBoyutuButonlariGuncelle(deger){
+  ["kucuk","orta","buyuk"].forEach(d=>{
+    const btn = document.getElementById("mod-boyut-"+d+"-btn");
+    if(btn) btn.classList.toggle("active", d===deger);
+  });
+}
+function modulBoyutuAyarYukle(){
+  modulBoyutuButonlariGuncelle(modulBoyutuAl());
+}
+modulBoyutuUygula(modulBoyutuAl());
 
 // Birim (ürün) fiyatı gösterimi — virgülden sonra 4 hane + ₺. Ara toplam/Kdv/Genel
 // Toplam gibi belge alt hesaplamaları bunu KULLANMAZ, onlar paraFormat (2 hane) kullanır.
@@ -5874,6 +5997,8 @@ function ayarlarYukle(){
   plasiyerListesiYukle();
   olcuBasaAlAyarYukle();
   arkaplanDeseniAyarYukle();
+  modulBoyutuAyarYukle();
+  ayarlarBugunOzetListesiCiz();
   acilisSayfasiYukle();
   if(!_tanimListeYuklendi.giderUstGrup) tanimListesiYukle("giderUstGrup");
   if(!_tanimListeYuklendi.giderAltGrup) tanimListesiYukle("giderAltGrup");
@@ -6607,6 +6732,23 @@ function plasiyerSiraTasi(idx, yon){
   cariApi("plasiyerSiraGuncelle", {sirali: yeniListe.map(p=>p.id)}).then(res=>{
     if(!res.ok) alert("Hata: "+(res.hata||"bilinmiyor"));
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+function ayarlarBugunOzetListesiCiz(){
+  const el = document.getElementById("ayarlar-bugun-ozet-liste");
+  if(!el) return;
+  const secili = bugunOzetSeciliAl();
+  el.innerHTML = BUGUN_OZET_KATALOG.map(k=>`
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer;padding:5px 0">
+      <input type="checkbox" class="ayarlar-bugun-ozet-chk" value="${k.id}" ${secili.includes(k.id)?"checked":""} style="width:auto">
+      ${k.ic} ${k.lbl}
+    </label>`).join("");
+}
+function bugunOzetAyariKaydet(){
+  const secili = Array.from(document.querySelectorAll(".ayarlar-bugun-ozet-chk:checked")).map(c=>c.value);
+  bugunOzetKaydet(secili);
+  bugunOzetCiz();
+  alert("Kaydedildi.");
 }
 
 function ayarlarListesiCiz(){

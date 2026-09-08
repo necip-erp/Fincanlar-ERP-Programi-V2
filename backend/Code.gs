@@ -404,6 +404,7 @@ function handleRequest(e) {
       case "saveOdeme":       result = saveOdeme(body); break;
       case "silOdeme":        result = silOdeme(body); break;
       case "getFinansOzet":   result = getFinansOzet(); break;
+      case "getBugunOzet":    result = getBugunOzet(); break;
       case "getRaporOzet":    result = getRaporOzet(body); break;
       case "getBankaYapisi":  result = getBankaYapisi(); break;
       case "saveBanka":       result = saveBanka(body); break;
@@ -3018,6 +3019,38 @@ function sifirlaAlisFaturaDurum(body) {
     if (String(durumData[i][0]) === faturaNo) { durumSheet.deleteRow(i + 1); return { ok: true }; }
   }
   return { ok: false, hata: "Bu fatura için işlenmiş bir kayıt bulunamadı" };
+}
+
+// Ana sayfada modüllerin altında gösterilen "Bugünkü Özet" kartları için. Zaten
+// önbelleğe alınmış liste fonksiyonlarını (getSatisListesi/getAlisListesi/
+// getTahsilatListesi/getOdemeListesi) çağırıp bugünün tarihine göre bellekte
+// süzüyor — ek bir sayfa okuması yapmıyor, sadece o listelerin (60sn TTL)
+// üzerine 30sn'lik ayrı bir önbellek katmanı ekliyor.
+function getBugunOzet() {
+  return cacheOkuVeyaHesapla("bugunOzet", 30, function () {
+    const bugun = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd");
+    function bugunMu(tarihStr) { return String(tarihStr || "").slice(0, 10) === bugun; }
+    function topla(liste, alan) {
+      return (liste || []).filter(x => bugunMu(x.tarih)).reduce((a, x) => a + (parseFloat(x[alan]) || 0), 0);
+    }
+    const satisRes = getSatisListesi();
+    const satisBugun = (satisRes.satislar || []).filter(s => bugunMu(s.tarih));
+    const siparisTutari = satisBugun.filter(s => s.belgeTipi === "Sipariş").reduce((a, s) => a + (parseFloat(s.toplamTutar) || 0), 0);
+    const teklifTutari = satisBugun.filter(s => s.belgeTipi === "Teklif").reduce((a, s) => a + (parseFloat(s.toplamTutar) || 0), 0);
+    const satisFaturaTutari = satisBugun.filter(s => !s.belgeTipi || s.belgeTipi === "Fatura").reduce((a, s) => a + (parseFloat(s.toplamTutar) || 0), 0);
+    const alisRes = getAlisListesi();
+    const alisFaturaTutari = topla(alisRes.alislar, "toplamTutar");
+    const tahsilatRes = getTahsilatListesi();
+    const tahsilatTutari = topla(tahsilatRes.tahsilatlar, "tutar");
+    const odemeRes = getOdemeListesi();
+    const odemeTutari = topla(odemeRes.odemeler, "tutar");
+    return {
+      ok: true,
+      siparisTutari: siparisTutari, teklifTutari: teklifTutari,
+      satisFaturaTutari: satisFaturaTutari, alisFaturaTutari: alisFaturaTutari,
+      tahsilatTutari: tahsilatTutari, odemeTutari: odemeTutari,
+    };
+  });
 }
 
 function getFinansOzet() {
