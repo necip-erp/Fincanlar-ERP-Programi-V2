@@ -5144,3 +5144,65 @@ function getUrunFiyatGecmisi(urunAdi) {
 // secret düzeltme sonrası tetikleme Fri Aug 14 14:08:12 UTC 2026
 
 // base64 secret sonrasi tetikleme// temizlenmis workflow testi Fri Aug 14 20:10:56 UTC 2026
+
+// ════════════════════════════════════════════════
+// OTOMATİK YEDEKLEME — Ana Spreadsheet'in tamamının Drive'da ayrı bir klasöre,
+// zaman damgalı isimle periyodik kopyasını alır. "Tümünü Sil ve Sıfırla" öncesi
+// alınan sayfa-içi _YEDEK_ kopyalarından farklı olarak, BU yedekler ayrı birer
+// Drive dosyasıdır — ana dosya tamamen silinse/bozulsa bile kurtarma imkanı verir.
+// Yedekler SÜRESİZ saklanır, otomatik silinmez (elle temizlenmesi gerekir).
+// ════════════════════════════════════════════════
+
+var YEDEK_KLASOR_ADI = "Fincanlar ERP - Otomatik Yedekler";
+
+function yedekKlasoruGetirVeyaOlustur_() {
+  var klasorler = DriveApp.getFoldersByName(YEDEK_KLASOR_ADI);
+  if (klasorler.hasNext()) return klasorler.next();
+  return DriveApp.createFolder(YEDEK_KLASOR_ADI);
+}
+
+// Zaman tetikleyicisi bu fonksiyonu çağırır. Elle de çalıştırılabilir (Apps Script
+// editöründen "Çalıştır" ile anlık yedek almak için).
+function otomatikYedekAl() {
+  var klasor = yedekKlasoruGetirVeyaOlustur_();
+  var zamanDamgasi = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd_HH-mm");
+  var orijinalDosya = DriveApp.getFileById(SHEET_ID);
+  var yeniAd = "Fincanlar ERP Yedek - " + zamanDamgasi;
+  orijinalDosya.makeCopy(yeniAd, klasor);
+}
+
+// TEK SEFERLİK KURULUM: Bu fonksiyonu Apps Script editöründen elle bir kez
+// çalıştır (▶ Çalıştır butonuyla, "otomatikYedekAl" değil "yedekTetikleyiciKur"
+// seçili olarak). Google izin isteyecektir, onayla. Bundan sonra sistem günde
+// 4 kez (yaklaşık her 6 saatte bir) otomatik yedek almaya başlar — tekrar
+// çalıştırmana gerek kalmaz. Fonksiyonu yanlışlıkla birden fazla kez çalıştırırsan
+// da sorun olmaz; önce varsa eski tetikleyiciyi siler, sonra yenisini kurar.
+function yedekTetikleyiciKur() {
+  var tetikleyiciler = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < tetikleyiciler.length; i++) {
+    if (tetikleyiciler[i].getHandlerFunction() === "otomatikYedekAl") {
+      ScriptApp.deleteTrigger(tetikleyiciler[i]);
+    }
+  }
+  ScriptApp.newTrigger("otomatikYedekAl")
+    .timeBased()
+    .everyHours(6)
+    .create();
+
+  // Kurulumun doğru çalıştığını görmek için hemen bir ilk yedek de al.
+  otomatikYedekAl();
+}
+
+// Mevcut tetikleyicilerin durumunu görmek için (Apps Script editöründen elle
+// çalıştırıp Logger çıktısına bakılabilir).
+function yedekTetikleyiciDurumGoster() {
+  var tetikleyiciler = ScriptApp.getProjectTriggers();
+  var bulundu = false;
+  for (var i = 0; i < tetikleyiciler.length; i++) {
+    if (tetikleyiciler[i].getHandlerFunction() === "otomatikYedekAl") {
+      bulundu = true;
+      Logger.log("Yedek tetikleyicisi AKTİF — her " + tetikleyiciler[i].getTriggerSourceId());
+    }
+  }
+  if (!bulundu) Logger.log("Yedek tetikleyicisi KURULU DEĞİL — yedekTetikleyiciKur() fonksiyonunu çalıştır.");
+}
