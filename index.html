@@ -59,7 +59,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,san
    kendi içinde bir "sekme" olarak açılır (PWA kurulu haldeyken window.open görev
    çubuğunda ayrı bir program penceresi gibi göründüğü için bu yönteme geçildi). ── */
 .sekme-seridi{display:flex;align-items:stretch;gap:2px;padding:0 10px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:thin}
-.sekme{display:flex;align-items:center;justify-content:center;gap:9px;padding:8px 20px 7px;min-width:140px;font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;cursor:pointer;border-bottom:2px solid transparent;user-select:none;transition:background var(--t),color var(--t)}
+.sekme{display:flex;align-items:center;justify-content:center;gap:9px;padding:8px 20px 7px;min-width:var(--sekme-genislik,140px);font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;cursor:pointer;border-bottom:2px solid transparent;user-select:none;transition:background var(--t),color var(--t)}
 .sekme:hover{background:var(--bg2);color:var(--text)}
 .sekme.aktif{color:var(--blue);border-bottom-color:var(--blue);background:var(--bg2)}
 .sekme .sekme-kapat{font-size:13px;line-height:1;padding:2px 4px;border-radius:5px;color:var(--text3,#9ca3af);opacity:.7}
@@ -332,6 +332,12 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .toast-kutu{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:9999;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
 .toast-kutu.gorunur{opacity:1}
 .rapor-baslik{font-size:14px;font-weight:800;margin:20px 0 4px}
+/* Ayarlar sayfası: her bölüm başlığı tıklanıp açılıp kapanabilir (accordion) */
+.ayarlar-bolum-baslik{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;user-select:none}
+.ayarlar-bolum-ok{display:inline-block;transition:transform .18s;color:var(--text3);font-size:12px}
+.ayarlar-bolum-kapali .ayarlar-bolum-ok{transform:rotate(-90deg)}
+.ayarlar-bolum-govde{overflow:hidden}
+.ayarlar-bolum-kapali .ayarlar-bolum-govde{display:none}
 .modtile{cursor:grab}
 .modtile.surukleniyor{opacity:.35}
 .ayarlar-kisayol-input{padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--bg3);font-family:inherit}
@@ -929,6 +935,14 @@ setInterval(topbarSaatGuncelle, 10000);
       </div>
     </div>
     <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Sekme Görünümü</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Üstteki sekme şeridindeki her bir sekmenin genişliğini ayarla. Çok modül açık tutuyorsan dar, az sekmeyle çalışıyorsan geniş tutmak daha rahat olabilir.</p>
+      <div class="fld" style="max-width:320px">
+        <label>Sekme Genişliği: <span id="sekme-genislik-deger">140px</span></label>
+        <input type="range" id="ayarlar-sekme-genislik" min="90" max="240" step="10" oninput="sekmeGenisligiOnizle(this.value)" onchange="sekmeGenisligiKaydet(this.value)">
+      </div>
+    </div>
+    <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Gider Tanımlama</div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 14px">
         Ödeme ekranında "Ödeme Hedefi: Gider" seçildiğinde karşınıza çıkacak üst ve alt gider gruplarını
@@ -1326,6 +1340,20 @@ function sekmeKapat(id){
   sekmeSeridiCiz();
 }
 
+// Klavye kısayoluyla (Ayarlar > Kısayol Tuşları) sekme şeridinde ileri/geri gezinme.
+// Sıra: [Ana Sayfa, ...açık sekmeler] — tıpkı tarayıcı sekmeleri arasında Ctrl+Tab gibi,
+// sondan sonra başa (veya baştan sonra sona) döner.
+function sekmeGezin(yon){
+  const sira = [null, ..._acikSekmeler];
+  if(sira.length <= 1) return; // tek "sekme" (Ana Sayfa) varsa gezinecek bir şey yok
+  const mevcutIdx = sira.indexOf(_aktifSekme);
+  let yeniIdx = (mevcutIdx === -1 ? 0 : mevcutIdx) + yon;
+  if(yeniIdx < 0) yeniIdx = sira.length - 1;
+  if(yeniIdx >= sira.length) yeniIdx = 0;
+  const hedef = sira[yeniIdx];
+  if(hedef === null) gitAnaSayfa(); else modulAc(hedef);
+}
+
 function modulAc(id){
   document.getElementById("home").style.display = "none";
   document.querySelectorAll(".modview").forEach(v=>v.classList.remove("active"));
@@ -1435,8 +1463,8 @@ function kisayollariAl(){
     const kayitli = JSON.parse(localStorage.getItem("fincanlar_kisayollar") || "null");
     if(kayitli && typeof kayitli === "object") return kayitli;
   }catch(e){}
-  // Varsayılanlar: Alt+Shift+1..8 modüller, Esc geri
-  const varsayilan = { _geri: "Escape" };
+  // Varsayılanlar: Alt+Shift+1..8 modüller, Esc geri, Ctrl+PageUp/PageDown sekme gezinme
+  const varsayilan = { _geri: "Escape", _sekmeIleri: "Ctrl+PageDown", _sekmeGeri: "Ctrl+PageUp" };
   MODULLER.filter(m=>m.id!=="ayarlar").forEach((m,i)=>{ varsayilan[m.id] = "Alt+Shift+"+(i+1); });
   return varsayilan;
 }
@@ -1461,6 +1489,16 @@ document.addEventListener("keydown", function(e){
     gitAnaSayfa();
     return;
   }
+  if(basilan === kisayollar._sekmeIleri){
+    e.preventDefault();
+    sekmeGezin(1);
+    return;
+  }
+  if(basilan === kisayollar._sekmeGeri){
+    e.preventDefault();
+    sekmeGezin(-1);
+    return;
+  }
   // Sabit kısayol: Ctrl+A → Ana Sayfa (yazı alanı dışındayken; input/textarea/select
   // içindeyken normal "tümünü seç" davranışı bozulmasın diye yukarıdaki erken çıkış zaten
   // bu durumda fonksiyonu çalıştırmıyor).
@@ -1470,7 +1508,7 @@ document.addEventListener("keydown", function(e){
     return;
   }
   for(const modId in kisayollar){
-    if(modId === "_geri") continue;
+    if(modId === "_geri" || modId === "_sekmeIleri" || modId === "_sekmeGeri") continue;
     if(kisayollar[modId] === basilan){
       e.preventDefault();
       modulAc(modId);
@@ -5805,6 +5843,48 @@ function ayarlarYukle(){
   acilisSayfasiYukle();
   if(!_tanimListeYuklendi.giderUstGrup) tanimListesiYukle("giderUstGrup");
   if(!_tanimListeYuklendi.giderAltGrup) tanimListesiYukle("giderAltGrup");
+  const sgKayitli = localStorage.getItem("fincanlar_sekme_genislik") || "140";
+  const sgInput = document.getElementById("ayarlar-sekme-genislik");
+  if(sgInput) sgInput.value = sgKayitli;
+  const sgEtiket = document.getElementById("sekme-genislik-deger");
+  if(sgEtiket) sgEtiket.textContent = sgKayitli + "px";
+  ayarlarBolumleriKur();
+}
+
+// ── Ayarlar sayfasındaki her "finans-panel" bölümünü (başlık + içerik) açılır/kapanır
+// hale getirir. Sadece #mod-ayarlar içindekiler etkilenir; diğer sayfalardaki aynı
+// sınıflar (Finans, Rapor modüllerindeki .rapor-baslik gibi) DOKUNULMADAN kalır.
+// Tek seferlik kurulum: zaten kurulmuş bir bölümü tekrar sarmaz (data-kuruldu bayrağı).
+let _ayarlarBolumSayaci = 0;
+function ayarlarBolumleriKur(){
+  const panelller = document.querySelectorAll("#mod-ayarlar > .finans-panel");
+  panelller.forEach(panel=>{
+    if(panel.dataset.kuruldu === "1") return;
+    panel.dataset.kuruldu = "1";
+    const baslikEl = panel.querySelector(".rapor-baslik");
+    if(!baslikEl) return;
+    const anahtar = "ayarlar_bolum_" + (_ayarlarBolumSayaci++) + "_" + baslikEl.textContent.trim();
+
+    // Başlıktan sonraki tüm kardeşleri bir gövde div'inde topla.
+    const govde = document.createElement("div");
+    govde.className = "ayarlar-bolum-govde";
+    let sonraki = baslikEl.nextSibling;
+    const tasinacaklar = [];
+    while(sonraki){ tasinacaklar.push(sonraki); sonraki = sonraki.nextSibling; }
+    tasinacaklar.forEach(n=>govde.appendChild(n));
+    panel.appendChild(govde);
+
+    baslikEl.classList.add("ayarlar-bolum-baslik");
+    baslikEl.innerHTML = `<span>${baslikEl.textContent}</span><span class="ayarlar-bolum-ok">▾</span>`;
+
+    // Varsayılan: açık. Daha önce kullanıcı kapatmışsa (localStorage) kapalı başlar.
+    if(localStorage.getItem(anahtar) === "kapali"){ panel.classList.add("ayarlar-bolum-kapali"); }
+
+    baslikEl.onclick = function(){
+      panel.classList.toggle("ayarlar-bolum-kapali");
+      localStorage.setItem(anahtar, panel.classList.contains("ayarlar-bolum-kapali") ? "kapali" : "acik");
+    };
+  });
 }
 
 // ── Açılışta Gelecek Sayfa ──
@@ -6502,6 +6582,14 @@ function ayarlarListesiCiz(){
        <span style="flex:1">← Ana sayfaya dön</span>
        <input readonly class="ayarlar-kisayol-input" data-modid="_geri" value="${_ayarlarTaslak._geri || ''}" onclick="kisayolYakala(this,'_geri')" style="width:160px;text-align:center;cursor:pointer">
      </div>`,
+    `<div class="satis-kalem-satir" style="justify-content:space-between">
+       <span style="flex:1">→ Sonraki sekme</span>
+       <input readonly class="ayarlar-kisayol-input" data-modid="_sekmeIleri" value="${_ayarlarTaslak._sekmeIleri || ''}" onclick="kisayolYakala(this,'_sekmeIleri')" style="width:160px;text-align:center;cursor:pointer">
+     </div>`,
+    `<div class="satis-kalem-satir" style="justify-content:space-between">
+       <span style="flex:1">← Önceki sekme</span>
+       <input readonly class="ayarlar-kisayol-input" data-modid="_sekmeGeri" value="${_ayarlarTaslak._sekmeGeri || ''}" onclick="kisayolYakala(this,'_sekmeGeri')" style="width:160px;text-align:center;cursor:pointer">
+     </div>`,
     ...MODULLER.filter(m=>m.id!=="ayarlar").map(m=>`
        <div class="satis-kalem-satir" style="justify-content:space-between">
          <span style="flex:1">${m.ic} ${m.lbl}</span>
@@ -6536,6 +6624,24 @@ function kisayollariVarsayilanaDondur(){
   _ayarlarTaslak = Object.assign({}, kisayollariAl());
   ayarlarListesiCiz();
 }
+
+// ── Sekme genişliği: --sekme-genislik CSS değişkenini uygular, localStorage'da
+// tutar ve sayfa her açıldığında (aşağıdaki hemen-çalışan blokta) geri yükler.
+function sekmeGenisligiUygula(px){
+  document.documentElement.style.setProperty("--sekme-genislik", px + "px");
+}
+function sekmeGenisligiOnizle(px){
+  sekmeGenisligiUygula(px);
+  const etiket = document.getElementById("sekme-genislik-deger");
+  if(etiket) etiket.textContent = px + "px";
+}
+function sekmeGenisligiKaydet(px){
+  localStorage.setItem("fincanlar_sekme_genislik", px);
+}
+(function(){
+  const kayitli = localStorage.getItem("fincanlar_sekme_genislik");
+  if(kayitli) sekmeGenisligiUygula(kayitli);
+})();
 </script>
 
 <!-- ══════════════ STOK MODÜLÜ — 2./3. kademe geçişleri ══════════════ -->
