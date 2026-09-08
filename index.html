@@ -1130,7 +1130,11 @@ function bugunOzetCiz(){
     }).join("");
   }).catch(()=>{});
 }
-bugunOzetCiz();
+// NOT: İlk çağrı burada YAPILMIYOR — CARI_API bu noktada henüz tanımlı değil
+// (aşağıdaki bir script bloğunda tanımlanıyor). Erken çağrı burada script'in
+// geri kalanını (Hızlı Erişim dahil) çalıştırmadan durdurmasına yol açıyordu.
+// İlk çağrı, dosyanın en altındaki açılış rutininde (CARI_API tanımlandıktan
+// sonra) yapılıyor — bkz. dosya sonu.
 
 // ── Alt modül sırası (Stok/Alış/Satış hub ekranlarındaki kartlar — aynı sürükle-bırak
 // deseni, her modül için ayrı localStorage anahtarıyla) ──
@@ -7585,6 +7589,9 @@ function stokHareketRaporuTemizle(){
     }, 200);
   }
 })();
+
+// Bugünkü Özet kartlarının ilk çekimi — burada CARI_API zaten tanımlı olduğu için güvenli.
+if(typeof bugunOzetCiz === "function") bugunOzetCiz();
 </script>
 
 <script>
