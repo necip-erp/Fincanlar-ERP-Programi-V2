@@ -448,6 +448,7 @@ function handleRequest(e) {
       case "silPlasiyer":        result = silPlasiyer(body); break;
       case "plasiyerSiraGuncelle": result = plasiyerSiraGuncelle(body); break;
       case "edmCariSorgula":  result = edmCariSorgula(body); break;
+      case "edmFaturaGonderTest": result = edmFaturaGonderTest(body); break;
       case "birimSiraGuncelle":     result = birimSiraGuncelle(body); break;
       case "basitTanimSiraGuncelle": result = basitTanimSiraGuncelle(body); break;
       case "markaSiraGuncelle":     result = markaSiraGuncelle(body); break;
@@ -5148,6 +5149,229 @@ function edmCariSorgula(body) {
     return { ok: true, eFatura: "Hayır", eArsiv: "Evet" };
   } catch (err) {
     return { ok: false, hata: "EDM sorgu hatası: " + err.message };
+  }
+}
+
+// ════════════════════════════════════════════════
+// EDM E-FATURA GÖNDERİMİ (SendInvoice) — DENEME/TEST amaçlı.
+// Var olan bir Satış faturasının kalemlerinden GİB standardında (UBL-TR 1.2)
+// bir e-Fatura XML'i oluşturup EDM'e gönderir.
+//
+// GÜVENLİK: Bu fonksiyon SADECE EDM_URL "test" içerdiğinde çalışır (canlı
+// ortamda otomatik reddeder) — gerçek bir faturanın yanlışlıkla gerçek bir
+// alıcıya değil, EDM'in test mükellefine (aşağıdaki EDM_TEST_ALICI_VKN)
+// gönderilmesini garanti eder. Canlıya geçişte gerçek alıcıya gönderim için
+// AYRI, bilinçli bir fonksiyon/onay akışı yazılmalı — bu fonksiyon o işe
+// KULLANILMAMALI.
+// ════════════════════════════════════════════════
+const EDM_SELLER = {
+  vkn: "3880688051",
+  unvan: "Fincanlar Yapı Malz.Ltd.Şti.",
+  adres: "Ovaakça Merkez Mah. Yeni Yalova Yolu Cad. No:591/1",
+  ilce: "Osmangazi",
+  il: "Bursa",
+  vergiDairesi: "Osmangazi Vergi Dairesi",
+};
+const EDM_TEST_ALICI_VKN = "3230512384"; // EDM'in kendi test mükellefi — SADECE deneme gönderimleri için
+
+function edmXmlEscape_(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Serbest metin birim adlarını UN/CEFACT birim koduna çevirir (UBL-TR zorunlu alan).
+function edmBirimKodu_(birim) {
+  const b = String(birim || "").trim().toLocaleLowerCase("tr");
+  if (b.indexOf("m2") > -1 || b.indexOf("m²") > -1 || b.indexOf("metrekare") > -1) return "MTK";
+  if (b.indexOf("kg") > -1) return "KGM";
+  if (b === "metre" || b === "mt" || b === "m") return "MTR";
+  if (b.indexOf("koli") > -1) return "XBX";
+  if (b.indexOf("paket") > -1) return "XPK";
+  return "C62"; // adet (varsayılan)
+}
+
+// VKN/TCKN'nin GİB e-Fatura mükellefi kaydını (varsa) döndürür: {alias, title} veya null.
+function edmVknBilgiAl_(ayar, sessionId, vkn) {
+  const xml = edmCheckUserXml_(ayar, sessionId, vkn);
+  if (xml.indexOf("Fault") > -1 || xml.indexOf("faultstring") > -1) {
+    throw new Error("CheckUser hatası (" + vkn + "): " + edmXmlDegeri_(xml, "faultstring"));
+  }
+  const alias = edmXmlDegeri_(xml, "ALIAS");
+  if (!alias) return null;
+  return { alias: alias, title: edmXmlDegeri_(xml, "TITLE") };
+}
+
+// UBL-TR 1.2 TEMELFATURA XML'i oluşturur. p: { uuid, tarih(yyyy-MM-dd), saat(HH:mm:ss),
+//   aliciVkn, aliciUnvan, kalemler:[{urunAdi,miktar,birim,birimFiyat,tutar,kdvOrani,kdvTutari}],
+//   araToplam, kdvToplam, genelToplam }
+function edmFaturaXmlOlustur_(p) {
+  const s = EDM_SELLER;
+  const satirlarXml = p.kalemler.map(function(k, idx) {
+    const birimKodu = edmBirimKodu_(k.birim);
+    return '' +
+      '\t<cac:InvoiceLine>\n' +
+      '\t\t<cbc:ID>' + (idx + 1) + '</cbc:ID>\n' +
+      '\t\t<cbc:InvoicedQuantity unitCode="' + birimKodu + '">' + k.miktar + '</cbc:InvoicedQuantity>\n' +
+      '\t\t<cbc:LineExtensionAmount currencyID="TRY">' + k.tutar.toFixed(2) + '</cbc:LineExtensionAmount>\n' +
+      '\t\t<cac:TaxTotal>\n' +
+      '\t\t\t<cbc:TaxAmount currencyID="TRY">' + k.kdvTutari.toFixed(2) + '</cbc:TaxAmount>\n' +
+      '\t\t\t<cac:TaxSubtotal>\n' +
+      '\t\t\t\t<cbc:TaxableAmount currencyID="TRY">' + k.tutar.toFixed(2) + '</cbc:TaxableAmount>\n' +
+      '\t\t\t\t<cbc:TaxAmount currencyID="TRY">' + k.kdvTutari.toFixed(2) + '</cbc:TaxAmount>\n' +
+      '\t\t\t\t<cbc:CalculationSequenceNumeric>1</cbc:CalculationSequenceNumeric>\n' +
+      '\t\t\t\t<cbc:Percent>' + k.kdvOrani + '</cbc:Percent>\n' +
+      '\t\t\t\t<cac:TaxCategory>\n' +
+      '\t\t\t\t\t<cac:TaxScheme>\n' +
+      '\t\t\t\t\t\t<cbc:Name>GERÇEK USULDE KATMA DEĞER VERGİSİ</cbc:Name>\n' +
+      '\t\t\t\t\t\t<cbc:TaxTypeCode>0015</cbc:TaxTypeCode>\n' +
+      '\t\t\t\t\t</cac:TaxScheme>\n' +
+      '\t\t\t\t</cac:TaxCategory>\n' +
+      '\t\t\t</cac:TaxSubtotal>\n' +
+      '\t\t</cac:TaxTotal>\n' +
+      '\t\t<cac:Item>\n' +
+      '\t\t\t<cbc:Name>' + edmXmlEscape_(k.urunAdi) + '</cbc:Name>\n' +
+      '\t\t</cac:Item>\n' +
+      '\t\t<cac:Price>\n' +
+      '\t\t\t<cbc:PriceAmount currencyID="TRY">' + k.birimFiyat.toFixed(4) + '</cbc:PriceAmount>\n' +
+      '\t\t</cac:Price>\n' +
+      '\t</cac:InvoiceLine>';
+  }).join("\n");
+
+  return '<Invoice xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2 UBL-Invoice-2.1.xsd" xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2">\n' +
+    '\t<cbc:UBLVersionID>2.1</cbc:UBLVersionID>\n' +
+    '\t<cbc:CustomizationID>TR1.2</cbc:CustomizationID>\n' +
+    '\t<cbc:ProfileID>TEMELFATURA</cbc:ProfileID>\n' +
+    '\t<cbc:ID/>\n' +
+    '\t<cbc:CopyIndicator>false</cbc:CopyIndicator>\n' +
+    '\t<cbc:UUID>' + p.uuid + '</cbc:UUID>\n' +
+    '\t<cbc:IssueDate>' + p.tarih + '</cbc:IssueDate>\n' +
+    '\t<cbc:IssueTime>' + p.saat + '</cbc:IssueTime>\n' +
+    '\t<cbc:InvoiceTypeCode>SATIS</cbc:InvoiceTypeCode>\n' +
+    '\t<cbc:Note>Fincanlar ERP - DENEME gönderimi</cbc:Note>\n' +
+    '\t<cbc:DocumentCurrencyCode>TRY</cbc:DocumentCurrencyCode>\n' +
+    '\t<cbc:LineCountNumeric>' + p.kalemler.length + '</cbc:LineCountNumeric>\n' +
+    '\t<cac:AccountingSupplierParty>\n' +
+    '\t\t<cac:Party>\n' +
+    '\t\t\t<cac:PartyIdentification><cbc:ID schemeID="VKN">' + s.vkn + '</cbc:ID></cac:PartyIdentification>\n' +
+    '\t\t\t<cac:PartyName><cbc:Name>' + edmXmlEscape_(s.unvan) + '</cbc:Name></cac:PartyName>\n' +
+    '\t\t\t<cac:PostalAddress>\n' +
+    '\t\t\t\t<cbc:BuildingName>' + edmXmlEscape_(s.adres) + '</cbc:BuildingName>\n' +
+    '\t\t\t\t<cbc:CitySubdivisionName>' + edmXmlEscape_(s.ilce) + '</cbc:CitySubdivisionName>\n' +
+    '\t\t\t\t<cbc:CityName>' + edmXmlEscape_(s.il) + '</cbc:CityName>\n' +
+    '\t\t\t\t<cac:Country><cbc:IdentificationCode>TR</cbc:IdentificationCode><cbc:Name>Türkiye</cbc:Name></cac:Country>\n' +
+    '\t\t\t</cac:PostalAddress>\n' +
+    '\t\t\t<cac:PartyTaxScheme><cac:TaxScheme><cbc:Name>' + edmXmlEscape_(s.vergiDairesi) + '</cbc:Name></cac:TaxScheme></cac:PartyTaxScheme>\n' +
+    '\t\t</cac:Party>\n' +
+    '\t</cac:AccountingSupplierParty>\n' +
+    '\t<cac:AccountingCustomerParty>\n' +
+    '\t\t<cac:Party>\n' +
+    '\t\t\t<cac:PartyIdentification><cbc:ID schemeID="VKN">' + p.aliciVkn + '</cbc:ID></cac:PartyIdentification>\n' +
+    '\t\t\t<cac:PartyName><cbc:Name>' + edmXmlEscape_(p.aliciUnvan) + '</cbc:Name></cac:PartyName>\n' +
+    '\t\t\t<cac:PostalAddress>\n' +
+    '\t\t\t\t<cbc:BuildingName/>\n' +
+    '\t\t\t\t<cbc:CitySubdivisionName/>\n' +
+    '\t\t\t\t<cbc:CityName/>\n' +
+    '\t\t\t\t<cac:Country><cbc:IdentificationCode>TR</cbc:IdentificationCode><cbc:Name>Türkiye</cbc:Name></cac:Country>\n' +
+    '\t\t\t</cac:PostalAddress>\n' +
+    '\t\t</cac:Party>\n' +
+    '\t</cac:AccountingCustomerParty>\n' +
+    '\t<cac:TaxTotal>\n' +
+    '\t\t<cbc:TaxAmount currencyID="TRY">' + p.kdvToplam.toFixed(2) + '</cbc:TaxAmount>\n' +
+    '\t\t<cac:TaxSubtotal>\n' +
+    '\t\t\t<cbc:TaxableAmount currencyID="TRY">' + p.araToplam.toFixed(2) + '</cbc:TaxableAmount>\n' +
+    '\t\t\t<cbc:TaxAmount currencyID="TRY">' + p.kdvToplam.toFixed(2) + '</cbc:TaxAmount>\n' +
+    '\t\t\t<cbc:CalculationSequenceNumeric>1</cbc:CalculationSequenceNumeric>\n' +
+    '\t\t\t<cbc:Percent>' + (p.kalemler[0] ? p.kalemler[0].kdvOrani : 20) + '</cbc:Percent>\n' +
+    '\t\t\t<cac:TaxCategory><cac:TaxScheme><cbc:Name>KDV GERCEK</cbc:Name><cbc:TaxTypeCode>0015</cbc:TaxTypeCode></cac:TaxScheme></cac:TaxCategory>\n' +
+    '\t\t</cac:TaxSubtotal>\n' +
+    '\t</cac:TaxTotal>\n' +
+    '\t<cac:LegalMonetaryTotal>\n' +
+    '\t\t<cbc:LineExtensionAmount currencyID="TRY">' + p.araToplam.toFixed(2) + '</cbc:LineExtensionAmount>\n' +
+    '\t\t<cbc:TaxExclusiveAmount currencyID="TRY">' + p.araToplam.toFixed(2) + '</cbc:TaxExclusiveAmount>\n' +
+    '\t\t<cbc:TaxInclusiveAmount currencyID="TRY">' + p.genelToplam.toFixed(2) + '</cbc:TaxInclusiveAmount>\n' +
+    '\t\t<cbc:AllowanceTotalAmount currencyID="TRY">0</cbc:AllowanceTotalAmount>\n' +
+    '\t\t<cbc:PayableAmount currencyID="TRY">' + p.genelToplam.toFixed(2) + '</cbc:PayableAmount>\n' +
+    '\t</cac:LegalMonetaryTotal>\n' +
+    satirlarXml + '\n' +
+    '</Invoice>';
+}
+
+// body: { satisId }
+function edmFaturaGonderTest(body) {
+  const ayar = edmAyarlariniAl_();
+  if (!ayar.url || !ayar.user || !ayar.password) {
+    return { ok: false, hata: "EDM bağlantı bilgileri tanımlı değil (Script Özellikleri)." };
+  }
+  if (ayar.url.indexOf("test") === -1) {
+    return { ok: false, hata: "Güvenlik: bu deneme gönderim fonksiyonu sadece TEST ortamı EDM_URL'inde çalışır, canlı ortamda devre dışı." };
+  }
+  const satisId = body.satisId;
+  if (!satisId) return { ok: false, hata: "satisId gerekli" };
+  const detay = getSatisDetay(satisId);
+  if (!detay.ok) return { ok: false, hata: "Satış bulunamadı: " + (detay.hata || "") };
+  if (!detay.kalemler || detay.kalemler.length === 0) {
+    return { ok: false, hata: "Bu faturada hiç kalem yok, gönderilemez." };
+  }
+
+  try {
+    const sessionId = edmLogin_(ayar);
+    const kendi = edmVknBilgiAl_(ayar, sessionId, EDM_SELLER.vkn);
+    if (!kendi) return { ok: false, hata: "Kendi VKN'niz (" + EDM_SELLER.vkn + ") test ortamında e-Fatura mükellefi olarak bulunamadı, gönderim yapılamaz." };
+    const alici = edmVknBilgiAl_(ayar, sessionId, EDM_TEST_ALICI_VKN);
+    if (!alici) return { ok: false, hata: "EDM test alıcısı (" + EDM_TEST_ALICI_VKN + ") bulunamadı." };
+
+    const now = new Date();
+    const xmlParams = {
+      uuid: Utilities.getUuid(),
+      tarih: Utilities.formatDate(now, "Europe/Istanbul", "yyyy-MM-dd"),
+      saat: Utilities.formatDate(now, "Europe/Istanbul", "HH:mm:ss"),
+      aliciVkn: EDM_TEST_ALICI_VKN,
+      aliciUnvan: alici.title || "EDM Test Mükellefi",
+      kalemler: detay.kalemler.map(function(k) {
+        return {
+          urunAdi: k.urunAdi, miktar: k.miktar, birim: k.birim,
+          birimFiyat: k.birimFiyat, tutar: k.tutar - (k.iskontoTutari || 0),
+          kdvOrani: k.kdvOrani, kdvTutari: k.kdvTutari,
+        };
+      }),
+      araToplam: detay.satis.toplamlar.araToplam,
+      kdvToplam: detay.satis.toplamlar.kdvToplam,
+      genelToplam: detay.satis.toplamlar.genelToplam,
+    };
+    const invoiceXml = edmFaturaXmlOlustur_(xmlParams);
+    const contentB64 = Utilities.base64Encode(invoiceXml, Utilities.Charset.UTF_8);
+
+    const kanal = "TEST";
+    const soapBody = '<SendInvoiceRequest xmlns="http://tempuri.org/">' +
+      edmRequestHeaderBlock_(sessionId, kanal) +
+      '<RECEIVER xmlns="" vkn="' + EDM_TEST_ALICI_VKN + '" alias="' + edmXmlEscape_(alici.alias) + '"/>' +
+      '<INVOICE xmlns="" TRXID="0">' +
+      '<HEADER>' +
+      '<SENDER>' + EDM_SELLER.vkn + '</SENDER>' +
+      '<RECEIVER>' + EDM_TEST_ALICI_VKN + '</RECEIVER>' +
+      '<FROM>' + edmXmlEscape_(kendi.alias) + '</FROM>' +
+      '<TO>' + edmXmlEscape_(alici.alias) + '</TO>' +
+      '<INTERNETSALES>false</INTERNETSALES>' +
+      '<EARCHIVE>false</EARCHIVE>' +
+      '</HEADER>' +
+      '<CONTENT>' + contentB64 + '</CONTENT>' +
+      '</INVOICE>' +
+      '</SendInvoiceRequest>';
+
+    const xml = edmSoapCagir_(ayar.url, "SendInvoiceRequest", soapBody);
+    if (xml.indexOf("Fault") > -1 || xml.indexOf("faultstring") > -1) {
+      return { ok: false, hata: "EDM SendInvoice hatası: " + edmXmlDegeri_(xml, "faultstring"), gonderilenXml: invoiceXml };
+    }
+    const returnCode = edmXmlDegeri_(xml, "RETURN_CODE");
+    const status = edmXmlDegeri_(xml, "STATUS");
+    const invoiceId = edmXmlDegeri_(xml, "ID"); // NOT: aynı isimde başka ID etiketleri de olabilir, teşhis amaçlı
+    if (returnCode !== "0") {
+      return { ok: false, hata: "EDM RETURN_CODE=" + returnCode + " (başarısız). Yanıt: " + xml.substring(0, 500) };
+    }
+    return { ok: true, durum: status || "Gönderildi", aliciUnvan: alici.title, ozetXml: xml.substring(0, 800) };
+  } catch (err) {
+    return { ok: false, hata: "EDM gönderim hatası: " + err.message };
   }
 }
 

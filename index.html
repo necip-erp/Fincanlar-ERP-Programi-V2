@@ -2636,6 +2636,7 @@ function satisDetayCiz(res){
       ${siparis && s.siparisDurumu !== "Muhasebelendi" ? `<button class="btn btn-primary" onclick="siparisFaturaModalAc('${s.id}')">🧾 Fatura Oluştur</button>` : ''}
       ${(s.belgeTipi==='Sipariş'||s.belgeTipi==='Teklif') ? `<button class="btn btn-primary" onclick="satisDuzenleAc('${s.id}')">✏️ Düzenle</button>` : ''}
       <button class="btn btn-primary" onclick="satisFisYazdir('${s.id}')">🖨 Yazdır</button>
+      ${s.belgeTipi==='Fatura' ? `<button class="btn" title="EDM test ortamına DENEME e-Fatura gönderimi (test alıcısına)" onclick="satisEdmTestGonder('${s.id}')">🧪 EDM'e Test Gönder</button>` : ''}
       <button class="btn btn-danger" onclick="satisSilOnay('${s.id}')">🗑 Satışı Sil</button>
     </div>
     <table class="hareket-tbl">
@@ -2841,6 +2842,18 @@ function satisFisYazdir(id){
   cariApi("getSatisDetay", {satisId:id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     belgeFormuYazdir(res);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// EDM test ortamına DENEME e-Fatura gönderimi. Faturanın gerçek kalem/tutar
+// bilgileri kullanılır ama alıcı, backend tarafından her zaman EDM'in kendi
+// test mükellefine (3230512384) yönlendirilir — gerçek cariye ASLA gönderilmez.
+// Backend ayrıca sadece EDM_URL "test" içerdiğinde çalışır, canlıda reddeder.
+function satisEdmTestGonder(id){
+  if(!confirm("Bu faturanın kalem/tutar bilgileriyle EDM TEST ortamına bir DENEME e-Fatura gönderimi yapılacak (alıcı: EDM'in test mükellefi, gerçek cariniz DEĞİL). Devam edilsin mi?")) return;
+  cariApi("edmFaturaGonderTest", {satisId:id}).then(res=>{
+    if(!res.ok){ alert("EDM gönderim hatası:\n\n"+(res.hata||"bilinmiyor")); return; }
+    alert("✅ EDM'e deneme gönderimi başarılı.\n\nAlıcı: "+(res.aliciUnvan||"—")+"\nDurum: "+(res.durum||"—"));
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
