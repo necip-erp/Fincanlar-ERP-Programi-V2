@@ -5208,14 +5208,37 @@ function edmVknBilgiAl_(ayar, sessionId, vkn) {
 // Giriş yapılan HESABIN kendi kayıtlı alias'larını döndürür (GetUserList).
 // GB (Gönderici Birim) varsa onu, yoksa PK (Posta Kutusu) varsa onu, yoksa
 // ilk kaydı döner: { identifier, alias, title, unit } veya null.
+//
+// ÖNEMLİ: EDM, GetUserList'i HESAP BAŞINA 240 DAKİKADA (4 saatte) BİR kez
+// çağırmaya izin veriyor — daha sık çağrılırsa Fault döner. Bu yüzden sonuç
+// ALINDIĞI ANDA Script Properties'e (EDM_OWN_IDENTIFIER/ALIAS/TITLE/UNIT)
+// KALICI olarak yazılır ve bir sonraki çağrılarda API'ye hiç gidilmez —
+// sadece bu üç özellik silinirse tekrar API'den çekilir. Kota anda dolu
+// çıkarsa, bu üç özellik test portalından (test.edmbilisim.com.tr/EFaturaUI21ea)
+// bakılıp Script Properties'e ELLE de girilebilir, GetUserList beklemeye
+// gerek kalmadan.
 function edmKendiBilgimiAl_(ayar, sessionId) {
+  const p = PropertiesService.getScriptProperties();
+  const cachedId = p.getProperty("EDM_OWN_IDENTIFIER");
+  if (cachedId) {
+    return {
+      identifier: cachedId,
+      alias: p.getProperty("EDM_OWN_ALIAS") || "",
+      title: p.getProperty("EDM_OWN_TITLE") || "",
+      unit: p.getProperty("EDM_OWN_UNIT") || "",
+    };
+  }
   const kanal = ayar.url.indexOf("test") > -1 ? "TEST" : "PROD";
   const body = '<GetUserListRequest xmlns="http://tempuri.org/">' +
     edmRequestHeaderBlock_(sessionId, kanal) +
     '</GetUserListRequest>';
   const xml = edmSoapCagir_(ayar.url, "GetUserListRequest", body);
   if (xml.indexOf("Fault") > -1 || xml.indexOf("faultstring") > -1) {
-    throw new Error("GetUserList hatası: " + edmXmlDegeri_(xml, "faultstring"));
+    throw new Error("GetUserList hatası: " + edmXmlDegeri_(xml, "faultstring") +
+      " — EDM bu servisi 240 dakikada bir kez çağırmaya izin veriyor. Beklemek yerine, " +
+      "test portalından (test.edmbilisim.com.tr/EFaturaUI21ea) kendi VKN/alias bilginizi " +
+      "bulup Script Özellikleri'ne EDM_OWN_IDENTIFIER / EDM_OWN_ALIAS / EDM_OWN_TITLE olarak " +
+      "elle girebilirsiniz.");
   }
   const re = /<IDENTIFIER>([^<]*)<\/IDENTIFIER>\s*<ALIAS>([^<]*)<\/ALIAS>\s*<TITLE>([^<]*)<\/TITLE>\s*<TYPE>([^<]*)<\/TYPE>\s*<REGISTER_TIME>([^<]*)<\/REGISTER_TIME>\s*<UNIT>([^<]*)<\/UNIT>/g;
   const kayitlar = [];
@@ -5224,9 +5247,16 @@ function edmKendiBilgimiAl_(ayar, sessionId) {
     kayitlar.push({ identifier: m[1], alias: m[2], title: m[3], unit: m[6] });
   }
   if (kayitlar.length === 0) return null;
-  return kayitlar.find(function(k){ return k.unit === "GB"; })
+  const secilen = kayitlar.find(function(k){ return k.unit === "GB"; })
       || kayitlar.find(function(k){ return k.unit === "PK"; })
       || kayitlar[0];
+  p.setProperties({
+    EDM_OWN_IDENTIFIER: secilen.identifier,
+    EDM_OWN_ALIAS: secilen.alias,
+    EDM_OWN_TITLE: secilen.title,
+    EDM_OWN_UNIT: secilen.unit,
+  });
+  return secilen;
 }
 
 // UBL-TR 1.2 TEMELFATURA XML'i oluşturur. p: { uuid, tarih(yyyy-MM-dd), saat(HH:mm:ss),
