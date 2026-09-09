@@ -870,6 +870,13 @@ function ensureSatisBelgeTipiColonu(sheet) {
   if (String(h16 || "") !== "SIPARIS_NO") {
     sheet.getRange(1, 16).setValue("SIPARIS_NO").setFontWeight("bold").setBackground("#e8edf5");
   }
+  // EDM'e gönderilen e-Fatura'nın GİB'e bildirilen resmi fatura numarası (ör.
+  // FYT2026000000001) — gönderim BAŞARILI olduktan sonra buraya yazılır, ERP ile
+  // GİB kaydı arasında numara tutarlılığı sağlanır.
+  const h17 = sheet.getRange(1, 17).getValue();
+  if (String(h17 || "") !== "EFATURA_NO") {
+    sheet.getRange(1, 17).setValue("EFATURA_NO").setFontWeight("bold").setBackground("#e8edf5");
+  }
 }
 
 // SatisKalemleri sayfası daha önce ISKONTO_YUZDE / KDV_ORANI sütunları olmadan
@@ -1003,6 +1010,7 @@ function getSatisDetay(satisId) {
         tutarIskontosu: parseFloat(data[i][13]) || 0,
         tutarIskontoKdvSonra: String(data[i][14]) !== "0",
         siparisNo: String(data[i][15] || ""),
+        efaturaNo: String(data[i][16] || ""),
       };
       break;
     }
@@ -5259,12 +5267,43 @@ function edmKendiBilgimiAl_(ayar, sessionId) {
   return secilen;
 }
 
-// GİB formatında geçerli bir fatura numarası üretir: 3 harf + 4 haneli yıl + 9 haneli
-// sıra no (örn. FYT2026123456789) — DENEME gönderimleri için her seferinde benzersiz.
+// GİB formatında GERÇEK/KALICI SIRALI bir e-Fatura numarası üretir: 3 harf (seri) +
+// 4 haneli yıl + 9 haneli sıra no. GİB kuralı: sıra numarasında ASLA boşluk/atlama
+// olmamalı — bu yüzden LockService ile eşzamanlılık korumalı, Script Properties'te
+// (EDM_FATURA_SERI, EDM_FATURA_SAYAC_<yıl>) KALICI olarak tutuluyor. Her çağrıda +1
+// artar, asla geriye sarılmaz/tekrar kullanılmaz.
 function edmFaturaNoUret_() {
-  const yil = new Date().getFullYear();
-  const siraNo = String(Date.now()).slice(-9).padStart(9, "0");
-  return "FYT" + yil + siraNo;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const p = PropertiesService.getScriptProperties();
+    const seri = p.getProperty("EDM_FATURA_SERI") || "FYT";
+    const yil = new Date().getFullYear();
+    const anahtar = "EDM_FATURA_SAYAC_" + yil;
+    const oncekiSayac = parseInt(p.getProperty(anahtar) || "0", 10);
+    const yeniSayac = oncekiSayac + 1;
+    p.setProperty(anahtar, String(yeniSayac));
+    const siraNo = String(yeniSayac).padStart(9, "0");
+    return seri + yil + siraNo;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Başarılı EDM gönderiminden sonra üretilen resmi e-Fatura numarasını Satış
+// kaydına geri yazar (ERP ile GİB kaydı arasında numara tutarlılığı için).
+function satisEfaturaNoKaydet_(satisId, efaturaNo) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  const data = sSheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(satisId)) {
+      sSheet.getRange(i + 1, 17).setValue(efaturaNo);
+      return true;
+    }
+  }
+  return false;
 }
 
 // UBL-TR 1.2 TEMELFATURA XML'i oluşturur. p: { uuid, tarih(yyyy-MM-dd), saat(HH:mm:ss),
@@ -5437,7 +5476,8 @@ function edmFaturaGonderTest(body) {
     if (returnCode !== "0") {
       return { ok: false, hata: "EDM RETURN_CODE=" + returnCode + " (başarısız). Yanıt: " + xml.substring(0, 500) };
     }
-    return { ok: true, durum: status || "Gönderildi", aliciUnvan: alici.title, ozetXml: xml.substring(0, 800) };
+    satisEfaturaNoKaydet_(satisId, xmlParams.faturaNo);
+    return { ok: true, durum: status || "Gönderildi", aliciUnvan: alici.title, efaturaNo: xmlParams.faturaNo, ozetXml: xml.substring(0, 800) };
   } catch (err) {
     return { ok: false, hata: "EDM gönderim hatası: " + err.message };
   }

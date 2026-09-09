@@ -2630,6 +2630,7 @@ function satisDetayCiz(res){
       ${s.siparisDurumu!=='Muhasebelendi'&&s.siparisDurumu!=='Kısmen Faturalandı' ? `<button class="btn" style="padding:6px 12px" onclick="siparisDurumKaydet('${s.id}')">Güncelle</button>` : ''}
     </div>` : ''}
     ${s.siparisNo ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Sipariş No</div><div class="v">${s.siparisNo}</div></div></div>` : ""}
+    ${s.efaturaNo ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">E-Fatura No</div><div class="v">${s.efaturaNo}</div></div></div>` : ""}
     ${s.kaynakSiparisId ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Kaynak</div><div class="v">Sipariş'ten aktarıldı</div></div></div>` : ""}
     ${s.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${s.aciklama}</div></div></div>` : ""}
     <div class="btnrow">
@@ -2853,7 +2854,7 @@ function satisEdmTestGonder(id){
   if(!confirm("Bu faturanın kalem/tutar bilgileriyle EDM TEST ortamına bir DENEME e-Fatura gönderimi yapılacak (alıcı: EDM'in test mükellefi, gerçek cariniz DEĞİL). Devam edilsin mi?")) return;
   cariApi("edmFaturaGonderTest", {satisId:id}).then(res=>{
     if(!res.ok){ alert("EDM gönderim hatası:\n\n"+(res.hata||"bilinmiyor")); return; }
-    alert("✅ EDM'e deneme gönderimi başarılı.\n\nAlıcı: "+(res.aliciUnvan||"—")+"\nDurum: "+(res.durum||"—"));
+    alert("✅ EDM'e deneme gönderimi başarılı.\n\nAlıcı: "+(res.aliciUnvan||"—")+"\nE-Fatura No: "+(res.efaturaNo||"—")+"\nDurum: "+(res.durum||"—"));
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
