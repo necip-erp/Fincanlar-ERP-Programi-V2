@@ -5021,22 +5021,134 @@ function plasiyerSiraGuncelle(body) {
 }
 
 // ════════════════════════════════════════════════
-// EDM/e-FATURA SORGULAMA — PLACEHOLDER. Mevcut (Akınsoft) sistemde VKN/TCKN
-// girilip "sistemden veri çek" dendiğinde firmanın e-Fatura mı e-Arşiv mi
-// olduğu otomatik sorgulanıp cariye işleniyor; aynı davranış burada da
-// istendi. EDM Bilişim'den test ortamı/API bilgileri henüz alınamadığı için
-// bu fonksiyon şimdilik GERÇEK BİR SORGU YAPMAZ — sadece net bir hata döner.
-// EDM API bilgileri elimize geçince: body.vergiNo ile EDM'in mükellef sorgu
-// servisi (örn. GİB kullanıcı listesi / gibuser sorgusu) çağrılıp sonucuna
-// göre { ok:true, eFatura:"Evet"|"Hayır", eArsiv:"Evet"|"Hayır" } dönülecek.
+// EDM E-FATURA WEB SERVİSİ (SOAP) — VKN/TCKN'ye göre GİB e-Fatura mükellefi
+// sorgusu. Akış: LOGIN (USER_NAME+PASSWORD → SESSION_ID, 20 dk cache'lenir)
+// → CHECK USER (IDENTIFIER=VKN/TCKN). GİB e-Fatura listesinde bulunursa
+// eFatura="Evet"/eArsiv="Hayır", bulunamazsa tam tersi (e-Arşiv varsayımı).
+// SADECE SORGU YAPAR — Sheets'e hiçbir yazma işlemi yoktur, bu yüzden veri
+// kaybı riski taşımaz.
+//
+// GÜVENLİK: Kullanıcı adı/şifre koda YAZILMAZ. Apps Script projesinde
+// Proje Ayarları (⚙️) > Script Özellikleri (Script Properties) kısmından
+// elle girilmesi gerekir:
+//   EDM_URL       → Test: https://test.edmbilisim.com.tr/EFaturaEDM21ea/EFaturaEDM.svc
+//                   Canlı: https://portal2.edmbilisim.com.tr/EFaturaEDM/EFaturaEDM.svc
+//   EDM_USER      → EDM'den gelen web servis kullanıcı adı
+//   EDM_PASSWORD  → EDM'den gelen web servis şifresi
+// (Akınsoft'ta kullanılan kullanıcıyla AYNISI kullanılmamalı — EDM'in
+// önerisi budur, aksi halde biri girince diğerinden oturum düşer.)
+// ════════════════════════════════════════════════
+
+function edmAyarlariniAl_() {
+  const p = PropertiesService.getScriptProperties();
+  return {
+    url: (p.getProperty("EDM_URL") || "").trim(),
+    user: (p.getProperty("EDM_USER") || "").trim(),
+    password: (p.getProperty("EDM_PASSWORD") || "").trim(),
+  };
+}
+
+function edmRequestHeaderBlock_(sessionId, kanal) {
+  return '<REQUEST_HEADER xmlns="">' +
+    '<SESSION_ID>' + sessionId + '</SESSION_ID>' +
+    '<CLIENT_TXN_ID>' + Utilities.getUuid() + '</CLIENT_TXN_ID>' +
+    '<ACTION_DATE>' + Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd'T'HH:mm:ss.SSS") + '</ACTION_DATE>' +
+    '<REASON>Fincanlar ERP cari e-Fatura sorgulama</REASON>' +
+    '<APPLICATION_NAME>Fincanlar ERP</APPLICATION_NAME>' +
+    '<HOSTNAME>AppsScript</HOSTNAME>' +
+    '<CHANNEL_NAME>' + kanal + '</CHANNEL_NAME>' +
+    '<COMPRESSED>N</COMPRESSED>' +
+    '</REQUEST_HEADER>';
+}
+
+function edmSoapCagir_(url, soapAction, bodyXml) {
+  const envelope = '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">' +
+    '<s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">' +
+    bodyXml +
+    '</s:Body></s:Envelope>';
+  const resp = UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "text/xml; charset=utf-8",
+    headers: { SoapAction: soapAction },
+    payload: envelope,
+    muteHttpExceptions: true,
+  });
+  return resp.getContentText();
+}
+
+function edmXmlDegeri_(xml, etiket) {
+  const m = xml.match(new RegExp("<" + etiket + "[^>]*>([\\s\\S]*?)</" + etiket + ">"));
+  return m ? m[1].trim() : "";
+}
+
+// SESSION_ID'yi 20 dk cache'ler; her sorguda yeniden login atmayı önler.
+function edmLogin_(ayar) {
+  const kanal = ayar.url.indexOf("test") > -1 ? "TEST" : "PROD";
+  const cache = CacheService.getScriptCache();
+  const cacheKey = "edm_session_" + kanal;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  const body = '<LoginRequest xmlns="http://tempuri.org/">' +
+    edmRequestHeaderBlock_("0", kanal) +
+    '<USER_NAME xmlns="">' + ayar.user + '</USER_NAME>' +
+    '<PASSWORD xmlns="">' + ayar.password + '</PASSWORD>' +
+    '</LoginRequest>';
+  const xml = edmSoapCagir_(ayar.url, "LoginRequest", body);
+  if (xml.indexOf("Fault") > -1 || xml.indexOf("faultstring") > -1) {
+    throw new Error("EDM Login reddetti (kullanıcı adı/şifre veya URL hatalı olabilir): " + edmXmlDegeri_(xml, "faultstring"));
+  }
+  const sessionId = edmXmlDegeri_(xml, "SESSION_ID");
+  if (!sessionId) throw new Error("EDM Login yanıtı beklenmedik: " + xml.substring(0, 300));
+  cache.put(cacheKey, sessionId, 1200); // 20 dk
+  return sessionId;
+}
+
+function edmCheckUserXml_(ayar, sessionId, identifier) {
+  const kanal = ayar.url.indexOf("test") > -1 ? "TEST" : "PROD";
+  const body = '<CheckUserRequest xmlns="http://tempuri.org/">' +
+    edmRequestHeaderBlock_(sessionId, kanal) +
+    '<USER xmlns=""><IDENTIFIER>' + identifier + '</IDENTIFIER></USER>' +
+    '</CheckUserRequest>';
+  return edmSoapCagir_(ayar.url, "CheckUserRequest", body);
+}
+
 // body: { vergiNo }
 function edmCariSorgula(body) {
-  const vergiNo = String(body.vergiNo || "").trim();
+  const vergiNoHam = String(body.vergiNo || "").trim();
+  const vergiNo = vergiNoHam.replace(/[^0-9]/g, "");
   if (!vergiNo) return { ok: false, hata: "Vergi/Kimlik No gerekli" };
-  return {
-    ok: false,
-    hata: "EDM bağlantı bilgileri henüz tanımlı değil. Test ortamı/API bilgileri alındıktan sonra bu buton VKN/TCKN'ye göre otomatik e-Fatura/e-Arşiv sorgusu yapacaktır. Şimdilik seçimi elle yapın."
-  };
+  if (vergiNo.length !== 10 && vergiNo.length !== 11) {
+    return { ok: false, hata: "Vergi/Kimlik No 10 (VKN) veya 11 (TCKN) haneli olmalı." };
+  }
+  const ayar = edmAyarlariniAl_();
+  if (!ayar.url || !ayar.user || !ayar.password) {
+    return {
+      ok: false,
+      hata: "EDM bağlantı bilgileri tanımlı değil. Apps Script projesinde Proje Ayarları > Script Özellikleri kısmına EDM_URL, EDM_USER, EDM_PASSWORD eklenmesi gerekiyor."
+    };
+  }
+  try {
+    let sessionId = edmLogin_(ayar);
+    let xml = edmCheckUserXml_(ayar, sessionId, vergiNo);
+    // Oturum süresi dolmuş olabilir (fault) — cache'i temizleyip bir kez daha dene.
+    if (xml.indexOf("Fault") > -1 || xml.indexOf("faultstring") > -1) {
+      const kanal = ayar.url.indexOf("test") > -1 ? "TEST" : "PROD";
+      CacheService.getScriptCache().remove("edm_session_" + kanal);
+      sessionId = edmLogin_(ayar);
+      xml = edmCheckUserXml_(ayar, sessionId, vergiNo);
+    }
+    if (xml.indexOf("Fault") > -1 || xml.indexOf("faultstring") > -1) {
+      return { ok: false, hata: "EDM sorgu hatası: " + edmXmlDegeri_(xml, "faultstring") };
+    }
+    const alias = edmXmlDegeri_(xml, "ALIAS");
+    if (alias) {
+      return { ok: true, eFatura: "Evet", eArsiv: "Hayır", unvan: edmXmlDegeri_(xml, "TITLE") };
+    }
+    return { ok: true, eFatura: "Hayır", eArsiv: "Evet" };
+  } catch (err) {
+    return { ok: false, hata: "EDM sorgu hatası: " + err.message };
+  }
 }
 
 // ════════════════════════════════════════════════
