@@ -2452,6 +2452,10 @@ function cmEdmSorgula(){
     if(!res.ok){ alert(res.hata||"Sorgulanamadı."); return; }
     document.getElementById("cm-efatura").value = res.eFatura || "Hayır";
     document.getElementById("cm-earsiv").value = res.eArsiv || "Hayır";
+    const mesaj = res.eFatura === "Evet"
+      ? "✅ Bu VKN/TCKN GİB e-Fatura mükellefleri listesinde KAYITLI.\n\nE-Fatura Mükellefi: Evet"+(res.unvan?("\nUnvan: "+res.unvan):"")
+      : "ℹ️ Bu VKN/TCKN GİB e-Fatura mükellefleri listesinde bulunamadı.\n\nE-Fatura Mükellefi: Hayır\nE-Arşiv Mükellefi: Evet olarak işaretlendi.\n\n(Not: EDM'in bu sorgusu sadece GİB e-Fatura kaydını kontrol eder; bu VKN ile daha önce fatura alışverişi/işlem yapılıp yapılmadığını göstermez.)";
+    alert(mesaj);
     if(res.unvan){
       const adInput = document.getElementById("cm-ad");
       if(!adInput.value.trim()){
