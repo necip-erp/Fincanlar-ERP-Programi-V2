@@ -5259,6 +5259,14 @@ function edmKendiBilgimiAl_(ayar, sessionId) {
   return secilen;
 }
 
+// GİB formatında geçerli bir fatura numarası üretir: 3 harf + 4 haneli yıl + 9 haneli
+// sıra no (örn. FYT2026123456789) — DENEME gönderimleri için her seferinde benzersiz.
+function edmFaturaNoUret_() {
+  const yil = new Date().getFullYear();
+  const siraNo = String(Date.now()).slice(-9).padStart(9, "0");
+  return "FYT" + yil + siraNo;
+}
+
 // UBL-TR 1.2 TEMELFATURA XML'i oluşturur. p: { uuid, tarih(yyyy-MM-dd), saat(HH:mm:ss),
 //   aliciVkn, aliciUnvan, kalemler:[{urunAdi,miktar,birim,birimFiyat,tutar,kdvOrani,kdvTutari}],
 //   araToplam, kdvToplam, genelToplam }
@@ -5300,7 +5308,7 @@ function edmFaturaXmlOlustur_(p) {
     '\t<cbc:UBLVersionID>2.1</cbc:UBLVersionID>\n' +
     '\t<cbc:CustomizationID>TR1.2</cbc:CustomizationID>\n' +
     '\t<cbc:ProfileID>TEMELFATURA</cbc:ProfileID>\n' +
-    '\t<cbc:ID/>\n' +
+    '\t<cbc:ID>' + p.faturaNo + '</cbc:ID>\n' +
     '\t<cbc:CopyIndicator>false</cbc:CopyIndicator>\n' +
     '\t<cbc:UUID>' + p.uuid + '</cbc:UUID>\n' +
     '\t<cbc:IssueDate>' + p.tarih + '</cbc:IssueDate>\n' +
@@ -5382,6 +5390,7 @@ function edmFaturaGonderTest(body) {
     const now = new Date();
     const xmlParams = {
       uuid: Utilities.getUuid(),
+      faturaNo: edmFaturaNoUret_(),
       tarih: Utilities.formatDate(now, "Europe/Istanbul", "yyyy-MM-dd"),
       saat: Utilities.formatDate(now, "Europe/Istanbul", "HH:mm:ss"),
       saticiVkn: kendi.identifier,
