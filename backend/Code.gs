@@ -5192,6 +5192,9 @@ function edmBirimKodu_(birim) {
 }
 
 // VKN/TCKN'nin GİB e-Fatura mükellefi kaydını (varsa) döndürür: {alias, title} veya null.
+// NOT: Bu sadece BAŞKALARININ (alıcının) mükellefiyetini kontrol etmek içindir.
+// Kendi hesabımızın alias'ı için CheckUser DEĞİL, GetUserList kullanılmalı — çünkü
+// test hesabının GİB'e kayıtlı VKN'si, firmanın gerçek VKN'sinden FARKLI olabilir.
 function edmVknBilgiAl_(ayar, sessionId, vkn) {
   const xml = edmCheckUserXml_(ayar, sessionId, vkn);
   if (xml.indexOf("Fault") > -1 || xml.indexOf("faultstring") > -1) {
@@ -5202,11 +5205,36 @@ function edmVknBilgiAl_(ayar, sessionId, vkn) {
   return { alias: alias, title: edmXmlDegeri_(xml, "TITLE") };
 }
 
+// Giriş yapılan HESABIN kendi kayıtlı alias'larını döndürür (GetUserList).
+// GB (Gönderici Birim) varsa onu, yoksa PK (Posta Kutusu) varsa onu, yoksa
+// ilk kaydı döner: { identifier, alias, title, unit } veya null.
+function edmKendiBilgimiAl_(ayar, sessionId) {
+  const kanal = ayar.url.indexOf("test") > -1 ? "TEST" : "PROD";
+  const body = '<GetUserListRequest xmlns="http://tempuri.org/">' +
+    edmRequestHeaderBlock_(sessionId, kanal) +
+    '</GetUserListRequest>';
+  const xml = edmSoapCagir_(ayar.url, "GetUserListRequest", body);
+  if (xml.indexOf("Fault") > -1 || xml.indexOf("faultstring") > -1) {
+    throw new Error("GetUserList hatası: " + edmXmlDegeri_(xml, "faultstring"));
+  }
+  const re = /<IDENTIFIER>([^<]*)<\/IDENTIFIER>\s*<ALIAS>([^<]*)<\/ALIAS>\s*<TITLE>([^<]*)<\/TITLE>\s*<TYPE>([^<]*)<\/TYPE>\s*<REGISTER_TIME>([^<]*)<\/REGISTER_TIME>\s*<UNIT>([^<]*)<\/UNIT>/g;
+  const kayitlar = [];
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    kayitlar.push({ identifier: m[1], alias: m[2], title: m[3], unit: m[6] });
+  }
+  if (kayitlar.length === 0) return null;
+  return kayitlar.find(function(k){ return k.unit === "GB"; })
+      || kayitlar.find(function(k){ return k.unit === "PK"; })
+      || kayitlar[0];
+}
+
 // UBL-TR 1.2 TEMELFATURA XML'i oluşturur. p: { uuid, tarih(yyyy-MM-dd), saat(HH:mm:ss),
 //   aliciVkn, aliciUnvan, kalemler:[{urunAdi,miktar,birim,birimFiyat,tutar,kdvOrani,kdvTutari}],
 //   araToplam, kdvToplam, genelToplam }
 function edmFaturaXmlOlustur_(p) {
   const s = EDM_SELLER;
+  const saticiVkn = p.saticiVkn || s.vkn;
   const satirlarXml = p.kalemler.map(function(k, idx) {
     const birimKodu = edmBirimKodu_(k.birim);
     return '' +
@@ -5253,7 +5281,7 @@ function edmFaturaXmlOlustur_(p) {
     '\t<cbc:LineCountNumeric>' + p.kalemler.length + '</cbc:LineCountNumeric>\n' +
     '\t<cac:AccountingSupplierParty>\n' +
     '\t\t<cac:Party>\n' +
-    '\t\t\t<cac:PartyIdentification><cbc:ID schemeID="VKN">' + s.vkn + '</cbc:ID></cac:PartyIdentification>\n' +
+    '\t\t\t<cac:PartyIdentification><cbc:ID schemeID="VKN">' + saticiVkn + '</cbc:ID></cac:PartyIdentification>\n' +
     '\t\t\t<cac:PartyName><cbc:Name>' + edmXmlEscape_(s.unvan) + '</cbc:Name></cac:PartyName>\n' +
     '\t\t\t<cac:PostalAddress>\n' +
     '\t\t\t\t<cbc:BuildingName>' + edmXmlEscape_(s.adres) + '</cbc:BuildingName>\n' +
@@ -5316,8 +5344,8 @@ function edmFaturaGonderTest(body) {
 
   try {
     const sessionId = edmLogin_(ayar);
-    const kendi = edmVknBilgiAl_(ayar, sessionId, EDM_SELLER.vkn);
-    if (!kendi) return { ok: false, hata: "Kendi VKN'niz (" + EDM_SELLER.vkn + ") test ortamında e-Fatura mükellefi olarak bulunamadı, gönderim yapılamaz." };
+    const kendi = edmKendiBilgimiAl_(ayar, sessionId);
+    if (!kendi) return { ok: false, hata: "GetUserList boş döndü — bu EDM hesabına tanımlı hiç posta kutusu/birim yok görünüyor." };
     const alici = edmVknBilgiAl_(ayar, sessionId, EDM_TEST_ALICI_VKN);
     if (!alici) return { ok: false, hata: "EDM test alıcısı (" + EDM_TEST_ALICI_VKN + ") bulunamadı." };
 
@@ -5326,6 +5354,7 @@ function edmFaturaGonderTest(body) {
       uuid: Utilities.getUuid(),
       tarih: Utilities.formatDate(now, "Europe/Istanbul", "yyyy-MM-dd"),
       saat: Utilities.formatDate(now, "Europe/Istanbul", "HH:mm:ss"),
+      saticiVkn: kendi.identifier,
       aliciVkn: EDM_TEST_ALICI_VKN,
       aliciUnvan: alici.title || "EDM Test Mükellefi",
       kalemler: detay.kalemler.map(function(k) {
@@ -5348,7 +5377,7 @@ function edmFaturaGonderTest(body) {
       '<RECEIVER xmlns="" vkn="' + EDM_TEST_ALICI_VKN + '" alias="' + edmXmlEscape_(alici.alias) + '"/>' +
       '<INVOICE xmlns="" TRXID="0">' +
       '<HEADER>' +
-      '<SENDER>' + EDM_SELLER.vkn + '</SENDER>' +
+      '<SENDER>' + kendi.identifier + '</SENDER>' +
       '<RECEIVER>' + EDM_TEST_ALICI_VKN + '</RECEIVER>' +
       '<FROM>' + edmXmlEscape_(kendi.alias) + '</FROM>' +
       '<TO>' + edmXmlEscape_(alici.alias) + '</TO>' +
