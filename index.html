@@ -2452,6 +2452,16 @@ function cmEdmSorgula(){
     if(!res.ok){ alert(res.hata||"Sorgulanamadı."); return; }
     document.getElementById("cm-efatura").value = res.eFatura || "Hayır";
     document.getElementById("cm-earsiv").value = res.eArsiv || "Hayır";
+    if(res.unvan){
+      const adInput = document.getElementById("cm-ad");
+      if(!adInput.value.trim()){
+        adInput.value = res.unvan;
+      } else if(adInput.value.trim() !== res.unvan.trim()){
+        if(confirm('EDM\'den gelen unvan: "'+res.unvan+'"\n\nAd Soyad / Firma alanını bununla değiştirmek ister misiniz?')){
+          adInput.value = res.unvan;
+        }
+      }
+    }
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 </script>
