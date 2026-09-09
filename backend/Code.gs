@@ -449,6 +449,7 @@ function handleRequest(e) {
       case "plasiyerSiraGuncelle": result = plasiyerSiraGuncelle(body); break;
       case "edmCariSorgula":  result = edmCariSorgula(body); break;
       case "edmFaturaGonderTest": result = edmFaturaGonderTest(body); break;
+      case "edmFaturaDurumSorgula": result = edmFaturaDurumSorgula(body); break;
       case "birimSiraGuncelle":     result = birimSiraGuncelle(body); break;
       case "basitTanimSiraGuncelle": result = basitTanimSiraGuncelle(body); break;
       case "markaSiraGuncelle":     result = markaSiraGuncelle(body); break;
@@ -877,6 +878,18 @@ function ensureSatisBelgeTipiColonu(sheet) {
   if (String(h17 || "") !== "EFATURA_NO") {
     sheet.getRange(1, 17).setValue("EFATURA_NO").setFontWeight("bold").setBackground("#e8edf5");
   }
+  // EDM SendInvoice ile üretilip gönderilen UUID (GİB tekil fatura no) — gönderim
+  // sonrası GetInvoiceStatus ile portal durumunu sorgulamak için gerekli anahtar.
+  const h18 = sheet.getRange(1, 18).getValue();
+  if (String(h18 || "") !== "EFATURA_UUID") {
+    sheet.getRange(1, 18).setValue("EFATURA_UUID").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  // Son sorgulanan portal durumu (GetInvoiceStatus'tan): STATUS_DESCRIPTION +
+  // RESPONSE_DESCRIPTION özet metni, ekranda göstermek için önbelleğe alınır.
+  const h19 = sheet.getRange(1, 19).getValue();
+  if (String(h19 || "") !== "EFATURA_DURUM") {
+    sheet.getRange(1, 19).setValue("EFATURA_DURUM").setFontWeight("bold").setBackground("#e8edf5");
+  }
 }
 
 // SatisKalemleri sayfası daha önce ISKONTO_YUZDE / KDV_ORANI sütunları olmadan
@@ -1011,6 +1024,8 @@ function getSatisDetay(satisId) {
         tutarIskontoKdvSonra: String(data[i][14]) !== "0",
         siparisNo: String(data[i][15] || ""),
         efaturaNo: String(data[i][16] || ""),
+        efaturaUuid: String(data[i][17] || ""),
+        efaturaDurum: String(data[i][18] || ""),
       };
       break;
     }
@@ -5290,20 +5305,99 @@ function edmFaturaNoUret_() {
   }
 }
 
-// Başarılı EDM gönderiminden sonra üretilen resmi e-Fatura numarasını Satış
-// kaydına geri yazar (ERP ile GİB kaydı arasında numara tutarlılığı için).
-function satisEfaturaNoKaydet_(satisId, efaturaNo) {
+// Başarılı EDM gönderiminden sonra üretilen resmi e-Fatura numarasını ve GİB
+// UUID'sini Satış kaydına geri yazar (ERP ile GİB kaydı arasında numara
+// tutarlılığı için, ve UUID sonraki durum sorgulamalarında anahtar olarak kullanılır).
+function satisEfaturaNoKaydet_(satisId, efaturaNo, uuid) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  ensureSatisBelgeTipiColonu(sSheet);
   const data = sSheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(satisId)) {
       sSheet.getRange(i + 1, 17).setValue(efaturaNo);
+      if (uuid) sSheet.getRange(i + 1, 18).setValue(uuid);
       return true;
     }
   }
   return false;
+}
+
+// Bir Satış kaydının daha önce EDM'e gönderilmiş olup olmadığını, gönderilmişse
+// hangi EFATURA_NO / EFATURA_UUID / EFATURA_DURUM ile kaydedildiğini döndürür.
+function satisEfaturaBilgisiAl_(satisId) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  ensureSatisBelgeTipiColonu(sSheet);
+  const data = sSheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(satisId)) {
+      return {
+        rowIndex: i + 1,
+        efaturaNo: String(data[i][16] || ""),
+        uuid: String(data[i][17] || ""),
+        durum: String(data[i][18] || ""),
+      };
+    }
+  }
+  return null;
+}
+
+// Sorgulanan portal durumunu (GetInvoiceStatus'tan gelen özet metni) Satış
+// kaydına önbelleğe alır — her açılışta tekrar sorgu atmamak için.
+function satisEfaturaDurumKaydet_(rowIndex, durumMetni) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  sSheet.getRange(rowIndex, 19).setValue(durumMetni);
+}
+
+// body: { satisId }  — EDM'e daha önce gönderilmiş bir faturanın GİB/portal
+// durumunu GetInvoiceStatus ile sorgular (zarf durumu, GİB durum kodu, ticari
+// kabul/red yanıtı). Sonucu Satış kaydına özet olarak önbelleğe alır.
+function edmFaturaDurumSorgula(body) {
+  const ayar = edmAyarlariniAl_();
+  if (!ayar.url || !ayar.user || !ayar.password) {
+    return { ok: false, hata: "EDM bağlantı bilgileri tanımlı değil (Script Özellikleri)." };
+  }
+  const satisId = body.satisId;
+  if (!satisId) return { ok: false, hata: "satisId gerekli" };
+  const kayit = satisEfaturaBilgisiAl_(satisId);
+  if (!kayit) return { ok: false, hata: "Satış bulunamadı." };
+  if (!kayit.uuid) {
+    return { ok: false, hata: "Bu fatura henüz EDM'e gönderilmemiş (kayıtlı UUID yok)." };
+  }
+  try {
+    const sessionId = edmLogin_(ayar);
+    const kanal = ayar.url.indexOf("test") > -1 ? "TEST" : "PROD";
+    const soapBody = '<GetInvoiceStatusRequest xmlns="http://tempuri.org/">' +
+      edmRequestHeaderBlock_(sessionId, kanal) +
+      '<INVOICE xmlns=""><UUID>' + edmXmlEscape_(kayit.uuid) + '</UUID></INVOICE>' +
+      '</GetInvoiceStatusRequest>';
+    const xml = edmSoapCagir_(ayar.url, "GetInvoiceStatusRequest", soapBody);
+    if (xml.indexOf("Fault") > -1 || xml.indexOf("faultstring") > -1) {
+      return { ok: false, hata: "EDM GetInvoiceStatus hatası: " + edmXmlDegeri_(xml, "faultstring") };
+    }
+    const sonuc = {
+      ok: true,
+      efaturaNo: kayit.efaturaNo,
+      uuid: kayit.uuid,
+      status: edmXmlDegeri_(xml, "STATUS"),
+      statusAciklama: edmXmlDegeri_(xml, "STATUS_DESCRIPTION"),
+      gibDurumKodu: edmXmlDegeri_(xml, "GIB_STATUS_CODE"),
+      gibDurumAciklama: edmXmlDegeri_(xml, "GIB_STATUS_DESCRIPTION"),
+      yanitKodu: edmXmlDegeri_(xml, "RESPONSE_CODE"),
+      yanitAciklama: edmXmlDegeri_(xml, "RESPONSE_DESCRIPTION"),
+    };
+    const ozetParcalar = [sonuc.statusAciklama, sonuc.gibDurumAciklama, sonuc.yanitAciklama].filter(function(x){ return x; });
+    sonuc.ozet = ozetParcalar.length ? ozetParcalar.join(" — ") : "Durum bilgisi henüz yok";
+    satisEfaturaDurumKaydet_(kayit.rowIndex, sonuc.ozet);
+    return sonuc;
+  } catch (err) {
+    return { ok: false, hata: "EDM durum sorgusu hatası: " + err.message };
+  }
 }
 
 // UBL-TR 1.2 TEMELFATURA XML'i oluşturur. p: { uuid, tarih(yyyy-MM-dd), saat(HH:mm:ss),
@@ -5476,8 +5570,19 @@ function edmFaturaGonderTest(body) {
     if (returnCode !== "0") {
       return { ok: false, hata: "EDM RETURN_CODE=" + returnCode + " (başarısız). Yanıt: " + xml.substring(0, 500) };
     }
-    satisEfaturaNoKaydet_(satisId, xmlParams.faturaNo);
-    return { ok: true, durum: status || "Gönderildi", aliciUnvan: alici.title, efaturaNo: xmlParams.faturaNo, ozetXml: xml.substring(0, 800) };
+    satisEfaturaNoKaydet_(satisId, xmlParams.faturaNo, xmlParams.uuid);
+
+    // Gönderim başarılı olur olmaz portal durumunu otomatik sorgula (best-effort —
+    // GİB'in durumu işlemesi biraz zaman alabileceğinden bu sorgu başarısız ya da
+    // henüz güncel olmayabilir; hata olsa bile gönderim sonucunu bozmasın).
+    let otomatikDurum = null;
+    try {
+      otomatikDurum = edmFaturaDurumSorgula({ satisId: satisId });
+    } catch (durumErr) {
+      otomatikDurum = { ok: false, hata: "Otomatik durum sorgusu başarısız: " + durumErr.message };
+    }
+
+    return { ok: true, durum: status || "Gönderildi", aliciUnvan: alici.title, efaturaNo: xmlParams.faturaNo, uuid: xmlParams.uuid, ozetXml: xml.substring(0, 800), otomatikDurumSorgusu: otomatikDurum };
   } catch (err) {
     return { ok: false, hata: "EDM gönderim hatası: " + err.message };
   }
