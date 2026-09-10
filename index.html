@@ -1562,19 +1562,26 @@ function globalAraDegisti(deger){
 // sırası sorunu vb.) sessizce konsola hata basar ama SAYFA/DİĞER MODÜLLER çalışmaya devam eder.
 const _origModulAc = modulAc;
 modulAc = function(id){
+  // İlk açılış mı yoksa zaten açık bir sekmeye geri mi dönülüyor? Bunu, alttaki
+  // _origModulAc çağrısı _acikSekmeler'e id'yi eklemeden ÖNCE tespit etmemiz lazım —
+  // aksi halde "satis"/"alis"/"stok" için aşağıdaki AnaSecimeDon() sıfırlamaları HER
+  // sekme değişiminde (ör. başka bir sekmeye gidip geri dönünce) tetiklenip o an açık
+  // olan spesifik kaydı (fatura/alış/stok tanımı) görünümden atıp seçim ekranına
+  // döndürüyordu — kullanıcı bunu "sekmeye geri dönünce içerik kayboluyor" diye bildirdi.
+  const ilkAcilis = !_acikSekmeler.includes(id);
   _origModulAc(id);
   try{
     if(id === "cari" && !_cariYuklendi){ cariListesiYukle(); }
     if(id === "cari" && !_plasiyerYuklendi){ plasiyerListesiYukle(); }
-    if(id === "satis"){ satisAnaSecimeDon(); }
-    if(id === "alis"){ alisAnaSecimeDon(); }
+    if(id === "satis" && ilkAcilis){ satisAnaSecimeDon(); }
+    if(id === "alis" && ilkAcilis){ alisAnaSecimeDon(); }
     if(id === "tahsilat" && !_tahsilatYuklendi){ tahsilatListesiYukle(); }
     if(id === "odeme" && !_odemeYuklendi){ odemeListesiYukle(); }
     if(id === "ceksenet" && !_cekSenetYuklendi){ cekSenetListesiYukle(); }
     if(id === "finans"){ finansYukle(); if(!_bankaYapisiYuklendi) bankaYapisiYukle(); bankaHesapSecimDoldur(); bankaHesapHareketleriYukle(); }
     if(id === "rapor" && !_raporIlkYuklemeYapildi){ _raporIlkYuklemeYapildi = true; tarihAraligiVarsayilaDoldur("rapor-baslangic","rapor-bitis"); raporYukle(); muhasebeRaporuYukle(); }
     if(id === "ayarlar"){ ayarlarYukle(); }
-    if(id === "stok"){ stokAnaSecimeDon(); }
+    if(id === "stok" && ilkAcilis){ stokAnaSecimeDon(); }
   }catch(hata){
     console.error("Modül yüklenirken hata (" + id + "):", hata);
   }
