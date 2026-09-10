@@ -5374,7 +5374,7 @@ function edmFaturaDurumSorgula(body) {
     const kanal = ayar.url.indexOf("test") > -1 ? "TEST" : "PROD";
     const soapBody = '<GetInvoiceStatusRequest xmlns="http://tempuri.org/">' +
       edmRequestHeaderBlock_(sessionId, kanal) +
-      '<INVOICE xmlns=""><UUID>' + edmXmlEscape_(kayit.uuid) + '</UUID></INVOICE>' +
+      '<INVOICE TRXID="0" UUID="' + edmXmlEscape_(kayit.uuid) + '" xmlns=""/>' +
       '</GetInvoiceStatusRequest>';
     const xml = edmSoapCagir_(ayar.url, "GetInvoiceStatusRequest", soapBody);
     if (xml.indexOf("Fault") > -1 || xml.indexOf("faultstring") > -1) {
@@ -5386,12 +5386,10 @@ function edmFaturaDurumSorgula(body) {
       uuid: kayit.uuid,
       status: edmXmlDegeri_(xml, "STATUS"),
       statusAciklama: edmXmlDegeri_(xml, "STATUS_DESCRIPTION"),
-      gibDurumKodu: edmXmlDegeri_(xml, "GIB_STATUS_CODE"),
-      gibDurumAciklama: edmXmlDegeri_(xml, "GIB_STATUS_DESCRIPTION"),
       yanitKodu: edmXmlDegeri_(xml, "RESPONSE_CODE"),
       yanitAciklama: edmXmlDegeri_(xml, "RESPONSE_DESCRIPTION"),
     };
-    const ozetParcalar = [sonuc.statusAciklama, sonuc.gibDurumAciklama, sonuc.yanitAciklama].filter(function(x){ return x; });
+    const ozetParcalar = [sonuc.status, sonuc.statusAciklama, sonuc.yanitAciklama].filter(function(x){ return x; });
     sonuc.ozet = ozetParcalar.length ? ozetParcalar.join(" — ") : "Durum bilgisi henüz yok";
     satisEfaturaDurumKaydet_(kayit.rowIndex, sonuc.ozet);
     return sonuc;
