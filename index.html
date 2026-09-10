@@ -1442,6 +1442,11 @@ function sekmeSeridiCiz(){
     </div>`;
   }).join("");
   el.innerHTML = anaPill + digerleri;
+  // Dar bir pencerede (ör. küçük boyutlu masaüstü uygulaması penceresi) çok sayıda sekme
+  // açıkken şerit yatayda taşabilir; yeni/aktif sekmenin ince kaydırma çubuğu fark
+  // edilmeden görünmez kalmaması için aktif olanı otomatik görünür alana kaydır.
+  const aktifEl = el.querySelector(".sekme.aktif");
+  if(aktifEl && aktifEl.scrollIntoView) aktifEl.scrollIntoView({inline:"nearest", block:"nearest"});
 }
 function sekmeKapat(id){
   _acikSekmeler = _acikSekmeler.filter(x=>x!==id);
