@@ -2593,11 +2593,21 @@ function satisAc(id){
   panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⏳</span><p>Yükleniyor...</p></div>';
   cariApi("getSatisDetay", {satisId:id}).then(res=>{
     if(!res.ok){ panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>'+(res.hata||"Hata")+'</p></div>'; return; }
+    // Bu kayıt hangi belge tipindeyse (Fatura/Teklif/Sipariş), sol taraftaki alt sekmeyi
+    // de ona göre senkronize et — aksi halde ör. son görülen sekme "Sipariş" iken bir
+    // Cari hareketinden Fatura açılınca liste "Sipariş" sekmesinde takılı kalıp kayıt
+    // sanki yanlış yere gitmiş gibi görünüyordu (asıl detay doğruydu, sadece sekme/liste
+    // eşleşmiyordu).
+    const belgeTipi = res.satis && res.satis.belgeTipi ? res.satis.belgeTipi : "Fatura";
+    if(_satisAktifBelgeTipi !== belgeTipi){
+      _satisAktifBelgeTipi = belgeTipi;
+      document.querySelectorAll(".belge-tab").forEach(b=>b.classList.toggle("active", b.dataset.tip===belgeTipi));
+    }
     satisDetayCiz(res);
+    satisListesiCiz(_satisListe);
   }).catch(err=>{
     panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>Bağlantı hatası: '+err.message+'</p></div>';
   });
-  satisListesiCiz(_satisListe);
 }
 
 function satisListeyeDon(){
