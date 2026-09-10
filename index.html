@@ -1373,7 +1373,11 @@ function sonIslemAc(tip, id){
   else if(tip === "CEK"){ modulAc("ceksenet"); cekSenetAc(id); }
   else if(tip === "STOK"){ modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("hareket"); }
 }
-sonIslemlerYukle();
+// NOT: İlk çağrı burada YAPILMIYOR (bkz. bugunOzetCiz ile aynı sebep) — CARI_API/cariApi
+// bu noktada henüz tanımlı değil (aşağıdaki bir script bloğunda tanımlanıyor). Erken
+// çağrı burada script'in geri kalanını (özellikle _acikSekmeler/sekme şeridi kurulumunu)
+// çalıştırmadan durdurup TÜM sekme şeridi sistemini sessizce bozuyordu. İlk çağrı artık
+// dosya sonundaki güvenli açılış rutinine taşındı.
 
 // Tıklanan modülü UYGULAMANIN KENDİ İÇİNDE bir sekme olarak açar (bkz. sekme şeridi).
 // Not: Daha önce bu, window.open ile gerçek bir tarayıcı sekmesi/pencere açıyordu;
@@ -7682,8 +7686,11 @@ function stokHareketRaporuTemizle(){
   }
 })();
 
-// Bugünkü Özet kartlarının ilk çekimi — burada CARI_API zaten tanımlı olduğu için güvenli.
+// Bugünkü Özet ve Son Yapılan İşlemler kartlarının ilk çekimi — burada CARI_API/cariApi
+// zaten tanımlı olduğu için güvenli (bkz. yukarıdaki not: bu çağrılar dosyanın başında
+// yapılırsa cariApi henüz tanımlanmadan çalışıp script'in geri kalanını bozuyordu).
 if(typeof bugunOzetCiz === "function") bugunOzetCiz();
+if(typeof sonIslemlerYukle === "function") sonIslemlerYukle();
 </script>
 
 <script>
