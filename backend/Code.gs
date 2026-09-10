@@ -5105,6 +5105,15 @@ function edmXmlDegeri_(xml, etiket) {
   return m ? m[1].trim() : "";
 }
 
+// EDM yanıtlarında ID/UUID gibi bazı kritik alanlar alt etiket olarak değil,
+// <INVOICE TRXID="0" UUID="..." ID="..." ...> gibi bir XML ÖZELLİĞİ (attribute)
+// olarak dönüyor — edmXmlDegeri_ bunları YAKALAYAMAZ (o sadece <ETIKET>metin</ETIKET>
+// arar). Bu yüzden ayrı bir attribute okuyucu gerekiyor.
+function edmXmlOznitelik_(xml, etiket, oznitelik) {
+  const m = xml.match(new RegExp("<" + etiket + "\\b[^>]*\\b" + oznitelik + "=\"([^\"]*)\""));
+  return m ? m[1] : "";
+}
+
 // SESSION_ID'yi 20 dk cache'ler; her sorguda yeniden login atmayı önler.
 function edmLogin_(ayar) {
   const kanal = ayar.url.indexOf("test") > -1 ? "TEST" : "PROD";
@@ -5564,11 +5573,21 @@ function edmFaturaGonderTest(body) {
     }
     const returnCode = edmXmlDegeri_(xml, "RETURN_CODE");
     const status = edmXmlDegeri_(xml, "STATUS");
-    const invoiceId = edmXmlDegeri_(xml, "ID"); // NOT: aynı isimde başka ID etiketleri de olabilir, teşhis amaçlı
     if (returnCode !== "0") {
       return { ok: false, hata: "EDM RETURN_CODE=" + returnCode + " (başarısız). Yanıt: " + xml.substring(0, 500) };
     }
-    satisEfaturaNoKaydet_(satisId, xmlParams.faturaNo, xmlParams.uuid);
+    // ÖNEMLİ: Kendi ürettiğimiz "FYT..." numarasının EDM/GİB açısından hiçbir
+    // karşılığı/önemi yok — istekte ID belirtmediğimiz için EDM faturayı KENDİ
+    // serisinden otomatik numaralandırıyor. Asıl geçerli/resmi numara, yanıttaki
+    // <INVOICE ... ID="..." UUID="..."> özelliklerinde (attribute, alt etiket
+    // DEĞİL) geliyor — bunu doğru okuyup gerçek numara olarak kaydediyoruz.
+    // Yanıt beklenmedik şekilde bu bilgiyi içermezse kendi ürettiğimiz numaraya
+    // (xmlParams.faturaNo/uuid) düşüyoruz ki hiç kayıt kalmasın diye.
+    const edmGercekNo = edmXmlOznitelik_(xml, "INVOICE", "ID");
+    const edmGercekUuid = edmXmlOznitelik_(xml, "INVOICE", "UUID");
+    const gercekFaturaNo = edmGercekNo || xmlParams.faturaNo;
+    const gercekUuid = edmGercekUuid || xmlParams.uuid;
+    satisEfaturaNoKaydet_(satisId, gercekFaturaNo, gercekUuid);
 
     // Gönderim başarılı olur olmaz portal durumunu otomatik sorgula (best-effort —
     // GİB'in durumu işlemesi biraz zaman alabileceğinden bu sorgu başarısız ya da
@@ -5580,7 +5599,7 @@ function edmFaturaGonderTest(body) {
       otomatikDurum = { ok: false, hata: "Otomatik durum sorgusu başarısız: " + durumErr.message };
     }
 
-    return { ok: true, durum: status || "Gönderildi", aliciUnvan: alici.title, efaturaNo: xmlParams.faturaNo, uuid: xmlParams.uuid, ozetXml: xml.substring(0, 800), otomatikDurumSorgusu: otomatikDurum };
+    return { ok: true, durum: status || "Gönderildi", aliciUnvan: alici.title, efaturaNo: gercekFaturaNo, uuid: gercekUuid, ozetXml: xml.substring(0, 800), otomatikDurumSorgusu: otomatikDurum };
   } catch (err) {
     return { ok: false, hata: "EDM gönderim hatası: " + err.message };
   }
