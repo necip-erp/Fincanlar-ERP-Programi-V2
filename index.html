@@ -835,6 +835,20 @@ setInterval(topbarSaatGuncelle, 10000);
         <div id="satis-son-faturalar"></div>
       </div>
     </div>
+
+    <div id="satisiade-view" style="display:none;height:100%;flex-direction:row">
+      <div class="cari-list-panel">
+        <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="satisAnaSecimeDon()">← Satış seçimine dön</button>
+        <div class="cari-list-head">
+          <input id="satisiade-ara" placeholder="İade ara (müşteri)..." oninput="satisIadeAramaFiltrele(this.value)">
+          <button class="cari-add-btn" onclick="satisIadeModalAc()" title="Yeni iade">+</button>
+        </div>
+        <div class="cari-items" id="satisiade-items"><div class="cari-empty">Yükleniyor...</div></div>
+      </div>
+      <div class="cari-detail-panel" id="satisiade-detail-panel">
+        <div class="cari-detail-empty"><span class="ic">↩️</span><p>Detayları görmek için soldan bir iade seçin</p></div>
+      </div>
+    </div>
   </div>
   <div class="modview" id="mod-finans">
     <div class="finans-panel">
@@ -846,6 +860,15 @@ setInterval(topbarSaatGuncelle, 10000);
         <select id="bhh-hesap-secim" onchange="bankaHesapHareketleriYukle()"><option value="">— Tüm hesaplar —</option></select>
       </div>
       <div id="bhh-alani"><div class="cari-empty">Bir hesap seçin veya tüm hareketleri görüntüleyin.</div></div>
+
+      <div class="rapor-baslik" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span>POS Hareketleri (Kredi Kartı Tahsilat/Ödeme)</span>
+        <button class="btn btn-primary" style="padding:4px 12px;font-size:13px" onclick="posBankaAktarModalAc()">Bankaya Aktar</button>
+      </div>
+      <div class="fld" style="max-width:320px"><label>POS Hesabı</label>
+        <select id="ph-hesap-secim" onchange="posHareketleriYukle()"><option value="">— Tüm hesaplar —</option></select>
+      </div>
+      <div id="ph-alani"><div class="cari-empty">Bir hesap seçin veya tüm hareketleri görüntüleyin.</div></div>
     </div>
   </div>
   <div class="modview" id="mod-rapor">
@@ -1154,6 +1177,7 @@ const ALT_MODUL_TANIM = {
     {alt:"Fatura",   ic:"🧾", lbl:"Fatura",   desc:"Kesilen satış faturaları"},
     {alt:"Teklif",   ic:"📝", lbl:"Teklif",   desc:"Müşteriye verilen teklifler"},
     {alt:"Sipariş",  ic:"📦", lbl:"Sipariş",  desc:"Müşteri siparişleri"},
+    {alt:"Iade",     ic:"↩️", lbl:"İade",     desc:"Müşteriden geri alınan mal iadesi"},
   ],
 };
 const ALT_MODUL_FN = { stok:"stokAltModulAc", alis:"alisAltModulAc", satis:"satisAltModulAc" };
@@ -1578,7 +1602,7 @@ modulAc = function(id){
     if(id === "tahsilat" && !_tahsilatYuklendi){ tahsilatListesiYukle(); }
     if(id === "odeme" && !_odemeYuklendi){ odemeListesiYukle(); }
     if(id === "ceksenet" && !_cekSenetYuklendi){ cekSenetListesiYukle(); }
-    if(id === "finans"){ finansYukle(); if(!_bankaYapisiYuklendi) bankaYapisiYukle(); bankaHesapSecimDoldur(); bankaHesapHareketleriYukle(); }
+    if(id === "finans"){ finansYukle(); if(!_bankaYapisiYuklendi) bankaYapisiYukle(); bankaHesapSecimDoldur(); bankaHesapHareketleriYukle(); posHesapSecimDoldur(); posHareketleriYukle(); }
     if(id === "rapor" && !_raporIlkYuklemeYapildi){ _raporIlkYuklemeYapildi = true; tarihAraligiVarsayilaDoldur("rapor-baslangic","rapor-bitis"); raporYukle(); muhasebeRaporuYukle(); }
     if(id === "ayarlar"){ ayarlarYukle(); }
     if(id === "stok" && ilkAcilis){ stokAnaSecimeDon(); }
@@ -2232,7 +2256,7 @@ function hareketTabloCiz(hareketler, cariId){
 }
 
 // Cari hareket satırına tıklayınca, aciklama alanındaki önekten (SATIS:, ALIS:,
-// ALISIADE:, TAHSILAT:, ODEME:) hangi işlemden geldiğini bulup o işlemin
+// ALISIADE:, SATISIADE:, TAHSILAT:, ODEME:) hangi işlemden geldiğini bulup o işlemin
 // detayını açar. Silme ikonuna tıklamalar (event.stopPropagation ile) hariçtir.
 function cariHareketSatirTiklandi(e, tr){
   if(e.target.closest(".hk-sil")) return;
@@ -2241,10 +2265,11 @@ function cariHareketSatirTiklandi(e, tr){
 
 function cariHareketIslemeGit(aciklama){
   if(!aciklama) return;
-  const m = aciklama.match(/^(SATIS|ALISIADE|ALIS|TAHSILAT|ODEME|CEK|CARI):([a-zA-Z0-9_]+)/);
+  const m = aciklama.match(/^(SATISIADE|SATIS|ALISIADE|ALIS|TAHSILAT|ODEME|CEK|CARI):([a-zA-Z0-9_]+)/);
   if(!m) return;
   const tip = m[1], id = m[2];
-  if(tip === "SATIS"){ modulAc("satis"); satisAc(id); }
+  if(tip === "SATISIADE"){ modulAc("satis"); satisAltModulAc("Iade"); satisIadeAc(id); }
+  else if(tip === "SATIS"){ modulAc("satis"); satisAc(id); }
   else if(tip === "ALISIADE"){ modulAc("alis"); alisAltModulAc("iade"); alisIadeAc(id); }
   else if(tip === "ALIS"){ modulAc("alis"); alisAltModulAc("giris"); alisAc(id); }
   else if(tip === "TAHSILAT"){ modulAc("tahsilat"); tahsilatAc(id); }
@@ -2519,11 +2544,20 @@ let _satisAktifBelgeTipi = "Fatura";
 function satisAnaSecimeDon(){
   document.getElementById("satis-secim").style.display = "block";
   document.getElementById("satis-view").style.display = "none";
+  const iadeView = document.getElementById("satisiade-view");
+  if(iadeView) iadeView.style.display = "none";
 }
 function satisAltModulAc(tip){
   document.getElementById("satis-secim").style.display = "none";
-  document.getElementById("satis-view").style.display = "flex";
   document.getElementById("mod-satis").classList.remove("detay-acik");
+  if(tip === "Iade"){
+    document.getElementById("satis-view").style.display = "none";
+    document.getElementById("satisiade-view").style.display = "flex";
+    if(!_satisIadeYuklendi) satisIadeListesiYukle();
+    return;
+  }
+  document.getElementById("satisiade-view") && (document.getElementById("satisiade-view").style.display = "none");
+  document.getElementById("satis-view").style.display = "flex";
   document.getElementById("satis-detail-panel").innerHTML =
     '<div class="cari-detail-empty"><span class="ic">📤</span><p>Detayları görmek için soldan bir satış seçin</p></div><div id="satis-son-faturalar"></div>';
   _satisSecili = null;
@@ -3340,6 +3374,9 @@ function satisKalemlerCiz(){
         <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniSatisKalemleri[${idx}].urunAdi=s.stokAdi; _yeniSatisKalemleri[${idx}].stokKodu=s.stokKodu||''; _yeniSatisKalemleri[${idx}].birim=s.birim1||'adet'; if(s.satisFiyati) _yeniSatisKalemleri[${idx}].birimFiyat=s.satisFiyati; if(s.satisIskontosu) _yeniSatisKalemleri[${idx}].iskontoYuzde=s.satisIskontosu; satisKalemlerCiz(); })">🔍</button>
         <div id="urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
+      <label style="display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text3);flex:0 0 auto;white-space:nowrap" title="Bu kalem bir stok kartına bağlı değil (hizmet/nakliye/masraf gibi) — stoktan düşülmez">
+        <input type="checkbox" style="width:auto" ${k.stoksuz?'checked':''} onchange="satisKalemAlanDegisti(${idx},'stoksuz',this.checked); satisKalemlerCiz()">Stoksuz
+      </label>
       <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="satisKalemAlanDegisti(${idx},'miktar',this.value)" onblur="kutuMiktarUyumKontrol('${k.stokKodu||''}', this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `satisKalemAlanDegisti(${idx},'birim',this.value)`)}
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="satisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
@@ -3471,6 +3508,12 @@ function satisKaydet(){
   if(!cariId){ alert("Cari (müşteri) seçimi zorunludur."); document.getElementById("sm-cari-arama").focus(); return; }
   const kalemler = _yeniSatisKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
   if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
+  for(const k of kalemler){
+    if(!k.stoksuz && !String(k.stokKodu||"").trim()){
+      alert("\""+k.urunAdi+"\" kalemi için Stok Rehberi'nden bir Stok Kodu seçin, ya da 'Stoksuz' işaretleyin.");
+      return;
+    }
+  }
   const odemeTipi = document.getElementById("sm-odeme").value;
   const belgeTipi = document.getElementById("sm-belgetipi").value;
   // Wolvox referanslı kredi limiti uyarısı: açık hesap (vadeli) fatura, cariyi limitin üzerine taşıyorsa onay iste.
@@ -3510,6 +3553,303 @@ function satisKaydet(){
     satisListesiYukle();
     if(cariId) cariListesiYukle(); // cari bakiyesi güncellenmiş olabilir
     satisAc(duzenleId || res.id);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ── SATIŞ İADESİ (Alış İadesi'nin ayna görüntüsü) ──
+// Önceden Satış tarafında "İade" diye bir modül hiç yoktu — müşteriden mal geri
+// geldiğinde stoğa giriş yazacak standart bir akış yoktu. cariye Alacak hareketi
+// eklenir (müşterinin bize borcu azalır), stok tarafında "Giriş" yazılır.
+let _satisIadeYuklendi = false;
+let _satisIadeListe = [];
+let _satisIadeSecili = null;
+let _yeniSatisIadeKalemleri = [];
+
+function satisIadeListesiYukle(){
+  _satisIadeYuklendi = true;
+  const onbellek = onbellekOku("satisIadeListesi", 60000);
+  if(onbellek){ _satisIadeListe = onbellek; satisIadeListesiCiz(_satisIadeListe); }
+  else document.getElementById("satisiade-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getSatisIadeListesi").then(res=>{
+    if(!res.ok){ if(!onbellek) document.getElementById("satisiade-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _satisIadeListe = res.iadeler;
+    onbellekYaz("satisIadeListesi", res.iadeler);
+    satisIadeListesiCiz(_satisIadeListe);
+  }).catch(err=>{
+    if(!onbellek) document.getElementById("satisiade-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+  });
+}
+
+function satisIadeListesiCiz(liste){
+  const el = document.getElementById("satisiade-items");
+  if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı iade yok. "+" ile ekleyin.</div>'; return; }
+  el.innerHTML = liste.map(a=>`
+    <div class="cari-item ${_satisIadeSecili===a.id?'sel':''}" onclick="satisIadeAc('${a.id}')">
+      <div class="cari-item-top">
+        <span class="cari-item-ad">${a.cariAd}</span>
+        <span class="cari-item-bakiye">${paraFormat(a.toplamTutar)}</span>
+      </div>
+      <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(a.tarih)}</b></span>
+    </div>`).join("");
+}
+
+function satisIadeAramaFiltrele(deger){
+  const d = deger.trim().toLocaleLowerCase('tr');
+  const filtreli = !d ? _satisIadeListe : _satisIadeListe.filter(a => a.cariAd.toLocaleLowerCase('tr').includes(d));
+  satisIadeListesiCiz(filtreli);
+}
+
+function satisIadeAc(id){
+  _satisIadeSecili = id;
+  document.getElementById("mod-satis").classList.add("detay-acik");
+  const panel = document.getElementById("satisiade-detail-panel");
+  panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⏳</span><p>Yükleniyor...</p></div>';
+  cariApi("getSatisIadeDetay", {iadeId:id}).then(res=>{
+    if(!res.ok){ panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>'+(res.hata||"Hata")+'</p></div>'; return; }
+    satisIadeDetayCiz(res);
+  }).catch(err=>{
+    panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>Bağlantı hatası: '+err.message+'</p></div>';
+  });
+  satisIadeListesiCiz(_satisIadeListe);
+}
+
+function satisIadeListeyeDon(){
+  document.getElementById("mod-satis").classList.remove("detay-acik");
+}
+
+function satisIadeDetayCiz(res){
+  const a = res.iade, kalemler = res.kalemler;
+  const panel = document.getElementById("satisiade-detail-panel");
+  panel.innerHTML = `
+    <button class="cari-back-btn" onclick="satisIadeListeyeDon()">← Listeye dön</button>
+    <div class="cari-detail-head">
+      <div>
+        <h2>${a.cariAd}</h2>
+        <span class="tip-badge"><b class="tarih-vurgu">${tarihGoster(a.tarih)}</b> · İade</span>
+      </div>
+      <div class="cari-bakiye-box">
+        <div class="num">${paraFormat(a.toplamTutar)}</div>
+        <div class="lbl">Toplam Tutar</div>
+      </div>
+    </div>
+    ${a.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${a.aciklama}</div></div></div>` : ""}
+    <div class="btnrow">
+      <button class="btn btn-danger" onclick="satisIadeSilOnay('${a.id}')">🗑 İadeyi Sil</button>
+    </div>
+    <table class="hareket-tbl">
+      <thead><tr><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>Tutar</th></tr></thead>
+      <tbody>
+        ${kalemler.map(k=>`
+          <tr>
+            <td>${k.urunAdi}</td>
+            <td>${miktarFormat(k.miktar)}</td>
+            <td>${k.birim}</td>
+            <td>${fiyatFormat(k.birimFiyat)}</td>
+            <td>${paraFormat(k.tutar)}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function satisIadeSilOnay(id){
+  if(!confirm("Bu iadeyi silmek istediğinize emin misiniz? (Cariye eklenmiş alacak hareketi varsa o da geri alınır)")) return;
+  cariApi("silSatisIade", {id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    satisIadeListeyeDon();
+    document.getElementById("satisiade-detail-panel").innerHTML = '<div class="cari-detail-empty"><span class="ic">↩️</span><p>Detayları görmek için soldan bir iade seçin</p></div>';
+    _satisIadeSecili = null;
+    satisIadeListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+function satisIadeModalAc(){
+  _yeniSatisIadeKalemleri = [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0}];
+  if(!_cariYuklendi) cariListesiYukle();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "satisiade-modal-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  const bugun = simdiTarihSaat();
+  overlay.innerHTML = `
+    <div class="modal-box modal-box-wide">
+      <h3>Yeni İade</h3>
+      <div class="fld" style="position:relative">
+        <label>Müşteri (Cari)</label>
+        <input id="stim-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest müşteri)..." autocomplete="off" style="padding-right:34px"
+               oninput="stimCariAramaDegisti(this.value)"
+               onfocus="stimCariOneriGoster()"
+               onblur="setTimeout(()=>stimCariOneriKapat(),200)"
+               onkeydown="oneriKlavyeYonet(event,'stim-cari-oneri')">
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('stim-cari').value=c.id; document.getElementById('stim-cari-arama').value=c.ad; stimCariSecimiDegisti(); })">🔍</button>
+        <input type="hidden" id="stim-cari" value="">
+        <div id="stim-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+      </div>
+      <div class="fld" id="stim-serbest-ad-fld"><label>Müşteri Adı (cari seçilmediyse)</label><input id="stim-serbest-ad" type="text" placeholder="Peşin Müşteri"></div>
+      <div class="fld"><label>Tarih</label><input id="stim-tarih" type="datetime-local" value="${bugun}"></div>
+      <div class="fld"><label>Açıklama</label><input id="stim-aciklama" type="text" placeholder="İsteğe bağlı (ör. iade nedeni)"></div>
+
+      <label style="font-size:10px;color:var(--text3);text-transform:uppercase">İade Edilen Ürünler</label>
+      <div id="stim-kalemler" style="margin:8px 0"></div>
+      <button class="btn" onclick="satisIadeKalemEkleUI()">+ Ürün Ekle</button>
+
+      <div class="satis-toplam">Toplam: <span id="stim-toplam">0,00 ₺</span></div>
+
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('satisiade-modal-overlay').remove()">İptal</button>
+        <button class="btn btn-primary" onclick="satisIadeKaydet()">Kaydet</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  satisIadeKalemlerCiz();
+}
+
+function stimCariSecimiDegisti(){
+  const cariSecili = !!document.getElementById("stim-cari").value;
+  document.getElementById("stim-serbest-ad-fld").style.display = cariSecili ? "none" : "flex";
+}
+function stimCariAramaDegisti(){
+  document.getElementById("stim-cari").value = "";
+  stimCariSecimiDegisti();
+  stimCariOneriGoster();
+}
+function stimCariOneriGoster(){
+  const kutu = document.getElementById("stim-cari-oneri");
+  if(!kutu) return;
+  const q = (document.getElementById("stim-cari-arama").value || "").trim().toLocaleLowerCase('tr');
+  if(q.length < 1){ kutu.style.display = "none"; return; }
+  const eslesenler = (_cariListe || []).filter(c =>
+    (c.ad||"").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").toLocaleLowerCase('tr').includes(q)
+  ).slice(0, 8);
+  if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
+  kutu.innerHTML = eslesenler.map((c,i)=>`
+    <div class="fiyat-gecmis-satir" onclick="stimCariSec(${i})" data-oneri-idx="${i}">
+      <span>${c.ad}</span><b>${c.cariKodu||''}</b>
+    </div>`).join("");
+  kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+  kutu.style.display = "block";
+}
+function stimCariOneriKapat(){
+  const kutu = document.getElementById("stim-cari-oneri");
+  if(kutu) kutu.style.display = "none";
+}
+function stimCariSec(i){
+  const kutu = document.getElementById("stim-cari-oneri");
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const c = eslesenler[i];
+  if(!c) return;
+  document.getElementById("stim-cari").value = c.id;
+  document.getElementById("stim-cari-arama").value = c.ad;
+  kutu.style.display = "none";
+  stimCariSecimiDegisti();
+}
+
+function satisIadeKalemEkleUI(){
+  _yeniSatisIadeKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0});
+  satisIadeKalemlerCiz();
+}
+function satisIadeKalemSilUI(idx){
+  _yeniSatisIadeKalemleri.splice(idx,1);
+  if(_yeniSatisIadeKalemleri.length===0) _yeniSatisIadeKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0});
+  satisIadeKalemlerCiz();
+}
+function satisIadeKalemAlanDegisti(idx, alan, deger){
+  _yeniSatisIadeKalemleri[idx][alan] = (alan==='miktar'||alan==='birimFiyat') ? (parseFloat(deger)||0) : deger;
+  if(alan==='miktar' || alan==='birimFiyat') satisIadeToplamGuncelle();
+}
+function satisIadeToplamGuncelle(){
+  const toplam = _yeniSatisIadeKalemleri.reduce((s,k)=> s + (parseFloat(k.miktar)||0)*(parseFloat(k.birimFiyat)||0), 0);
+  const el = document.getElementById("stim-toplam");
+  if(el) el.textContent = paraFormat(toplam);
+}
+
+function satisIadeKalemlerCiz(){
+  if(!_stokTanimYuklendi) stokTanimListesiYukle();
+  const el = document.getElementById("stim-kalemler");
+  el.innerHTML = _yeniSatisIadeKalemleri.map((k,idx)=>`
+    <div class="satis-kalem-satir">
+      <input class="satis-kalem-stokkodu" type="text" placeholder="Stok Kodu" value="${k.stokKodu||''}" oninput="satisIadeKalemAlanDegisti(${idx},'stokKodu',this.value)">
+      <div style="flex:1;position:relative">
+        <input class="satis-kalem-urun" style="width:100%;padding-right:32px" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
+               oninput="satisIadeKalemAlanDegisti(${idx},'urunAdi',this.value); satisIadeUrunOneriGoster(${idx})"
+               onblur="setTimeout(()=>satisIadeUrunOneriKapat(${idx}),200)"
+               onfocus="satisIadeUrunOneriGoster(${idx})"
+               onkeydown="oneriKlavyeYonet(event,'stim-urun-oneri-${idx}')">
+        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniSatisIadeKalemleri[${idx}].urunAdi=s.stokAdi; _yeniSatisIadeKalemleri[${idx}].stokKodu=s.stokKodu||''; _yeniSatisIadeKalemleri[${idx}].birim=s.birim1||'adet'; if(s.satisFiyati) _yeniSatisIadeKalemleri[${idx}].birimFiyat=s.satisFiyati; satisIadeKalemlerCiz(); })">🔍</button>
+        <div id="stim-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text3);flex:0 0 auto;white-space:nowrap" title="Bu kalem bir stok kartına bağlı değil (hizmet/masraf gibi) — stoktan düşülmez">
+        <input type="checkbox" style="width:auto" ${k.stoksuz?'checked':''} onchange="satisIadeKalemAlanDegisti(${idx},'stoksuz',this.checked); satisIadeKalemlerCiz()">Stoksuz
+      </label>
+      <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="satisIadeKalemAlanDegisti(${idx},'miktar',this.value)">
+      ${birimSelectHTML('satis-kalem-birim', k.birim, `satisIadeKalemAlanDegisti(${idx},'birim',this.value)`)}
+      <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="satisIadeKalemAlanDegisti(${idx},'birimFiyat',this.value)">
+      ${_yeniSatisIadeKalemleri.length>1 ? `<span class="hk-sil" onclick="satisIadeKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
+    </div>`).join("");
+  satisIadeToplamGuncelle();
+}
+
+let _stimOneriTimer = null;
+function satisIadeUrunOneriGoster(idx){
+  clearTimeout(_stimOneriTimer);
+  const q = (_yeniSatisIadeKalemleri[idx].urunAdi||"").trim().toLocaleLowerCase('tr');
+  const kutu = document.getElementById("stim-urun-oneri-"+idx);
+  if(!kutu) return;
+  if(q.length<1){ kutu.style.display="none"; return; }
+  _stimOneriTimer = setTimeout(()=>{
+    const eslesenler = (_stokTanimListe||[]).filter(s=>
+      (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").toLocaleLowerCase('tr').includes(q) || (s.barkod||"").toLocaleLowerCase('tr').includes(q)
+    ).slice(0,8);
+    if(eslesenler.length===0){ kutu.style.display="none"; return; }
+    kutu.innerHTML = eslesenler.map((s,i)=>`
+      <div class="fiyat-gecmis-satir" onclick="satisIadeUrunOneriSec(${idx},${i})" data-oneri-idx="${i}">
+        <span>${s.stokKodu?s.stokKodu+' · ':''}${s.stokAdi}</span>
+        <b>${s.birim1||'adet'}</b>
+      </div>`).join("");
+    kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+    kutu.style.display = "block";
+  }, 200);
+}
+function satisIadeUrunOneriKapat(idx){
+  const kutu = document.getElementById("stim-urun-oneri-"+idx);
+  if(kutu) kutu.style.display = "none";
+}
+function satisIadeUrunOneriSec(idx, oneriIdx){
+  const kutu = document.getElementById("stim-urun-oneri-"+idx);
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const s = eslesenler[oneriIdx];
+  if(!s) return;
+  _yeniSatisIadeKalemleri[idx].urunAdi = s.stokAdi;
+  _yeniSatisIadeKalemleri[idx].stokKodu = s.stokKodu || "";
+  _yeniSatisIadeKalemleri[idx].birim = s.birim1 || "adet";
+  _yeniSatisIadeKalemleri[idx].birimFiyat = parseFloat(s.satisFiyati) || 0;
+  satisIadeKalemlerCiz();
+}
+
+function satisIadeKaydet(){
+  const cariId = document.getElementById("stim-cari").value;
+  const serbestAd = document.getElementById("stim-serbest-ad").value.trim();
+  const kalemler = _yeniSatisIadeKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
+  if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
+  for(const k of kalemler){
+    if(!k.stoksuz && !String(k.stokKodu||"").trim()){
+      alert("\""+k.urunAdi+"\" kalemi için Stok Rehberi'nden bir Stok Kodu seçin, ya da 'Stoksuz' işaretleyin.");
+      return;
+    }
+  }
+  const body = {
+    cariId: cariId || undefined,
+    cariAd: !cariId ? serbestAd : undefined,
+    tarih: document.getElementById("stim-tarih").value,
+    aciklama: document.getElementById("stim-aciklama").value,
+    kalemler,
+  };
+  cariApi("saveSatisIade", body).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    document.getElementById("satisiade-modal-overlay").remove();
+    satisIadeListesiYukle();
+    if(cariId) cariListesiYukle();
+    satisIadeAc(res.id);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 </script>
@@ -3826,6 +4166,9 @@ function alisKalemlerCiz(){
         <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniAlisKalemleri[${idx}].urunAdi=s.stokAdi; _yeniAlisKalemleri[${idx}].stokKodu=s.stokKodu||''; _yeniAlisKalemleri[${idx}].birim=s.birim1||'adet'; if(s.alisFiyati) _yeniAlisKalemleri[${idx}].birimFiyat=s.alisFiyati; alisKalemlerCiz(); })">🔍</button>
         <div id="alis-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
+      <label style="display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text3);flex:0 0 auto;white-space:nowrap" title="Bu kalem bir stok kartına bağlı değil (hizmet/nakliye/masraf gibi) — stoktan düşülmez">
+        <input type="checkbox" style="width:auto" ${k.stoksuz?'checked':''} onchange="alisKalemAlanDegisti(${idx},'stoksuz',this.checked); alisKalemlerCiz()">Stoksuz
+      </label>
       <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="alisKalemAlanDegisti(${idx},'miktar',this.value)" onblur="kutuMiktarUyumKontrol('${k.stokKodu||''}', this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `alisKalemAlanDegisti(${idx},'birim',this.value)`)}
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
@@ -3887,10 +4230,11 @@ function alisKaydet(){
   const serbestAd = document.getElementById("am-serbest-ad").value.trim();
   const kalemler = _yeniAlisKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
   if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
-  // ★ Stok kodu tüm modüller arası ana bağlantı — manuel Alış girişinde de zorunlu.
-  const kodsuz = kalemler.find(k=>!String(k.stokKodu||"").trim());
+  // ★ Stok kodu tüm modüller arası ana bağlantı — manuel Alış girişinde de zorunlu
+  // (ya da bilerek "Stoksuz" işaretlenmiş bir hizmet/masraf kalemi olmalı).
+  const kodsuz = kalemler.find(k=>!k.stoksuz && !String(k.stokKodu||"").trim());
   if(kodsuz){
-    alert(`"${kodsuz.urunAdi}" için stok kodu seçilmemiş. Lütfen 🔍 Stok Rehberi'nden mevcut bir stok seçin, ya da önce Stok > Tanımlar'dan yeni bir stok kartı açıp buradan seçin.`);
+    alert(`"${kodsuz.urunAdi}" için stok kodu seçilmemiş. Lütfen 🔍 Stok Rehberi'nden mevcut bir stok seçin, önce Stok > Tanımlar'dan yeni bir stok kartı açıp buradan seçin, ya da 'Stoksuz' işaretleyin.`);
     return;
   }
   const tutarIskontosuEl = document.getElementById("am-tutar-iskontosu");
@@ -4127,15 +4471,19 @@ function alisIadeKalemlerCiz(){
   const el = document.getElementById("aim-kalemler");
   el.innerHTML = _yeniAlisIadeKalemleri.map((k,idx)=>`
     <div class="satis-kalem-satir">
+      <input class="satis-kalem-stokkodu" type="text" placeholder="Stok Kodu" value="${k.stokKodu||''}" oninput="alisIadeKalemAlanDegisti(${idx},'stokKodu',this.value)">
       <div style="flex:1;position:relative">
         <input class="satis-kalem-urun" style="width:100%;padding-right:32px" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
                oninput="alisIadeKalemAlanDegisti(${idx},'urunAdi',this.value); alisIadeUrunOneriGoster(${idx})"
                onblur="setTimeout(()=>alisIadeUrunOneriKapat(${idx}),200)"
                onfocus="alisIadeUrunOneriGoster(${idx})"
                onkeydown="oneriKlavyeYonet(event,'aim-urun-oneri-${idx}')">
-        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniAlisIadeKalemleri[${idx}].urunAdi=s.stokAdi; _yeniAlisIadeKalemleri[${idx}].birim=s.birim1||'adet'; if(s.alisFiyati) _yeniAlisIadeKalemleri[${idx}].birimFiyat=s.alisFiyati; alisIadeKalemlerCiz(); })">🔍</button>
+        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniAlisIadeKalemleri[${idx}].urunAdi=s.stokAdi; _yeniAlisIadeKalemleri[${idx}].stokKodu=s.stokKodu||''; _yeniAlisIadeKalemleri[${idx}].birim=s.birim1||'adet'; if(s.alisFiyati) _yeniAlisIadeKalemleri[${idx}].birimFiyat=s.alisFiyati; alisIadeKalemlerCiz(); })">🔍</button>
         <div id="aim-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
+      <label style="display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text3);flex:0 0 auto;white-space:nowrap" title="Bu kalem bir stok kartına bağlı değil (hizmet/masraf gibi) — stoktan düşülmez">
+        <input type="checkbox" style="width:auto" ${k.stoksuz?'checked':''} onchange="alisIadeKalemAlanDegisti(${idx},'stoksuz',this.checked); alisIadeKalemlerCiz()">Stoksuz
+      </label>
       <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="alisIadeKalemAlanDegisti(${idx},'miktar',this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `alisIadeKalemAlanDegisti(${idx},'birim',this.value)`)}
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisIadeKalemAlanDegisti(${idx},'birimFiyat',this.value)">
@@ -4175,6 +4523,7 @@ function alisIadeUrunOneriSec(idx, oneriIdx){
   const s = eslesenler[oneriIdx];
   if(!s) return;
   _yeniAlisIadeKalemleri[idx].urunAdi = s.stokAdi;
+  _yeniAlisIadeKalemleri[idx].stokKodu = s.stokKodu || "";
   _yeniAlisIadeKalemleri[idx].birim = s.birim1 || "adet";
   _yeniAlisIadeKalemleri[idx].birimFiyat = parseFloat(s.alisFiyati) || 0;
   alisIadeKalemlerCiz();
@@ -4185,6 +4534,12 @@ function alisIadeKaydet(){
   const serbestAd = document.getElementById("aim-serbest-ad").value.trim();
   const kalemler = _yeniAlisIadeKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
   if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
+  for(const k of kalemler){
+    if(!k.stoksuz && !String(k.stokKodu||"").trim()){
+      alert("\""+k.urunAdi+"\" kalemi için Stok Rehberi'nden bir Stok Kodu seçin, ya da 'Stoksuz' işaretleyin.");
+      return;
+    }
+  }
   const body = {
     cariId: cariId || undefined,
     cariAd: !cariId ? serbestAd : undefined,
@@ -4967,8 +5322,8 @@ function tahsilatModalAc(onCariId, editId){
           <option value="Nakit" ${t&&t.yontem==='Nakit'?'selected':''}>Nakit</option>
           <option value="Havale/EFT" ${t&&t.yontem==='Havale/EFT'?'selected':''}>Havale/EFT</option>
           <option value="Kredi Kartı" ${t&&t.yontem==='Kredi Kartı'?'selected':''}>Kredi Kartı</option>
-          <option value="Çek" ${t&&t.yontem==='Çek'?'selected':''}>Çek</option>
         </select>
+        <div style="font-size:11px;color:#888;margin-top:3px">Çek ile tahsilat için Çek/Senet modülünü kullanın — orada vade takibi de yapılır.</div>
       </div>
       <div class="fld" id="tm-pos-fld" style="display:none"><label>POS Hesabı</label>
         <select id="tm-pos"><option value="">— Seçiniz —</option>${posSecenekleriHtml()}</select>
@@ -5071,15 +5426,22 @@ function tahsilatKaydet(){
   if(!cariId){ alert("Lütfen müşteri seçin"); return; }
   const tutar = parseFloat(document.getElementById("tm-tutar").value) || 0;
   if(tutar <= 0){ alert("Tutar sıfırdan büyük olmalı"); return; }
+  const yontem = document.getElementById("tm-yontem").value;
+  const posHesapId = document.getElementById("tm-pos") ? document.getElementById("tm-pos").value : "";
+  const bankaHesapId = document.getElementById("tm-banka-hesap") ? document.getElementById("tm-banka-hesap").value : "";
+  // Kredi Kartı/Havale seçilip karşı hesap boş bırakılırsa POS/Banka hesabına
+  // hiç iz düşmeden kayıt kaçabiliyordu — burada baştan engelleniyor.
+  if(yontem === "Kredi Kartı" && !posHesapId){ alert("Kredi Kartı ile tahsilatta POS hesabı seçimi zorunludur"); return; }
+  if(yontem === "Havale/EFT" && !bankaHesapId){ alert("Havale/EFT ile tahsilatta banka hesabı seçimi zorunludur"); return; }
   const editId = document.getElementById("tm-edit-id").value;
   const body = {
     cariId,
     tutar,
     tarih: document.getElementById("tm-tarih").value,
-    yontem: document.getElementById("tm-yontem").value,
+    yontem,
     aciklama: document.getElementById("tm-aciklama").value,
-    posHesapId: document.getElementById("tm-pos") ? document.getElementById("tm-pos").value : "",
-    bankaHesapId: document.getElementById("tm-banka-hesap") ? document.getElementById("tm-banka-hesap").value : "",
+    posHesapId,
+    bankaHesapId,
   };
   if(editId) body.id = editId;
   cariApi(editId ? "guncelleTahsilat" : "saveTahsilat", body).then(res=>{
@@ -5230,13 +5592,13 @@ function odemeModalAc(onCariId){
       </div>
       <div class="fld"><label>Tutar</label><input id="om-tutar" type="number" min="0" step="0.01" placeholder="0,00"></div>
       <div class="fld"><label>Tarih</label><input id="om-tarih" type="datetime-local" value="${bugun}"></div>
-      <div class="fld"><label>Yöntem</label>
+      <div class="fld"><label id="om-yontem-label">Yöntem</label>
         <select id="om-yontem" onchange="odemeYontemDegisti()">
           <option value="Nakit">Nakit</option>
           <option value="Havale/EFT">Havale/EFT</option>
           <option value="Kredi Kartı">Kredi Kartı</option>
-          <option value="Çek">Çek</option>
         </select>
+        <div style="font-size:11px;color:#888;margin-top:3px">Çek ile ödeme için Çek/Senet modülünü kullanın — orada vade takibi de yapılır.</div>
       </div>
       <div class="fld" id="om-pos-fld" style="display:none"><label>POS Hesabı</label>
         <select id="om-pos"><option value="">— Seçiniz —</option>${posSecenekleriHtml()}</select>
@@ -5263,6 +5625,10 @@ function odemeHedefTipDegisti(){
   document.getElementById("om-hedef-cari-fld").style.display = (hedef === "Cari") ? "flex" : "none";
   document.getElementById("om-hedef-banka-fld").style.display = (hedef === "Banka") ? "flex" : "none";
   document.getElementById("om-hedef-gider-fld").style.display = (hedef === "Gider") ? "flex" : "none";
+  // Hedef "Banka/Kredi Kartı" olduğunda Yöntem alanı artık paranın NEREYE
+  // gittiğini değil, NEREDEN çıktığını (kaynak kasa/hesap) belirtir — karışmasın diye etiketi netleştiriyoruz.
+  const yl = document.getElementById("om-yontem-label");
+  if (yl) yl.textContent = (hedef === "Banka") ? "Yöntem (para nereden çıkıyor?)" : "Yöntem";
 }
 
 // Banka Hesabı / Kredi Kartı seçimini, Banka Yapısı'ndaki tüm hesap ve kartları
@@ -5387,15 +5753,20 @@ function odemeKaydet(){
   const hedefTipi = document.getElementById("om-hedef-tip").value;
   const tutar = parseFloat(document.getElementById("om-tutar").value) || 0;
   if(tutar <= 0){ alert("Tutar sıfırdan büyük olmalı"); return; }
+  const yontem = document.getElementById("om-yontem").value;
+  const posHesapId = document.getElementById("om-pos") ? document.getElementById("om-pos").value : "";
+  const bankaHesapId = document.getElementById("om-banka-hesap") ? document.getElementById("om-banka-hesap").value : "";
+  if(yontem === "Kredi Kartı" && !posHesapId){ alert("Kredi Kartı ile ödemede POS hesabı seçimi zorunludur"); return; }
+  if(yontem === "Havale/EFT" && !bankaHesapId){ alert("Havale/EFT ile ödemede banka hesabı seçimi zorunludur"); return; }
 
   const body = {
     hedefTipi,
     tutar,
     tarih: document.getElementById("om-tarih").value,
-    yontem: document.getElementById("om-yontem").value,
+    yontem,
     aciklama: document.getElementById("om-aciklama").value,
-    posHesapId: document.getElementById("om-pos") ? document.getElementById("om-pos").value : "",
-    bankaHesapId: document.getElementById("om-banka-hesap") ? document.getElementById("om-banka-hesap").value : "",
+    posHesapId,
+    bankaHesapId,
   };
 
   if(hedefTipi === "Cari"){
@@ -5754,6 +6125,100 @@ function bankaHesapHareketleriYukle(){
   }).catch(err=>{
     el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
+}
+
+// ── POS Hareketleri (Kredi Kartı ile yapılan Satış/Tahsilat/Ödeme kayıtlarının döküldüğü defter) ──
+// Önceden bu defter hiç görüntülenmiyordu — kayıtlar sessizce birikiyordu.
+function posHesapSecimDoldur(){
+  const sel = document.getElementById("ph-hesap-secim");
+  if(!sel) return;
+  const secili = sel.value;
+  sel.innerHTML = '<option value="">— Tüm hesaplar —</option>' + posSecenekleriHtml();
+  sel.value = secili || "";
+}
+
+function posHareketleriYukle(){
+  const el = document.getElementById("ph-alani");
+  if(!el) return;
+  const posHesapId = document.getElementById("ph-hesap-secim") ? document.getElementById("ph-hesap-secim").value : "";
+  el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getPosHareketleri", {posHesapId}).then(res=>{
+    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(res.hareketler.length===0){ el.innerHTML = '<div class="cari-empty">Kayıtlı hareket yok.</div>'; return; }
+    el.innerHTML = `
+      <div class="finans-kart ${res.toplam>=0?'pos':'neg'}" style="max-width:260px;margin-bottom:10px"><div class="lbl">Bize Geçecek Bakiye (Alacak)</div><div class="num">${paraFormat(res.toplam)}</div></div>
+      <table class="hareket-tbl">
+        <thead><tr><th>Tarih</th><th>Tip</th><th>Tutar</th><th>Açıklama</th></tr></thead>
+        <tbody>
+          ${res.hareketler.map(h=>`
+            <tr>
+              <td>${tarihGoster(h.tarih)}</td>
+              <td>${h.tip}</td>
+              <td>${h.tip==='Borç'?'+':'-'}${paraFormat(h.tutar)}</td>
+              <td>${h.aciklama}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
+  }).catch(err=>{
+    el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+  });
+}
+
+// ── POS'tan Bankaya Aktarım (mutabakat/virman) ──
+// Kredi kartıyla tahsil edilen tutar POS hesabına "Borç" olarak birikir; bu
+// para gerçekten bankaya yattığında burada POS'tan düşülüp banka hesabına işlenir.
+function posBankaAktarModalAc(){
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "pba-modal-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h3>POS'tan Bankaya Aktar</h3>
+      <div class="fld"><label>POS Hesabı</label>
+        <select id="pba-pos"><option value="">— Seçiniz —</option>${posSecenekleriHtml()}</select>
+      </div>
+      <div class="fld"><label>Banka Hesabı</label>
+        <select id="pba-banka"><option value="">— Seçiniz —</option></select>
+      </div>
+      <div class="fld"><label>Tutar</label><input id="pba-tutar" type="number" min="0" step="0.01" placeholder="0,00"></div>
+      <div class="fld"><label>Tarih</label><input id="pba-tarih" type="datetime-local" value="${simdiTarihSaat()}"></div>
+      <div class="fld"><label>Açıklama</label><input id="pba-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('pba-modal-overlay').remove()">İptal</button>
+        <button class="btn btn-primary" onclick="posBankaAktarKaydet()">Kaydet</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  cariApi("getBankaYapisi").then(res=>{
+    if(!res.ok) return;
+    const sel = document.getElementById("pba-banka");
+    if(!sel) return;
+    sel.innerHTML = '<option value="">— Seçiniz —</option>' + res.hesaplar.map(h=>{
+      const banka = res.bankalar.find(b=>b.id===h.bankaId);
+      return `<option value="${h.id}">${banka?banka.ad:''} — ${h.hesapAdi}</option>`;
+    }).join("");
+  }).catch(()=>{});
+}
+
+function posBankaAktarKaydet(){
+  const posHesapId = document.getElementById("pba-pos").value;
+  const bankaHesapId = document.getElementById("pba-banka").value;
+  if(!posHesapId){ alert("Lütfen POS hesabı seçin"); return; }
+  if(!bankaHesapId){ alert("Lütfen banka hesabı seçin"); return; }
+  const tutar = parseFloat(document.getElementById("pba-tutar").value) || 0;
+  if(tutar <= 0){ alert("Tutar sıfırdan büyük olmalı"); return; }
+  const body = {
+    posHesapId, bankaHesapId, tutar,
+    tarih: document.getElementById("pba-tarih").value,
+    aciklama: document.getElementById("pba-aciklama").value,
+  };
+  cariApi("savePosBankaAktarim", body).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    document.getElementById("pba-modal-overlay").remove();
+    posHareketleriYukle();
+    bankaHesapHareketleriYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 </script>
 
@@ -7562,7 +8027,7 @@ function stokHareketKalanHesapla(hareketler){
 // belgeTipi'ne göre gerçek bir Satış/Alış/Alış İadesi kaydına bağlı olan hareketlerde
 // "📄 Belgeyi Aç" butonu gösterilebilmesi için kullanılır (manuel Stok Giriş/Çıkış/Toplu
 // Hareket kayıtlarındaki serbest metin belgeNo'larda buton gösterilmez).
-const STOK_HAREKET_BELGE_TIPLERI = {"Satış Faturası":1, "Alış Faturası":1, "Alış İadesi":1};
+const STOK_HAREKET_BELGE_TIPLERI = {"Satış Faturası":1, "Alış Faturası":1, "Alış İadesi":1, "Satış İadesi":1};
 
 // Stok Hareket Raporu tablosunun sıralama durumu — üst başlığa tıklanınca değişir.
 // Sütun başlıklarına tıklandığında artan/azalan (asc/desc) arasında geçiş yapılır.
@@ -7636,12 +8101,13 @@ function stokHareketAramaFiltrele(){
 }
 
 // Stok Hareket Raporu satırındaki "📄 Aç" butonu — belgeTipi'ne göre ilgili Satış/Alış/
-// Alış İadesi kaydını kendi modülünde detay görünümünde açar (bkz. cariHareketIslemeGit
+// Alış İadesi/Satış İadesi kaydını kendi modülünde detay görünümünde açar (bkz. cariHareketIslemeGit
 // ile aynı yönlendirme mantığı).
 function stokHareketBelgeAc(belgeTipi, belgeNo){
   if(belgeTipi === "Satış Faturası"){ modulAc("satis"); satisAc(belgeNo); }
   else if(belgeTipi === "Alış Faturası"){ modulAc("alis"); alisAltModulAc("giris"); alisAc(belgeNo); }
   else if(belgeTipi === "Alış İadesi"){ modulAc("alis"); alisAltModulAc("iade"); alisIadeAc(belgeNo); }
+  else if(belgeTipi === "Satış İadesi"){ modulAc("satis"); satisAltModulAc("Iade"); satisIadeAc(belgeNo); }
 }
 
 function stokHareketRaporuTemizle(){
