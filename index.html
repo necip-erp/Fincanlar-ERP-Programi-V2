@@ -10,9 +10,11 @@
 <meta name="theme-color" content="#4338ca">
 <style>
 :root{
-  /* ── Nötrler: hafif soğuk gri tonu (klasik "SaaS beyazı" değil) ── */
+  /* ── Nötrler: hafif soğuk gri tonu (klasik "SaaS beyazı" değil).
+     Kenarlık rengi masaüstü/kurumsal yazılım hissi için biraz daha belirgin
+     yapıldı (tablo/panel çizgileri net görünsün diye). ── */
   --bg:#f4f5f8; --bg2:#fff; --bg3:#eef0f5;
-  --border:#e2e5eb; --text:#161a22; --text2:#555e6d; --text3:#8991a1;
+  --border:#d7dbe3; --text:#161a22; --text2:#555e6d; --text3:#8991a1;
 
   /* ── Modül kartı boyutu (Ayarlar > Genel Görünüm'den Küçük/Orta/Büyük seçilir).
      "Orta" = özgün tasarım değerleri; body.modul-boyut-kucuk/buyuk bunları geçersiz kılar. ── */
@@ -23,18 +25,25 @@
      uzaklaştırıldı, daha karakterli/güven veren bir ton ── */
   --blue:#4338ca; --blue-l:#eeecfc;
 
+  /* ── Modül renk sistemi: gelir/gider mantığına oturan 4 net renk (bizimhesap tarzı) —
+     Satış+Tahsilat = yeşil (para giriyor), Alış+Ödeme = kırmızı (para çıkıyor),
+     Stok+Finans+Rapor = mavi (envanter/bilgi, marka rengiyle aynı aile),
+     Cari+Çek-Senet = sarı (takip/kayıt). Modül kartlarında ve ilgili ekranların
+     vurgu renklerinde (bakiye kutusu, seçili satır) kullanılır. ── */
+  --green:#16a34a;  --green-l:#e5f7ec;
+  --red:#dc2626;    --red-l:#fceaea;
+  --yellow:#ca8a04; --yellow-l:#fcf3d9;
+
   /* ── "Fincanlar" işaretine ince bir gönderme: sıcak bakır/amber ikincil vurgu.
      Sadece imza niteliğindeki küçük detaylarda (aktif sekme çizgisi, rozet) kullanılır. ── */
   --amber:#b5651d; --amber-l:#fbeee0;
 
-  --green:#15803d; --green-l:#e3f6e9;
-  --red:#b91c1c;   --red-l:#fbe9e9;
   --violet:#6d28d9; --violet-l:#efe9fc;
   --teal:#0f766e;   --teal-l:#e1f5f2;
 
-  --r:10px; --r-sm:7px; --r-lg:16px;
-  --shadow-sm:0 1px 2px rgba(20,22,30,.05), 0 1px 1px rgba(20,22,30,.04);
-  --shadow-md:0 10px 24px -8px rgba(30,32,60,.16), 0 2px 6px rgba(30,32,60,.06);
+  --r:6px; --r-sm:4px; --r-lg:10px;
+  --shadow-sm:0 1px 2px rgba(20,22,30,.06), 0 1px 1px rgba(20,22,30,.05);
+  --shadow-md:0 6px 16px -6px rgba(30,32,60,.18), 0 2px 5px rgba(30,32,60,.08);
   --ease:cubic-bezier(.4,0,.2,1);
   --t:150ms var(--ease);
 }
@@ -145,7 +154,7 @@ body.desen-acik{
 .son-islem-satir .alt{font-size:10.5px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .son-islem-satir .tarih{font-size:9.5px;color:var(--text3);margin-top:2px}
 @media (max-width:1180px){#home{flex-direction:column}.home-yan{width:100%;max-height:none}}
-.modtile{background:var(--bg2);border:1px solid var(--border);border-radius:13px;padding:var(--mod-pad);text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
+.modtile{background:var(--bg2);border:1px solid var(--border);border-top:3px solid var(--border);border-radius:var(--r);padding:var(--mod-pad);text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
 .modtile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--blue),var(--amber));transform:scaleX(0);transform-origin:left;transition:transform .22s var(--ease)}
 .modtile:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:transparent}
 .modtile:hover::before{transform:scaleX(1)}
@@ -200,6 +209,19 @@ body.desen-acik{
 .cari-detail-head .tip-badge{display:inline-block;font-size:10px;padding:3px 9px;border-radius:20px;background:var(--bg3);color:var(--text2);text-transform:uppercase;letter-spacing:.03em;font-weight:700}
 .cari-bakiye-box{text-align:right}
 .cari-bakiye-box .num{font-size:22px;font-weight:800}
+
+/* ── Modüle özgü vurgu renkleri: her ekran kendi modülünün rengini (bkz. MODULLER) taşır ── */
+#mod-satis .cari-bakiye-box .num,#mod-tahsilat .cari-bakiye-box .num{color:var(--green)}
+#mod-alis .cari-bakiye-box .num,#mod-odeme .cari-bakiye-box .num{color:var(--red)}
+#mod-satis .cari-item.sel,#mod-tahsilat .cari-item.sel{background:var(--green-l);border-left-color:var(--green)}
+#mod-alis .cari-item.sel,#mod-odeme .cari-item.sel{background:var(--red-l);border-left-color:var(--red)}
+#mod-cari .cari-item.sel,#mod-ceksenet .cari-item.sel{background:var(--yellow-l);border-left-color:var(--yellow)}
+#mod-satis .satis-toplam,#mod-tahsilat .satis-toplam{color:var(--green)}
+#mod-alis .satis-toplam,#mod-odeme .satis-toplam{color:var(--red)}
+/* Satış/Alış modalları document.body'e eklendiği için #mod-satis kapsamının dışında kalır —
+   onlar için ayrı bir tema sınıfı kullanılır (bkz. overlay.classList.add). */
+.modal-overlay.tema-yesil .satis-toplam{color:var(--green)}
+.modal-overlay.tema-kirmizi .satis-toplam{color:var(--red)}
 .cari-bakiye-box .lbl{font-size:10px;color:var(--text3);text-transform:uppercase}
 
 .cari-info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:20px}
@@ -223,9 +245,14 @@ body.desen-acik{
 .hareket-form input:focus,.hareket-form select:focus{border-color:var(--blue)}
 .hareket-form input[type=text]{width:180px}
 
-table.hareket-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
-table.hareket-tbl th{text-align:left;padding:7px 8px;color:var(--text3);font-weight:600;font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border)}
-table.hareket-tbl td{padding:8px 8px;border-bottom:1px solid var(--border)}
+table.hareket-tbl{width:100%;border-collapse:collapse;font-size:12.5px;border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden}
+table.hareket-tbl th{text-align:left;padding:7px 9px;color:var(--text2);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.02em;background:var(--bg3);border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
+table.hareket-tbl th:last-child{border-right:none}
+table.hareket-tbl td{padding:7px 9px;border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
+table.hareket-tbl td:last-child{border-right:none}
+table.hareket-tbl tbody tr:last-child td{border-bottom:none}
+table.hareket-tbl tbody tr:nth-child(even){background:var(--bg3)}
+table.hareket-tbl tbody tr:hover{background:var(--blue-l)}
 table.hareket-tbl tr:hover td{background:var(--bg3)}
 table.hareket-tbl tr.hk-row{cursor:pointer}
 .hk-borc{color:var(--red);font-weight:700;background:var(--red-l);padding:2px 8px;border-radius:20px;font-size:11.5px;white-space:nowrap}
@@ -320,10 +347,10 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .satis-kalem-satir input:focus,.satis-kalem-satir select:focus{border-color:var(--blue);background:var(--bg2)}
 .satis-kalem-stokkodu{width:110px;flex:0 0 110px}
 .satis-kalem-urun{flex:1;min-width:0}
-.satis-kalem-miktar{width:90px;flex:0 0 90px}
+.satis-kalem-miktar{width:90px;flex:0 0 90px;text-align:right}
 .satis-kalem-birim{width:90px;flex:0 0 90px}
-.satis-kalem-fiyat{width:120px;flex:0 0 120px}
-.satis-kalem-yuzde{width:70px;flex:0 0 70px}
+.satis-kalem-fiyat{width:120px;flex:0 0 120px;text-align:right}
+.satis-kalem-yuzde{width:70px;flex:0 0 70px;text-align:right}
 .satis-kalem-paket{width:88px;flex:0 0 88px;font-size:12px;color:var(--text2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .satis-toplam{text-align:right;margin-top:14px;font-size:15px;font-weight:800}
 .satis-toplam-detay{margin-top:14px;padding:10px 12px;background:var(--bg3);border-radius:8px}
@@ -1041,14 +1068,14 @@ setInterval(topbarSaatGuncelle, 10000);
 <script>
 const MODULLER = [
   {id:"stok",     ic:"📦", lbl:"Stok",      desc:"Stok listesi ve takip",   renk:"blue"},
-  {id:"cari",     ic:"👥", lbl:"Cari",      desc:"Müşteri / tedarikçi",     renk:"amber"},
+  {id:"cari",     ic:"👥", lbl:"Cari",      desc:"Müşteri / tedarikçi",     renk:"yellow"},
   {id:"tahsilat", ic:"💰", lbl:"Tahsilat",  desc:"Gelen ödemeler",          renk:"green"},
   {id:"odeme",    ic:"💳", lbl:"Ödeme",     desc:"Giden ödemeler",          renk:"red"},
-  {id:"ceksenet", ic:"🧾", lbl:"Çek/Senet", desc:"Vade ve tahsilat takibi", renk:"violet"},
-  {id:"alis",     ic:"📥", lbl:"Alış",      desc:"Satın alma",              renk:"violet"},
-  {id:"satis",    ic:"📤", lbl:"Satış",     desc:"Satış işlemleri",         renk:"teal"},
-  {id:"finans",   ic:"📊", lbl:"Finans",    desc:"Genel finans durumu",     renk:"amber"},
-  {id:"rapor",    ic:"📈", lbl:"Rapor",     desc:"Raporlar",                renk:"teal"},
+  {id:"ceksenet", ic:"🧾", lbl:"Çek/Senet", desc:"Vade ve tahsilat takibi", renk:"yellow"},
+  {id:"alis",     ic:"📥", lbl:"Alış",      desc:"Satın alma",              renk:"red"},
+  {id:"satis",    ic:"📤", lbl:"Satış",     desc:"Satış işlemleri",         renk:"green"},
+  {id:"finans",   ic:"📊", lbl:"Finans",    desc:"Genel finans durumu",     renk:"blue"},
+  {id:"rapor",    ic:"📈", lbl:"Rapor",     desc:"Raporlar",                renk:"blue"},
   {id:"ayarlar",  ic:"⚙️", lbl:"Ayarlar",   desc:"Kısayollar ve düzen",     renk:"neutral"},
 ];
 
@@ -1088,8 +1115,9 @@ function modgridCiz(){
   document.getElementById("modgrid").innerHTML = sirali.map(m=>{
     const renkli = m.renk && m.renk !== "neutral";
     const icStil = renkli ? `background:var(--${m.renk}-l);color:var(--${m.renk})` : "";
+    const tileStil = renkli ? `border-top-color:var(--${m.renk})` : "";
     return `
-    <div class="modtile" draggable="true" data-id="${m.id}"
+    <div class="modtile" draggable="true" data-id="${m.id}" style="${tileStil}"
          onclick="modulAcYeniSekme('${m.id}')"
          ondragstart="_surukleneId='${m.id}'; this.classList.add('surukleniyor')"
          ondragend="this.classList.remove('surukleniyor')"
@@ -1182,6 +1210,8 @@ const ALT_MODUL_TANIM = {
 };
 const ALT_MODUL_FN = { stok:"stokAltModulAc", alis:"alisAltModulAc", satis:"satisAltModulAc" };
 const ALT_MODUL_GRID = { stok:"stok-secim-grid", alis:"alis-secim-grid", satis:"satis-secim-grid" };
+// Alt modül kartları, ait oldukları ana modülün rengini taşır (bkz. MODULLER).
+const ALT_MODUL_RENK = { stok:"blue", alis:"red", satis:"green" };
 let _altSurukleneAnahtar = null, _altSurukleneAlt = null;
 function altModulSirasiniAl(anahtar){
   const ogeler = ALT_MODUL_TANIM[anahtar];
@@ -1201,14 +1231,17 @@ function altModgridCiz(anahtar){
   const fn = ALT_MODUL_FN[anahtar];
   const el = document.getElementById(ALT_MODUL_GRID[anahtar]);
   if(!el) return;
+  const renk = ALT_MODUL_RENK[anahtar];
+  const tileStil = renk ? `style="border-top-color:var(--${renk})"` : "";
+  const icStil = renk ? `style="background:var(--${renk}-l);color:var(--${renk})"` : "";
   el.innerHTML = sirali.map(o => `
-    <div class="modtile" draggable="true" data-alt="${o.alt}"
+    <div class="modtile" draggable="true" data-alt="${o.alt}" ${tileStil}
          onclick="${fn}('${o.alt}')"
          ondragstart="_altSurukleneAnahtar='${anahtar}'; _altSurukleneAlt='${o.alt}'; event.stopPropagation(); this.classList.add('surukleniyor')"
          ondragend="this.classList.remove('surukleniyor')"
          ondragover="event.preventDefault()"
          ondrop="event.stopPropagation(); altModulSiraDegistir('${anahtar}','${o.alt}')">
-      <span class="ic">${o.ic}</span>
+      <span class="ic" ${icStil}>${o.ic}</span>
       <div class="lbl">${o.lbl}</div>
       <div class="desc">${o.desc}</div>
     </div>`).join("");
@@ -3087,6 +3120,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "satis-modal-overlay";
+  overlay.classList.add("tema-yesil");
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   // s.tarih backend'den "yyyy-MM-dd" veya "yyyy-MM-dd HH:mm" biçiminde gelir (hucreTarihStr);
   // <input type="datetime-local"> ise "yyyy-MM-ddTHH:mm" bekler, bu yüzden boşluk yerine T
@@ -3669,6 +3703,7 @@ function satisIadeModalAc(){
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "satisiade-modal-overlay";
+  overlay.classList.add("tema-yesil");
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   const bugun = simdiTarihSaat();
   overlay.innerHTML = `
@@ -4041,6 +4076,7 @@ function alisModalAc(duzenle){
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "alis-modal-overlay";
+  overlay.classList.add("tema-kirmizi");
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   const a = duzenle ? duzenle.alis : null;
   // s.tarih ile aynı sebep: backend "yyyy-MM-dd"/"yyyy-MM-dd HH:mm" döner, datetime-local "T" ister.
@@ -4372,6 +4408,7 @@ function alisIadeModalAc(){
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "alisiade-modal-overlay";
+  overlay.classList.add("tema-kirmizi");
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   const bugun = simdiTarihSaat();
   overlay.innerHTML = `
