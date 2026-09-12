@@ -945,15 +945,51 @@ setInterval(topbarSaatGuncelle, 10000);
       <div id="mr-icerik"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
   </div>
+  <div class="modview" id="mod-cvirman">
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Cari Virman</div>
+      <p style="font-size:13px;color:var(--text2);margin-top:-8px">
+        İki cari arasında nakit/banka hareketi olmadan bakiye aktarır (mahsup). Kaynak carinin
+        bakiyesi tutar kadar azalır, hedef carinin bakiyesi tutar kadar artar.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+        <div class="fld" style="flex:1;min-width:200px;margin-bottom:0"><label>Kaynak Cari (bakiyesi azalır)</label>
+          <select id="cvirman-kaynak"></select></div>
+        <div class="fld" style="flex:1;min-width:200px;margin-bottom:0"><label>Hedef Cari (bakiyesi artar)</label>
+          <select id="cvirman-hedef"></select></div>
+        <div class="fld" style="width:150px;margin-bottom:0"><label>Tarih</label>
+          <input type="date" id="cvirman-tarih"></div>
+        <div class="fld" style="width:150px;margin-bottom:0"><label>Tutar</label>
+          <input type="number" id="cvirman-tutar" step="0.01" min="0"></div>
+        <div class="fld" style="flex:1;min-width:200px;margin-bottom:0"><label>Açıklama (opsiyonel)</label>
+          <input type="text" id="cvirman-aciklama"></div>
+        <button class="btn btn-primary" onclick="cariVirmanKaydet()">🔁 Virman Yap</button>
+      </div>
+      <div id="cvirman-liste"><div class="cari-empty">Yükleniyor...</div></div>
+    </div>
+  </div>
   <div class="modview" id="mod-silinenler">
     <div class="finans-panel">
-      <div class="rapor-baslik" style="margin-top:0">Silinen Kayıtlar</div>
-      <p style="font-size:13px;color:var(--text2);margin-top:-8px">
-        Çek/Senet, Tahsilat, Ödeme, Satış (Fatura/Teklif/Sipariş/İade) ve Alış (Fatura/İade)
-        modüllerinde silinen her kayıt burada listelenir. "Geri Al" ile kayıt, ilişkili
-        cari/stok hareketleriyle birlikte yeniden oluşturulur.
-      </p>
-      <div id="silinenler-icerik"><div class="cari-empty">Yükleniyor...</div></div>
+      <div class="rapor-baslik" style="margin-top:0">Silinenler</div>
+      <div style="display:flex;gap:6px;margin-bottom:14px">
+        <button type="button" class="belge-tab active" id="silinenler-tab-aktif-btn" style="flex:none;padding:7px 14px" onclick="silinenlerAltSekmeDegistir('aktif')">🗑️ Silinen Kayıtlar</button>
+        <button type="button" class="belge-tab" id="silinenler-tab-donen-btn" style="flex:none;padding:7px 14px" onclick="silinenlerAltSekmeDegistir('donen')">↩️ Geri Döndürülenler</button>
+      </div>
+      <div id="silinenler-tab-aktif">
+        <p style="font-size:13px;color:var(--text2);margin-top:-8px">
+          Çek/Senet, Tahsilat, Ödeme, Satış (Fatura/Teklif/Sipariş/İade) ve Alış (Fatura/İade)
+          modüllerinde silinen her kayıt burada listelenir. "Geri Al" ile kayıt, ilişkili
+          cari/stok hareketleriyle birlikte yeniden oluşturulur.
+        </p>
+        <div id="silinenler-icerik"><div class="cari-empty">Yükleniyor...</div></div>
+      </div>
+      <div id="silinenler-tab-donen" style="display:none">
+        <p style="font-size:13px;color:var(--text2);margin-top:-8px">
+          Daha önce silinip "Geri Al" ile tekrar oluşturulmuş kayıtların geçmişi — hangi
+          kaydın ne zaman silinip ne zaman ve hangi yeni numarayla geri getirildiği burada görülür.
+        </p>
+        <div id="geridonenler-icerik"><div class="cari-empty">Yükleniyor...</div></div>
+      </div>
     </div>
   </div>
   <div class="modview" id="mod-ayarlar">
@@ -1081,6 +1117,22 @@ setInterval(topbarSaatGuncelle, 10000);
       </div>
       <div id="gider-tanim-agac"></div>
     </div>
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">EDM Önek → Tedarikçi Eşleştirme</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">
+        Bazı EDM e-Fatura numaraları gönderen bilgisini net vermez, sadece bir önek taşır
+        (örn. fatura no "CNY2026000123" → önek "CNY" → gerçek tedarikçi "CANYAP"). Burada
+        tanımlanan eşleştirmeler, Alış &gt; Bekleyen Alış Faturaları ekranında bir ÖNERİ olarak
+        gösterilir — otomatik uygulanmaz, siz onaylayınca kullanılır. Bir faturayı bir cariye
+        onayladığınızda, o faturanın öneki de buraya otomatik eklenir/güncellenir.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+        <div class="fld" style="width:140px;margin-bottom:0"><label>Önek</label><input id="edmonek-yeni-onek" type="text" placeholder="Örn. CNY" style="text-transform:uppercase"></div>
+        <div class="fld" style="flex:1;min-width:220px;margin-bottom:0"><label>Cari</label><select id="edmonek-yeni-cari"></select></div>
+        <button class="btn btn-primary" onclick="edmOnekEslesmeEkle()">+ Ekle</button>
+      </div>
+      <div id="edmonek-liste"><div class="cari-empty">Yükleniyor...</div></div>
+    </div>
   </div>
 </div>
 
@@ -1090,6 +1142,7 @@ const MODULLER = [
   {id:"cari",     ic:"👥", lbl:"Cari",      desc:"Müşteri / tedarikçi",     renk:"yellow"},
   {id:"tahsilat", ic:"💰", lbl:"Tahsilat",  desc:"Gelen ödemeler",          renk:"green"},
   {id:"odeme",    ic:"💳", lbl:"Ödeme",     desc:"Giden ödemeler",          renk:"red"},
+  {id:"cvirman",  ic:"🔁", lbl:"Cari Virman", desc:"İki cari arasında bakiye aktarımı", renk:"yellow"},
   {id:"ceksenet", ic:"🧾", lbl:"Çek/Senet", desc:"Vade ve tahsilat takibi", renk:"yellow"},
   {id:"alis",     ic:"📥", lbl:"Alış",      desc:"Satın alma",              renk:"red"},
   {id:"satis",    ic:"📤", lbl:"Satış",     desc:"Satış işlemleri",         renk:"green"},
@@ -1656,6 +1709,10 @@ modulAc = function(id){
     if(id === "alis" && ilkAcilis){ alisAnaSecimeDon(); }
     if(id === "tahsilat" && !_tahsilatYuklendi){ tahsilatListesiYukle(); }
     if(id === "odeme" && !_odemeYuklendi){ odemeListesiYukle(); }
+    if(id === "cvirman"){
+      if(!_cariYuklendi) cariListesiYukle(); else cvirmanCariSelectDoldur();
+      if(!_cvirmanYuklendi) cariVirmanListesiYukle();
+    }
     if(id === "ceksenet" && !_cekSenetYuklendi){ cekSenetListesiYukle(); }
     if(id === "finans"){ finansYukle(); if(!_bankaYapisiYuklendi) bankaYapisiYukle(); bankaHesapSecimDoldur(); bankaHesapHareketleriYukle(); posHesapSecimDoldur(); posHareketleriYukle(); }
     if(id === "rapor" && !_raporIlkYuklemeYapildi){ _raporIlkYuklemeYapildi = true; tarihAraligiVarsayilaDoldur("rapor-baslangic","rapor-bitis"); raporYukle(); muhasebeRaporuYukle(); }
@@ -2126,6 +2183,7 @@ function cariListesiYukle(){
   if(onbellek){
     _cariListe = onbellek.sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
     cariListesiCiz(_cariListe);
+    if(typeof cvirmanCariSelectDoldur === "function") cvirmanCariSelectDoldur();
   } else {
     document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   }
@@ -2134,6 +2192,7 @@ function cariListesiYukle(){
     _cariListe = res.cariler.sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
     onbellekYaz("cariListesi", res.cariler);
     cariListesiCiz(_cariListe);
+    if(typeof cvirmanCariSelectDoldur === "function") cvirmanCariSelectDoldur();
     if(_cariListe.length === 0){
       console.log("CARİ TEŞHİS: sayfa adı=", res._teshisSheetAdi, "okunan satır sayısı (başlık dahil)=", res._teshisHDataUzunluk);
     }
@@ -4809,6 +4868,71 @@ function alisBekleyenDurumSifirla(faturaNo){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
+// ── Ayarlar > EDM Önek → Tedarikçi Eşleştirme yönetim tablosu ──
+let _edmOnekListe = [];
+function edmOnekEslesmeYukle(){
+  const selEl = document.getElementById("edmonek-yeni-cari");
+  if(selEl) selEl.innerHTML = '<option value="">— cari seçin —</option>' + _cariListe.map(c=>`<option value="${c.id}">${c.ad}</option>`).join("");
+  const el = document.getElementById("edmonek-liste");
+  if(!el) return;
+  el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getEdmOnekEslesmeListesi").then(res=>{
+    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _edmOnekListe = res.kayitlar;
+    edmOnekEslesmeCiz();
+  }).catch(err=>{
+    el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+  });
+}
+
+function edmOnekEslesmeCiz(){
+  const el = document.getElementById("edmonek-liste");
+  if(_edmOnekListe.length === 0){ el.innerHTML = '<div class="cari-empty">Henüz bir eşleştirme tanımlanmamış.</div>'; return; }
+  el.innerHTML = `
+    <table class="hareket-tbl">
+      <thead><tr><th>Önek</th><th>Cari</th><th></th></tr></thead>
+      <tbody>
+        ${_edmOnekListe.map(k=>`
+          <tr>
+            <td><b>${k.onek}</b></td>
+            <td>${k.cariAd || "—"}</td>
+            <td><button class="btn" style="padding:4px 12px;font-size:12.5px" onclick="edmOnekEslesmeSilOnay('${k.onek}')">🗑️ Sil</button></td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function edmOnekEslesmeEkle(){
+  const onek = document.getElementById("edmonek-yeni-onek").value.trim().toUpperCase();
+  const cariId = document.getElementById("edmonek-yeni-cari").value;
+  if(!onek){ alert("Önek girin (ör. CNY)"); return; }
+  if(!cariId){ alert("Cari seçin"); return; }
+  const cariAd = (_cariListe.find(c=>c.id===cariId)||{}).ad || "";
+  cariApi("edmOnekEslesmeManuelKaydet", {onek, cariId, cariAd}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    document.getElementById("edmonek-yeni-onek").value = "";
+    document.getElementById("edmonek-yeni-cari").value = "";
+    edmOnekEslesmeYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+function edmOnekEslesmeSilOnay(onek){
+  if(!confirm(`"${onek}" önek eşleştirmesini silmek istediğinize emin misiniz?`)) return;
+  cariApi("edmOnekEslesmeSil", {onek}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    edmOnekEslesmeYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// Kullanıcı BFM'deki "Bu cariyi kullan" önek-önerisi bağlantısına tıklayınca çağrılır —
+// öneri OTOMATİK uygulanmaz, sadece kullanıcı bilerek tıklarsa cari alanına yazılır.
+function bfmOnekOnerisiKullan(cariId, cariAd){
+  const cariEl = document.getElementById("bfm-cari");
+  const aramaEl = document.getElementById("bfm-cari-arama");
+  if(cariEl) cariEl.value = cariId;
+  if(aramaEl) aramaEl.value = cariAd;
+}
+
 function alisBekleyenOnayModalAc(faturaNo){
   const f = _alisBekleyenListe.find(x=>x.faturaNo===faturaNo);
   if(!f) return;
@@ -4840,6 +4964,7 @@ function alisBekleyenOnayModalAc(faturaNo){
           <input type="hidden" id="bfm-cari" value="${f.eslesenCariId||''}">
           <div id="bfm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
           ${f.eslesenCariAd ? `<div style="font-size:11px;color:var(--green);margin-top:3px">✓ Daha önce "${f.tedarikci}" bu cariye işlenmiş, otomatik seçildi.</div>` : ``}
+          ${(!f.eslesenCariAd && f.onekOnerisiCariAd) ? `<div style="font-size:11px;color:var(--accent);margin-top:3px">🔖 Önek eşleşmesi: "${f.onek}" → ${f.onekOnerisiCariAd}. <span style="text-decoration:underline;cursor:pointer;font-weight:600" onclick="bfmOnekOnerisiKullan('${(f.onekOnerisiCariId||'').replace(/'/g,"\\\\'")}','${(f.onekOnerisiCariAd||'').replace(/'/g,"\\\\'")}')">Bu cariyi kullan</span></div>` : ``}
         </div>
         <div class="fld" style="margin:0"><label>Tarih</label><input id="bfm-tarih" type="datetime-local" value="${tarihISO}T00:00"></div>
         <div class="fld" style="margin:0"><label>Ödeme Tipi</label>
@@ -6630,6 +6755,93 @@ function muhasebeRaporuYukle(){
 }
 </script>
 
+<!-- ══════════════ CARİ VİRMAN ══════════════ -->
+<script>
+let _cvirmanYuklendi = false;
+let _cvirmanListe = [];
+
+function cvirmanCariSelectDoldur(){
+  const opts = '<option value="">— seçin —</option>' + _cariListe.map(c=>`<option value="${c.id}">${c.ad}</option>`).join("");
+  const k = document.getElementById("cvirman-kaynak");
+  const h = document.getElementById("cvirman-hedef");
+  if(k) k.innerHTML = opts;
+  if(h) h.innerHTML = opts;
+  const tarihEl = document.getElementById("cvirman-tarih");
+  if(tarihEl && !tarihEl.value) tarihEl.value = new Date().toISOString().slice(0,10);
+}
+
+function cariVirmanKaydet(){
+  const kaynakId = document.getElementById("cvirman-kaynak").value;
+  const hedefId = document.getElementById("cvirman-hedef").value;
+  const tutar = parseFloat(document.getElementById("cvirman-tutar").value) || 0;
+  if(!kaynakId || !hedefId){ alert("Kaynak ve hedef cari seçilmeli."); return; }
+  if(kaynakId === hedefId){ alert("Kaynak ve hedef cari aynı olamaz."); return; }
+  if(tutar <= 0){ alert("Tutar sıfırdan büyük olmalı."); return; }
+  const kaynakAd = (_cariListe.find(c=>c.id===kaynakId)||{}).ad || "";
+  const hedefAd = (_cariListe.find(c=>c.id===hedefId)||{}).ad || "";
+  if(!confirm(`${kaynakAd} → ${hedefAd}\n${paraFormat(tutar)} tutarında virman yapılacak.\nOnaylıyor musunuz?`)) return;
+
+  cariApi("saveCariVirman", {
+    kaynakCariId: kaynakId, kaynakCariAd: kaynakAd,
+    hedefCariId: hedefId, hedefCariAd: hedefAd,
+    tarih: document.getElementById("cvirman-tarih").value,
+    tutar: tutar, aciklama: document.getElementById("cvirman-aciklama").value,
+  }).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    document.getElementById("cvirman-tutar").value = "";
+    document.getElementById("cvirman-aciklama").value = "";
+    cariVirmanListesiYukle();
+    cariListesiYukle(); // bakiyeler değişti
+    alert("Virman kaydedildi.");
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+function cariVirmanListesiYukle(){
+  const el = document.getElementById("cvirman-liste");
+  el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getCariVirmanListesi").then(res=>{
+    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _cvirmanYuklendi = true;
+    _cvirmanListe = res.virmanlar;
+    cariVirmanListesiCiz();
+  }).catch(err=>{
+    el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+  });
+}
+
+function cariVirmanListesiCiz(){
+  const el = document.getElementById("cvirman-liste");
+  if(_cvirmanListe.length === 0){ el.innerHTML = '<div class="cari-empty">Henüz bir virman kaydı yok.</div>'; return; }
+  el.innerHTML = `
+    <table class="hareket-tbl">
+      <thead><tr><th>Tarih</th><th>Kaynak</th><th>Hedef</th><th>Tutar</th><th>Açıklama</th><th></th></tr></thead>
+      <tbody>
+        ${_cvirmanListe.map(v=>`
+          <tr>
+            <td>${tarihGoster(v.tarih)}</td>
+            <td>${v.kaynakCariAd}</td>
+            <td>${v.hedefCariAd}</td>
+            <td>${paraFormat(v.tutar)}</td>
+            <td>${v.aciklama || "—"}</td>
+            <td><button class="btn" style="padding:4px 12px;font-size:12.5px" onclick="cariVirmanSilOnay('${v.id}')">🗑️ Sil</button></td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function cariVirmanSilOnay(id){
+  const v = _cvirmanListe.find(x=>x.id===id);
+  const ozet = v ? (v.kaynakCariAd+" → "+v.hedefCariAd+" — "+paraFormat(v.tutar)) : "Bu virman";
+  if(!confirm(ozet+"\n\nBu virmanı silmek istediğinize emin misiniz?\n(Bu işlem 'Silinenler' bölümünden geri alınabilir.)")) return;
+  cariApi("cariVirmanSil", {id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    cariVirmanListesiYukle();
+    cariListesiYukle();
+    alert("Virman silindi.");
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+</script>
+
 <!-- ══════════════ SİLİNENLER (geri alınabilir çöp kutusu) ══════════════ -->
 <!-- Çek/Senet, Tahsilat, Ödeme, Satış (Fatura/Teklif/Sipariş/İade), Alış (Fatura/İade)
      modüllerindeki her silme işlemi, backend tarafında silinmeden önce buraya bir
@@ -6640,10 +6852,10 @@ function muhasebeRaporuYukle(){
 let _silinenlerListe = [];
 const SILINEN_TIP_ETIKET = {
   TAHSILAT:"Tahsilat", ODEME:"Ödeme", SATIS:"Satış", ALIS:"Alış",
-  ALISIADE:"Alış İadesi", SATISIADE:"Satış İadesi", CEKSENET:"Çek/Senet",
+  ALISIADE:"Alış İadesi", SATISIADE:"Satış İadesi", CEKSENET:"Çek/Senet", VIRMAN:"Cari Virman",
 };
 const SILINEN_TIP_IKON = {
-  TAHSILAT:"💰", ODEME:"💳", SATIS:"📤", ALIS:"📥", ALISIADE:"↩️", SATISIADE:"↩️", CEKSENET:"🧾",
+  TAHSILAT:"💰", ODEME:"💳", SATIS:"📤", ALIS:"📥", ALISIADE:"↩️", SATISIADE:"↩️", CEKSENET:"🧾", VIRMAN:"🔁",
 };
 
 function silinenlerYukle(){
@@ -6685,6 +6897,8 @@ function silinenGeriAlOnay(id){
   cariApi("silinenGeriAl", {id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     silinenlerYukle();
+    // Geri Döndürülenler alt sekmesi açıksa (ya da bir sonraki açılışında) taze görünsün.
+    _geridonenlerYuklendi = false;
     // İlgili modüllerin listeleri de bayatlamış olabilir — sekmesi açıksa tazelensin diye
     // ilgili _*Yuklendi bayraklarını sıfırlayıp bir sonraki açılışta tazelenmelerini sağlıyoruz.
     cariListesiYukle();
@@ -6697,6 +6911,58 @@ function silinenGeriAlOnay(id){
     if(typeof cekSenetListesiYukle === "function") cekSenetListesiYukle();
     alert("Kayıt geri alındı.");
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ── Silinenler / Geri Döndürülenler alt sekme geçişi ──
+let _geridonenlerYuklendi = false;
+let _geridonenlerListe = [];
+function silinenlerAltSekmeDegistir(hangi){
+  const aktifBtn = document.getElementById("silinenler-tab-aktif-btn");
+  const donenBtn = document.getElementById("silinenler-tab-donen-btn");
+  const aktifEl = document.getElementById("silinenler-tab-aktif");
+  const donenEl = document.getElementById("silinenler-tab-donen");
+  if(hangi === "donen"){
+    aktifBtn.classList.remove("active"); donenBtn.classList.add("active");
+    aktifEl.style.display = "none"; donenEl.style.display = "";
+    if(!_geridonenlerYuklendi) geridonenlerYukle();
+  } else {
+    donenBtn.classList.remove("active"); aktifBtn.classList.add("active");
+    donenEl.style.display = "none"; aktifEl.style.display = "";
+  }
+}
+
+function geridonenlerYukle(){
+  const el = document.getElementById("geridonenler-icerik");
+  el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getGeriDondurulenlerListesi").then(res=>{
+    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _geridonenlerYuklendi = true;
+    _geridonenlerListe = res.kayitlar;
+    geridonenlerCiz();
+  }).catch(err=>{
+    el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+  });
+}
+
+function geridonenlerCiz(){
+  const el = document.getElementById("geridonenler-icerik");
+  if(_geridonenlerListe.length === 0){ el.innerHTML = '<div class="cari-empty">Henüz geri alınmış bir kayıt yok.</div>'; return; }
+  el.innerHTML = `
+    <table class="hareket-tbl">
+      <thead><tr><th></th><th>Tür</th><th>Cari</th><th>Tutar</th><th>Silinme Tarihi</th><th>Geri Alınma Tarihi</th><th>Yeni Kayıt No</th></tr></thead>
+      <tbody>
+        ${_geridonenlerListe.map(s=>`
+          <tr>
+            <td>${SILINEN_TIP_IKON[s.tip]||"↩️"}</td>
+            <td>${s.baslik || SILINEN_TIP_ETIKET[s.tip] || s.tip}</td>
+            <td>${s.cariAd || "—"}</td>
+            <td>${s.tutar ? paraFormat(s.tutar) : "—"}</td>
+            <td>${s.silmeTarihi}</td>
+            <td>${s.geriAlmaTarihi}</td>
+            <td>${s.yeniId || "—"}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
 }
 </script>
 
@@ -6846,6 +7112,7 @@ function ayarlarYukle(){
   acilisSayfasiYukle();
   if(!_tanimListeYuklendi.giderUstGrup) tanimListesiYukle("giderUstGrup");
   if(!_tanimListeYuklendi.giderAltGrup) tanimListesiYukle("giderAltGrup");
+  edmOnekEslesmeYukle();
   const sgKayitli = localStorage.getItem("fincanlar_sekme_genislik") || "140";
   const sgInput = document.getElementById("ayarlar-sekme-genislik");
   if(sgInput) sgInput.value = sgKayitli;

@@ -32,6 +32,7 @@ const SHEETS = {
   stokHareketleri: "StokHareketleri",
   seriTanimlari: "SeriTanimlari",
   tedarikciCariEslesme: "TedarikciCariEslesme",
+  edmOnekEslesme: "EdmOnekEslesme",
   markalar: "Markalar",
   urunGruplari: "UrunGruplari",
   altUrunGruplari: "AltUrunGruplari",
@@ -48,6 +49,7 @@ const SHEETS = {
   alisFaturaDurum: "AlisFaturaDurum",
   siparisDurumlari: "SiparisDurumlari",
   plasiyerler: "Plasiyerler",
+  cariVirmanlar: "CariVirmanlar",
 };
 
 // ── YARDIMCI FONKSİYONLAR ──
@@ -124,7 +126,7 @@ function cacheTemizle(anahtarlar) {
 // ayrı ayrı yazılmak zorunda kalmaz; var olan (test edilmiş) save fonksiyonları
 // yeniden kullanılır.
 // ════════════════════════════════════════════════
-const SILINEN_BASLIKLAR = ["ID","TIP","ORIJINAL_ID","BASLIK","CARI_AD","TUTAR","VERI_JSON","SILME_TARIHI","GERI_ALINDI"];
+const SILINEN_BASLIKLAR = ["ID","TIP","ORIJINAL_ID","BASLIK","CARI_AD","TUTAR","VERI_JSON","SILME_TARIHI","GERI_ALINDI","GERI_ALMA_TARIHI","YENI_ID"];
 
 function silinenlerKaydet(tip, orijinalId, baslik, cariAd, tutar, veri) {
   try {
@@ -156,15 +158,42 @@ function getSilinenlerListesi() {
 }
 
 // Bir "Silinenler" kaydını geri getirilemez şekilde listeden kaldırır (ör. geri alma
-// başarılı olduktan sonra, ya da kullanıcı "listeden temizle" derse).
-function silinenKaydiKapat_(id) {
+// başarılı olduktan sonra, ya da kullanıcı "listeden temizle" derse). Geri alma tarihini
+// ve yeniden oluşturulan kaydın YENİ ID'sini de yazar — bu sayede "Geri Döndürülenler"
+// bölümünde hangi kaydın ne zaman ve hangi yeni numarayla geri geldiği görülebilir.
+function silinenKaydiKapat_(id, yeniId) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.silinenIslemler, SILINEN_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === id) { sheet.getRange(i + 1, 9).setValue(true); return true; }
+    if (String(data[i][0]) === id) {
+      const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+      sheet.getRange(i + 1, 9, 1, 3).setValues([[true, simdi, String(yeniId || "")]]);
+      return true;
+    }
   }
   return false;
+}
+
+// "Silinenler" listesinin tam tersi: daha önce silinip GERİ ALINMIŞ kayıtların geçmişi
+// (audit izi). Kullanıcı bir siparişin/kaydın geçmişte silinip sonra geri getirildiğini
+// buradan görebilir. En son geri alınan en üstte.
+function getGeriDondurulenlerListesi() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.silinenIslemler, SILINEN_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const sonuc = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0] || !(row[8] === true || row[8] === "TRUE")) continue;
+    sonuc.push({
+      id: String(row[0]), tip: String(row[1] || ""), orijinalId: String(row[2] || ""),
+      baslik: String(row[3] || ""), cariAd: String(row[4] || ""), tutar: parseFloat(row[5]) || 0,
+      silmeTarihi: String(row[7] || ""), geriAlmaTarihi: String(row[9] || ""), yeniId: String(row[10] || ""),
+    });
+  }
+  sonuc.reverse();
+  return { ok: true, kayitlar: sonuc };
 }
 
 // body: { id } — Silinenler listesindeki bir kaydı, orijinal save___ fonksiyonunu
@@ -194,6 +223,7 @@ function silinenGeriAl(body) {
   const GERI_YUKLEME_FN = {
     TAHSILAT: saveTahsilat, ODEME: saveOdeme, SATIS: saveSatis, ALIS: saveAlis,
     ALISIADE: saveAlisIade, SATISIADE: saveSatisIade, CEKSENET: saveCekSenet,
+    VIRMAN: saveCariVirman,
   };
   const fn = GERI_YUKLEME_FN[tip];
   if (!fn) return { ok: false, hata: "Bu kayıt türü için geri alma henüz desteklenmiyor" };
@@ -201,7 +231,7 @@ function silinenGeriAl(body) {
   const sonuc = fn(veri);
   if (!sonuc || !sonuc.ok) return { ok: false, hata: "Geri yükleme başarısız: " + (sonuc && sonuc.hata || "bilinmiyor") };
 
-  silinenKaydiKapat_(id);
+  silinenKaydiKapat_(id, sonuc.id);
   return { ok: true, yeniId: sonuc.id };
 }
 
@@ -630,6 +660,13 @@ function handleRequest(e) {
       case "silCekSenetGorseli":   result = silCekSenetGorseli(body); break;
       case "getSilinenlerListesi": result = getSilinenlerListesi(); break;
       case "silinenGeriAl":        result = silinenGeriAl(body); break;
+      case "getGeriDondurulenlerListesi": result = getGeriDondurulenlerListesi(); break;
+      case "saveCariVirman":       result = saveCariVirman(body); break;
+      case "getCariVirmanListesi": result = getCariVirmanListesi(); break;
+      case "cariVirmanSil":        result = cariVirmanSil(body); break;
+      case "getEdmOnekEslesmeListesi": result = getEdmOnekEslesmeListesi(); break;
+      case "edmOnekEslesmeManuelKaydet": result = edmOnekEslesmeManuelKaydet(body); break;
+      case "edmOnekEslesmeSil":    result = edmOnekEslesmeSil(body); break;
       default: result = { error: "Bilinmeyen işlem: " + action };
     }
     return jsonResponse(result);
@@ -890,6 +927,106 @@ function vadesiGecmisAlacaklar() {
   }
   sonuc.sort((a, b) => a.vade < b.vade ? -1 : 1);
   return { ok: true, hareketler: sonuc };
+}
+
+// ════════════════════════════════════════════════
+// CARİ VİRMAN — iki cari arasında bakiye aktarımı (nakit/banka hareketi YOK, sadece
+// mahsup). KAYNAK carinin bakiyesi tutar kadar AZALIR (Alacak hareketi), HEDEF
+// carinin bakiyesi tutar kadar ARTAR (Borç hareketi). Mevcut cariHareketEkle()
+// yeniden kullanılır — bakiye hesaplama mantığı (Borç ekler, Alacak çıkarır)
+// tüm modüllerde zaten bu şekilde çalışıyor (bkz. vadesiGecmisAlacaklar).
+// Silinenler/Geri Döndürülenler çöp kutusuna da diğer modüllerle aynı şekilde dahildir.
+// ════════════════════════════════════════════════
+const CARI_VIRMAN_BASLIKLAR = ["ID","TARIH","KAYNAK_CARI_ID","KAYNAK_CARI_AD","HEDEF_CARI_ID","HEDEF_CARI_AD","TUTAR","ACIKLAMA","KAYIT_TARIHI","KAYNAK_HAREKET_ID","HEDEF_HAREKET_ID"];
+
+// body: { kaynakCariId, kaynakCariAd, hedefCariId, hedefCariAd, tarih, tutar, aciklama }
+function saveCariVirman(body) {
+  const kaynakId = String(body.kaynakCariId || "").trim();
+  const hedefId = String(body.hedefCariId || "").trim();
+  const tutar = parseFloat(body.tutar) || 0;
+  if (!kaynakId) return { ok: false, hata: "Kaynak cari seçilmeli" };
+  if (!hedefId) return { ok: false, hata: "Hedef cari seçilmeli" };
+  if (kaynakId === hedefId) return { ok: false, hata: "Kaynak ve hedef cari aynı olamaz" };
+  if (tutar <= 0) return { ok: false, hata: "Tutar sıfırdan büyük olmalı" };
+
+  const kaynakAd = String(body.kaynakCariAd || "");
+  const hedefAd = String(body.hedefCariAd || "");
+  const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
+  const notu = String(body.aciklama || "").trim();
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const id = "vir_" + Date.now();
+
+  const kaynakHareket = cariHareketEkle({
+    cariId: kaynakId, tarih: tarih, tip: "Alacak", tutar: tutar,
+    aciklama: "VIRMAN:" + id + " | Cari Virman — " + hedefAd + " hesabına aktarıldı" + (notu ? " (" + notu + ")" : ""),
+  });
+  if (!kaynakHareket.ok) return { ok: false, hata: "Kaynak cari hareketi eklenemedi" };
+
+  const hedefHareket = cariHareketEkle({
+    cariId: hedefId, tarih: tarih, tip: "Borç", tutar: tutar,
+    aciklama: "VIRMAN:" + id + " | Cari Virman — " + kaynakAd + " hesabından aktarıldı" + (notu ? " (" + notu + ")" : ""),
+  });
+  if (!hedefHareket.ok) {
+    // Hedef tarafı başarısız olduysa, yarım kalmış kaynak hareketini geri al (tutarsız bakiye bırakmamak için).
+    cariHareketSil({ id: kaynakHareket.id });
+    return { ok: false, hata: "Hedef cari hareketi eklenemedi" };
+  }
+
+  const sheet = getOrCreateSheet(ss, SHEETS.cariVirmanlar, CARI_VIRMAN_BASLIKLAR);
+  sheet.appendRow([id, tarih, kaynakId, kaynakAd, hedefId, hedefAd, tutar, notu,
+    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), kaynakHareket.id, hedefHareket.id]);
+
+  cacheTemizle(["cariListesi_v3"]);
+  return { ok: true, id: id };
+}
+
+function getCariVirmanListesi() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.cariVirmanlar, CARI_VIRMAN_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const sonuc = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0]) continue;
+    sonuc.push({
+      id: String(row[0]), tarih: hucreTarihStr(row[1]),
+      kaynakCariId: String(row[2] || ""), kaynakCariAd: String(row[3] || ""),
+      hedefCariId: String(row[4] || ""), hedefCariAd: String(row[5] || ""),
+      tutar: parseFloat(row[6]) || 0, aciklama: String(row[7] || ""),
+    });
+  }
+  sonuc.reverse();
+  return { ok: true, virmanlar: sonuc };
+}
+
+// body: { id } — Silinenler çöp kutusuna kaydedip, iki tarafın CariHareketler
+// satırlarını ve CariVirmanlar satırını siler. "Geri Al" ile saveCariVirman aynı
+// veriyle tekrar çağrılır (GERI_YUKLEME_FN haritası — yeni bir virman ID'siyle).
+function cariVirmanSil(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.cariVirmanlar, CARI_VIRMAN_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === id) {
+      const row = data[i];
+      const veri = {
+        kaynakCariId: String(row[2] || ""), kaynakCariAd: String(row[3] || ""),
+        hedefCariId: String(row[4] || ""), hedefCariAd: String(row[5] || ""),
+        tarih: hucreTarihStr(row[1]), tutar: parseFloat(row[6]) || 0, aciklama: String(row[7] || ""),
+      };
+      silinenlerKaydet("VIRMAN", id, "Cari Virman", veri.kaynakCariAd + " → " + veri.hedefCariAd, veri.tutar, veri);
+      if (row[9]) cariHareketSil({ id: String(row[9]) });
+      if (row[10]) cariHareketSil({ id: String(row[10]) });
+      sheet.deleteRow(i + 1);
+      cacheTemizle(["cariListesi_v3"]);
+      return { ok: true };
+    }
+  }
+  return { ok: false, hata: "Virman kaydı bulunamadı" };
 }
 
 // body: { id }
@@ -3553,6 +3690,80 @@ function tedarikciCariEslesmeKaydet(ss, tedarikci, cariId) {
   sheet.appendRow([t, cariId, simdi]);
 }
 
+// ════════════════════════════════════════════════
+// EDM ÖNEK → TEDARİKÇİ EŞLEŞTİRME — bazı EDM fatura numaraları (ör. "CNY2026000123")
+// gönderen adını net vermez, sadece bir önek taşır. TEDARIKCI eşleştirme hafızasından
+// FARKLI olarak bu, YARI OTOMATİK çalışır: BFM ekranında bir ÖNERİ olarak gösterilir,
+// otomatik doldurulmaz — kullanıcı onaylayınca (bir cariye işleyince) hem fatura hem
+// bu eşleştirme kaydedilir/güncellenir.
+// ════════════════════════════════════════════════
+const EDM_ONEK_ESLESME_BASLIKLAR = ["ONEK","CARI_ID","CARI_AD","GUNCELLEME_TARIHI"];
+
+// Fatura numarasının başındaki harf bloğunu (varsa) önek olarak çıkarır.
+// "CNY2026000123" → "CNY", "FYT2026000005" → "FYT", "2026000123" → "" (harf yoksa önek yok).
+function faturaOnekiCikar(faturaNo) {
+  const m = String(faturaNo || "").trim().toUpperCase().match(/^[A-ZÇĞİÖŞÜ]+/);
+  return m ? m[0] : "";
+}
+
+function edmOnekEslesmeOku(ss) {
+  const sheet = getOrCreateSheet(ss, SHEETS.edmOnekEslesme, EDM_ONEK_ESLESME_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const map = {};
+  for (let i = 1; i < data.length; i++) {
+    const onek = String(data[i][0] || "").trim().toUpperCase();
+    if (onek) map[onek] = { cariId: String(data[i][1] || ""), cariAd: String(data[i][2] || "") };
+  }
+  return map;
+}
+
+function edmOnekEslesmeKaydet(ss, onek, cariId, cariAd) {
+  const o = String(onek || "").trim().toUpperCase();
+  if (!o || !cariId) return;
+  const sheet = getOrCreateSheet(ss, SHEETS.edmOnekEslesme, EDM_ONEK_ESLESME_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0] || "").trim().toUpperCase() === o) {
+      sheet.getRange(i + 1, 2, 1, 3).setValues([[cariId, cariAd || "", simdi]]);
+      return;
+    }
+  }
+  sheet.appendRow([o, cariId, cariAd || "", simdi]);
+}
+
+// Ayarlar ekranındaki yönetim tablosu için: tüm eşleştirmeleri listeler.
+function getEdmOnekEslesmeListesi() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const map = edmOnekEslesmeOku(ss);
+  const sonuc = Object.keys(map).sort().map(onek => ({ onek: onek, cariId: map[onek].cariId, cariAd: map[onek].cariAd }));
+  return { ok: true, kayitlar: sonuc };
+}
+
+// body: { onek, cariId, cariAd } — Ayarlar ekranından elle ekleme/düzenleme.
+function edmOnekEslesmeManuelKaydet(body) {
+  const onek = String(body.onek || "").trim();
+  const cariId = String(body.cariId || "").trim();
+  if (!onek) return { ok: false, hata: "Önek gerekli" };
+  if (!cariId) return { ok: false, hata: "Cari seçilmeli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  edmOnekEslesmeKaydet(ss, onek, cariId, String(body.cariAd || ""));
+  return { ok: true };
+}
+
+// body: { onek }
+function edmOnekEslesmeSil(body) {
+  const onek = String(body.onek || "").trim().toUpperCase();
+  if (!onek) return { ok: false, hata: "onek gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.edmOnekEslesme, EDM_ONEK_ESLESME_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0] || "").trim().toUpperCase() === onek) { sheet.deleteRow(i + 1); return { ok: true }; }
+  }
+  return { ok: false, hata: "Eşleştirme bulunamadı" };
+}
+
 function getBekleyenAlisFaturalari() {
   let disData;
   try {
@@ -3612,6 +3823,9 @@ function getBekleyenAlisFaturalari() {
 
   // Daha önce bu tedarikçi bir cariye eşlenmiş mi? Eşlenmişse onay ekranında otomatik seçili gelsin.
   const eslesmeMap = tedarikciCariEslesmeOku(ss);
+  // EDM fatura no önekinden (ör. "CNY") tedarikçiye — bu SADECE bir ÖNERİ olarak sunulur,
+  // otomatik seçilmez (tedarikçi adı eşleşmesinden farklı olarak kullanıcı onayı gerekir).
+  const onekMap = edmOnekEslesmeOku(ss);
   const cariListeSonuc = getCariListesi();
   const cariByIdMap = {};
   if (cariListeSonuc.ok) cariListeSonuc.cariler.forEach(c => { cariByIdMap[c.id] = c; });
@@ -3651,6 +3865,12 @@ function getBekleyenAlisFaturalari() {
     const eslesenCariId = eslesmeMap[String(f.tedarikci || "").trim().toLocaleLowerCase('tr')] || "";
     f.eslesenCariId = eslesenCariId;
     f.eslesenCariAd = eslesenCariId && cariByIdMap[eslesenCariId] ? cariByIdMap[eslesenCariId].ad : "";
+    // Tedarikçi adı eşleşmesi yoksa, fatura no önekinden bir ÖNERİ üret (otomatik uygulanmaz).
+    f.onek = faturaOnekiCikar(f.faturaNo);
+    if (!eslesenCariId && f.onek && onekMap[f.onek]) {
+      f.onekOnerisiCariId = onekMap[f.onek].cariId;
+      f.onekOnerisiCariAd = onekMap[f.onek].cariAd || (cariByIdMap[onekMap[f.onek].cariId] ? cariByIdMap[onekMap[f.onek].cariId].ad : "");
+    }
     // Genel toplam = fatura tutarı (KDV dahil). Kaynak veride miktar olmadığından
     // birim fiyatlar üzerinden hesaplanıyor — gerçek fatura toplamı miktarla çarpılınca değişebilir.
     f.netToplam = f.kalemler.reduce((t, k) => t + k.netFiyat, 0);
@@ -3694,6 +3914,13 @@ function onaylaAlisFaturasi(body) {
   // için bu eşleşmeyi hatırla (bir sonraki onay ekranında otomatik seçili gelsin).
   if (body.cariId && body.tedarikci) {
     tedarikciCariEslesmeKaydet(ss, body.tedarikci, String(body.cariId).trim());
+  }
+  // Fatura no'da bir önek varsa (ör. "CNY"), bu önek → cari eşleştirmesini de
+  // öğren/güncelle — sonraki aynı önekli faturalarda BFM'de öneri olarak çıkar
+  // (yine de otomatik uygulanmaz, kullanıcı onayı gerekir).
+  const onek = faturaOnekiCikar(faturaNo);
+  if (body.cariId && onek) {
+    edmOnekEslesmeKaydet(ss, onek, String(body.cariId).trim(), String(body.cariAd || ""));
   }
 
   return { ok: true, alisId: alisSonuc.id, toplamTutar: alisSonuc.toplamTutar };
