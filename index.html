@@ -7147,8 +7147,9 @@ function ayarlarBolumleriKur(){
     baslikEl.classList.add("ayarlar-bolum-baslik");
     baslikEl.innerHTML = `<span>${baslikEl.textContent}</span><span class="ayarlar-bolum-ok">▾</span>`;
 
-    // Varsayılan: açık. Daha önce kullanıcı kapatmışsa (localStorage) kapalı başlar.
-    if(localStorage.getItem(anahtar) === "kapali"){ panel.classList.add("ayarlar-bolum-kapali"); }
+    // Varsayılan: KAPALI (sadece başlıklar görünür, menü kısa kalır). Kullanıcı
+    // daha önce bir bölümü elle AÇMIŞSA (localStorage) o bölüm açık başlar.
+    if(localStorage.getItem(anahtar) !== "acik"){ panel.classList.add("ayarlar-bolum-kapali"); }
 
     baslikEl.onclick = function(){
       panel.classList.toggle("ayarlar-bolum-kapali");
