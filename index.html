@@ -2184,6 +2184,7 @@ function cariListesiYukle(){
     _cariListe = onbellek.sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
     cariListesiCiz(_cariListe);
     if(typeof cvirmanCariSelectDoldur === "function") cvirmanCariSelectDoldur();
+    if(typeof edmOnekCariSelectDoldur === "function") edmOnekCariSelectDoldur();
   } else {
     document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   }
@@ -2193,6 +2194,7 @@ function cariListesiYukle(){
     onbellekYaz("cariListesi", res.cariler);
     cariListesiCiz(_cariListe);
     if(typeof cvirmanCariSelectDoldur === "function") cvirmanCariSelectDoldur();
+    if(typeof edmOnekCariSelectDoldur === "function") edmOnekCariSelectDoldur();
     if(_cariListe.length === 0){
       console.log("CARİ TEŞHİS: sayfa adı=", res._teshisSheetAdi, "okunan satır sayısı (başlık dahil)=", res._teshisHDataUzunluk);
     }
@@ -4870,9 +4872,13 @@ function alisBekleyenDurumSifirla(faturaNo){
 
 // ── Ayarlar > EDM Önek → Tedarikçi Eşleştirme yönetim tablosu ──
 let _edmOnekListe = [];
-function edmOnekEslesmeYukle(){
+function edmOnekCariSelectDoldur(){
   const selEl = document.getElementById("edmonek-yeni-cari");
   if(selEl) selEl.innerHTML = '<option value="">— cari seçin —</option>' + _cariListe.map(c=>`<option value="${c.id}">${c.ad}</option>`).join("");
+}
+
+function edmOnekEslesmeYukle(){
+  if(!_cariYuklendi) cariListesiYukle(); else edmOnekCariSelectDoldur();
   const el = document.getElementById("edmonek-liste");
   if(!el) return;
   el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
