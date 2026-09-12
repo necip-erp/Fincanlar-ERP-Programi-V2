@@ -257,6 +257,8 @@ table.hareket-tbl tr:hover td{background:var(--bg3)}
 table.hareket-tbl tr.hk-row{cursor:pointer}
 .hk-borc{color:var(--red);font-weight:700;background:var(--red-l);padding:2px 8px;border-radius:20px;font-size:11.5px;white-space:nowrap}
 .uyari-kutu{background:var(--red-l);color:var(--red);font-weight:700;font-size:13px;padding:10px 14px;border-radius:10px;margin:0 16px 12px}
+.hk-tutar-borc{color:var(--red);font-weight:700;white-space:nowrap}
+.hk-tutar-alacak{color:var(--green);font-weight:700;white-space:nowrap}
 .hk-alacak{color:var(--green);font-weight:700;background:var(--green-l);padding:2px 8px;border-radius:20px;font-size:11.5px;white-space:nowrap}
 .hk-sil{color:var(--text3);cursor:pointer;font-size:14px;transition:color var(--t),transform var(--t);display:inline-block}
 .hk-sil:hover{color:var(--red);transform:scale(1.12)}
@@ -705,6 +707,12 @@ setInterval(topbarSaatGuncelle, 10000);
         <div class="fld" style="max-width:240px"><label>Ürün</label>
           <select id="shr-urun-secim"><option value="">— Tüm ürünler —</option></select>
         </div>
+        <div class="fld" style="max-width:180px"><label>Marka</label>
+          <select id="shr-marka-secim" onchange="stokHareketRaporuCiz()"><option value="">— Tüm markalar —</option></select>
+        </div>
+        <div class="fld" style="max-width:180px"><label>Ebat</label>
+          <select id="shr-ebat-secim" onchange="stokHareketRaporuCiz()"><option value="">— Tüm ebatlar —</option></select>
+        </div>
         <div class="fld" style="max-width:260px"><label>Ara</label>
           <input type="text" id="shr-arama" placeholder="Ürün, stok kodu, belge no, açıklama..." oninput="stokHareketAramaFiltrele(this.value)">
         </div>
@@ -937,6 +945,17 @@ setInterval(topbarSaatGuncelle, 10000);
       <div id="mr-icerik"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
   </div>
+  <div class="modview" id="mod-silinenler">
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Silinen Kayıtlar</div>
+      <p style="font-size:13px;color:var(--text2);margin-top:-8px">
+        Çek/Senet, Tahsilat, Ödeme, Satış (Fatura/Teklif/Sipariş/İade) ve Alış (Fatura/İade)
+        modüllerinde silinen her kayıt burada listelenir. "Geri Al" ile kayıt, ilişkili
+        cari/stok hareketleriyle birlikte yeniden oluşturulur.
+      </p>
+      <div id="silinenler-icerik"><div class="cari-empty">Yükleniyor...</div></div>
+    </div>
+  </div>
   <div class="modview" id="mod-ayarlar">
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Kısayol Tuşları</div>
@@ -1076,6 +1095,7 @@ const MODULLER = [
   {id:"satis",    ic:"📤", lbl:"Satış",     desc:"Satış işlemleri",         renk:"green"},
   {id:"finans",   ic:"📊", lbl:"Finans",    desc:"Genel finans durumu",     renk:"blue"},
   {id:"rapor",    ic:"📈", lbl:"Rapor",     desc:"Raporlar",                renk:"blue"},
+  {id:"silinenler", ic:"🗑️", lbl:"Silinenler", desc:"Silinen kayıtlar, geri al", renk:"neutral"},
   {id:"ayarlar",  ic:"⚙️", lbl:"Ayarlar",   desc:"Kısayollar ve düzen",     renk:"neutral"},
 ];
 
@@ -1549,6 +1569,8 @@ function modulAc(id){
   if(!_acikSekmeler.includes(id)) _acikSekmeler.push(id);
   _aktifSekme = id;
   sekmeSeridiCiz();
+  // Silinenler listesi her açılışta taze olmalı (stale cache burada yanıltıcı olur).
+  if(id === "silinenler") silinenlerYukle();
 }
 
 function gitAnaSayfa(){
@@ -2240,8 +2262,8 @@ function hkAciklamaGoster(aciklama){
 
 const HK_SUTUNLAR = {
   tarih:    { baslik:"Tarih",     render: h => tarihGoster(h.tarih), sortDeger: h => h.tarih || "" },
-  tip:      { baslik:"Tip",       render: h => `<span class="${h.tip==='Borç'?'hk-borc':'hk-alacak'}">${h.tip}</span>`, sortDeger: h => h.tip || "" },
-  tutar:    { baslik:"Tutar",     render: h => paraFormat(h.tutar), sortDeger: h => parseFloat(h.tutar) || 0 },
+  borc:     { baslik:"Borç",      render: h => h.tip==='Borç' ? `<span class="hk-tutar-borc">${paraFormat(h.tutar)}</span>` : "", sortDeger: h => h.tip==='Borç' ? (parseFloat(h.tutar)||0) : -1 },
+  alacak:   { baslik:"Alacak",    render: h => h.tip==='Alacak' ? `<span class="hk-tutar-alacak">${paraFormat(h.tutar)}</span>` : "", sortDeger: h => h.tip==='Alacak' ? (parseFloat(h.tutar)||0) : -1 },
   vade:     { baslik:"Vade",      render: h => { if(!h.vade) return "—"; const gecti = h.tip==='Borç' && h.vade < new Date().toISOString().slice(0,10); return gecti ? `<span class="hk-borc">${tarihGoster(h.vade)}</span>` : tarihGoster(h.vade); }, sortDeger: h => h.vade || "" },
   aciklama: { baslik:"Açıklama",  render: h => hkAciklamaGoster(h.aciklama), sortDeger: h => hkAciklamaGoster(h.aciklama) || "" },
   bakiye:   { baslik:"Bakiye",    render: h => `<span class="${bakiyeSinifi(h.bakiyeSonrasi)}">${paraFormat(h.bakiyeSonrasi)}</span>`, sortDeger: h => parseFloat(h.bakiyeSonrasi) || 0 },
@@ -3082,8 +3104,15 @@ function belgeFormuCiz(s, kalemler, t, c){
   setTimeout(()=>{ div.remove(); }, 500);
 }
 
+// Silme onaylarında ortak, ayrıntılı uyarı metni — "ne siliniyor" net görünsün diye.
+function silOnaySor(ozet){
+  return confirm(ozet+"\n\nBu kaydı silmek istediğinize emin misiniz?\n(Bu işlem 'Silinenler' bölümünden geri alınabilir.)");
+}
+
 function satisSilOnay(id){
-  if(!confirm("Bu satışı silmek istediğinize emin misiniz? (Cariye eklenmiş borç hareketi varsa o da geri alınır)")) return;
+  const s = _satisListe.find(x=>x.id===id);
+  const ozet = s ? (s.belgeTipi+" — "+s.cariAd+" — "+paraFormat(s.toplamTutar)) : "Bu satış";
+  if(!silOnaySor(ozet)) return;
   cariApi("silSatis", {id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     satisListeyeDon();
@@ -3687,7 +3716,9 @@ function satisIadeDetayCiz(res){
 }
 
 function satisIadeSilOnay(id){
-  if(!confirm("Bu iadeyi silmek istediğinize emin misiniz? (Cariye eklenmiş alacak hareketi varsa o da geri alınır)")) return;
+  const a = _satisIadeListe.find(x=>x.id===id);
+  const ozet = a ? ("Satış İadesi — "+a.cariAd+" — "+paraFormat(a.toplamTutar)) : "Bu iade";
+  if(!silOnaySor(ozet)) return;
   cariApi("silSatisIade", {id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     satisIadeListeyeDon();
@@ -4054,7 +4085,9 @@ function alisDetayCiz(res){
 }
 
 function alisSilOnay(id){
-  if(!confirm("Bu alışı silmek istediğinize emin misiniz? (Cariye eklenmiş alacak hareketi varsa o da geri alınır)")) return;
+  const a = _alisListe.find(x=>x.id===id);
+  const ozet = a ? ("Alış Faturası — "+a.cariAd+" — "+paraFormat(a.toplamTutar)) : "Bu alış";
+  if(!silOnaySor(ozet)) return;
   cariApi("silAlis", {id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     alisListeyeDon();
@@ -4391,7 +4424,9 @@ function alisIadeDetayCiz(res){
 }
 
 function alisIadeSilOnay(id){
-  if(!confirm("Bu iadeyi silmek istediğinize emin misiniz? (Cariye eklenmiş borç hareketi varsa o da geri alınır)")) return;
+  const a = _alisIadeListe.find(x=>x.id===id);
+  const ozet = a ? ("Alış İadesi — "+a.cariAd+" — "+paraFormat(a.toplamTutar)) : "Bu iade";
+  if(!silOnaySor(ozet)) return;
   cariApi("silAlisIade", {id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     alisIadeListeyeDon();
@@ -5316,7 +5351,9 @@ function tahsilatListeyeDon(){
 }
 
 function tahsilatSilOnay(id){
-  if(!confirm("Bu tahsilatı silmek istediğinize emin misiniz? (Cariye eklenmiş alacak hareketi de geri alınır)")) return;
+  const t = _tahsilatListe.find(x=>x.id===id);
+  const ozet = t ? ("Tahsilat ("+t.yontem+") — "+t.cariAd+" — "+paraFormat(t.tutar)) : "Bu tahsilat";
+  if(!silOnaySor(ozet)) return;
   cariApi("silTahsilat", {id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     tahsilatListeyeDon();
@@ -5575,7 +5612,9 @@ function odemeListeyeDon(){
 }
 
 function odemeSilOnay(id){
-  if(!confirm("Bu ödemeyi silmek istediğinize emin misiniz? (Cariye eklenmiş borç hareketi de geri alınır)")) return;
+  const o = _odemeListe.find(x=>x.id===id);
+  const ozet = o ? ("Ödeme ("+o.yontem+") — "+(o.cariAd||o.hedefAd||"")+" — "+paraFormat(o.tutar)) : "Bu ödeme";
+  if(!silOnaySor(ozet)) return;
   cariApi("silOdeme", {id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     odemeListeyeDon();
@@ -5896,6 +5935,7 @@ function cekSenetAc(id){
     if(!res.ok){ panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>'+(res.hata||"Bulunamadı")+'</p></div>'; return; }
     const c = res.cek;
     const acik = c.durum === "Portföyde";
+    const hareketVar = res.hareketler.length > 0;
     panel.innerHTML = `
       <button class="cari-back-btn" onclick="cekSenetListeyeDon()">← Listeye dön</button>
       <div class="cari-detail-head">
@@ -5917,18 +5957,66 @@ function cekSenetAc(id){
       ${acik ? `
       <div class="btnrow">
         <button class="btn btn-primary" onclick="cekSenetIslemModalAc('${c.id}')">${c.tip==='Alınan'?'💰 Tahsil Et':'💸 Öde'}</button>
-        <button class="btn" onclick="cekSenetDurumGuncelleOnay('${c.id}','${c.tip==='Alınan'?'Ciro Edildi':'Karşılıksız'}')">${c.tip==='Alınan'?'↪️ Ciro Et':'⚠️ Karşılıksız'}</button>
-        ${c.tip==='Alınan' ? `<button class="btn" onclick="cekSenetDurumGuncelleOnay('${c.id}','Karşılıksız')">⚠️ Karşılıksız İşaretle</button>` : ""}
+        ${c.tip==='Alınan' ? `<button class="btn" onclick="cekSenetCiroModalAc('${c.id}')">↪️ Ciro Et</button>` : ""}
+        <button class="btn" onclick="cekSenetDurumGuncelleOnay('${c.id}','Karşılıksız')">⚠️ Karşılıksız İşaretle</button>
       </div>` : ""}
       ${res.hareketler.length ? `
       <div class="rapor-baslik">İşlem Geçmişi</div>
       <table class="hk-tablo"><thead><tr><th>Tarih</th><th>İşlem</th><th>Tutar</th><th>Açıklama</th></tr></thead>
       <tbody>${res.hareketler.map(h=>`<tr><td>${tarihGoster(h.tarih)}</td><td>${h.tip}</td><td>${h.tutar?paraFormat(h.tutar):'—'}</td><td>${h.aciklama||'—'}</td></tr>`).join("")}</tbody></table>` : ""}
+
+      <div class="rapor-baslik" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span>Görseller</span>
+        <label class="btn" style="padding:4px 12px;font-size:13px;margin:0;cursor:pointer">
+          📷 Görsel Ekle<input type="file" accept="image/*" capture="environment" style="display:none" onchange="cekSenetGorselSec(event,'${c.id}')">
+        </label>
+      </div>
+      <div id="ceksenet-gorseller">Yükleniyor...</div>
+
       <div class="btnrow" style="margin-top:14px">
-        <button class="btn btn-danger" onclick="cekSenetSilOnay('${c.id}')">🗑 Sil</button>
+        ${hareketVar ? `<button class="btn" onclick="cekSenetHareketGeriAlOnay('${c.id}')" title="Son ciro/tahsilat/karşılıksız işlemini tek başına geri alır">↩️ Son Hareketi Geri Al</button>` : ""}
+        <button class="btn btn-danger" onclick="cekSenetSilOnay('${c.id}', ${hareketVar})">🗑 Sil</button>
       </div>
     `;
     cekSenetListesiCiz();
+    cekSenetGorselleriYukle(id);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+function cekSenetGorselleriYukle(cekId){
+  const el = document.getElementById("ceksenet-gorseller");
+  if(!el) return;
+  cariApi("getCekSenetGorselleri", {cekId}).then(res=>{
+    if(!el) return; // ekran değişmiş olabilir
+    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||"bilinmiyor")+'</div>'; return; }
+    if(res.gorseller.length===0){ el.innerHTML = '<div class="cari-empty">Henüz görsel eklenmedi.</div>'; return; }
+    el.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap">' + res.gorseller.map(g=>`
+      <div style="position:relative">
+        <a href="${g.dosyaUrl}" target="_blank"><img src="${g.dosyaUrl}" style="width:110px;height:110px;object-fit:cover;border-radius:var(--r-sm);border:1px solid var(--border)"></a>
+        <span onclick="cekSenetGorselSilOnay('${g.id}','${cekId}')" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px">✕</span>
+      </div>`).join("") + '</div>';
+  }).catch(()=>{ if(el) el.innerHTML = '<div class="cari-empty">Görseller yüklenemedi.</div>'; });
+}
+
+function cekSenetGorselSec(evt, cekId){
+  const dosya = evt.target.files && evt.target.files[0];
+  if(!dosya) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    cariApi("cekSenetGorselYukle", {cekId, dosyaBase64: reader.result, dosyaAdi: dosya.name, mimeType: dosya.type}).then(res=>{
+      if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+      cekSenetGorselleriYukle(cekId);
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  };
+  reader.readAsDataURL(dosya);
+  evt.target.value = "";
+}
+
+function cekSenetGorselSilOnay(id, cekId){
+  if(!confirm("Bu görseli silmek istediğinize emin misiniz?")) return;
+  cariApi("silCekSenetGorseli", {id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    cekSenetGorselleriYukle(cekId);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
@@ -5936,8 +6024,14 @@ function cekSenetListeyeDon(){
   document.getElementById("mod-ceksenet").classList.remove("detay-acik");
 }
 
-function cekSenetSilOnay(id){
-  if(!confirm("Bu çek/senedi silmek istediğinize emin misiniz? (Cariye eklenmiş hareket ve varsa kısmi işlem geçmişi de geri alınır)")) return;
+function cekSenetSilOnay(id, hareketVar){
+  if(hareketVar){
+    alert("Bu çek/senette işlem geçmişi (ciro, kısmi tahsilat/ödeme veya karşılıksız kaydı) var.\n\nÖnce '↩️ Son Hareketi Geri Al' ile bu işlemleri TEK TEK geri almanız gerekiyor — aksi halde ciro gibi başka bir cariye etki eden işlemler yanlışlıkla birlikte silinebilir.");
+    return;
+  }
+  const c = _cekSenetListe.find(x=>x.id===id);
+  const detay = c ? (c.tip+" çek/senet — "+c.cariAd+" — "+paraFormat(c.tutar)) : "Bu çek/senet";
+  if(!confirm(detay+"\n\nBu kaydı silmek istediğinize emin misiniz?\n(Cariye işlenmiş hareket de birlikte geri alınır. Bu işlem 'Silinenler' bölümünden geri alınabilir.)")) return;
   cariApi("silCekSenet", {id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     cekSenetListeyeDon();
@@ -5948,12 +6042,84 @@ function cekSenetSilOnay(id){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
+function cekSenetHareketGeriAlOnay(id){
+  if(!confirm("Bu çek/senetteki EN SON işlemi (ciro, kısmi tahsilat/ödeme veya karşılıksız kaydı) geri almak istediğinize emin misiniz?\n\nSadece son işlem geri alınır, çek/senedin kendisi silinmez.")) return;
+  cariApi("cekSenetHareketGeriAl", {id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    cekSenetListesiYukle();
+    cariListesiYukle();
+    cekSenetAc(id);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
 function cekSenetDurumGuncelleOnay(id, durum){
-  const soru = durum === "Karşılıksız" ? "Bu çek/senet karşılıksız mı çıktı?" : "Bu çek/senet başka bir cariye ciro mu edildi?";
-  if(!confirm(soru+" (Cari bakiyesi değişmez, sadece durum güncellenir)")) return;
+  if(!confirm("Bu çek/senet karşılıksız mı çıktı? (Cari bakiyesi değişmez, sadece durum güncellenir)")) return;
   cariApi("cekSenetDurumGuncelle", {id, durum}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     cekSenetListesiYukle();
+    cekSenetAc(id);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// Ciro Et: hedef cariyi seçtirir ve o cariye Borç (bize olan borcumuz azalır) hareketi düşer.
+function cekSenetCiroModalAc(id){
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "cekciro-modal-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h3>Çeki Ciro Et</h3>
+      <p style="font-size:13px;color:var(--text2)">Bu çeki hangi cariye (tedarikçiye) ciro ediyorsunuz? Seçtiğiniz cariye, çek tutarı kadar Borç hareketi düşülür (o cariye olan borcunuz bu kadar azalır).</p>
+      <div class="fld" style="position:relative">
+        <label>Cari</label>
+        <input id="cekciro-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" style="padding-right:34px"
+               oninput="cekciroCariAramaDegisti(this.value)"
+               onblur="setTimeout(()=>{const k=document.getElementById('cekciro-cari-oneri'); if(k) k.style.display='none';},200)"
+               onfocus="cekciroCariAramaDegisti(this.value)">
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('cekciro-cari').value=c.id; document.getElementById('cekciro-cari-arama').value=c.ad; })">🔍</button>
+        <input type="hidden" id="cekciro-cari" value="">
+        <div id="cekciro-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+      </div>
+      <div class="fld"><label>Açıklama</label><input id="cekciro-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('cekciro-modal-overlay').remove()">İptal</button>
+        <button class="btn btn-primary" onclick="cekSenetCiroKaydet('${id}')">Ciro Et</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  if(!_cariYuklendi) cariListesiYukle();
+}
+
+function cekciroCariAramaDegisti(deger){
+  document.getElementById("cekciro-cari").value = "";
+  const kutu = document.getElementById("cekciro-cari-oneri");
+  const q = (deger||"").trim().toLocaleLowerCase('tr');
+  if(!kutu || q.length<1){ if(kutu) kutu.style.display="none"; return; }
+  const eslesenler = (_cariListe||[]).filter(c=>(c.ad||"").toLocaleLowerCase('tr').includes(q)).slice(0,8);
+  if(eslesenler.length===0){ kutu.style.display="none"; return; }
+  kutu.innerHTML = eslesenler.map((c,i)=>`<div class="fiyat-gecmis-satir" onclick="cekciroCariSec(${i})" data-oneri-idx="${i}"><span>${c.ad}</span></div>`).join("");
+  kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+  kutu.style.display = "block";
+}
+function cekciroCariSec(i){
+  const kutu = document.getElementById("cekciro-cari-oneri");
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const c = eslesenler[i];
+  if(!c) return;
+  document.getElementById("cekciro-cari").value = c.id;
+  document.getElementById("cekciro-cari-arama").value = c.ad;
+  kutu.style.display = "none";
+}
+function cekSenetCiroKaydet(id){
+  const ciroCariId = document.getElementById("cekciro-cari").value;
+  if(!ciroCariId){ alert("Lütfen ciro edilecek cariyi seçin"); return; }
+  const aciklama = document.getElementById("cekciro-aciklama").value;
+  cariApi("cekSenetDurumGuncelle", {id, durum:"Ciro Edildi", ciroCariId, aciklama}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    document.getElementById("cekciro-modal-overlay").remove();
+    cekSenetListesiYukle();
+    cariListesiYukle();
     cekSenetAc(id);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
@@ -6453,7 +6619,7 @@ function muhasebeRaporuYukle(){
           <thead><tr><th>Ürün</th>${tip==='urunBazliHareket'?'<th>Giriş Miktar</th><th>Çıkış Miktar</th>':'<th>Miktar</th>'}<th>Toplam Tutar</th></tr></thead>
           <tbody>
             ${res.satirlar.map(s=>`
-              <tr><td>${s.urunAdi}</td>${tip==='urunBazliHareket'?`<td>${s.girisMiktar}</td><td>${s.cikisMiktar}</td>`:`<td>${s.cikisMiktar}</td>`}<td>${paraFormat(s.tutar)}</td></tr>`).join("")}
+              <tr><td>${s.urunAdi}</td>${tip==='urunBazliHareket'?`<td>${miktarFormat(s.girisMiktar)}</td><td>${miktarFormat(s.cikisMiktar)}</td>`:`<td>${miktarFormat(s.cikisMiktar)}</td>`}<td>${paraFormat(s.tutar)}</td></tr>`).join("")}
           </tbody>
           <tfoot><tr><td colspan="${tip==='urunBazliHareket'?3:2}"><b>Toplam</b></td><td><b>${paraFormat(res.toplam)}</b></td></tr></tfoot>
         </table>`;
@@ -6461,6 +6627,76 @@ function muhasebeRaporuYukle(){
   }).catch(err=>{
     el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
+}
+</script>
+
+<!-- ══════════════ SİLİNENLER (geri alınabilir çöp kutusu) ══════════════ -->
+<!-- Çek/Senet, Tahsilat, Ödeme, Satış (Fatura/Teklif/Sipariş/İade), Alış (Fatura/İade)
+     modüllerindeki her silme işlemi, backend tarafında silinmeden önce buraya bir
+     anlık görüntü olarak kaydediliyor. "Geri Al" denince, ilgili save___ fonksiyonu
+     aynı veriyle tekrar çağrılıyor — kayıt (yeni bir ID ile) cari/stok hareketleri
+     dahil eksiksiz yeniden oluşuyor. -->
+<script>
+let _silinenlerListe = [];
+const SILINEN_TIP_ETIKET = {
+  TAHSILAT:"Tahsilat", ODEME:"Ödeme", SATIS:"Satış", ALIS:"Alış",
+  ALISIADE:"Alış İadesi", SATISIADE:"Satış İadesi", CEKSENET:"Çek/Senet",
+};
+const SILINEN_TIP_IKON = {
+  TAHSILAT:"💰", ODEME:"💳", SATIS:"📤", ALIS:"📥", ALISIADE:"↩️", SATISIADE:"↩️", CEKSENET:"🧾",
+};
+
+function silinenlerYukle(){
+  const el = document.getElementById("silinenler-icerik");
+  el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getSilinenlerListesi").then(res=>{
+    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _silinenlerListe = res.silinenler;
+    silinenlerCiz();
+  }).catch(err=>{
+    el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
+  });
+}
+
+function silinenlerCiz(){
+  const el = document.getElementById("silinenler-icerik");
+  if(_silinenlerListe.length === 0){ el.innerHTML = '<div class="cari-empty">Silinen kayıt yok.</div>'; return; }
+  el.innerHTML = `
+    <table class="hareket-tbl">
+      <thead><tr><th></th><th>Tür</th><th>Cari</th><th>Tutar</th><th>Silme Tarihi</th><th></th></tr></thead>
+      <tbody>
+        ${_silinenlerListe.map(s=>`
+          <tr>
+            <td>${SILINEN_TIP_IKON[s.tip]||"🗑️"}</td>
+            <td>${s.baslik || SILINEN_TIP_ETIKET[s.tip] || s.tip}</td>
+            <td>${s.cariAd || "—"}</td>
+            <td>${s.tutar ? paraFormat(s.tutar) : "—"}</td>
+            <td>${s.silmeTarihi}</td>
+            <td><button class="btn btn-primary" style="padding:4px 12px;font-size:12.5px" onclick="silinenGeriAlOnay('${s.id}')">↩️ Geri Al</button></td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function silinenGeriAlOnay(id){
+  const s = _silinenlerListe.find(x=>x.id===id);
+  const ozet = s ? ((s.baslik||SILINEN_TIP_ETIKET[s.tip])+" — "+(s.cariAd||"")+" — "+(s.tutar?paraFormat(s.tutar):"")) : "Bu kayıt";
+  if(!confirm(ozet+"\n\nBu kaydı geri almak istediğinize emin misiniz? Kayıt, ilişkili cari/stok hareketleriyle birlikte YENİDEN oluşturulacak (yeni bir kayıt numarasıyla).")) return;
+  cariApi("silinenGeriAl", {id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    silinenlerYukle();
+    // İlgili modüllerin listeleri de bayatlamış olabilir — sekmesi açıksa tazelensin diye
+    // ilgili _*Yuklendi bayraklarını sıfırlayıp bir sonraki açılışta tazelenmelerini sağlıyoruz.
+    cariListesiYukle();
+    if(typeof tahsilatListesiYukle === "function") tahsilatListesiYukle();
+    if(typeof odemeListesiYukle === "function") odemeListesiYukle();
+    if(typeof satisListesiYukle === "function") satisListesiYukle();
+    if(typeof alisListesiYukle === "function") alisListesiYukle();
+    if(typeof alisIadeListesiYukle === "function") alisIadeListesiYukle();
+    if(typeof satisIadeListesiYukle === "function") satisIadeListesiYukle();
+    if(typeof cekSenetListesiYukle === "function") cekSenetListesiYukle();
+    alert("Kayıt geri alındı.");
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 </script>
 
@@ -8012,11 +8248,33 @@ function stokHareketSonrakiNoKullan(mod){
 let _shrSonuc = null;
 function stokHareketUrunFiltreDoldur(){
   const sel = document.getElementById("shr-urun-secim");
-  if(!sel || sel.dataset.dolduruldu) return;
-  if(!_stokTanimListe || _stokTanimListe.length===0){ if(!_stokTanimYuklendi) stokTanimListesiYukle(); return; }
-  sel.innerHTML = '<option value="">— Tüm ürünler —</option>' +
-    _stokTanimListe.map(s=>`<option value="${s.id}">${s.stokAdi}</option>`).join("");
-  sel.dataset.dolduruldu = "1";
+  if(sel && !sel.dataset.dolduruldu){
+    if(!_stokTanimListe || _stokTanimListe.length===0){ if(!_stokTanimYuklendi) stokTanimListesiYukle(); }
+    else{
+      sel.innerHTML = '<option value="">— Tüm ürünler —</option>' +
+        _stokTanimListe.map(s=>`<option value="${s.id}">${s.stokAdi}</option>`).join("");
+      sel.dataset.dolduruldu = "1";
+    }
+  }
+  // Marka ve Ebat filtre listeleri henüz yüklenmediyse yükle (Stok Tanımları ekranıyla aynı kaynak).
+  // Bu API çağrıları asenkron olduğundan, ilk açılışta liste henüz gelmemiş olabilir —
+  // 500ms sonra bir kez daha denenir (genelde bu sürede API cevabı gelmiş olur).
+  let eksikVarMi = false;
+  if(!_markaYuklendi){ markaListesiYukle(); eksikVarMi = true; }
+  if(!_tanimListeYuklendi.ebat){ tanimListesiYukle("ebat"); eksikVarMi = true; }
+  const markaSel = document.getElementById("shr-marka-secim");
+  if(markaSel && !markaSel.dataset.dolduruldu && _markaListe.length){
+    markaSel.innerHTML = '<option value="">— Tüm markalar —</option>' +
+      _markaListe.map(m=>`<option value="${m.id}">${m.kod?m.kod+' — ':''}${m.ad}</option>`).join("");
+    markaSel.dataset.dolduruldu = "1";
+  } else if(markaSel && !markaSel.dataset.dolduruldu) eksikVarMi = true;
+  const ebatSel = document.getElementById("shr-ebat-secim");
+  if(ebatSel && !ebatSel.dataset.dolduruldu && _tanimListeCache.ebat.length){
+    ebatSel.innerHTML = '<option value="">— Tüm ebatlar —</option>' +
+      _tanimListeCache.ebat.map(e=>`<option value="${e.id}">${e.ad}</option>`).join("");
+    ebatSel.dataset.dolduruldu = "1";
+  } else if(ebatSel && !ebatSel.dataset.dolduruldu) eksikVarMi = true;
+  if(eksikVarMi) setTimeout(stokHareketUrunFiltreDoldur, 500);
 }
 
 function stokHareketGecmisiDoldurTikla(){
@@ -8092,14 +8350,33 @@ function stokHareketRaporuCiz(){
   const el = document.getElementById("shr-icerik");
   if(!_shrSonuc){ el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>'; return; }
   const q = (document.getElementById("shr-arama").value || "").trim().toLocaleLowerCase('tr');
-  let hareketler = !q ? _shrSonuc.hareketler : _shrSonuc.hareketler.filter(h =>
-    (h.stokAdi||"").toLocaleLowerCase('tr').includes(q) ||
-    (h.stokKodu||"").toLocaleLowerCase('tr').includes(q) ||
-    (h.belgeNo||"").toLocaleLowerCase('tr').includes(q) ||
-    (h.belgeTipi||"").toLocaleLowerCase('tr').includes(q) ||
-    (h.aciklama||"").toLocaleLowerCase('tr').includes(q)
-  );
-  if(hareketler.length===0){ el.innerHTML = '<div class="cari-empty">'+(q?'Aramayla eşleşen hareket yok.':'Bu aralıkta stok hareketi yok.')+'</div>'; return; }
+  const markaId = document.getElementById("shr-marka-secim") ? document.getElementById("shr-marka-secim").value : "";
+  const ebatId = document.getElementById("shr-ebat-secim") ? document.getElementById("shr-ebat-secim").value : "";
+  // Stok Hareketleri satırları sadece stokKodu/stokAdi taşır; Marka/Ebat bilgisi
+  // Stok Tanımları'nda olduğu için, filtre öncesi stokKodu -> {markaId,ebatId} eşlemesi çıkarılır.
+  let stokKoduBilgi = null;
+  if(markaId || ebatId){
+    stokKoduBilgi = {};
+    (_stokTanimListe||[]).forEach(s=>{ if(s.stokKodu) stokKoduBilgi[s.stokKodu] = s; });
+  }
+  let hareketler = _shrSonuc.hareketler.filter(h => {
+    if(q){
+      const eslesti = (h.stokAdi||"").toLocaleLowerCase('tr').includes(q) ||
+        (h.stokKodu||"").toLocaleLowerCase('tr').includes(q) ||
+        (h.belgeNo||"").toLocaleLowerCase('tr').includes(q) ||
+        (h.belgeTipi||"").toLocaleLowerCase('tr').includes(q) ||
+        (h.aciklama||"").toLocaleLowerCase('tr').includes(q);
+      if(!eslesti) return false;
+    }
+    if(markaId || ebatId){
+      const bilgi = stokKoduBilgi[h.stokKodu];
+      if(!bilgi) return false; // stok kodu tanımlı değilse (Stoksuz kalem vb.) marka/ebat filtresine giremez
+      if(markaId && bilgi.markaId !== markaId) return false;
+      if(ebatId && bilgi.ebatId !== ebatId) return false;
+    }
+    return true;
+  });
+  if(hareketler.length===0){ el.innerHTML = '<div class="cari-empty">'+((q||markaId||ebatId)?'Filtreyle eşleşen hareket yok.':'Bu aralıkta stok hareketi yok.')+'</div>'; return; }
 
   const sutun = SHR_SUTUNLAR.find(s=>s.anahtar===_shrSirala.anahtar) || SHR_SUTUNLAR[0];
   hareketler = hareketler.slice().sort((a,b)=>{
@@ -8151,6 +8428,8 @@ function stokHareketRaporuTemizle(){
   document.getElementById("shr-baslangic").value = "";
   document.getElementById("shr-bitis").value = "";
   document.getElementById("shr-urun-secim").value = "";
+  const markaSel = document.getElementById("shr-marka-secim"); if(markaSel) markaSel.value = "";
+  const ebatSel = document.getElementById("shr-ebat-secim"); if(ebatSel) ebatSel.value = "";
   document.getElementById("shr-arama").value = "";
   stokHareketRaporuYukle();
 }

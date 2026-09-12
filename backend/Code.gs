@@ -43,6 +43,8 @@ const SHEETS = {
   aciklamaSablonlari: "AciklamaSablonlari",
   cekSenetler: "CekSenetler",
   cekSenetHareketleri: "CekSenetHareketleri",
+  cekSenetGorselleri: "CekSenetGorselleri",
+  silinenIslemler: "SilinenIslemler",
   alisFaturaDurum: "AlisFaturaDurum",
   siparisDurumlari: "SiparisDurumlari",
   plasiyerler: "Plasiyerler",
@@ -110,6 +112,97 @@ function cacheOkuVeyaHesapla(anahtar, saniyeTTL, hesaplaFn) {
 
 function cacheTemizle(anahtarlar) {
   try { CacheService.getScriptCache().removeAll(anahtarlar); } catch (e) { /* yoksay */ }
+}
+
+// ════════════════════════════════════════════════
+// SİLİNENLER (GERİ ALINABİLİR SİLME) — tüm modüllerde ortak kullanılan çöp kutusu.
+// TASARIM: silme anında, o kaydı yeniden OLUŞTURMAK için gereken orijinal veri
+// (save___ fonksiyonuna gönderilecek "body" ile aynı şekil) JSON olarak saklanır.
+// "Geri Al" denince aynı save___ fonksiyonu tekrar çağrılır — yeni bir ID ile
+// yeniden oluşturulur (cari/stok hareketleri dahil, save fonksiyonunun kendi
+// mantığıyla en baştan ve doğru şekilde). Böylece restore mantığı her modül için
+// ayrı ayrı yazılmak zorunda kalmaz; var olan (test edilmiş) save fonksiyonları
+// yeniden kullanılır.
+// ════════════════════════════════════════════════
+const SILINEN_BASLIKLAR = ["ID","TIP","ORIJINAL_ID","BASLIK","CARI_AD","TUTAR","VERI_JSON","SILME_TARIHI","GERI_ALINDI"];
+
+function silinenlerKaydet(tip, orijinalId, baslik, cariAd, tutar, veri) {
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = getOrCreateSheet(ss, SHEETS.silinenIslemler, SILINEN_BASLIKLAR);
+    const id = "sil_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+    sheet.appendRow([id, tip, String(orijinalId || ""), baslik, cariAd || "", tutar || 0,
+      JSON.stringify(veri || {}), Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), false]);
+    cacheTemizle(["silinenlerListesi"]);
+  } catch (e) { /* silinenler kaydı başarısız olsa bile asıl silme işlemi engellenmesin */ }
+}
+
+function getSilinenlerListesi() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.silinenIslemler, SILINEN_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const sonuc = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0] || row[8] === true || row[8] === "TRUE") continue;
+    sonuc.push({
+      id: String(row[0]), tip: String(row[1] || ""), orijinalId: String(row[2] || ""),
+      baslik: String(row[3] || ""), cariAd: String(row[4] || ""), tutar: parseFloat(row[5]) || 0,
+      silmeTarihi: String(row[7] || ""),
+    });
+  }
+  sonuc.reverse();
+  return { ok: true, silinenler: sonuc };
+}
+
+// Bir "Silinenler" kaydını geri getirilemez şekilde listeden kaldırır (ör. geri alma
+// başarılı olduktan sonra, ya da kullanıcı "listeden temizle" derse).
+function silinenKaydiKapat_(id) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.silinenIslemler, SILINEN_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) { sheet.getRange(i + 1, 9).setValue(true); return true; }
+  }
+  return false;
+}
+
+// body: { id } — Silinenler listesindeki bir kaydı, orijinal save___ fonksiyonunu
+// aynı veriyle tekrar çağırarak geri getirir.
+function silinenGeriAl(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.silinenIslemler, SILINEN_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  let tip = "", veriJson = "", zatenGeriAlinmis = false;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) {
+      tip = String(data[i][1] || "");
+      veriJson = String(data[i][6] || "");
+      zatenGeriAlinmis = (data[i][8] === true || data[i][8] === "TRUE");
+      break;
+    }
+  }
+  if (!tip) return { ok: false, hata: "Kayıt bulunamadı" };
+  if (zatenGeriAlinmis) return { ok: false, hata: "Bu kayıt zaten geri alınmış" };
+
+  let veri;
+  try { veri = JSON.parse(veriJson); } catch (e) { return { ok: false, hata: "Kayıt verisi okunamadı" }; }
+
+  const GERI_YUKLEME_FN = {
+    TAHSILAT: saveTahsilat, ODEME: saveOdeme, SATIS: saveSatis, ALIS: saveAlis,
+    ALISIADE: saveAlisIade, SATISIADE: saveSatisIade, CEKSENET: saveCekSenet,
+  };
+  const fn = GERI_YUKLEME_FN[tip];
+  if (!fn) return { ok: false, hata: "Bu kayıt türü için geri alma henüz desteklenmiyor" };
+
+  const sonuc = fn(veri);
+  if (!sonuc || !sonuc.ok) return { ok: false, hata: "Geri yükleme başarısız: " + (sonuc && sonuc.hata || "bilinmiyor") };
+
+  silinenKaydiKapat_(id);
+  return { ok: true, yeniId: sonuc.id };
 }
 
 // CariHesaplar sayfası daha önce CARI_KODU sütunu olmadan oluşturulmuş olabilir
@@ -309,6 +402,7 @@ const ACIKLAMA_SABLON_VARSAYILAN = {
   "odeme_hedefKrediKarti": "Kredi Kartı Borç Ödemesi",
   "cek_alinan": "Alınan Çek/Senet",
   "cek_verilen": "Verilen Çek/Senet",
+  "cek_ciro": "Çek Cirosu",
   "posBankaAktarim": "POS'tan Bankaya Aktarım",
 };
 
@@ -530,6 +624,12 @@ function handleRequest(e) {
       case "silCekSenet":        result = silCekSenet(body); break;
       case "cekSenetIslemYap":   result = cekSenetIslemYap(body); break;
       case "cekSenetDurumGuncelle": result = cekSenetDurumGuncelle(body); break;
+      case "cekSenetHareketGeriAl": result = cekSenetHareketGeriAl(body); break;
+      case "cekSenetGorselYukle":  result = cekSenetGorselYukle(body); break;
+      case "getCekSenetGorselleri": result = getCekSenetGorselleri(body.cekId); break;
+      case "silCekSenetGorseli":   result = silCekSenetGorseli(body); break;
+      case "getSilinenlerListesi": result = getSilinenlerListesi(); break;
+      case "silinenGeriAl":        result = silinenGeriAl(body); break;
       default: result = { error: "Bilinmeyen işlem: " + action };
     }
     return jsonResponse(result);
@@ -1477,13 +1577,36 @@ function silSatis(body) {
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const data = sSheet.getDataRange().getValues();
 
+  // Kalemleri silmeden ÖNCE oku (hem "Silinenler" anlık görüntüsü hem de sipariş
+  // faturalanan-miktar geri alma için gerekiyor).
+  const kSheetOn = getOrCreateSheet(ss, SHEETS.satisKalemleri,
+    ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
+  const kDataOn = kSheetOn.getDataRange().getValues();
+  const anlikKalemler = [];
+  for (let i = 1; i < kDataOn.length; i++) {
+    if (String(kDataOn[i][1]) === id) {
+      anlikKalemler.push({
+        urunAdi: String(kDataOn[i][2] || ""), miktar: parseFloat(kDataOn[i][3]) || 0, birim: String(kDataOn[i][4] || "adet"),
+        birimFiyat: parseFloat(kDataOn[i][5]) || 0, iskontoYuzde: parseFloat(kDataOn[i][7]) || 0,
+        kdvOrani: parseFloat(kDataOn[i][8]) || 0, stokKodu: String(kDataOn[i][10] || ""),
+      });
+    }
+  }
+
   let cariId = "";
   let kaynakSiparisId = "";
   let bulundu = false;
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === id) {
-      cariId = String(data[i][2] || "");
-      kaynakSiparisId = String(data[i][11] || "");
+      const row = data[i];
+      cariId = String(row[2] || "");
+      kaynakSiparisId = String(row[11] || "");
+      if (!body._geriAlmadanKaydetme) {
+        silinenlerKaydet("SATIS", id, (String(row[8] || "Fatura")) + " (Satış)", String(row[3] || ""), parseFloat(row[4]) || 0, {
+          cariId: cariId, tarih: hucreTarihStr(row[1]), aciklama: String(row[6] || ""),
+          belgeTipi: String(row[8] || "Fatura"), odemeTipi: String(row[5] || ""), kalemler: anlikKalemler,
+        });
+      }
       sSheet.deleteRow(i + 1);
       bulundu = true;
       break;
@@ -1918,11 +2041,32 @@ function silAlis(body) {
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const data = aSheet.getDataRange().getValues();
 
+  const kSheetOn = getOrCreateSheet(ss, SHEETS.alisKalemleri,
+    ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
+  const kDataOn = kSheetOn.getDataRange().getValues();
+  const anlikKalemler = [];
+  for (let i = 1; i < kDataOn.length; i++) {
+    if (String(kDataOn[i][1]) === id) {
+      anlikKalemler.push({
+        urunAdi: String(kDataOn[i][2] || ""), miktar: parseFloat(kDataOn[i][3]) || 0,
+        birim: String(kDataOn[i][4] || "adet"), birimFiyat: parseFloat(kDataOn[i][5] || 0),
+        stokKodu: String(kDataOn[i][7] || ""),
+      });
+    }
+  }
+
   let cariId = "";
   let bulundu = false;
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === id) {
-      cariId = String(data[i][2] || "");
+      const row = data[i];
+      cariId = String(row[2] || "");
+      if (!body._geriAlmadanKaydetme) {
+        silinenlerKaydet("ALIS", id, "Alış Faturası", String(row[3] || ""), parseFloat(row[4]) || 0, {
+          cariId: cariId, cariAd: String(row[3] || ""), tarih: hucreTarihStr(row[1]),
+          aciklama: String(row[6] || ""), odemeTipi: String(row[5] || ""), kalemler: anlikKalemler,
+        });
+      }
       aSheet.deleteRow(i + 1);
       bulundu = true;
       break;
@@ -2263,11 +2407,33 @@ function silAlisIade(body) {
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const data = aSheet.getDataRange().getValues();
 
+  const kSheetOn = getOrCreateSheet(ss, SHEETS.alisIadeKalemleri,
+    ["ID","IADE_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
+  ensureAlisIadeKalemStokKoduColonu(kSheetOn);
+  const kDataOn = kSheetOn.getDataRange().getValues();
+  const anlikKalemler = [];
+  for (let i = 1; i < kDataOn.length; i++) {
+    if (String(kDataOn[i][1]) === id) {
+      anlikKalemler.push({
+        urunAdi: String(kDataOn[i][2] || ""), miktar: parseFloat(kDataOn[i][3]) || 0,
+        birim: String(kDataOn[i][4] || "adet"), birimFiyat: parseFloat(kDataOn[i][5] || 0),
+        stokKodu: String(kDataOn[i][7] || ""),
+      });
+    }
+  }
+
   let cariId = "";
   let bulundu = false;
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === id) {
-      cariId = String(data[i][2] || "");
+      const row = data[i];
+      cariId = String(row[2] || "");
+      if (!body._geriAlmadanKaydetme) {
+        silinenlerKaydet("ALISIADE", id, "Alış İadesi", String(row[3] || ""), parseFloat(row[4]) || 0, {
+          cariId: cariId, cariAd: String(row[3] || ""), tarih: hucreTarihStr(row[1]),
+          aciklama: String(row[5] || ""), kalemler: anlikKalemler,
+        });
+      }
       aSheet.deleteRow(i + 1);
       bulundu = true;
       break;
@@ -2441,11 +2607,32 @@ function silSatisIade(body) {
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const data = sSheet.getDataRange().getValues();
 
+  const kSheetOn = getOrCreateSheet(ss, SHEETS.satisIadeKalemleri,
+    ["ID","IADE_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
+  const kDataOn = kSheetOn.getDataRange().getValues();
+  const anlikKalemler = [];
+  for (let i = 1; i < kDataOn.length; i++) {
+    if (String(kDataOn[i][1]) === id) {
+      anlikKalemler.push({
+        urunAdi: String(kDataOn[i][2] || ""), miktar: parseFloat(kDataOn[i][3]) || 0,
+        birim: String(kDataOn[i][4] || "adet"), birimFiyat: parseFloat(kDataOn[i][5] || 0),
+        stokKodu: String(kDataOn[i][7] || ""),
+      });
+    }
+  }
+
   let cariId = "";
   let bulundu = false;
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === id) {
-      cariId = String(data[i][2] || "");
+      const row = data[i];
+      cariId = String(row[2] || "");
+      if (!body._geriAlmadanKaydetme) {
+        silinenlerKaydet("SATISIADE", id, "Satış İadesi", String(row[3] || ""), parseFloat(row[4]) || 0, {
+          cariId: cariId, cariAd: String(row[3] || ""), tarih: hucreTarihStr(row[1]),
+          aciklama: String(row[5] || ""), kalemler: anlikKalemler,
+        });
+      }
       sSheet.deleteRow(i + 1);
       bulundu = true;
       break;
@@ -2490,6 +2677,13 @@ function ensureTahsilatPosColonu(sheet) {
   const mevcutBaslik = sheet.getRange(1, 9).getValue();
   if (String(mevcutBaslik || "") !== "POS_HESAP_ID") {
     sheet.getRange(1, 9).setValue("POS_HESAP_ID").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  // Önceden Havale/EFT tahsilatlarında bankaHesapId hiç kalıcı tutulmuyordu (sadece
+  // BankaHesapHareketleri'ne yazılıp unutuluyordu) — bu da silme/geri alma sırasında
+  // hangi hesaba geri Giriş yazılacağının bilinmemesine yol açardı.
+  const mevcutBaslik2 = sheet.getRange(1, 10).getValue();
+  if (String(mevcutBaslik2 || "") !== "BANKA_HESAP_ID") {
+    sheet.getRange(1, 10).setValue("BANKA_HESAP_ID").setFontWeight("bold").setBackground("#e8edf5");
   }
 }
 
@@ -2548,7 +2742,7 @@ function saveTahsilat(body) {
   const id = "th_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  tSheet.appendRow([id, tarih, cariId, cariAd, tutar, yontem, String(body.aciklama || ""), kayitTarihi, posHesapId]);
+  tSheet.appendRow([id, tarih, cariId, cariAd, tutar, yontem, String(body.aciklama || ""), kayitTarihi, posHesapId, bankaHesapId]);
 
   cariHareketEkle({
     cariId: cariId, tarih: tarih, tip: "Alacak", tutar: tutar,
@@ -2578,7 +2772,7 @@ function saveTahsilat(body) {
 function guncelleTahsilat(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const silSonuc = silTahsilat({ id });
+  const silSonuc = silTahsilat({ id, _geriAlmadanKaydetme: true });
   if (!silSonuc.ok) return silSonuc;
   return saveTahsilat(body);
 }
@@ -2596,7 +2790,16 @@ function silTahsilat(body) {
   let bulundu = false;
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === id) {
-      cariId = String(data[i][2] || "");
+      const row = data[i];
+      cariId = String(row[2] || "");
+      // Silmeden önce "Silinenler"e, aynı tahsilatı yeniden oluşturmaya yetecek veriyle kaydet.
+      if (!body._geriAlmadanKaydetme) {
+        silinenlerKaydet("TAHSILAT", id, "Tahsilat (" + String(row[5] || "") + ")", String(row[3] || ""), parseFloat(row[4]) || 0, {
+          cariId: cariId, tutar: parseFloat(row[4]) || 0, tarih: hucreTarihStr(row[1]),
+          yontem: String(row[5] || ""), aciklama: String(row[6] || ""),
+          posHesapId: String(row[8] || ""), bankaHesapId: String(row[9] || ""),
+        });
+      }
       tSheet.deleteRow(i + 1);
       bulundu = true;
       break;
@@ -2827,7 +3030,18 @@ function silOdeme(body) {
   let bulundu = false;
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === id) {
-      cariId = String(data[i][2] || "");
+      const row = data[i];
+      cariId = String(row[2] || "");
+      if (!body._geriAlmadanKaydetme) {
+        const hedefTipi = String(row[10] || "Cari");
+        const baslik = "Ödeme (" + (hedefTipi === "Cari" ? String(row[3] || "") : String(row[13] || hedefTipi)) + ")";
+        silinenlerKaydet("ODEME", id, baslik, String(row[3] || ""), parseFloat(row[4]) || 0, {
+          hedefTipi: hedefTipi, tutar: parseFloat(row[4]) || 0, tarih: hucreTarihStr(row[1]),
+          yontem: String(row[5] || ""), aciklama: String(row[6] || ""),
+          posHesapId: String(row[8] || ""), bankaHesapId: String(row[9] || ""),
+          cariId: String(row[2] || ""), hedefAltTipi: String(row[11] || ""), hedefId: String(row[12] || ""),
+        });
+      }
       oSheet.deleteRow(i + 1);
       bulundu = true;
       break;
@@ -2983,7 +3197,218 @@ function saveCekSenet(body) {
   return { ok: true, id: id };
 }
 
-// body: { id } — henüz hiç tahsilat/ödeme işlenmemiş bir çek/senedi tamamen siler.
+// CIRO_CARI_ID (14. kolon) — çek/senet ciro edildiğinde hangi cariye devredildiğini
+// tutar. Önceden ciro işleminde hedef cari hiç seçilmiyordu, sadece durum
+// "Ciro Edildi" yapılıyordu — o cariye borç kaydı da düşülmüyordu.
+function ensureCekSenetCiroColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 14).getValue();
+  if (String(mevcutBaslik || "") !== "CIRO_CARI_ID") {
+    sheet.getRange(1, 14).setValue("CIRO_CARI_ID").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
+// body: { id, durum ("Karşılıksız" veya "Ciro Edildi"), aciklama, ciroCariId (Ciro Edildi ise zorunlu) }
+// Portföydeki bir çek/senedi tahsil/ödeme yapılmadan kapatır. "Ciro Edildi" durumunda,
+// çek başka bir cariye devredilmiş demektir — o cariye Borç hareketi düşülür (biz o
+// cariye artık nakit yerine bu çekle ödeme yapmış oluyoruz, borcumuz azalır).
+// "Karşılıksız" durumunda cari bakiyesine dokunulmaz (o hareket kayıt anında zaten
+// işlenmişti; karşılıksız çıkması ayrı bir tahsilat/icra sürecidir, burada ele alınmıyor).
+function cekSenetDurumGuncelle(body) {
+  const id = String(body.id || "").trim();
+  const durum = String(body.durum || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  if (durum !== "Karşılıksız" && durum !== "Ciro Edildi") return { ok: false, hata: "Geçersiz durum" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
+  ensureCekSenetCiroColonu(sheet);
+  const data = sheet.getDataRange().getValues();
+  let rowIdx = -1, mevcutDurum = "", tip = "", kalanTutar = 0, cekTarih = "";
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) {
+      rowIdx = i + 1; mevcutDurum = String(data[i][10] || ""); tip = String(data[i][1] || "");
+      kalanTutar = parseFloat(data[i][5]) || 0; cekTarih = hucreTarihStr(data[i][8]);
+      break;
+    }
+  }
+  if (rowIdx === -1) return { ok: false, hata: "Çek/senet bulunamadı" };
+  if (mevcutDurum !== "Portföyde") return { ok: false, hata: "Bu çek/senet zaten kapatılmış (" + mevcutDurum + ")" };
+
+  let ciroCariId = "";
+  if (durum === "Ciro Edildi") {
+    if (tip !== "Alınan") return { ok: false, hata: "Sadece Alınan çekler ciro edilebilir" };
+    ciroCariId = String(body.ciroCariId || "").trim();
+    if (!ciroCariId) return { ok: false, hata: "Ciro edilecek cari seçimi zorunludur" };
+    const cSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
+      ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU"]);
+    const cData = cSheet.getDataRange().getValues();
+    let ciroCariAd = "";
+    for (let i = 1; i < cData.length; i++) { if (String(cData[i][0]) === ciroCariId) { ciroCariAd = String(cData[i][2] || ""); break; } }
+    if (!ciroCariAd) return { ok: false, hata: "Ciro edilecek cari bulunamadı" };
+
+    sheet.getRange(rowIdx, 14).setValue(ciroCariId);
+    cariHareketEkle({
+      cariId: ciroCariId, tarih: Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"), tip: "Borç", tutar: kalanTutar,
+      aciklama: cariHareketAciklamaOlustur("CEKCIRO", id, "cek_ciro", body.aciklama),
+    });
+  }
+
+  sheet.getRange(rowIdx, 11).setValue(durum);
+
+  const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
+  const hId = "csh_" + Date.now();
+  hSheet.appendRow([hId, id, Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"), durum, 0,
+    String(body.aciklama || "") + (ciroCariId ? " (Ciro: " + ciroCariId + ")" : ""), Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+
+  cacheTemizle(["cekSenetListesi"]);
+  return { ok: true };
+}
+
+// body: { id } — bir çek/senetteki EN SON hareketi (kısmi tahsilat/ödeme, Ciro Edildi
+// veya Karşılıksız işaretlemesi) geri alır. Silme işlemleri artık "her şeyi birden"
+// silmiyor — önce ciro/tahsilat gibi ara adımlar TEK TEK bu fonksiyonla geri alınmalı,
+// çek ancak "Portföyde" ve hiç hareketi kalmamış haldeyken tam olarak silinebilir
+// (bkz. silCekSenet). Bu, "ciro sonrası sil dedim, hem ciro hem çek girişi silindi"
+// sorununu çözer: artık tek bir "Sil" hiçbir zaman birden fazla adımı birden geri almaz.
+function cekSenetHareketGeriAl(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
+  const hData = hSheet.getDataRange().getValues();
+  let sonHareketRowIdx = -1, sonHareket = null;
+  for (let i = 1; i < hData.length; i++) {
+    if (String(hData[i][1]) === id) { sonHareketRowIdx = i + 1; sonHareket = hData[i]; } // en son eşleşen kalır (satırlar kronolojik ekleniyor)
+  }
+  if (sonHareketRowIdx === -1) return { ok: false, hata: "Bu çek/senette geri alınacak bir hareket yok" };
+
+  const hareketTip = String(sonHareket[3] || "");
+  const hareketTutar = parseFloat(sonHareket[4]) || 0;
+
+  const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
+  ensureCekSenetCiroColonu(sheet);
+  const data = sheet.getDataRange().getValues();
+  let rowIdx = -1, kalanTutar = 0, tutar = 0, ciroCariId = "";
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) { rowIdx = i + 1; kalanTutar = parseFloat(data[i][5]) || 0; tutar = parseFloat(data[i][4]) || 0; ciroCariId = String(data[i][13] || ""); break; }
+  }
+  if (rowIdx === -1) return { ok: false, hata: "Çek/senet bulunamadı" };
+
+  if (hareketTip === "Ciro Edildi" || hareketTip === "Karşılıksız") {
+    if (hareketTip === "Ciro Edildi" && ciroCariId) {
+      const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler,
+        ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
+      const hkData = hkSheet.getDataRange().getValues();
+      for (let i = hkData.length - 1; i >= 1; i--) {
+        if (String(hkData[i][1]) === ciroCariId && String(hkData[i][5] || "").indexOf("CEKCIRO:" + id) === 0) {
+          hkSheet.deleteRow(i + 1);
+          cacheTemizle(["cariListesi_v3"]);
+          break;
+        }
+      }
+      sheet.getRange(rowIdx, 14).setValue("");
+    }
+    sheet.getRange(rowIdx, 11).setValue("Portföyde");
+  } else {
+    // Tahsilat / Ödeme geri alınıyor: tutar tekrar kalan bakiyeye eklenir, durum yeniden "Portföyde" olur.
+    const yeniKalan = Math.round((kalanTutar + hareketTutar) * 100) / 100;
+    sheet.getRange(rowIdx, 6).setValue(Math.min(yeniKalan, tutar));
+    sheet.getRange(rowIdx, 11).setValue("Portföyde");
+  }
+
+  hSheet.deleteRow(sonHareketRowIdx);
+  cacheTemizle(["cekSenetListesi"]);
+  return { ok: true };
+}
+
+// ════════════════════════════════════════════════
+// ÇEK/SENET GÖRSELLERİ — alınan/verilen her çek/senede birden fazla fotoğraf (ön/arka
+// yüz gibi) eklenebilir. Dosyalar Drive'da ayrı bir klasörde tutulur, sadece linki
+// CekSenetGorselleri sayfasına yazılır (Sheets hücresine doğrudan base64 yazmak büyük
+// görsellerde hücre boyut sınırını aşabileceği için tercih edilmedi).
+// ════════════════════════════════════════════════
+var CEK_GORSEL_KLASOR_ADI = "Fincanlar ERP - Cek Senet Gorselleri";
+const CEK_GORSEL_BASLIKLAR = ["ID","CEK_ID","DOSYA_URL","DOSYA_ADI","YUKLEME_TARIHI"];
+
+function cekGorselKlasoruGetir_() {
+  const klasorler = DriveApp.getFoldersByName(CEK_GORSEL_KLASOR_ADI);
+  if (klasorler.hasNext()) return klasorler.next();
+  return DriveApp.createFolder(CEK_GORSEL_KLASOR_ADI);
+}
+
+// body: { cekId, dosyaBase64 (data:image/...;base64,... öneki OLABİLİR de OLMAYABİLİR de), dosyaAdi, mimeType }
+function cekSenetGorselYukle(body) {
+  const cekId = String(body.cekId || "").trim();
+  let base64 = String(body.dosyaBase64 || "");
+  if (!cekId) return { ok: false, hata: "cekId gerekli" };
+  if (!base64) return { ok: false, hata: "Dosya verisi gerekli" };
+
+  const virgul = base64.indexOf(",");
+  let mimeType = String(body.mimeType || "image/jpeg");
+  if (base64.startsWith("data:") && virgul > -1) {
+    mimeType = base64.substring(5, base64.indexOf(";"));
+    base64 = base64.substring(virgul + 1);
+  }
+
+  let dosya;
+  try {
+    const bytes = Utilities.base64Decode(base64);
+    const blob = Utilities.newBlob(bytes, mimeType, String(body.dosyaAdi || (cekId + ".jpg")));
+    const klasor = cekGorselKlasoruGetir_();
+    dosya = klasor.createFile(blob);
+    dosya.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (e) {
+    return { ok: false, hata: "Görsel yüklenemedi: " + e.message };
+  }
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.cekSenetGorselleri, CEK_GORSEL_BASLIKLAR);
+  const id = "csg_" + Date.now();
+  const dosyaUrl = "https://drive.google.com/uc?export=view&id=" + dosya.getId();
+  sheet.appendRow([id, cekId, dosyaUrl, dosya.getName(), Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+
+  cacheTemizle(["cekSenetGorselleri_" + cekId]);
+  return { ok: true, id: id, dosyaUrl: dosyaUrl };
+}
+
+function getCekSenetGorselleri(cekId) {
+  if (!cekId) return { ok: false, hata: "cekId gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.cekSenetGorselleri, CEK_GORSEL_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const sonuc = [];
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][1]) !== String(cekId)) continue;
+    sonuc.push({ id: String(data[i][0]), cekId: String(data[i][1]), dosyaUrl: String(data[i][2] || ""),
+      dosyaAdi: String(data[i][3] || ""), yuklemeTarihi: String(data[i][4] || "") });
+  }
+  return { ok: true, gorseller: sonuc };
+}
+
+// body: { id } — hem sheet satırını hem Drive dosyasını siler.
+function silCekSenetGorseli(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.cekSenetGorselleri, CEK_GORSEL_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === id) {
+      const dosyaUrl = String(data[i][2] || "");
+      const m = dosyaUrl.match(/id=([a-zA-Z0-9_-]+)/);
+      if (m) { try { DriveApp.getFileById(m[1]).setTrashed(true); } catch (e) { /* dosya zaten yoksa yoksay */ } }
+      sheet.deleteRow(i + 1);
+      return { ok: true };
+    }
+  }
+  return { ok: false, hata: "Görsel bulunamadı" };
+}
+
+// body: { id } — çek/senedi ancak "Portföyde" durumda VE hiç işlem geçmişi (kısmi
+// tahsilat/ödeme, ciro, karşılıksız) yoksa tamamen siler. Aksi halde önce
+// cekSenetHareketGeriAl ile geçmişteki adımların TEK TEK geri alınması istenir —
+// tek bir "Sil" tıklamasının birden fazla bağlı işlemi birden geri almasını önler.
 function silCekSenet(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
@@ -2992,11 +3417,28 @@ function silCekSenet(body) {
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
 
-  let cariId = "";
+  const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
+  const hData = hSheet.getDataRange().getValues();
+  const bagliHareketVar = hData.some(row => String(row[1]) === id);
+
+  let cariId = "", bulunanRow = null;
   let bulundu = false;
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === id) {
-      cariId = String(data[i][2] || "");
+      const row = data[i];
+      const durum = String(row[10] || "");
+      if (durum !== "Portföyde" || bagliHareketVar) {
+        return { ok: false, hata: "Bu çek/senette işlem geçmişi var (durum: " + durum + "). Önce ilgili ciro/tahsilat/ödeme işlemini 'Son Hareketi Geri Al' ile geri alın, sonra silin." };
+      }
+      cariId = String(row[2] || "");
+      bulunanRow = row;
+      if (!body._geriAlmadanKaydetme) {
+        silinenlerKaydet("CEKSENET", id, (String(row[1] || "")) + " Çek/Senet", String(row[3] || ""), parseFloat(row[4]) || 0, {
+          cariId: cariId, tip: String(row[1] || ""), tutar: parseFloat(row[4]) || 0,
+          seriNo: String(row[6] || ""), bankaAdi: String(row[7] || ""),
+          duzenlenmeTarihi: hucreTarihStr(row[8]), vade: hucreTarihStr(row[9]), aciklama: String(row[11] || ""),
+        });
+      }
       sheet.deleteRow(i + 1);
       bulundu = true;
       break;
@@ -3017,12 +3459,8 @@ function silCekSenet(body) {
     }
   }
 
-  // Kısmi tahsilat/ödeme geçmişini de temizle.
-  const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
-  const hData = hSheet.getDataRange().getValues();
-  for (let i = hData.length - 1; i >= 1; i--) {
-    if (String(hData[i][1]) === id) hSheet.deleteRow(i + 1);
-  }
+  // Not: buraya ulaşıldıysa çek/senette zaten hiç hareket geçmişi yoktu (üstteki kontrol
+  // sayesinde) — CekSenetHareketleri'nde silinecek bir şey kalmamıştır.
 
   cacheTemizle(["cekSenetListesi"]);
   return { ok: true };
@@ -3065,37 +3503,6 @@ function cekSenetIslemYap(body) {
 
   cacheTemizle(["cekSenetListesi"]);
   return { ok: true, kalanTutar: yeniKalan, durum: yeniDurum };
-}
-
-// body: { id, durum ("Karşılıksız" veya "Ciro Edildi"), aciklama }
-// Portföydeki bir çek/senedi tahsil/ödeme yapılmadan kapatır (ör. karşılıksız çıktı ya
-// da başka bir tedarikçiye ciro edildi). Cari bakiyesine dokunmaz — o hareket zaten
-// kayıt anında düşmüştü; sadece durum bilgisini günceller.
-function cekSenetDurumGuncelle(body) {
-  const id = String(body.id || "").trim();
-  const durum = String(body.durum || "").trim();
-  if (!id) return { ok: false, hata: "id gerekli" };
-  if (durum !== "Karşılıksız" && durum !== "Ciro Edildi") return { ok: false, hata: "Geçersiz durum" };
-
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
-  const data = sheet.getDataRange().getValues();
-  let rowIdx = -1, mevcutDurum = "";
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === id) { rowIdx = i + 1; mevcutDurum = String(data[i][10] || ""); break; }
-  }
-  if (rowIdx === -1) return { ok: false, hata: "Çek/senet bulunamadı" };
-  if (mevcutDurum !== "Portföyde") return { ok: false, hata: "Bu çek/senet zaten kapatılmış (" + mevcutDurum + ")" };
-
-  sheet.getRange(rowIdx, 11).setValue(durum);
-
-  const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
-  const hId = "csh_" + Date.now();
-  hSheet.appendRow([hId, id, Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"), durum, 0,
-    String(body.aciklama || ""), Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
-
-  cacheTemizle(["cekSenetListesi"]);
-  return { ok: true };
 }
 
 // ════════════════════════════════════════════════
