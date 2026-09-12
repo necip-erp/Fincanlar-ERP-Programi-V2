@@ -126,15 +126,26 @@ function cacheTemizle(anahtarlar) {
 // ayrı ayrı yazılmak zorunda kalmaz; var olan (test edilmiş) save fonksiyonları
 // yeniden kullanılır.
 // ════════════════════════════════════════════════
-const SILINEN_BASLIKLAR = ["ID","TIP","ORIJINAL_ID","BASLIK","CARI_AD","TUTAR","VERI_JSON","SILME_TARIHI","GERI_ALINDI","GERI_ALMA_TARIHI","YENI_ID"];
+const SILINEN_BASLIKLAR = ["ID","TIP","ORIJINAL_ID","BASLIK","CARI_AD","TUTAR","VERI_JSON","SILME_TARIHI","GERI_ALINDI","GERI_ALMA_TARIHI","YENI_ID","BELGE_NO"];
 
-function silinenlerKaydet(tip, orijinalId, baslik, cariAd, tutar, veri) {
+// belgeNo: Sipariş No / Fatura No gibi, kaydı tanımlayan görünür belge numarası
+// (opsiyonel — her tür için bir tane olmayabilir).
+// Bazı modüllerde (özellikle BFM'den onaylanan Alış faturaları) ACIKLAMA alanı
+// "Fatura No: XYZ" biçiminde bir belge numarası taşır — silinenler kaydında
+// bunu ayrı bir alan olarak (BELGE_NO) saklamak için ortak yardımcı.
+function belgeNoAciklamadanCikar_(aciklama) {
+  const m = String(aciklama || "").match(/Fatura No:\s*(\S+)/i);
+  return m ? m[1] : "";
+}
+
+function silinenlerKaydet(tip, orijinalId, baslik, cariAd, tutar, veri, belgeNo) {
   try {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const sheet = getOrCreateSheet(ss, SHEETS.silinenIslemler, SILINEN_BASLIKLAR);
     const id = "sil_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
     sheet.appendRow([id, tip, String(orijinalId || ""), baslik, cariAd || "", tutar || 0,
-      JSON.stringify(veri || {}), Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), false]);
+      JSON.stringify(veri || {}), Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), false,
+      "", "", String(belgeNo || "")]);
     cacheTemizle(["silinenlerListesi"]);
   } catch (e) { /* silinenler kaydı başarısız olsa bile asıl silme işlemi engellenmesin */ }
 }
@@ -150,11 +161,17 @@ function getSilinenlerListesi() {
     sonuc.push({
       id: String(row[0]), tip: String(row[1] || ""), orijinalId: String(row[2] || ""),
       baslik: String(row[3] || ""), cariAd: String(row[4] || ""), tutar: parseFloat(row[5]) || 0,
-      silmeTarihi: String(row[7] || ""),
+      silmeTarihi: String(row[7] || ""), belgeNo: String(row[11] || ""), veri: silinenVeriOku_(row),
     });
   }
   sonuc.reverse();
   return { ok: true, silinenler: sonuc };
+}
+
+// VERI_JSON hücresini güvenle objeye çevirir — bozuk/okunamaz JSON varsa boş obje döner
+// (detay görüntüleme çökmesin diye).
+function silinenVeriOku_(row) {
+  try { return JSON.parse(String(row[6] || "{}")) || {}; } catch (e) { return {}; }
 }
 
 // Bir "Silinenler" kaydını geri getirilemez şekilde listeden kaldırır (ör. geri alma
@@ -190,6 +207,7 @@ function getGeriDondurulenlerListesi() {
       id: String(row[0]), tip: String(row[1] || ""), orijinalId: String(row[2] || ""),
       baslik: String(row[3] || ""), cariAd: String(row[4] || ""), tutar: parseFloat(row[5]) || 0,
       silmeTarihi: String(row[7] || ""), geriAlmaTarihi: String(row[9] || ""), yeniId: String(row[10] || ""),
+      belgeNo: String(row[11] || ""), veri: silinenVeriOku_(row),
     });
   }
   sonuc.reverse();
@@ -1739,10 +1757,12 @@ function silSatis(body) {
       cariId = String(row[2] || "");
       kaynakSiparisId = String(row[11] || "");
       if (!body._geriAlmadanKaydetme) {
+        const siparisNo = String(row[15] || "");
+        const efaturaNo = String(row[16] || "");
         silinenlerKaydet("SATIS", id, (String(row[8] || "Fatura")) + " (Satış)", String(row[3] || ""), parseFloat(row[4]) || 0, {
           cariId: cariId, tarih: hucreTarihStr(row[1]), aciklama: String(row[6] || ""),
           belgeTipi: String(row[8] || "Fatura"), odemeTipi: String(row[5] || ""), kalemler: anlikKalemler,
-        });
+        }, siparisNo || efaturaNo);
       }
       sSheet.deleteRow(i + 1);
       bulundu = true;
@@ -2199,10 +2219,11 @@ function silAlis(body) {
       const row = data[i];
       cariId = String(row[2] || "");
       if (!body._geriAlmadanKaydetme) {
+        const aciklamaMetni = String(row[6] || "");
         silinenlerKaydet("ALIS", id, "Alış Faturası", String(row[3] || ""), parseFloat(row[4]) || 0, {
           cariId: cariId, cariAd: String(row[3] || ""), tarih: hucreTarihStr(row[1]),
-          aciklama: String(row[6] || ""), odemeTipi: String(row[5] || ""), kalemler: anlikKalemler,
-        });
+          aciklama: aciklamaMetni, odemeTipi: String(row[5] || ""), kalemler: anlikKalemler,
+        }, belgeNoAciklamadanCikar_(aciklamaMetni));
       }
       aSheet.deleteRow(i + 1);
       bulundu = true;
@@ -2566,10 +2587,11 @@ function silAlisIade(body) {
       const row = data[i];
       cariId = String(row[2] || "");
       if (!body._geriAlmadanKaydetme) {
+        const aciklamaMetni = String(row[5] || "");
         silinenlerKaydet("ALISIADE", id, "Alış İadesi", String(row[3] || ""), parseFloat(row[4]) || 0, {
           cariId: cariId, cariAd: String(row[3] || ""), tarih: hucreTarihStr(row[1]),
-          aciklama: String(row[5] || ""), kalemler: anlikKalemler,
-        });
+          aciklama: aciklamaMetni, kalemler: anlikKalemler,
+        }, belgeNoAciklamadanCikar_(aciklamaMetni));
       }
       aSheet.deleteRow(i + 1);
       bulundu = true;
@@ -2765,10 +2787,11 @@ function silSatisIade(body) {
       const row = data[i];
       cariId = String(row[2] || "");
       if (!body._geriAlmadanKaydetme) {
+        const aciklamaMetni = String(row[5] || "");
         silinenlerKaydet("SATISIADE", id, "Satış İadesi", String(row[3] || ""), parseFloat(row[4]) || 0, {
           cariId: cariId, cariAd: String(row[3] || ""), tarih: hucreTarihStr(row[1]),
-          aciklama: String(row[5] || ""), kalemler: anlikKalemler,
-        });
+          aciklama: aciklamaMetni, kalemler: anlikKalemler,
+        }, belgeNoAciklamadanCikar_(aciklamaMetni));
       }
       sSheet.deleteRow(i + 1);
       bulundu = true;
@@ -3574,7 +3597,7 @@ function silCekSenet(body) {
           cariId: cariId, tip: String(row[1] || ""), tutar: parseFloat(row[4]) || 0,
           seriNo: String(row[6] || ""), bankaAdi: String(row[7] || ""),
           duzenlenmeTarihi: hucreTarihStr(row[8]), vade: hucreTarihStr(row[9]), aciklama: String(row[11] || ""),
-        });
+        }, String(row[6] || ""));
       }
       sheet.deleteRow(i + 1);
       bulundu = true;

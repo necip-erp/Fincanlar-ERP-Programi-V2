@@ -1930,7 +1930,7 @@ function tarihGoster(deger){
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
   if(!m) return s;
   const gun = m[1] && m[2] && m[3] ? `${m[3]}/${m[2]}/${m[1]}` : s;
-  return m[4] && m[5] ? `${gun} - ${m[4]}:${m[5]}` : gun;
+  return m[4] && m[5] ? `${gun} ${m[4]}:${m[5]}` : gun;
 }
 
 // datetime-local input'ları için tarayıcının YEREL saatine göre "YYYY-MM-DDTHH:mm" üretir.
@@ -6881,16 +6881,20 @@ function silinenlerCiz(){
   if(_silinenlerListe.length === 0){ el.innerHTML = '<div class="cari-empty">Silinen kayıt yok.</div>'; return; }
   el.innerHTML = `
     <table class="hareket-tbl">
-      <thead><tr><th></th><th>Tür</th><th>Cari</th><th>Tutar</th><th>Silme Tarihi</th><th></th></tr></thead>
+      <thead><tr><th></th><th>Tür</th><th>Belge No</th><th>Cari</th><th>Tutar</th><th>Silme Tarihi</th><th></th></tr></thead>
       <tbody>
         ${_silinenlerListe.map(s=>`
           <tr>
             <td>${SILINEN_TIP_IKON[s.tip]||"🗑️"}</td>
             <td>${s.baslik || SILINEN_TIP_ETIKET[s.tip] || s.tip}</td>
+            <td>${s.belgeNo || "—"}</td>
             <td>${s.cariAd || "—"}</td>
             <td>${s.tutar ? paraFormat(s.tutar) : "—"}</td>
             <td>${s.silmeTarihi}</td>
-            <td><button class="btn btn-primary" style="padding:4px 12px;font-size:12.5px" onclick="silinenGeriAlOnay('${s.id}')">↩️ Geri Al</button></td>
+            <td style="white-space:nowrap">
+              <button class="btn" style="padding:4px 10px;font-size:12.5px" onclick="silinenDetayGoster('aktif','${s.id}')">👁️ İçerik</button>
+              <button class="btn btn-primary" style="padding:4px 10px;font-size:12.5px" onclick="silinenGeriAlOnay('${s.id}')">↩️ Geri Al</button>
+            </td>
           </tr>`).join("")}
       </tbody>
     </table>`;
@@ -6955,21 +6959,61 @@ function geridonenlerCiz(){
   if(_geridonenlerListe.length === 0){ el.innerHTML = '<div class="cari-empty">Henüz geri alınmış bir kayıt yok.</div>'; return; }
   el.innerHTML = `
     <table class="hareket-tbl">
-      <thead><tr><th></th><th>Tür</th><th>Cari</th><th>Tutar</th><th>Silinme Tarihi</th><th>Geri Alınma Tarihi</th><th>Yeni Kayıt No</th></tr></thead>
+      <thead><tr><th></th><th>Tür</th><th>Belge No</th><th>Cari</th><th>Tutar</th><th>Silinme Tarihi</th><th>Geri Alınma Tarihi</th><th>Yeni Kayıt No</th><th></th></tr></thead>
       <tbody>
         ${_geridonenlerListe.map(s=>`
           <tr>
             <td>${SILINEN_TIP_IKON[s.tip]||"↩️"}</td>
             <td>${s.baslik || SILINEN_TIP_ETIKET[s.tip] || s.tip}</td>
+            <td>${s.belgeNo || "—"}</td>
             <td>${s.cariAd || "—"}</td>
             <td>${s.tutar ? paraFormat(s.tutar) : "—"}</td>
             <td>${s.silmeTarihi}</td>
             <td>${s.geriAlmaTarihi}</td>
             <td>${s.yeniId || "—"}</td>
+            <td><button class="btn" style="padding:4px 10px;font-size:12.5px" onclick="silinenDetayGoster('donen','${s.id}')">👁️ İçerik</button></td>
           </tr>`).join("")}
       </tbody>
     </table>`;
 }
+
+// ── Silinen/Geri Dönen kaydın içeriğini gösteren detay modalı ──
+// "kalemler" dizisi varsa mini bir ürün tablosu, diğer alanlar ise okunabilir
+// anahtar/değer satırları olarak gösterilir. Alan adları teknik değil, kullanıcı
+// diliyle etiketlenir.
+const SILINEN_ALAN_ETIKET = {
+  cariId:"Cari", cariAd:"Cari", tarih:"Tarih", aciklama:"Açıklama", belgeTipi:"Belge Tipi",
+  odemeTipi:"Ödeme Tipi", tip:"Tür", tutar:"Tutar", seriNo:"Seri No", bankaAdi:"Banka",
+  duzenlenmeTarihi:"Düzenlenme Tarihi", vade:"Vade", kaynakCariId:"Kaynak Cari",
+  kaynakCariAd:"Kaynak Cari", hedefCariId:"Hedef Cari", hedefCariAd:"Hedef Cari",
+};
+function silinenDetayGoster(kaynak, id){
+  const liste = kaynak === "donen" ? _geridonenlerListe : _silinenlerListe;
+  const s = liste.find(x=>x.id===id);
+  if(!s) return;
+  const veri = s.veri || {};
+  const kalemler = Array.isArray(veri.kalemler) ? veri.kalemler : null;
+  const satirlar = Object.keys(veri).filter(k=>k!=="kalemler" && veri[k]!==undefined && veri[k]!=="" && typeof veri[k] !== "object")
+    .map(k=>`<tr><td style="color:var(--text3);padding:3px 12px 3px 0;white-space:nowrap">${SILINEN_ALAN_ETIKET[k]||k}</td><td>${k==='tarih'||k==='vade'||k==='duzenlenmeTarihi' ? tarihGoster(veri[k]) : veri[k]}</td></tr>`).join("");
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h3>${SILINEN_TIP_IKON[s.tip]||"🗑️"} ${s.baslik || SILINEN_TIP_ETIKET[s.tip] || s.tip}${s.belgeNo ? " — "+s.belgeNo : ""}</h3>
+      <table style="width:100%;font-size:13.5px;margin-bottom:${kalemler?12:0}px">${satirlar}</table>
+      ${kalemler ? `
+      <table class="hk-tablo">
+        <thead><tr><th>Ürün</th><th>Miktar</th><th>Birim Fiyat</th><th>Tutar</th></tr></thead>
+        <tbody>${kalemler.map(k=>`<tr><td>${k.urunAdi||"—"}${k.stokKodu?` <span style="color:var(--text3);font-size:11px">(${k.stokKodu})</span>`:""}</td><td>${k.miktar!=null?k.miktar+" "+(k.birim||""):"—"}</td><td>${k.birimFiyat!=null?paraFormat(k.birimFiyat):"—"}</td><td>${k.tutar!=null?paraFormat(k.tutar):(k.miktar&&k.birimFiyat?paraFormat(k.miktar*k.birimFiyat):"—")}</td></tr>`).join("")}</tbody>
+      </table>` : ``}
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn" onclick="this.closest('.modal-overlay').remove()">Kapat</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
 </script>
 
 <!-- ══════════════ BANKA TANIMLAMALARI (Finans modülü altında) ══════════════ -->
