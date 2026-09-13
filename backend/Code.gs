@@ -616,6 +616,7 @@ function handleRequest(e) {
       case "silKrediKarti":   result = silKrediKarti(body); break;
       case "getStokTanimListesi": result = getStokTanimListesi(); break;
       case "saveStokTanim":       result = saveStokTanim(body); break;
+      case "stokKoduOner":        result = stokKoduOner(body); break;
       case "stokKoduDegistir":    result = stokKoduDegistir(body); break;
       case "saveStokTanimTopluce": result = saveStokTanimTopluce(body); break;
       case "silStokTanim":        result = silStokTanim(body); break;
@@ -4916,6 +4917,62 @@ function saveStokTanim(body) {
   return { ok: true, id: id, stokKodu: stokKodu };
 }
 
+// ★ EKLENDİ: Firma stok kodu şeması — 12 hane: [Marka 2][Ürün Grubu 2][Alt Ürün Grubu 2]
+// [Firma Kodu 5][Kalite 1]. Marka/Ürün Grubu/Alt Ürün Grubu'nun kendi tanımlarındaki 2
+// haneli KOD'ları birleştirilip, kalan 5+1 haneyi bu fonksiyon otomatik tamamlar:
+//  - faturaKodu verilmişse (tedarikçi/e-fatura satırında kendi ürün kodu varsa): o kodun
+//    RAKAMLARININ SON 5 HANESİ kullanılır (kısaysa başına 0 eklenerek tamamlanır).
+//  - verilmemişse (stoksuz gelen e-faturalarda olduğu gibi): aynı marka+grup+alt grup
+//    kombinasyonunda kullanılan en büyük firma kodundan bir sonraki sıra no üretilir (00001'den başlar).
+// Kalite kodu belirtilmemişse "1" (1. kalite) varsayılır — kullanıcı isterse elle değiştirebilir.
+function stokKoduOner(body) {
+  const marka = (getMarkaListesi().markalar || []).find(m => m.id === String(body.markaId || ""));
+  if (!marka) return { ok: false, hata: "Marka seçilmeli" };
+  if (!marka.kod || marka.kod.length !== 2) return { ok: false, hata: "'" + marka.ad + "' markasının kodu tanımlı değil (Ayarlar › Marka Tanımlama)" };
+
+  const grup = (getBasitTanimListesi("urunGrubu").kalemler || []).find(g => g.id === String(body.urunGrubuId || ""));
+  if (!grup) return { ok: false, hata: "Ürün Grubu seçilmeli" };
+  if (!grup.kod || grup.kod.length !== 2) return { ok: false, hata: "'" + grup.ad + "' ürün grubunun kodu tanımlı değil (Ayarlar › Ürün Grubu Tanımlama)" };
+
+  const altGrup = (getBasitTanimListesi("altUrunGrubu").kalemler || []).find(a => a.id === String(body.altUrunGrubuId || ""));
+  if (!altGrup) return { ok: false, hata: "Alt Ürün Grubu seçilmeli" };
+  if (!altGrup.kod || altGrup.kod.length !== 2) return { ok: false, hata: "'" + altGrup.ad + "' alt ürün grubunun kodu tanımlı değil (Ayarlar › Alt Ürün Grubu Tanımlama)" };
+
+  const onEk = marka.kod + grup.kod + altGrup.kod; // ilk 6 hane
+
+  const mevcutKodlar = {};
+  (getStokTanimListesi().kalemler || []).forEach(s => { if (s.stokKodu) mevcutKodlar[s.stokKodu] = true; });
+
+  let firmaKodu;
+  const faturaKoduRakam = String(body.faturaKodu || "").replace(/[^0-9]/g, "");
+  if (faturaKoduRakam) {
+    firmaKodu = faturaKoduRakam.slice(-5).padStart(5, "0");
+  } else {
+    let maxSira = 0;
+    Object.keys(mevcutKodlar).forEach(kod => {
+      if (kod.length === 12 && kod.slice(0, 6) === onEk) {
+        const sira = parseInt(kod.slice(6, 11), 10);
+        if (!isNaN(sira) && sira > maxSira) maxSira = sira;
+      }
+    });
+    firmaKodu = String(maxSira + 1).padStart(5, "0");
+  }
+
+  const kaliteKodu = (String(body.kaliteKodu || "1").trim().slice(0, 1)) || "1";
+
+  let stokKodu = onEk + firmaKodu + kaliteKodu;
+  // Üretilen kod (nadiren) zaten kullanılıyorsa firma kodunu artırarak birkaç kez daha dene.
+  let deneme = 0;
+  while (mevcutKodlar[stokKodu] && deneme < 30) {
+    firmaKodu = String(parseInt(firmaKodu, 10) + 1).padStart(5, "0");
+    stokKodu = onEk + firmaKodu + kaliteKodu;
+    deneme++;
+  }
+  if (mevcutKodlar[stokKodu]) return { ok: false, hata: "Uygun bir kod üretilemedi, lütfen elle girin" };
+
+  return { ok: true, stokKodu: stokKodu, kaynak: faturaKoduRakam ? "fatura" : "otomatik" };
+}
+
 // ★ EKLENDİ: Stok kodu değişikliği — StokTanımları'nda kendi kodu, ve bağlı TÜM veri
 // akışında (SatisKalemleri, AlisKalemleri, StokHareketleri — bu üçünde de STOK_KODU
 // denormalize edilmiş halde ayrıca tutuluyor) eski kod geçen her satırı yeni koda taşır.
@@ -5906,7 +5963,17 @@ const BASIT_TANIM_CACHE_ANAHTARI = {
   giderUstGrup: "giderUstGrupListesi",
   giderAltGrup: "giderAltGrupListesi",
 };
-const BASIT_TANIM_BASLIKLAR = ["ID", "AD", "UST_ID", "SIRA"];
+const BASIT_TANIM_BASLIKLAR = ["ID", "AD", "UST_ID", "SIRA", "KOD"];
+// Stok Kodu'nun otomatik üretimi için hangi basit tanım tiplerinin 2 haneli bir KOD'a
+// sahip olması ZORUNLU — diğer tipler (Ebat, Renk, Ambalaj, Gider grupları) kod kullanmaz,
+// bu alan onlarda her zaman boş kalır.
+const TANIM_KOD_ZORUNLU = { urunGrubu: true, altUrunGrubu: true };
+
+// Eski kayıtlarda KOD sütunu (5.) olmayabilir (özellik sonradan eklendi) — sheet'i
+// gerektiğinde tamamlar, mevcut veriye dokunmaz.
+function ensureBasitTanimKodKolonu(sheet) {
+  if (sheet.getLastColumn() < 5) sheet.getRange(1, 5).setValue("KOD");
+}
 
 function getBasitTanimListesi(tip) {
   const sheetAdi = BASIT_TANIM_SHEET_ADI[tip];
@@ -5914,17 +5981,19 @@ function getBasitTanimListesi(tip) {
   return cacheOkuVeyaHesapla(BASIT_TANIM_CACHE_ANAHTARI[tip], 300, function () {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const sheet = getOrCreateSheet(ss, sheetAdi, BASIT_TANIM_BASLIKLAR);
+    ensureBasitTanimKodKolonu(sheet);
     const data = sheet.getDataRange().getValues();
     const sonuc = [];
     for (let i = 1; i < data.length; i++) {
       if (!data[i][0]) continue;
-      sonuc.push({ id: String(data[i][0]), ad: String(data[i][1] || ""), ustId: String(data[i][2] || ""), sira: parseFloat(data[i][3]) || 0 });
+      sonuc.push({ id: String(data[i][0]), ad: String(data[i][1] || ""), ustId: String(data[i][2] || ""), sira: parseFloat(data[i][3]) || 0, kod: String(data[i][4] || "") });
     }
     return { ok: true, kalemler: siraliDizile(sonuc) };
   });
 }
 
-// body: { tip, id (varsa güncelleme), ad, ustId (yalnızca altUrunGrubu için: bağlı olduğu Ürün Grubu id'si) }
+// body: { tip, id (varsa güncelleme), ad, ustId (yalnızca altUrunGrubu için), kod (yalnızca
+// urunGrubu/altUrunGrubu için ZORUNLU — 2 haneli, Stok Kodu'nun ilk/orta hanelerini oluşturur) }
 function saveBasitTanim(body) {
   const tip = String(body.tip || "");
   const sheetAdi = BASIT_TANIM_SHEET_ADI[tip];
@@ -5932,14 +6001,21 @@ function saveBasitTanim(body) {
   const ad = String(body.ad || "").trim();
   if (!ad) return { ok: false, hata: "Ad gerekli" };
   const ustId = String(body.ustId || "");
+  let kod = String(body.kod || "").trim().toUpperCase().slice(0, 2);
+  if (TANIM_KOD_ZORUNLU[tip]) {
+    if (kod.length !== 2) return { ok: false, hata: "Kod 2 karakter olmalı (Stok Kodu'nun otomatik üretimi için gerekli)" };
+  } else {
+    kod = ""; // bu tiplerde kod kullanılmaz
+  }
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, sheetAdi, BASIT_TANIM_BASLIKLAR);
+  ensureBasitTanimKodKolonu(sheet);
   const data = sheet.getDataRange().getValues();
   let id = String(body.id || "").trim();
   if (id) {
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === id) {
-        sheet.getRange(i + 1, 1, 1, 3).setValues([[id, ad, ustId]]);
+        sheet.getRange(i + 1, 1, 1, 5).setValues([[id, ad, ustId, data[i][3], kod]]);
         cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]);
         return { ok: true, id: id };
       }
@@ -5947,7 +6023,7 @@ function saveBasitTanim(body) {
   }
   const maxSira = data.slice(1).reduce((m, r) => Math.max(m, parseFloat(r[3]) || 0), 0);
   id = tip.slice(0, 3) + "_" + Date.now();
-  sheet.appendRow([id, ad, ustId, maxSira + 1]);
+  sheet.appendRow([id, ad, ustId, maxSira + 1, kod]);
   cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]);
   return { ok: true, id: id };
 }

@@ -647,9 +647,11 @@ setInterval(topbarSaatGuncelle, 10000);
       <div class="rapor-baslik" style="margin-top:10px">Ürün Grubu Tanımlama</div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Ürünleri gruplamak için kullanılan üst kategoriler.</p>
       <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="width:90px"><label>Kod (2 hane)</label><input id="tanim-urunGrubu-yeni-kod" type="text" maxlength="2" placeholder="Örn. 01" style="text-transform:uppercase"></div>
         <div style="flex:1"><label>Yeni Ürün Grubu Adı</label><input id="tanim-urunGrubu-yeni-ad" type="text" placeholder="Örn. Mutfak Gereçleri"></div>
         <button class="btn btn-primary" onclick="tanimEkle('urunGrubu')">+ Ekle</button>
       </div>
+      <p style="color:var(--text3);font-size:11.5px;margin:6px 0 0">Kod, Stok Kodu'nun 3-4. hanelerini oluşturur (bkz. Marka Tanımlama'daki kod mantığı) — otomatik Stok Kodu önerisi için gereklidir.</p>
       <div id="tanimliste-urunGrubu" style="margin-top:12px"></div>
     </div>
 
@@ -659,9 +661,11 @@ setInterval(topbarSaatGuncelle, 10000);
       <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Ürün grubunun altındaki daha detaylı alt kategoriler.</p>
       <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
         <div style="width:220px"><label>Ürün Grubu</label><select id="tanim-altUrunGrubu-ust"></select></div>
+        <div style="width:90px"><label>Kod (2 hane)</label><input id="tanim-altUrunGrubu-yeni-kod" type="text" maxlength="2" placeholder="Örn. 05" style="text-transform:uppercase"></div>
         <div style="flex:1"><label>Yeni Alt Ürün Grubu Adı</label><input id="tanim-altUrunGrubu-yeni-ad" type="text" placeholder="Örn. Tencere"></div>
         <button class="btn btn-primary" onclick="tanimEkle('altUrunGrubu')">+ Ekle</button>
       </div>
+      <p style="color:var(--text3);font-size:11.5px;margin:6px 0 0">Kod, Stok Kodu'nun 5-6. hanelerini oluşturur — otomatik Stok Kodu önerisi için gereklidir.</p>
       <div id="tanimliste-altUrunGrubu" style="margin-top:12px"></div>
     </div>
 
@@ -5416,14 +5420,17 @@ function bfmStokSec(i,j){
 function bfmYeniStokAc(i){
   const kutu = document.getElementById(`bfm-yenistokac-${i}`);
   if(kutu) kutu.checked = false;
+  const f = window._bfmAktifFatura;
+  // Faturada (tedarikçide) zaten bir ürün kodu varsa "🔧 Öner" butonu firma kodu kısmını
+  // ondan türetir; stoksuz gelen faturalarda bu boş olur ve otomatik sıra no üretilir.
+  const faturaKoduIpucu = (f && f.kalemler[i]) ? (f.kalemler[i].stokKodu || "") : "";
   stokTanimModalAc(null, (yeni)=>{
     document.getElementById(`bfm-stokkodu-${i}`).value = yeni.stokKodu || "";
     const aramaEl = document.getElementById(`bfm-stokara-${i}`);
     if(aramaEl) aramaEl.value = yeni.stokAdi || "";
-    const f = window._bfmAktifFatura;
     if(f && f.kalemler[i]){ f.kalemler[i].stokKoduAdi = yeni.stokAdi; f.kalemler[i].stokKodu = yeni.stokKodu; }
     bfmSatirGuncelle(i);
-  });
+  }, faturaKoduIpucu);
 }
 
 // Birleştirilmiş satırda o an seçili/girilmiş olan stok kodunun aktif stok kartını
@@ -7836,6 +7843,8 @@ let _tanimListeYuklendi = { urunGrubu:false, altUrunGrubu:false, ebat:false, ren
 // "Alt grup" tipindeki basit tanımların, hangi "üst grup" tipine bağlı olduğunu belirtir.
 // Bu eşleştirmeye eklenen her yeni tip, aşağıdaki genel Ekle/Düzenle/Çiz mantığından otomatik yararlanır.
 const TANIM_ALT_UST_ESLESME = { altUrunGrubu: "urunGrubu", giderAltGrup: "giderUstGrup" };
+// Backend'deki TANIM_KOD_ZORUNLU ile birebir aynı — hangi tiplerin 2 haneli Kod alanı olduğunu belirtir.
+const TANIM_KOD_GEREKLI = { urunGrubu: true, altUrunGrubu: true };
 
 function tanimListesiYukle(tip){
   const el = document.getElementById("tanimliste-"+tip);
@@ -7874,7 +7883,7 @@ function tanimListesiCiz(tip){
         <span class="hk-sil" style="font-size:11px;${idx===0?'opacity:.25;pointer-events:none':''}" onclick="tanimSiraTasi('${tip}',${idx},-1)" title="Yukarı taşı">▲</span>
         <span class="hk-sil" style="font-size:11px;${idx===liste.length-1?'opacity:.25;pointer-events:none':''}" onclick="tanimSiraTasi('${tip}',${idx},1)" title="Aşağı taşı">▼</span>
       </span>
-      <span style="flex:1" id="tanim-${tip}-metin-${k.id}">${k.ad}${TANIM_ALT_UST_ESLESME[tip] ? tanimUstAdiEtiket(tip, k.ustId) : ""}</span>
+      <span style="flex:1" id="tanim-${tip}-metin-${k.id}">${k.kod?`<span class="tip-badge" style="margin-right:6px">${k.kod}</span>`:""}${k.ad}${TANIM_ALT_UST_ESLESME[tip] ? tanimUstAdiEtiket(tip, k.ustId) : ""}</span>
       <span class="hk-sil" onclick="tanimDuzenleAc('${tip}','${k.id}')" title="Düzenle">✏️</span>
       <span class="hk-sil" onclick="tanimSilOnay('${tip}','${k.id}')" title="Sil">🗑</span>
     </div>`).join("");
@@ -7928,9 +7937,17 @@ function tanimEkle(tip){
     const ustSel = document.getElementById("tanim-"+tip+"-ust");
     body.ustId = ustSel ? ustSel.value : "";
   }
+  let kodInput = null;
+  if(TANIM_KOD_GEREKLI[tip]){
+    kodInput = document.getElementById("tanim-"+tip+"-yeni-kod");
+    const kod = (kodInput.value||"").trim().toUpperCase();
+    if(kod.length !== 2){ alert("Kod tam olarak 2 karakter olmalı (Stok Kodu'nun otomatik üretimi için gerekli)."); return; }
+    body.kod = kod;
+  }
   cariApi("saveBasitTanim", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     input.value = "";
+    if(kodInput) kodInput.value = "";
     tanimListesiYukle(tip);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
@@ -7945,8 +7962,11 @@ function tanimDuzenleAc(tip, id){
         <option value="">— Üst grup yok —</option>
         ${(_tanimListeCache[ustTip]||[]).map(g=>`<option value="${g.id}" ${g.id===k.ustId?'selected':''}>${g.ad}</option>`).join("")}
       </select>` : "";
+  const kodSecimi = TANIM_KOD_GEREKLI[tip]
+    ? `<input id="tanim-${tip}-duzenle-kod-${id}" type="text" maxlength="2" value="${k.kod||''}" placeholder="Kod" style="width:56px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);text-transform:uppercase">` : "";
   el.outerHTML = `<span style="flex:1;display:flex;gap:6px">
     ${ustSecimi}
+    ${kodSecimi}
     <input id="tanim-${tip}-duzenle-${id}" type="text" value="${k.ad}" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2)">
     <button class="btn btn-primary" style="padding:4px 10px" onclick="tanimDuzenleKaydet('${tip}','${id}')">Kaydet</button>
     <button class="btn" style="padding:4px 10px" onclick="tanimListesiCiz('${tip}')">Vazgeç</button>
@@ -7960,6 +7980,12 @@ function tanimDuzenleKaydet(tip, id){
   if(TANIM_ALT_UST_ESLESME[tip]){
     const ustSel = document.getElementById("tanim-"+tip+"-duzenle-ust-"+id);
     body.ustId = ustSel ? ustSel.value : "";
+  }
+  if(TANIM_KOD_GEREKLI[tip]){
+    const kodInput = document.getElementById("tanim-"+tip+"-duzenle-kod-"+id);
+    const kod = (kodInput.value||"").trim().toUpperCase();
+    if(kod.length !== 2){ alert("Kod tam olarak 2 karakter olmalı."); return; }
+    body.kod = kod;
   }
   cariApi("saveBasitTanim", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
@@ -8437,8 +8463,12 @@ function stokTanimAramaFiltrele(deger){
   stokTanimListesiCiz(filtreli);
 }
 
-function stokTanimModalAc(editId, onKaydedildi){
+function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
   window._stokTanimKaydedildiCB = onKaydedildi || null;
+  // Faturadan/tedarikçiden gelen ham ürün kodu (varsa) — "🔧 Öner" butonu, firma kodu
+  // kısmını bundan türetir (bkz. stokKoduOnerUygula). BFM'de "Yeni Stok Aç" ile açıldığında
+  // bfmYeniStokAc bunu iletir; diğer tüm açılışlarda boş kalır (otomatik sıra no üretilir).
+  window._stokTanimFaturaKoduIpucu = faturaKoduIpucu || "";
   if(_birimListe.length===0) birimListesiYukle();
   if(!_markaYuklendi) markaListesiYukle();
   ["urunGrubu","altUrunGrubu","ebat","renk","ambalaj"].forEach(tip=>{ if(!_tanimListeYuklendi[tip]) tanimListesiYukle(tip); });
@@ -8456,7 +8486,7 @@ function stokTanimModalAc(editId, onKaydedildi){
         <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Stok Kodu</label>
           <div style="display:flex;gap:4px">
             <input id="st-stokkodu" type="text" value="${k?k.stokKodu:''}" placeholder="İsteğe bağlı (ilk 2 hane marka kodu)" ${k?'readonly title="Var olan bir stok kartının kodu, bağlı tüm hareketleri de taşımak için sadece \'Değiştir\' ile güncellenebilir"':''}>
-            ${k ? `<button type="button" class="btn" style="padding:6px 10px;white-space:nowrap" onclick="stokKoduDegistirSureci('${k.id}')">✏️ Değiştir</button>` : ``}
+            ${k ? `<button type="button" class="btn" style="padding:6px 10px;white-space:nowrap" onclick="stokKoduDegistirSureci('${k.id}')">✏️ Değiştir</button>` : `<button type="button" class="btn" style="padding:6px 10px;white-space:nowrap" onclick="stokKoduOnerUygula()" title="Marka + Ürün Grubu + Alt Ürün Grubu seçiminden 12 haneli kod önerir">🔧 Öner</button>`}
           </div>
         </div>
         <div class="fld" style="flex:2;min-width:220px;margin-bottom:0"><label>Stok Adı *</label><input id="st-stokadi" type="text" value="${k?k.stokAdi:''}"></div>
@@ -8502,6 +8532,26 @@ function stokTanimModalAc(editId, onKaydedildi){
 // ★ EKLENDİ: Var olan bir stok kartının kodunu değiştirme — backend stokKoduDegistir,
 // yeni kod başka açık bir kartta kullanılıyorsa reddedip uyarı döndürür; başarılıysa bağlı
 // tüm Satış/Alış kalemleri ve Stok Hareketleri de otomatik yeni koda taşınır.
+// Marka + Ürün Grubu + Alt Ürün Grubu seçiliyse, şirketin 12 haneli stok kodu şemasına göre
+// (2 marka + 2 grup + 2 alt grup + 5 firma kodu + 1 kalite="1") otomatik bir kod üretip
+// Stok Kodu kutusuna yazar. Üretilen kod yine de elle değiştirilebilir — sadece bir öneridir.
+function stokKoduOnerUygula(){
+  const markaId = document.getElementById("st-marka").value;
+  const urunGrubuId = document.getElementById("st-urungrubu").value;
+  const altUrunGrubuId = document.getElementById("st-alturungrubu").value;
+  if(!markaId || !urunGrubuId || !altUrunGrubuId){
+    alert("Kod önerebilmek için önce Marka, Ürün Grubu ve Alt Ürün Grubu seçilmeli.");
+    return;
+  }
+  cariApi("stokKoduOner", {
+    markaId, urunGrubuId, altUrunGrubuId,
+    faturaKodu: window._stokTanimFaturaKoduIpucu || "",
+  }).then(res=>{
+    if(!res.ok){ alert("Kod önerilemedi: "+(res.hata||"bilinmiyor")); return; }
+    document.getElementById("st-stokkodu").value = res.stokKodu;
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
 function stokKoduDegistirSureci(id){
   const k = _stokTanimListe.find(x=>x.id===id);
   if(!k) return;
