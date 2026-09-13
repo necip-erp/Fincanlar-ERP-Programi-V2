@@ -1831,10 +1831,31 @@ let _cariSecili = null;
 // hata mesajını "ok:false, hata:'...'" biçiminde bekler (res.hata). Bu eşleşmezlik
 // yüzünden GERÇEK hata mesajı hiç görünmüyor, her yerde "Hata: bilinmiyor" çıkıyordu
 // (örn. Alış Faturası onaylarken). Burada normalize ederek tek yerden düzeltiyoruz.
+//
+// "Unexpected token '<'" hatası: Apps Script bazen (özellikle aynı anda birden fazla
+// istek gittiğinde veya geçici bir sunucu tarafı hıçkırığında) JSON yerine HTML bir
+// hata/oturum sayfası döndürüyor — r.json() bunu ayrıştıramayınca kriptik bu mesajı
+// veriyordu. Şimdi: (1) yanıt JSON değilse BİR KEZ, kısa bir bekleme sonrası otomatik
+// tekrar deneniyor (çoğu zaman geçici sorun kendini çözüyor), (2) o da başarısız olursa
+// kullanıcıya anlaşılır bir Türkçe mesaj gösteriliyor.
+function cariApiIstekYap_(url){
+  return fetch(url).then(r => r.text()).then(txt=>{
+    try{ return JSON.parse(txt); }
+    catch(e){
+      const gecersizYanitHatasi = new Error("Sunucudan geçersiz yanıt geldi (geçici bir bağlantı sorunu olabilir)");
+      gecersizYanitHatasi.gecersizYanit = true;
+      throw gecersizYanitHatasi;
+    }
+  });
+}
+
 function cariApi(action, params){
   const body = Object.assign({action: action}, params || {});
   const url = CARI_API + "?payload=" + encodeURIComponent(JSON.stringify(body));
-  return fetch(url).then(r => r.json()).then(res=>{
+  return cariApiIstekYap_(url).catch(err=>{
+    if(!err.gecersizYanit) throw err; // ağ hatası (offline vb.) ise direkt fırlat, tekrar denemenin faydası yok
+    return new Promise(resolve=>setTimeout(resolve, 800)).then(()=>cariApiIstekYap_(url));
+  }).then(res=>{
     if(res && res.error && res.ok===undefined){
       return { ok:false, hata: res.error };
     }
@@ -2041,11 +2062,33 @@ function rehberAc(tip, callback){
 
   if(tip==='cari'){
     if(_cariYuklendi && _cariListe.length){ rehberVeriGeldi(_cariListe); }
-    else cariApi("getCariListesi").then(res=>{ if(res.ok){ _cariListe=res.cariler; _cariYuklendi=true; rehberVeriGeldi(res.cariler); } });
+    else cariApi("getCariListesi").then(res=>{
+      if(res.ok){ _cariListe=res.cariler; _cariYuklendi=true; rehberVeriGeldi(res.cariler); }
+      else rehberHataGoster(res.hata || "Cari listesi alınamadı");
+    }).catch(err=>rehberHataGoster(err.message));
   } else {
     if(_stokTanimYuklendi && _stokTanimListe.length){ rehberVeriGeldi(_stokTanimListe); }
-    else cariApi("getStokTanimListesi").then(res=>{ if(res.ok){ _stokTanimListe=res.kalemler; _stokTanimYuklendi=true; rehberVeriGeldi(res.kalemler); } });
+    else cariApi("getStokTanimListesi").then(res=>{
+      if(res.ok){ _stokTanimListe=res.kalemler; _stokTanimYuklendi=true; rehberVeriGeldi(res.kalemler); }
+      else rehberHataGoster(res.hata || "Stok listesi alınamadı");
+    }).catch(err=>rehberHataGoster(err.message));
   }
+}
+
+// Rehber verisi yüklenemezse "Yükleniyor..." ekranında sonsuza kadar takılı kalmasın diye
+// hatayı gösterip tek tıkla yeniden deneme imkanı sunar.
+function rehberHataGoster(mesaj){
+  const el = document.getElementById("rehber-tbl-wrap");
+  if(!el) return; // kullanıcı bu sırada modalı zaten kapatmış olabilir
+  el.innerHTML = '<div class="cari-empty">⚠️ '+htmlKacis(mesaj)+
+    '<div class="liste-arama-temizle" onclick="rehberYenidenDene()">Tekrar dene</div></div>';
+}
+
+function rehberYenidenDene(){
+  if(!_rehberState) return;
+  const { tip, callback } = _rehberState;
+  rehberKapat();
+  rehberAc(tip, callback);
 }
 
 function rehberVeriGeldi(satirlar){
