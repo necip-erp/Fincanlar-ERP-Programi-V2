@@ -2321,8 +2321,19 @@ function hkAciklamaGoster(aciklama){
   return m ? m[1] : aciklama;
 }
 
+// "Tarih" sütununa göre sıralarken aynı güne denk gelen hareketlerde KAYIT_TARIHI
+// (gerçek oluşturulma anı) ile kırılım sağlar — backend'deki getCariDetay sıralamasıyla
+// aynı mantık, aksi halde başlığa tıklayıp yön değiştirince aynı-günlü kayıtların sırası
+// (ve dolayısıyla hangi bakiyenin hangi satırda göründüğü) tutarsızlaşabilir.
+function hkTarihSiraDegeri(h){
+  const g = String(h.tarih||"").slice(0,10); // sadece gün kısmı (saat varsa at)
+  const m = String(h.kayitTarihi||"").match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+  const kayitSira = m ? `${m[3]}${m[2]}${m[1]}${m[4]}${m[5]}` : "000000000000";
+  return `${g}_${kayitSira}_${h.id||""}`;
+}
+
 const HK_SUTUNLAR = {
-  tarih:    { baslik:"Tarih",     render: h => tarihGoster(h.tarih), sortDeger: h => h.tarih || "" },
+  tarih:    { baslik:"Tarih",     render: h => tarihGoster(h.tarih), sortDeger: hkTarihSiraDegeri },
   borc:     { baslik:"Borç",      render: h => h.tip==='Borç' ? `<span class="hk-tutar-borc">${paraFormat(h.tutar)}</span>` : "", sortDeger: h => h.tip==='Borç' ? (parseFloat(h.tutar)||0) : -1 },
   alacak:   { baslik:"Alacak",    render: h => h.tip==='Alacak' ? `<span class="hk-tutar-alacak">${paraFormat(h.tutar)}</span>` : "", sortDeger: h => h.tip==='Alacak' ? (parseFloat(h.tutar)||0) : -1 },
   vade:     { baslik:"Vade",      render: h => { if(!h.vade) return "—"; const gecti = h.tip==='Borç' && h.vade < new Date().toISOString().slice(0,10); return gecti ? `<span class="hk-borc">${tarihGoster(h.vade)}</span>` : tarihGoster(h.vade); }, sortDeger: h => h.vade || "" },

@@ -795,16 +795,40 @@ function getCariDetay(cariId) {
       vade: hucreTarihStr(row[7]),
     });
   }
-  // Tarihe göre sırala (eskiden yeniye), kümülatif bakiyeyi hesapla
-  hareketler.sort((a, b) => new Date(a.tarih) - new Date(b.tarih));
+  // Tarihe göre sırala (eskiden yeniye). Aynı güne ait birden fazla hareket varsa (TARİH
+  // sadece gün çözünürlüğünde), KAYIT_TARIHI (gerçek oluşturulma anı, dakika hassasiyetinde)
+  // ile bozuyoruz — aksi halde ör. "önce girilen tahsilat, sonra kesilen fatura" gibi aynı
+  // güne denk gelen işlemlerde bakiye kümülatif olarak DOĞRU hesaplanır ama görüntüleme
+  // sırası bundan bağımsız kalıp (örn. frontend'de Tarih'e göre yeniden sıralanınca) tutarsız
+  // görünebiliyordu — bakiye 0,00 olan satır, bakiye 29.136,00 olan satırdan ÖNCE gösterilip
+  // "mantık hatası" izlenimi veriyordu. id de üçüncü seviye kesin bir kırılım sağlar.
+  hareketler.sort((a, b) => {
+    const gcmp = new Date(a.tarih) - new Date(b.tarih);
+    if (gcmp !== 0) return gcmp;
+    const kcmp = kayitTarihiEpoch_(a.kayitTarihi) - kayitTarihiEpoch_(b.kayitTarihi);
+    if (kcmp !== 0) return kcmp;
+    return String(a.id).localeCompare(String(b.id));
+  });
   let bakiye = 0;
   hareketler.forEach(h => {
     bakiye += (h.tip === "Borç") ? h.tutar : -h.tutar;
     h.bakiyeSonrasi = bakiye;
   });
-  hareketler.reverse(); // en yeni en üstte gösterilsin
+  // NOT: Artık burada .reverse() YAPILMIYOR — frontend varsayılan olarak bu (Tarih artan,
+  // KAYIT_TARIHI ile kırılımlı) sırayı olduğu gibi gösteriyor; "en yeni en üstte" görünüm
+  // isteniyorsa kullanıcı Tarih başlığına tıklayıp azalan sıraya geçebilir (bu durumda da
+  // aynı KAYIT_TARIHI kırılımı frontend tarafında korunuyor, bkz. HK_SUTUNLAR.tarih.sortDeger).
 
   return { ok: true, cari: cari, hareketler: hareketler, bakiye: bakiye };
+}
+
+// "dd/MM/yyyy HH:mm" biçimindeki KAYIT_TARIHI metnini karşılaştırılabilir bir epoch
+// (milisaniye) değerine çevirir — biçim uyuşmuyorsa 0 döner (sona atılır, kırılım
+// sağlanamasa da uygulama çökmesin diye).
+function kayitTarihiEpoch_(kt) {
+  const m = String(kt || "").match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+  if (!m) return 0;
+  return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]).getTime();
 }
 
 // body: { id (varsa güncelleme), tip, ad, telefon, adres, vergiNo, not }
