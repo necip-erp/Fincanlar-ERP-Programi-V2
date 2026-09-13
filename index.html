@@ -199,6 +199,11 @@ body.desen-acik{
 .cari-empty{padding:30px 16px;text-align:center;color:var(--text3);font-size:12px}
 .liste-daha-fazla{padding:12px;text-align:center;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;border-top:1px solid var(--border)}
 .liste-daha-fazla:hover{background:var(--bg3)}
+.cari-item mark{background:var(--yellow-l);color:inherit;border-radius:3px;padding:0 1px}
+.cari-item.kbd-aktif{background:var(--bg3);border-left-color:var(--text3)}
+.liste-arama-temizle{margin-top:8px;color:var(--blue);font-weight:700;cursor:pointer;font-size:12px}
+.liste-arama-temizle:hover{text-decoration:underline}
+.cari-list-head .liste-sonuc-sayisi{font-size:11px;color:var(--text3);white-space:nowrap;padding:0 2px}
 
 .cari-detail-panel{flex:1;overflow:auto;padding:20px 24px}
 .cari-detail-empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text3);gap:6px}
@@ -733,7 +738,8 @@ setInterval(topbarSaatGuncelle, 10000);
   <div class="modview" id="mod-cari">
     <div class="cari-list-panel">
       <div class="cari-list-head">
-        <input id="cari-ara" placeholder="Cari ara..." oninput="cariAramaFiltrele(this.value)">
+        <input id="cari-ara" placeholder="Cari ara (ad, kod, telefon)..." autocomplete="off" oninput="cariAramaFiltrele(this.value)" onkeydown="listeKlavyeYonet(event,'cari-ara','cari-items')">
+        <span class="liste-sonuc-sayisi" id="cari-sonuc-sayisi"></span>
         <button class="cari-add-btn" onclick="cariModalAc()" title="Yeni cari ekle">+</button>
       </div>
       <div class="cari-items" id="cari-items"><div class="cari-empty">Yükleniyor...</div></div>
@@ -745,7 +751,8 @@ setInterval(topbarSaatGuncelle, 10000);
   <div class="modview" id="mod-tahsilat">
     <div class="cari-list-panel">
       <div class="cari-list-head">
-        <input id="tahsilat-ara" placeholder="Tahsilat ara (müşteri)..." oninput="tahsilatAramaFiltrele(this.value)">
+        <input id="tahsilat-ara" placeholder="Tahsilat ara (müşteri, yöntem)..." autocomplete="off" oninput="tahsilatAramaFiltrele(this.value)" onkeydown="listeKlavyeYonet(event,'tahsilat-ara','tahsilat-items')">
+        <span class="liste-sonuc-sayisi" id="tahsilat-sonuc-sayisi"></span>
         <button class="cari-add-btn" onclick="tahsilatModalAc()" title="Yeni tahsilat">+</button>
       </div>
       <div class="cari-items" id="tahsilat-items"><div class="cari-empty">Yükleniyor...</div></div>
@@ -757,7 +764,8 @@ setInterval(topbarSaatGuncelle, 10000);
   <div class="modview" id="mod-odeme">
     <div class="cari-list-panel">
       <div class="cari-list-head">
-        <input id="odeme-ara" placeholder="Ödeme ara (tedarikçi)..." oninput="odemeAramaFiltrele(this.value)">
+        <input id="odeme-ara" placeholder="Ödeme ara (tedarikçi, yöntem)..." autocomplete="off" oninput="odemeAramaFiltrele(this.value)" onkeydown="listeKlavyeYonet(event,'odeme-ara','odeme-items')">
+        <span class="liste-sonuc-sayisi" id="odeme-sonuc-sayisi"></span>
         <button class="cari-add-btn" onclick="odemeModalAc()" title="Yeni ödeme">+</button>
       </div>
       <div class="cari-items" id="odeme-items"><div class="cari-empty">Yükleniyor...</div></div>
@@ -860,7 +868,8 @@ setInterval(topbarSaatGuncelle, 10000);
           <button class="belge-tab" data-tip="Sipariş" onclick="satisBelgeTipiDegistir('Sipariş')">Sipariş</button>
         </div>
         <div class="cari-list-head">
-          <input id="satis-ara" placeholder="Satış ara (müşteri)..." oninput="satisAramaFiltrele(this.value)">
+          <input id="satis-ara" placeholder="Satış ara (müşteri, sipariş no...)..." autocomplete="off" oninput="satisAramaFiltrele(this.value)" onkeydown="listeKlavyeYonet(event,'satis-ara','satis-items')">
+          <span class="liste-sonuc-sayisi" id="satis-sonuc-sayisi"></span>
           <button class="cari-add-btn" onclick="satisModalAc()" title="Yeni ekle">+</button>
         </div>
         <div class="cari-items" id="satis-items"><div class="cari-empty">Yükleniyor...</div></div>
@@ -875,7 +884,7 @@ setInterval(topbarSaatGuncelle, 10000);
       <div class="cari-list-panel">
         <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="satisAnaSecimeDon()">← Satış seçimine dön</button>
         <div class="cari-list-head">
-          <input id="satisiade-ara" placeholder="İade ara (müşteri)..." oninput="satisIadeAramaFiltrele(this.value)">
+          <input id="satisiade-ara" placeholder="İade ara (müşteri)..." autocomplete="off" oninput="satisIadeAramaFiltrele(this.value)" onkeydown="listeKlavyeYonet(event,'satisiade-ara','satisiade-items')">
           <button class="cari-add-btn" onclick="satisIadeModalAc()" title="Yeni iade">+</button>
         </div>
         <div class="cari-items" id="satisiade-items"><div class="cari-empty">Yükleniyor...</div></div>
@@ -1624,6 +1633,19 @@ function modulAc(id){
   sekmeSeridiCiz();
   // Silinenler listesi her açılışta taze olmalı (stale cache burada yanıltıcı olur).
   if(id === "silinenler") silinenlerYukle();
+  // Cari/Tahsilat/Ödeme modülleri doğrudan liste ekranıyla açılır — sol arama kutusuna
+  // odaklan ki kullanıcı hiçbir şeye tıklamadan yazmaya başlayabilsin. (Satış/Satış İadesi
+  // önce Fatura/Teklif/Sipariş seçim ekranı gösterdiği için odaklanma satisAltModulAc'te.)
+  const ARAMA_GIRISI_MODUL = {cari:"cari-ara", tahsilat:"tahsilat-ara", odeme:"odeme-ara"};
+  if(ARAMA_GIRISI_MODUL[id]) odakSolAramaKutusu(ARAMA_GIRISI_MODUL[id]);
+}
+
+// Sol panel arama kutusuna otomatik odaklanır — yalnızca fare/klavyeli (masaüstü) cihazlarda;
+// dokunmatik/mobil cihazlarda otomatik odaklanma istenmeyen şekilde sanal klavyeyi açar.
+function odakSolAramaKutusu(girisId){
+  if(!(window.matchMedia && window.matchMedia("(pointer: fine)").matches)) return;
+  const el = document.getElementById(girisId);
+  if(el) setTimeout(()=>el.focus(), 0);
 }
 
 function gitAnaSayfa(){
@@ -2152,6 +2174,56 @@ function oneriKlavyeYonet(e, kutuId){
   if(aktif>=0){ satirlar[aktif].classList.add("oneri-aktif"); satirlar[aktif].scrollIntoView({block:"nearest"}); }
 }
 
+// ── Sol liste panelleri (Cari/Satış/Tahsilat/Ödeme/Satış İade) için ortak
+// arama yardımcıları: HTML kaçışı, eşleşen metni vurgulama, klavye ile gezinme
+// ve arama sonucu boşken sorguyu gösteren mesaj. ──
+function htmlKacis(metin){
+  return String(metin==null?"":metin).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function metinVurgula(metin, sorgu){
+  const guvenli = htmlKacis(metin);
+  if(!sorgu) return guvenli;
+  try{
+    const escaped = sorgu.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('(' + escaped + ')', 'ig');
+    return htmlKacis(metin).replace(new RegExp('('+escaped+')','ig'), '<mark>$1</mark>');
+  }catch(e){ return guvenli; }
+}
+
+// Liste boşsa: arama yapılıyorsa sorguyu gösterip temizleme imkanı sunar,
+// yapılmıyorsa modüle özel "kayıt yok" mesajını gösterir.
+function aramaBosSonucHTML(sorgu, girisId, bosMesaj){
+  if(sorgu) return '<div class="cari-empty">🔍 “'+htmlKacis(sorgu)+'” için sonuç bulunamadı.'
+    + '<div class="liste-arama-temizle" onclick="document.getElementById(\''+girisId+'\').value=\'\';document.getElementById(\''+girisId+'\').dispatchEvent(new Event(\'input\'));document.getElementById(\''+girisId+'\').focus();">Aramayı temizle</div></div>';
+  return '<div class="cari-empty">'+bosMesaj+'</div>';
+}
+
+// Bir "cari-list-panel" içindeki arama kutusunda Yukarı/Aşağı ok ile satırlar
+// arasında gezinme, Enter ile seçili satırı açma, Escape ile aramayı temizleme.
+function listeKlavyeYonet(e, girisId, kapsayiciId){
+  if(e.key === "Escape"){
+    const giris = document.getElementById(girisId);
+    if(giris && giris.value){ giris.value = ""; giris.dispatchEvent(new Event("input")); }
+    else if(giris) giris.blur();
+    return;
+  }
+  if(e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter") return;
+  const kapsayici = document.getElementById(kapsayiciId);
+  if(!kapsayici) return;
+  const satirlar = Array.from(kapsayici.querySelectorAll(".cari-item"));
+  if(satirlar.length === 0) return;
+  let aktif = satirlar.findIndex(s=>s.classList.contains("kbd-aktif"));
+  if(e.key === "ArrowDown"){ e.preventDefault(); aktif = Math.min(aktif+1, satirlar.length-1); }
+  else if(e.key === "ArrowUp"){ e.preventDefault(); aktif = Math.max(aktif-1, 0); }
+  else if(e.key === "Enter"){
+    if(aktif>=0){ e.preventDefault(); satirlar[aktif].click(); }
+    return;
+  }
+  satirlar.forEach(s=>s.classList.remove("kbd-aktif"));
+  if(aktif>=0){ satirlar[aktif].classList.add("kbd-aktif"); satirlar[aktif].scrollIntoView({block:"nearest"}); }
+}
+
 // ── Liste önbellekleme (performans) ──
 // Modüller art\u0131k ayrı sekmelerde açıldığı için her açılış taze bir sayfa yüklemesi demek;
 // bu yüzden son başarılı liste sonucunu tarayıcıda (tüm sekmeler arasında paylaşılan
@@ -2207,19 +2279,27 @@ function cariListesiYukle(){
 let _cariRenderLimit = 80; // Cari sayısı arttıkça binlerce DOM öğesi birden basmak yavaşlar;
 // başlangıçta sınırlı sayıda gösterip "daha fazla göster" ile kademeli açıyoruz.
 let _cariSonGosterilenListe = [];
+let _cariAramaSorgu = "";
 
 function cariListesiCiz(liste){
   const el = document.getElementById("cari-items");
-  if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı cari yok. "+" ile ekleyin.</div>'; return; }
+  const sayacEl = document.getElementById("cari-sonuc-sayisi");
+  if(liste.length === 0){
+    el.innerHTML = aramaBosSonucHTML(_cariAramaSorgu, "cari-ara", 'Kayıtlı cari yok. "+" ile ekleyin.');
+    if(sayacEl) sayacEl.textContent = _cariAramaSorgu ? "0 sonuç" : "";
+    return;
+  }
   _cariSonGosterilenListe = liste;
+  if(sayacEl) sayacEl.textContent = _cariAramaSorgu ? (liste.length + " sonuç") : "";
   const gosterilecek = liste.slice(0, _cariRenderLimit);
+  const q = _cariAramaSorgu;
   el.innerHTML = gosterilecek.map(c=>`
     <div class="cari-item ${_cariSecili===c.id?'sel':''}" onclick="cariAc('${c.id}')">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${c.ad}</span>
+        <span class="cari-item-ad">${metinVurgula(c.ad, q)}</span>
         <span class="cari-item-bakiye ${bakiyeSinifi(c.bakiye)}">${paraFormat(c.bakiye)}</span>
       </div>
-      <span class="cari-item-tip">${c.tip}${c.cariKodu?' · '+c.cariKodu:''}${(c.krediLimiti>0 && c.bakiye>c.krediLimiti)?' · <span class="hk-borc">⚠️ Limit aşıldı</span>':''}</span>
+      <span class="cari-item-tip">${c.tip}${c.cariKodu?' · '+metinVurgula(c.cariKodu, q):''}${c.telefon?' · '+metinVurgula(c.telefon, q):''}${(c.krediLimiti>0 && c.bakiye>c.krediLimiti)?' · <span class="hk-borc">⚠️ Limit aşıldı</span>':''}</span>
     </div>`).join("") + (liste.length > _cariRenderLimit
       ? `<div class="liste-daha-fazla" onclick="cariDahaFazlaGoster()">+ ${liste.length - _cariRenderLimit} kayıt daha göster</div>`
       : "");
@@ -2232,7 +2312,8 @@ function cariDahaFazlaGoster(){
 
 function cariAramaFiltrele(deger){
   _cariRenderLimit = 80; // yeni bir arama = baştan say
-  const d = deger.trim().toLocaleLowerCase('tr');
+  _cariAramaSorgu = deger.trim();
+  const d = _cariAramaSorgu.toLocaleLowerCase('tr');
   const filtreli = !d ? _cariListe : _cariListe.filter(c =>
     c.ad.toLocaleLowerCase('tr').includes(d) || (c.telefon||"").includes(d) || (c.cariKodu||"").toLocaleLowerCase('tr').includes(d));
   cariListesiCiz(filtreli);
@@ -2690,6 +2771,7 @@ function satisAltModulAc(tip){
   _satisSecili = null;
   satisBelgeTipiDegistir(tip);
   if(!_satisYuklendi) satisListesiYukle();
+  odakSolAramaKutusu("satis-ara");
 }
 
 // Fatura sekmesi açıkken, sayfanın altında son kesilen faturaları listeler.
@@ -2713,17 +2795,25 @@ function satisSonFaturalarGoster(){
     </div>`;
 }
 
+let _satisAramaSorgu = "";
+
 function satisListesiCiz(liste){
   const el = document.getElementById("satis-items");
+  const sayacEl = document.getElementById("satis-sonuc-sayisi");
   const filtreliListe = liste.filter(s => (s.belgeTipi||"Fatura") === _satisAktifBelgeTipi);
-  if(filtreliListe.length === 0){ el.innerHTML = '<div class="cari-empty">Bu türde kayıt yok. "+" ile ekleyin.</div>'; return; }
+  if(sayacEl) sayacEl.textContent = _satisAramaSorgu ? (filtreliListe.length + " sonuç") : "";
+  if(filtreliListe.length === 0){
+    el.innerHTML = aramaBosSonucHTML(_satisAramaSorgu, "satis-ara", 'Bu türde kayıt yok. "+" ile ekleyin.');
+    return;
+  }
+  const q = _satisAramaSorgu;
   el.innerHTML = filtreliListe.map(s=>`
     <div class="cari-item ${_satisSecili===s.id?'sel':''}" onclick="satisAc('${s.id}')">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${s.cariAd}</span>
+        <span class="cari-item-ad">${metinVurgula(s.cariAd, q)}</span>
         <span class="cari-item-bakiye">${paraFormat(s.toplamTutar)}</span>
       </div>
-      <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${s.odemeTipi}${s.siparisDurumu ? ` · <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}</span>
+      <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${metinVurgula(s.odemeTipi, q)}${s.siparisNo?' · '+metinVurgula(''+s.siparisNo, q):''}${s.siparisDurumu ? ` · <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}</span>
     </div>`).join("");
 }
 
@@ -2752,8 +2842,13 @@ function satisBelgeTipiDegistir(tip){
 }
 
 function satisAramaFiltrele(deger){
-  const d = deger.trim().toLocaleLowerCase('tr');
-  const filtreli = !d ? _satisListe : _satisListe.filter(s => s.cariAd.toLocaleLowerCase('tr').includes(d));
+  _satisAramaSorgu = deger.trim();
+  const d = _satisAramaSorgu.toLocaleLowerCase('tr');
+  const filtreli = !d ? _satisListe : _satisListe.filter(s =>
+    s.cariAd.toLocaleLowerCase('tr').includes(d) ||
+    (s.odemeTipi||"").toLocaleLowerCase('tr').includes(d) ||
+    (s.siparisNo!=null && (''+s.siparisNo).includes(d)) ||
+    (s.efaturaNo||"").toLocaleLowerCase('tr').includes(d));
   satisListesiCiz(filtreli);
 }
 
@@ -3715,13 +3810,19 @@ function satisIadeListesiYukle(){
   });
 }
 
+let _satisIadeAramaSorgu = "";
+
 function satisIadeListesiCiz(liste){
   const el = document.getElementById("satisiade-items");
-  if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı iade yok. "+" ile ekleyin.</div>'; return; }
+  if(liste.length === 0){
+    el.innerHTML = aramaBosSonucHTML(_satisIadeAramaSorgu, "satisiade-ara", 'Kayıtlı iade yok. "+" ile ekleyin.');
+    return;
+  }
+  const q = _satisIadeAramaSorgu;
   el.innerHTML = liste.map(a=>`
     <div class="cari-item ${_satisIadeSecili===a.id?'sel':''}" onclick="satisIadeAc('${a.id}')">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${a.cariAd}</span>
+        <span class="cari-item-ad">${metinVurgula(a.cariAd, q)}</span>
         <span class="cari-item-bakiye">${paraFormat(a.toplamTutar)}</span>
       </div>
       <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(a.tarih)}</b></span>
@@ -3729,7 +3830,8 @@ function satisIadeListesiCiz(liste){
 }
 
 function satisIadeAramaFiltrele(deger){
-  const d = deger.trim().toLocaleLowerCase('tr');
+  _satisIadeAramaSorgu = deger.trim();
+  const d = _satisIadeAramaSorgu.toLocaleLowerCase('tr');
   const filtreli = !d ? _satisIadeListe : _satisIadeListe.filter(a => a.cariAd.toLocaleLowerCase('tr').includes(d));
   satisIadeListesiCiz(filtreli);
 }
@@ -5431,22 +5533,32 @@ function tahsilatListesiYukle(){
   });
 }
 
+let _tahsilatAramaSorgu = "";
+
 function tahsilatListesiCiz(liste){
   const el = document.getElementById("tahsilat-items");
-  if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı tahsilat yok. "+" ile ekleyin.</div>'; return; }
+  const sayacEl = document.getElementById("tahsilat-sonuc-sayisi");
+  if(sayacEl) sayacEl.textContent = _tahsilatAramaSorgu ? (liste.length + " sonuç") : "";
+  if(liste.length === 0){
+    el.innerHTML = aramaBosSonucHTML(_tahsilatAramaSorgu, "tahsilat-ara", 'Kayıtlı tahsilat yok. "+" ile ekleyin.');
+    return;
+  }
+  const q = _tahsilatAramaSorgu;
   el.innerHTML = liste.map(t=>`
     <div class="cari-item ${_tahsilatSecili===t.id?'sel':''}" onclick="tahsilatAc('${t.id}')">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${t.cariAd}</span>
+        <span class="cari-item-ad">${metinVurgula(t.cariAd, q)}</span>
         <span class="cari-item-bakiye">${paraFormat(t.tutar)}</span>
       </div>
-      <span class="cari-item-tip">${tarihGoster(t.tarih)} · ${t.yontem}</span>
+      <span class="cari-item-tip">${tarihGoster(t.tarih)} · ${metinVurgula(t.yontem, q)}</span>
     </div>`).join("");
 }
 
 function tahsilatAramaFiltrele(deger){
-  const d = deger.trim().toLocaleLowerCase('tr');
-  const filtreli = !d ? _tahsilatListe : _tahsilatListe.filter(t => t.cariAd.toLocaleLowerCase('tr').includes(d));
+  _tahsilatAramaSorgu = deger.trim();
+  const d = _tahsilatAramaSorgu.toLocaleLowerCase('tr');
+  const filtreli = !d ? _tahsilatListe : _tahsilatListe.filter(t =>
+    t.cariAd.toLocaleLowerCase('tr').includes(d) || (t.yontem||"").toLocaleLowerCase('tr').includes(d));
   tahsilatListesiCiz(filtreli);
 }
 
@@ -5693,22 +5805,32 @@ function odemeListesiYukle(){
   });
 }
 
+let _odemeAramaSorgu = "";
+
 function odemeListesiCiz(liste){
   const el = document.getElementById("odeme-items");
-  if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı ödeme yok. "+" ile ekleyin.</div>'; return; }
+  const sayacEl = document.getElementById("odeme-sonuc-sayisi");
+  if(sayacEl) sayacEl.textContent = _odemeAramaSorgu ? (liste.length + " sonuç") : "";
+  if(liste.length === 0){
+    el.innerHTML = aramaBosSonucHTML(_odemeAramaSorgu, "odeme-ara", 'Kayıtlı ödeme yok. "+" ile ekleyin.');
+    return;
+  }
+  const q = _odemeAramaSorgu;
   el.innerHTML = liste.map(o=>`
     <div class="cari-item ${_odemeSecili===o.id?'sel':''}" onclick="odemeAc('${o.id}')">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${o.cariAd}</span>
+        <span class="cari-item-ad">${metinVurgula(o.cariAd, q)}</span>
         <span class="cari-item-bakiye">${paraFormat(o.tutar)}</span>
       </div>
-      <span class="cari-item-tip">${tarihGoster(o.tarih)} · ${o.yontem}</span>
+      <span class="cari-item-tip">${tarihGoster(o.tarih)} · ${metinVurgula(o.yontem, q)}</span>
     </div>`).join("");
 }
 
 function odemeAramaFiltrele(deger){
-  const d = deger.trim().toLocaleLowerCase('tr');
-  const filtreli = !d ? _odemeListe : _odemeListe.filter(o => o.cariAd.toLocaleLowerCase('tr').includes(d));
+  _odemeAramaSorgu = deger.trim();
+  const d = _odemeAramaSorgu.toLocaleLowerCase('tr');
+  const filtreli = !d ? _odemeListe : _odemeListe.filter(o =>
+    o.cariAd.toLocaleLowerCase('tr').includes(d) || (o.yontem||"").toLocaleLowerCase('tr').includes(d));
   odemeListesiCiz(filtreli);
 }
 
