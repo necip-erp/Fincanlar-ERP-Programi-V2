@@ -738,7 +738,7 @@ setInterval(topbarSaatGuncelle, 10000);
   <div class="modview" id="mod-cari">
     <div class="cari-list-panel">
       <div class="cari-list-head">
-        <input id="cari-ara" placeholder="Cari ara (ad, kod, telefon)..." autocomplete="off" oninput="cariAramaFiltrele(this.value)" onkeydown="listeKlavyeYonet(event,'cari-ara','cari-items')">
+        <input id="cari-ara" placeholder="Cari ara (ad, kod, telefon, adres)..." autocomplete="off" oninput="cariAramaFiltrele(this.value)" onkeydown="listeKlavyeYonet(event,'cari-ara','cari-items')">
         <span class="liste-sonuc-sayisi" id="cari-sonuc-sayisi"></span>
         <button class="cari-add-btn" onclick="cariModalAc()" title="Yeni cari ekle">+</button>
       </div>
@@ -951,6 +951,10 @@ setInterval(topbarSaatGuncelle, 10000);
           <input type="date" id="mr-kasa-gun" onchange="muhasebeRaporuYukle()">
         </div>
       </div>
+      <div id="mr-stokkodu-alani" style="display:none;max-width:280px;margin-bottom:14px" class="fld">
+        <label>Stok Kodu ile filtrele (opsiyonel)</label>
+        <input type="text" id="mr-stokkodu" placeholder="Örn. 120.01.001..." oninput="muhasebeRaporuStokKoduDegisti()">
+      </div>
       <div id="mr-icerik"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
   </div>
@@ -972,7 +976,8 @@ setInterval(topbarSaatGuncelle, 10000);
           <input type="number" id="cvirman-tutar" step="0.01" min="0"></div>
         <div class="fld" style="flex:1;min-width:200px;margin-bottom:0"><label>Açıklama (opsiyonel)</label>
           <input type="text" id="cvirman-aciklama"></div>
-        <button class="btn btn-primary" onclick="cariVirmanKaydet()">🔁 Virman Yap</button>
+        <button class="btn btn-primary" id="cvirman-kaydet-btn" onclick="cariVirmanKaydet()">🔁 Virman Yap</button>
+        <button class="btn" id="cvirman-iptal-btn" style="display:none" onclick="cariVirmanDuzenlemeIptal()">İptal</button>
       </div>
       <div id="cvirman-liste"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
@@ -2358,7 +2363,7 @@ function cariAramaFiltrele(deger){
   _cariAramaSorgu = deger.trim();
   const d = _cariAramaSorgu.toLocaleLowerCase('tr');
   const filtreli = !d ? _cariListe : _cariListe.filter(c =>
-    c.ad.toLocaleLowerCase('tr').includes(d) || (c.telefon||"").includes(d) || (c.cariKodu||"").toLocaleLowerCase('tr').includes(d));
+    c.ad.toLocaleLowerCase('tr').includes(d) || (c.telefon||"").includes(d) || (c.cariKodu||"").toLocaleLowerCase('tr').includes(d) || (c.adres||"").toLocaleLowerCase('tr').includes(d));
   cariListesiCiz(filtreli);
 }
 
@@ -6795,12 +6800,21 @@ function birGunOncesiGoster(gunStr){
 function muhasebeRaporuTipDegisti(){
   const tip = document.getElementById("mr-tip-secim").value;
   document.getElementById("mr-kasa-mod-alani").style.display = (tip === "kasaRaporu") ? "flex" : "none";
+  const stokKoduDestekli = ["urunBazliHareket","urunBazliSiparis","urunBazliFatura","karZarar"].includes(tip);
+  document.getElementById("mr-stokkodu-alani").style.display = stokKoduDestekli ? "flex" : "none";
   if(tip === "kasaRaporu"){
     const gunEl = document.getElementById("mr-kasa-gun");
     if(!gunEl.value) gunEl.value = simdiTarihSaat().slice(0,10);
     document.getElementById("mr-kasa-gun-fld").style.display = (_kasaRaporuMod==="gunluk") ? "flex" : "none";
   }
   muhasebeRaporuYukle();
+}
+
+let _mrStokKoduTimer = null;
+// Her tuş vuruşunda sunucuya gitmesin diye kısa bir debounce ile filtreliyoruz.
+function muhasebeRaporuStokKoduDegisti(){
+  clearTimeout(_mrStokKoduTimer);
+  _mrStokKoduTimer = setTimeout(muhasebeRaporuYukle, 350);
 }
 
 function kasaRaporuModDegistir(mod){
@@ -6854,7 +6868,8 @@ function muhasebeRaporuYukle(){
 
   const gunlukSecili = tip === "kasaRaporu" && _kasaRaporuMod === "gunluk";
   const gun = gunlukSecili ? (document.getElementById("mr-kasa-gun").value || simdiTarihSaat().slice(0,10)) : "";
-  const istekBody = gunlukSecili ? {tip, mod:"gunluk", gun} : {tip, mod:"aralik", baslangic, bitis};
+  const stokKodu = document.getElementById("mr-stokkodu").value.trim();
+  const istekBody = gunlukSecili ? {tip, mod:"gunluk", gun, stokKodu} : {tip, mod:"aralik", baslangic, bitis, stokKodu};
 
   cariApi("getMuhasebeRaporu", istekBody).then(res=>{
     if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
@@ -6897,10 +6912,10 @@ function muhasebeRaporuYukle(){
         </div>
         ${res.eslesmeyenSayisi>0 ? `<p style="color:var(--text3);font-size:12px;margin:0 0 10px">⚠️ ${res.eslesmeyenSayisi} kalemin Stok Tanımları'nda eşleşen alış fiyatı bulunamadı — bu kalemlerin maliyeti 0 kabul edildi (kâr olduğundan yüksek görünebilir). Ürün adının Stok Tanımları'ndaki adla birebir aynı olduğundan emin olun.</p>` : ""}
         <table class="rapor-tbl">
-          <thead><tr><th>Ürün</th><th>Miktar</th><th>Satış Tutarı</th><th>Maliyet</th><th>Kâr</th></tr></thead>
+          <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Satış Tutarı</th><th>Maliyet</th><th>Kâr</th></tr></thead>
           <tbody>
             ${res.satirlar.map(s=>`
-              <tr><td>${s.urunAdi}${s.maliyetBilinmiyor?' ⚠️':''}</td><td>${miktarFormat(s.miktar)}</td><td>${paraFormat(s.satisTutari)}</td><td>${paraFormat(s.maliyet)}</td><td>${paraFormat(s.kar)}</td></tr>`).join("")}
+              <tr><td>${s.stokKodu||'—'}</td><td>${s.urunAdi}${s.maliyetBilinmiyor?' ⚠️':''}</td><td>${miktarFormat(s.miktar)}</td><td>${paraFormat(s.satisTutari)}</td><td>${paraFormat(s.maliyet)}</td><td>${paraFormat(s.kar)}</td></tr>`).join("")}
           </tbody>
         </table>`;
       return;
@@ -6923,12 +6938,12 @@ function muhasebeRaporuYukle(){
     } else {
       el.innerHTML = `
         <table class="rapor-tbl">
-          <thead><tr><th>Ürün</th>${tip==='urunBazliHareket'?'<th>Giriş Miktar</th><th>Çıkış Miktar</th>':'<th>Miktar</th>'}<th>Toplam Tutar</th></tr></thead>
+          <thead><tr><th>Stok Kodu</th><th>Ürün</th>${tip==='urunBazliHareket'?'<th>Giriş Miktar</th><th>Çıkış Miktar</th>':'<th>Miktar</th>'}<th>Toplam Tutar</th></tr></thead>
           <tbody>
             ${res.satirlar.map(s=>`
-              <tr><td>${s.urunAdi}</td>${tip==='urunBazliHareket'?`<td>${miktarFormat(s.girisMiktar)}</td><td>${miktarFormat(s.cikisMiktar)}</td>`:`<td>${miktarFormat(s.cikisMiktar)}</td>`}<td>${paraFormat(s.tutar)}</td></tr>`).join("")}
+              <tr><td>${s.stokKodu||'—'}</td><td>${s.urunAdi}</td>${tip==='urunBazliHareket'?`<td>${miktarFormat(s.girisMiktar)}</td><td>${miktarFormat(s.cikisMiktar)}</td>`:`<td>${miktarFormat(s.cikisMiktar)}</td>`}<td>${paraFormat(s.tutar)}</td></tr>`).join("")}
           </tbody>
-          <tfoot><tr><td colspan="${tip==='urunBazliHareket'?3:2}"><b>Toplam</b></td><td><b>${paraFormat(res.toplam)}</b></td></tr></tfoot>
+          <tfoot><tr><td colspan="${tip==='urunBazliHareket'?4:3}"><b>Toplam</b></td><td><b>${paraFormat(res.toplam)}</b></td></tr></tfoot>
         </table>`;
     }
   }).catch(err=>{
@@ -6941,6 +6956,7 @@ function muhasebeRaporuYukle(){
 <script>
 let _cvirmanYuklendi = false;
 let _cvirmanListe = [];
+let _cvirmanDuzenlenenId = null; // dolu ise "Virman Yap" formu düzenleme modunda çalışır
 
 function cvirmanCariSelectDoldur(){
   const opts = '<option value="">— seçin —</option>' + _cariListe.map(c=>`<option value="${c.id}">${c.ad}</option>`).join("");
@@ -6961,21 +6977,51 @@ function cariVirmanKaydet(){
   if(tutar <= 0){ alert("Tutar sıfırdan büyük olmalı."); return; }
   const kaynakAd = (_cariListe.find(c=>c.id===kaynakId)||{}).ad || "";
   const hedefAd = (_cariListe.find(c=>c.id===hedefId)||{}).ad || "";
-  if(!confirm(`${kaynakAd} → ${hedefAd}\n${paraFormat(tutar)} tutarında virman yapılacak.\nOnaylıyor musunuz?`)) return;
+  const duzenleniyor = !!_cvirmanDuzenlenenId;
+  const onayMetni = duzenleniyor
+    ? `${kaynakAd} → ${hedefAd}\n${paraFormat(tutar)} tutarındaki virman güncellenecek.\nOnaylıyor musunuz?`
+    : `${kaynakAd} → ${hedefAd}\n${paraFormat(tutar)} tutarında virman yapılacak.\nOnaylıyor musunuz?`;
+  if(!confirm(onayMetni)) return;
 
-  cariApi("saveCariVirman", {
+  const body = {
+    id: _cvirmanDuzenlenenId || undefined,
     kaynakCariId: kaynakId, kaynakCariAd: kaynakAd,
     hedefCariId: hedefId, hedefCariAd: hedefAd,
     tarih: document.getElementById("cvirman-tarih").value,
     tutar: tutar, aciklama: document.getElementById("cvirman-aciklama").value,
-  }).then(res=>{
+  };
+  cariApi(duzenleniyor ? "updateCariVirman" : "saveCariVirman", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
-    document.getElementById("cvirman-tutar").value = "";
-    document.getElementById("cvirman-aciklama").value = "";
+    cariVirmanDuzenlemeIptal(); // formu ve düzenleme modunu sıfırla
     cariVirmanListesiYukle();
     cariListesiYukle(); // bakiyeler değişti
-    alert("Virman kaydedildi.");
+    alert(duzenleniyor ? "Virman güncellendi." : "Virman kaydedildi.");
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// Bir virman satırındaki "✏️ Düzenle" butonuna basılınca formu o kaydın bilgileriyle
+// doldurur ve "Virman Yap" butonunu "Güncelle" moduna alır.
+function cariVirmanDuzenle(id){
+  const v = _cvirmanListe.find(x=>x.id===id);
+  if(!v) return;
+  _cvirmanDuzenlenenId = id;
+  document.getElementById("cvirman-kaynak").value = v.kaynakCariId;
+  document.getElementById("cvirman-hedef").value = v.hedefCariId;
+  document.getElementById("cvirman-tarih").value = String(v.tarih||"").slice(0,10);
+  document.getElementById("cvirman-tutar").value = v.tutar;
+  document.getElementById("cvirman-aciklama").value = v.aciklama || "";
+  const btn = document.getElementById("cvirman-kaydet-btn");
+  btn.textContent = "💾 Virman Güncelle";
+  document.getElementById("cvirman-iptal-btn").style.display = "";
+  document.getElementById("cvirman-kaynak").scrollIntoView({block:"center", behavior:"smooth"});
+}
+
+function cariVirmanDuzenlemeIptal(){
+  _cvirmanDuzenlenenId = null;
+  document.getElementById("cvirman-kaydet-btn").textContent = "🔁 Virman Yap";
+  document.getElementById("cvirman-iptal-btn").style.display = "none";
+  document.getElementById("cvirman-tutar").value = "";
+  document.getElementById("cvirman-aciklama").value = "";
 }
 
 function cariVirmanListesiYukle(){
@@ -7005,7 +7051,10 @@ function cariVirmanListesiCiz(){
             <td>${v.hedefCariAd}</td>
             <td>${paraFormat(v.tutar)}</td>
             <td>${v.aciklama || "—"}</td>
-            <td><button class="btn" style="padding:4px 12px;font-size:12.5px" onclick="cariVirmanSilOnay('${v.id}')">🗑️ Sil</button></td>
+            <td style="white-space:nowrap">
+              <button class="btn" style="padding:4px 10px;font-size:12.5px" onclick="cariVirmanDuzenle('${v.id}')">✏️ Düzenle</button>
+              <button class="btn" style="padding:4px 10px;font-size:12.5px" onclick="cariVirmanSilOnay('${v.id}')">🗑️ Sil</button>
+            </td>
           </tr>`).join("")}
       </tbody>
     </table>`;
@@ -7017,6 +7066,7 @@ function cariVirmanSilOnay(id){
   if(!confirm(ozet+"\n\nBu virmanı silmek istediğinize emin misiniz?\n(Bu işlem 'Silinenler' bölümünden geri alınabilir.)")) return;
   cariApi("cariVirmanSil", {id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    if(_cvirmanDuzenlenenId === id) cariVirmanDuzenlemeIptal(); // düzenlenen kayıt silindiyse formu sıfırla
     cariVirmanListesiYukle();
     cariListesiYukle();
     alert("Virman silindi.");

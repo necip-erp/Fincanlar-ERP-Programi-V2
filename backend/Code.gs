@@ -682,6 +682,7 @@ function handleRequest(e) {
       case "saveCariVirman":       result = saveCariVirman(body); break;
       case "getCariVirmanListesi": result = getCariVirmanListesi(); break;
       case "cariVirmanSil":        result = cariVirmanSil(body); break;
+      case "updateCariVirman":     result = updateCariVirman(body); break;
       case "getEdmOnekEslesmeListesi": result = getEdmOnekEslesmeListesi(); break;
       case "edmOnekEslesmeManuelKaydet": result = edmOnekEslesmeManuelKaydet(body); break;
       case "edmOnekEslesmeSil":    result = edmOnekEslesmeSil(body); break;
@@ -1045,6 +1046,9 @@ function getCariVirmanListesi() {
 // body: { id } — Silinenler çöp kutusuna kaydedip, iki tarafın CariHareketler
 // satırlarını ve CariVirmanlar satırını siler. "Geri Al" ile saveCariVirman aynı
 // veriyle tekrar çağrılır (GERI_YUKLEME_FN haritası — yeni bir virman ID'siyle).
+// body: { id } — normal silme (Silinenler çöp kutusuna kaydeder).
+// body: { id, _geriAlmadanKaydetme:true } — updateCariVirman() içinden "düzenle" akışında
+// kullanılır: eski kaydı çöp kutusuna ATMADAN siler (asıl amaç düzenlemek, silmek değil).
 function cariVirmanSil(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
@@ -1060,7 +1064,9 @@ function cariVirmanSil(body) {
         hedefCariId: String(row[4] || ""), hedefCariAd: String(row[5] || ""),
         tarih: hucreTarihStr(row[1]), tutar: parseFloat(row[6]) || 0, aciklama: String(row[7] || ""),
       };
-      silinenlerKaydet("VIRMAN", id, "Cari Virman", veri.kaynakCariAd + " → " + veri.hedefCariAd, veri.tutar, veri);
+      if (!body._geriAlmadanKaydetme) {
+        silinenlerKaydet("VIRMAN", id, "Cari Virman", veri.kaynakCariAd + " → " + veri.hedefCariAd, veri.tutar, veri);
+      }
       if (row[9]) cariHareketSil({ id: String(row[9]) });
       if (row[10]) cariHareketSil({ id: String(row[10]) });
       sheet.deleteRow(i + 1);
@@ -1069,6 +1075,18 @@ function cariVirmanSil(body) {
     }
   }
   return { ok: false, hata: "Virman kaydı bulunamadı" };
+}
+
+// Bir virman kaydını düzenler: mevcut kaydı (ve bağlı iki cari hareketini) çöp kutusuna
+// atmadan siler, ardından güncellenmiş bilgilerle YENİ bir virman olarak yeniden oluşturur
+// (uygulamadaki diğer "güncelle" fonksiyonlarıyla aynı sil+yeniden-oluştur deseni —
+// bkz. guncelleTahsilat). Sonuçta yeni bir virman ID'si oluşur.
+function updateCariVirman(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const silSonuc = cariVirmanSil({ id: id, _geriAlmadanKaydetme: true });
+  if (!silSonuc.ok) return silSonuc;
+  return saveCariVirman(body);
 }
 
 // body: { id }
@@ -4325,6 +4343,7 @@ function getMuhasebeRaporu(body) {
   }
 
   if (tip === "karZarar") {
+    const stokKoduFiltre = String(body.stokKodu || "").trim().toLocaleLowerCase('tr');
     const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
       ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
     ensureSatisBelgeTipiColonu(sSheet);
@@ -4349,7 +4368,7 @@ function getMuhasebeRaporu(body) {
     ensureSatisKalemVergiKolonlari(kSheet);
     const kData = kSheet.getDataRange().getValues();
 
-    const urunMap = {}; // urunAdi -> {satisTutari, maliyet, miktar}
+    const urunMap = {}; // anahtar (urunAdi+stokKodu) -> {satisTutari, maliyet, miktar}
     let toplamSatis = 0, toplamMaliyet = 0, eslesmeyenSayisi = 0;
     for (let i = 1; i < kData.length; i++) {
       const row = kData[i];
@@ -4360,6 +4379,8 @@ function getMuhasebeRaporu(body) {
       if (!araligaDahilMi(tarih)) continue;
 
       const urunAdi = String(row[2] || "").trim();
+      const stokKodu = String(row[10] || "");
+      if (stokKoduFiltre && !stokKodu.toLocaleLowerCase('tr').includes(stokKoduFiltre)) continue;
       const miktar = parseFloat(row[3]) || 0;
       const birimFiyat = parseFloat(row[5]) || 0;
       const iskontoYuzde = parseFloat(row[7]) || 0;
@@ -4373,15 +4394,16 @@ function getMuhasebeRaporu(body) {
       toplamSatis += satirSatisTutari;
       toplamMaliyet += satirMaliyet;
 
-      if (!urunMap[urunAdi]) urunMap[urunAdi] = { urunAdi, miktar: 0, satisTutari: 0, maliyet: 0, maliyetBilinmiyor: false };
-      urunMap[urunAdi].miktar += miktar;
-      urunMap[urunAdi].satisTutari += satirSatisTutari;
-      urunMap[urunAdi].maliyet += satirMaliyet;
-      if (maliyetBilinmiyor) urunMap[urunAdi].maliyetBilinmiyor = true;
+      const anahtar = urunAdi + "||" + stokKodu;
+      if (!urunMap[anahtar]) urunMap[anahtar] = { urunAdi, stokKodu, miktar: 0, satisTutari: 0, maliyet: 0, maliyetBilinmiyor: false };
+      urunMap[anahtar].miktar += miktar;
+      urunMap[anahtar].satisTutari += satirSatisTutari;
+      urunMap[anahtar].maliyet += satirMaliyet;
+      if (maliyetBilinmiyor) urunMap[anahtar].maliyetBilinmiyor = true;
     }
 
     const satirlar = Object.values(urunMap).map(u => ({
-      urunAdi: u.urunAdi, miktar: u.miktar, satisTutari: u.satisTutari, maliyet: u.maliyet,
+      urunAdi: u.urunAdi, stokKodu: u.stokKodu, miktar: u.miktar, satisTutari: u.satisTutari, maliyet: u.maliyet,
       kar: u.satisTutari - u.maliyet, maliyetBilinmiyor: u.maliyetBilinmiyor,
     }));
     satirlar.sort((a, b) => b.kar - a.kar);
@@ -4394,6 +4416,8 @@ function getMuhasebeRaporu(body) {
   }
 
   if (tip === "urunBazliHareket" || tip === "urunBazliSiparis" || tip === "urunBazliFatura") {
+    // Kullanıcı stok kodu yazarak da (kısmi eşleşme, büyük/küçük harf duyarsız) filtreleyebilsin.
+    const stokKoduFiltre = String(body.stokKodu || "").trim().toLocaleLowerCase('tr');
     const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
       ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
     ensureSatisBelgeTipiColonu(sSheet);
@@ -4410,10 +4434,14 @@ function getMuhasebeRaporu(body) {
       ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
     const kData = kSheet.getDataRange().getValues();
     const urunMap = {};
-    function urunEkle(urunAdi, miktar, tutar, yon) {
-      if (!urunMap[urunAdi]) urunMap[urunAdi] = { urunAdi: urunAdi, girisMiktar: 0, cikisMiktar: 0, tutar: 0 };
-      if (yon === "giris") urunMap[urunAdi].girisMiktar += miktar; else urunMap[urunAdi].cikisMiktar += miktar;
-      urunMap[urunAdi].tutar += tutar;
+    // Ürün adı + stok kodu birlikte anahtar oluşturur — aynı üründe zaman içinde stok kodu
+    // değiştiyse (veya hiç girilmediyse) satırlar birbirine karışmaz.
+    function urunEkle(urunAdi, stokKodu, miktar, tutar, yon) {
+      if (stokKoduFiltre && !String(stokKodu || "").toLocaleLowerCase('tr').includes(stokKoduFiltre)) return;
+      const anahtar = urunAdi + "||" + (stokKodu || "");
+      if (!urunMap[anahtar]) urunMap[anahtar] = { urunAdi: urunAdi, stokKodu: stokKodu || "", girisMiktar: 0, cikisMiktar: 0, tutar: 0 };
+      if (yon === "giris") urunMap[anahtar].girisMiktar += miktar; else urunMap[anahtar].cikisMiktar += miktar;
+      urunMap[anahtar].tutar += tutar;
     }
 
     for (let i = 1; i < kData.length; i++) {
@@ -4429,7 +4457,7 @@ function getMuhasebeRaporu(body) {
       // Fiili stok hareketi raporu (urunBazliHareket) sadece kesilmiş Faturaları
       // çıkış sayar — Teklif ve Sipariş henüz malın stoktan çıktığı anlamına gelmez.
       if (tip === "urunBazliHareket" && belgeTipi !== "Fatura") continue;
-      urunEkle(urunAdi, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
+      urunEkle(urunAdi, String(row[10] || ""), parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
     }
 
     // Ürün Bazlı Hareket Raporu ayrıca alış (giriş) ve alış iadesi (giriş azaltan) hareketlerini de kapsar.
@@ -4455,7 +4483,7 @@ function getMuhasebeRaporu(body) {
         if (!tarih || !araligaDahilMi(tarih)) continue;
         const urunAdi = String(row[2] || "");
         if (!urunAdi) continue;
-        urunEkle(urunAdi, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "giris");
+        urunEkle(urunAdi, String(row[7] || ""), parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "giris");
       }
 
       // Alış İadeleri: tedarikçiye geri verilen mal, girişten düşülür (çıkış olarak sayılır).
@@ -4477,7 +4505,8 @@ function getMuhasebeRaporu(body) {
         if (!tarih || !araligaDahilMi(tarih)) continue;
         const urunAdi = String(row[2] || "");
         if (!urunAdi) continue;
-        urunEkle(urunAdi, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
+        // Bu sayfada STOK_KODU sütunu yok — ürün adıyla eşleştirilir (bkz. yorum yukarıda).
+        urunEkle(urunAdi, "", parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
       }
 
       // Satış İadeleri: müşteriden geri gelen mal, çıkıştan düşülür (giriş olarak sayılır).
@@ -4500,7 +4529,7 @@ function getMuhasebeRaporu(body) {
         if (!tarih || !araligaDahilMi(tarih)) continue;
         const urunAdi = String(row[2] || "");
         if (!urunAdi) continue;
-        urunEkle(urunAdi, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "giris");
+        urunEkle(urunAdi, String(row[7] || ""), parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "giris");
       }
     }
 
