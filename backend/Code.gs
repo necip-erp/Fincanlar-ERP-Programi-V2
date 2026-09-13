@@ -712,6 +712,7 @@ function getCariListesi() {
 
     // Her cari için bakiyeyi tek geçişte hesapla
     const bakiyeMap = {};
+    const sonIslemMap = {}; // cariId -> en son hareket tarihi (Rehber'de "son işleme göre" sıralama için)
     for (let i = 1; i < hkData.length; i++) {
       const row = hkData[i];
       const cariId = String(row[1] || "");
@@ -720,6 +721,8 @@ function getCariListesi() {
       const tutar = parseFloat(row[4]) || 0;
       if (!bakiyeMap[cariId]) bakiyeMap[cariId] = 0;
       bakiyeMap[cariId] += (tip === "Borç") ? tutar : -tutar;
+      const tarihStr = hucreTarihStr(row[2]);
+      if (tarihStr && (!sonIslemMap[cariId] || tarihStr > sonIslemMap[cariId])) sonIslemMap[cariId] = tarihStr;
     }
 
     const sonuc = [];
@@ -743,6 +746,7 @@ function getCariListesi() {
         eArsiv: String(row[12] || "Hayır") || "Hayır",
         plasiyerId: String(row[13] || ""),
         bakiye: bakiyeMap[id] || 0,
+        sonIslemTarihi: sonIslemMap[id] || "",
       });
     }
     // TEŞHİS: sonuc boşsa ama fiziksel satır varsa (hData.length>1) bunu ayırt
@@ -1028,14 +1032,16 @@ function getCariVirmanListesi() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.cariVirmanlar, CARI_VIRMAN_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
+  const cariKoduMap = cariKoduHaritasiOlustur(ss);
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (!row[0]) continue;
+    const kaynakCariId = String(row[2] || ""), hedefCariId = String(row[4] || "");
     sonuc.push({
       id: String(row[0]), tarih: hucreTarihStr(row[1]),
-      kaynakCariId: String(row[2] || ""), kaynakCariAd: String(row[3] || ""),
-      hedefCariId: String(row[4] || ""), hedefCariAd: String(row[5] || ""),
+      kaynakCariId: kaynakCariId, kaynakCariAd: String(row[3] || ""), kaynakCariKodu: cariKoduMap[kaynakCariId] || "",
+      hedefCariId: hedefCariId, hedefCariAd: String(row[5] || ""), hedefCariKodu: cariKoduMap[hedefCariId] || "",
       tutar: parseFloat(row[6]) || 0, aciklama: String(row[7] || ""),
     });
   }
@@ -1287,6 +1293,20 @@ function satisKalemHesapla(miktar, birimFiyat, iskontoYuzde, kdvOrani) {
 }
 
 // Tüm satışların özet listesini döner (en yeni en üstte).
+// Cari kodu birçok işlem listesinde (Satış/Alış/Tahsilat/Ödeme/İade/Virman) gösterilecek —
+// CariHesaplar sayfasından tek seferde ID -> CARI_KODU haritası çıkarır.
+function cariKoduHaritasiOlustur(ss) {
+  const map = {};
+  const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
+    ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
+  const hData = hSheet.getDataRange().getValues();
+  for (let i = 1; i < hData.length; i++) {
+    const cariId = String(hData[i][0] || "");
+    if (cariId) map[cariId] = String(hData[i][8] || "");
+  }
+  return map;
+}
+
 function getSatisListesi() {
   return cacheOkuVeyaHesapla("satisListesi", 60, function () {
   const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -1327,6 +1347,7 @@ function getSatisListesi() {
     });
   }
 
+  const cariKoduMap = cariKoduHaritasiOlustur(ss);
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
@@ -1335,11 +1356,13 @@ function getSatisListesi() {
     const belgeTipi = String(row[8] || "") || "Fatura";
     const elleSecilenDurum = String(row[12] || "");
     const f = faturalanmaHaritasi[id];
+    const cariId = String(row[2] || "");
     sonuc.push({
       id: id,
       tarih: hucreTarihStr(row[1]),
-      cariId: String(row[2] || ""),
+      cariId: cariId,
       cariAd: String(row[3] || ""),
+      cariKodu: cariKoduMap[cariId] || "",
       toplamTutar: parseFloat(row[4]) || 0,
       odemeTipi: String(row[5] || ""),
       aciklama: String(row[6] || ""),
@@ -2035,14 +2058,7 @@ function getAlisListesi() {
     const alisId = String(durumData[i][2] || "");
     if (alisId) faturaNoMap[alisId] = String(durumData[i][0] || "");
   }
-  const cariKoduMap = {};
-  const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
-    ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
-  const hData = hSheet.getDataRange().getValues();
-  for (let i = 1; i < hData.length; i++) {
-    const cariId = String(hData[i][0] || "");
-    if (cariId) cariKoduMap[cariId] = String(hData[i][8] || "");
-  }
+  const cariKoduMap = cariKoduHaritasiOlustur(ss);
 
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
@@ -2481,14 +2497,17 @@ function getAlisIadeListesi() {
   const aSheet = getOrCreateSheet(ss, SHEETS.alisIadeler,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const data = aSheet.getDataRange().getValues();
+  const cariKoduMap = cariKoduHaritasiOlustur(ss);
 
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const id = String(row[0] || "");
     if (!id) continue;
+    const cariId = String(row[2] || "");
     sonuc.push({
-      id: id, tarih: hucreTarihStr(row[1]), cariId: String(row[2] || ""), cariAd: String(row[3] || ""),
+      id: id, tarih: hucreTarihStr(row[1]), cariId: cariId, cariAd: String(row[3] || ""),
+      cariKodu: cariKoduMap[cariId] || "",
       toplamTutar: parseFloat(row[4]) || 0, aciklama: String(row[5] || ""), kayitTarihi: hucreTarihStr(row[6]),
     });
   }
@@ -2683,14 +2702,17 @@ function getSatisIadeListesi() {
   const sSheet = getOrCreateSheet(ss, SHEETS.satisIadeler,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const data = sSheet.getDataRange().getValues();
+  const cariKoduMap = cariKoduHaritasiOlustur(ss);
 
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const id = String(row[0] || "");
     if (!id) continue;
+    const cariId = String(row[2] || "");
     sonuc.push({
-      id: id, tarih: hucreTarihStr(row[1]), cariId: String(row[2] || ""), cariAd: String(row[3] || ""),
+      id: id, tarih: hucreTarihStr(row[1]), cariId: cariId, cariAd: String(row[3] || ""),
+      cariKodu: cariKoduMap[cariId] || "",
       toplamTutar: parseFloat(row[4]) || 0, aciklama: String(row[5] || ""), kayitTarihi: hucreTarihStr(row[6]),
     });
   }
@@ -2896,14 +2918,17 @@ function getTahsilatListesi() {
     ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI","POS_HESAP_ID"]);
   ensureTahsilatPosColonu(tSheet);
   const data = tSheet.getDataRange().getValues();
+  const cariKoduMap = cariKoduHaritasiOlustur(ss);
 
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const id = String(row[0] || "");
     if (!id) continue;
+    const cariId = String(row[2] || "");
     sonuc.push({
-      id: id, tarih: hucreTarihStr(row[1]), cariId: String(row[2] || ""), cariAd: String(row[3] || ""),
+      id: id, tarih: hucreTarihStr(row[1]), cariId: cariId, cariAd: String(row[3] || ""),
+      cariKodu: cariKoduMap[cariId] || "",
       tutar: parseFloat(row[4]) || 0, yontem: String(row[5] || ""),
       aciklama: String(row[6] || ""), kayitTarihi: hucreTarihStr(row[7]), posHesapId: String(row[8] || ""),
     });
@@ -3066,17 +3091,20 @@ function getOdemeListesi() {
     ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI","POS_HESAP_ID","BANKA_HESAP_ID"]);
   ensureOdemePosBankaColonlari(oSheet);
   const data = oSheet.getDataRange().getValues();
+  const cariKoduMap = cariKoduHaritasiOlustur(ss);
 
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const id = String(row[0] || "");
     if (!id) continue;
+    const cariId = String(row[2] || "");
     const cariAd = String(row[3] || "");
     const hedefTipi = String(row[10] || "") || "Cari";
     const hedefAd = String(row[13] || "");
     sonuc.push({
-      id: id, tarih: hucreTarihStr(row[1]), cariId: String(row[2] || ""), cariAd: cariAd || hedefAd || "—",
+      id: id, tarih: hucreTarihStr(row[1]), cariId: cariId, cariAd: cariAd || hedefAd || "—",
+      cariKodu: (hedefTipi === "Cari") ? (cariKoduMap[cariId] || "") : "",
       tutar: parseFloat(row[4]) || 0, yontem: String(row[5] || ""),
       aciklama: String(row[6] || ""), kayitTarihi: hucreTarihStr(row[7]),
       hedefTipi: hedefTipi, hedefAltTipi: String(row[11] || ""), hedefId: String(row[12] || ""), hedefAd: hedefAd,
@@ -4380,7 +4408,7 @@ function getMuhasebeRaporu(body) {
 
       const urunAdi = String(row[2] || "").trim();
       const stokKodu = String(row[10] || "");
-      if (stokKoduFiltre && !stokKodu.toLocaleLowerCase('tr').includes(stokKoduFiltre)) continue;
+      if (stokKoduFiltre && !stokKodu.toLocaleLowerCase('tr').includes(stokKoduFiltre) && !urunAdi.toLocaleLowerCase('tr').includes(stokKoduFiltre)) continue;
       const miktar = parseFloat(row[3]) || 0;
       const birimFiyat = parseFloat(row[5]) || 0;
       const iskontoYuzde = parseFloat(row[7]) || 0;
@@ -4437,7 +4465,7 @@ function getMuhasebeRaporu(body) {
     // Ürün adı + stok kodu birlikte anahtar oluşturur — aynı üründe zaman içinde stok kodu
     // değiştiyse (veya hiç girilmediyse) satırlar birbirine karışmaz.
     function urunEkle(urunAdi, stokKodu, miktar, tutar, yon) {
-      if (stokKoduFiltre && !String(stokKodu || "").toLocaleLowerCase('tr').includes(stokKoduFiltre)) return;
+      if (stokKoduFiltre && !String(stokKodu || "").toLocaleLowerCase('tr').includes(stokKoduFiltre) && !String(urunAdi || "").toLocaleLowerCase('tr').includes(stokKoduFiltre)) return;
       const anahtar = urunAdi + "||" + (stokKodu || "");
       if (!urunMap[anahtar]) urunMap[anahtar] = { urunAdi: urunAdi, stokKodu: stokKodu || "", girisMiktar: 0, cikisMiktar: 0, tutar: 0 };
       if (yon === "giris") urunMap[anahtar].girisMiktar += miktar; else urunMap[anahtar].cikisMiktar += miktar;

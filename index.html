@@ -200,6 +200,7 @@ body.desen-acik{
 .liste-daha-fazla{padding:12px;text-align:center;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;border-top:1px solid var(--border)}
 .liste-daha-fazla:hover{background:var(--bg3)}
 .cari-item mark{background:var(--yellow-l);color:inherit;border-radius:3px;padding:0 1px}
+.cari-item-kod{font-weight:400;color:var(--text3);font-size:11px}
 .cari-item.kbd-aktif{background:var(--bg3);border-left-color:var(--text3)}
 .liste-arama-temizle{margin-top:8px;color:var(--blue);font-weight:700;cursor:pointer;font-size:12px}
 .liste-arama-temizle:hover{text-decoration:underline}
@@ -317,6 +318,8 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
 .rehber-head h3{margin:0;font-size:15px;flex-shrink:0}
 .rehber-head input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:20px;background:var(--bg3);font-size:13px;outline:none;transition:border-color var(--t),box-shadow var(--t)}
 .rehber-head input:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-l);background:var(--bg2)}
+.rehber-head select{flex-shrink:0;max-width:190px;padding:8px 10px;border:1px solid var(--border);border-radius:20px;background:var(--bg3);font-size:12.5px;outline:none;cursor:pointer;color:var(--text)}
+.rehber-head select:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-l)}
 .rehber-kapat{background:none;border:none;font-size:18px;color:var(--text3);cursor:pointer;padding:4px;line-height:1;transition:color var(--t)}
 .rehber-kapat:hover{color:var(--text)}
 .rehber-tbl-wrap{flex:1;overflow:auto}
@@ -952,8 +955,8 @@ setInterval(topbarSaatGuncelle, 10000);
         </div>
       </div>
       <div id="mr-stokkodu-alani" style="display:none;max-width:280px;margin-bottom:14px" class="fld">
-        <label>Stok Kodu ile filtrele (opsiyonel)</label>
-        <input type="text" id="mr-stokkodu" placeholder="Örn. 120.01.001..." oninput="muhasebeRaporuStokKoduDegisti()">
+        <label>Stok Kodu veya Ürün Adı ile filtrele (opsiyonel)</label>
+        <input type="text" id="mr-stokkodu" placeholder="Örn. 120.01.001 veya Seramik..." oninput="muhasebeRaporuStokKoduDegisti()">
       </div>
       <div id="mr-icerik"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
@@ -2045,6 +2048,39 @@ function datetimeLocalDeger(deger){
 // gezinip Enter'a basınca seçilen callback fonksiyonuna kaydı iletir.
 let _rehberState = { tip:null, satirlar:[], filtreli:[], siraAlan:null, siraYon:1, aktifIdx:-1, callback:null };
 
+// Rehber'de sunulan sıralama seçenekleri — yeni bir kriter eklemek için buraya yeni bir
+// {etiket, alan, yon} nesnesi eklemek yeterli (dropdown ve mantık otomatik güncellenir).
+// yon: 1 = artan (A→Z, küçükten büyüğe, eskiden yeniye), -1 = azalan.
+const REHBER_SIRALAMA_SECENEKLERI = {
+  cari: [
+    {etiket:"Koda göre (A→Z)", alan:"cariKodu", yon:1},
+    {etiket:"Ada göre (A→Z)", alan:"ad", yon:1},
+    {etiket:"Borca göre (en çok borçlu önce)", alan:"bakiye", yon:-1},
+    {etiket:"Alacağa göre (en çok alacaklı önce)", alan:"bakiye", yon:1},
+    {etiket:"Son işleme göre (en yeni önce)", alan:"sonIslemTarihi", yon:-1},
+  ],
+  stok: [
+    {etiket:"Koda göre (A→Z)", alan:"stokKodu", yon:1},
+    {etiket:"Ada göre (A→Z)", alan:"stokAdi", yon:1},
+    {etiket:"Güncel stoğa göre (çoktan aza)", alan:"guncelStok", yon:-1},
+    {etiket:"Satış fiyatına göre (yüksekten düşüğe)", alan:"satisFiyati", yon:-1},
+  ],
+};
+
+function rehberSiralamaSecenekleriHTML(tip){
+  return REHBER_SIRALAMA_SECENEKLERI[tip].map((s,i)=>`<option value="${i}">${s.etiket}</option>`).join("");
+}
+
+// Açılır menüden bir sıralama kriteri seçildiğinde çağrılır (index olarak gelir).
+function rehberSiralaSecimden(idxStr){
+  const opt = REHBER_SIRALAMA_SECENEKLERI[_rehberState.tip][parseInt(idxStr, 10)];
+  if(!opt) return;
+  _rehberState.siraAlan = opt.alan;
+  _rehberState.siraYon = opt.yon;
+  rehberSiralamayiUygula();
+  rehberTabloCiz();
+}
+
 function rehberAc(tip, callback){
   _rehberState = { tip, satirlar:[], filtreli:[], siraAlan:null, siraYon:1, aktifIdx:-1, callback };
   const overlay = document.createElement("div");
@@ -2057,10 +2093,14 @@ function rehberAc(tip, callback){
       <div class="rehber-head">
         <h3>${baslik}</h3>
         <input id="rehber-ara" type="text" placeholder="Ara..." autocomplete="off" oninput="rehberFiltrele(this.value)" onkeydown="rehberKlavye(event)">
+        <select id="rehber-sirala-select" title="Sıralama kriteri" onchange="rehberSiralaSecimden(this.value)">
+          <option value="" selected disabled>Sırala...</option>
+          ${rehberSiralamaSecenekleriHTML(tip)}
+        </select>
         <button class="rehber-kapat" onclick="rehberKapat()" title="Kapat">✕</button>
       </div>
       <div class="rehber-tbl-wrap" id="rehber-tbl-wrap"><div class="cari-empty">Yükleniyor...</div></div>
-      <div class="rehber-alt">Çift tıklayarak ya da ok tuşlarıyla seçip Enter'a basarak seçin · Esc ile kapatın · Sütun başlığına tıklayarak sıralayın</div>
+      <div class="rehber-alt">Çift tıklayarak ya da ok tuşlarıyla seçip Enter'a basarak seçin · Esc ile kapatın · Sütun başlığına veya "Sırala" menüsüne tıklayarak sıralayın</div>
     </div>`;
   document.body.appendChild(overlay);
   setTimeout(()=>{ const el = document.getElementById("rehber-ara"); if(el) el.focus(); }, 50);
@@ -2119,22 +2159,36 @@ function rehberFiltrele(deger){
     });
   }
   _rehberState.filtreli = filtreli;
-  _rehberState.aktifIdx = filtreli.length ? 0 : -1;
+  if(_rehberState.siraAlan) rehberSiralamayiUygula(); // aktif bir sıralama varsa arama sonrasında da korunsun
+  _rehberState.aktifIdx = _rehberState.filtreli.length ? 0 : -1;
   rehberTabloCiz();
 }
 
 function rehberSirala(alan){
   if(_rehberState.siraAlan === alan) _rehberState.siraYon *= -1;
   else { _rehberState.siraAlan = alan; _rehberState.siraYon = 1; }
+  rehberSiralamayiUygula();
+  rehberTabloCiz();
+}
+
+// Sütun başlığı tıklaması ve "Sırala" açılır menüsü ortak bu fonksiyonu kullanır.
+// null/boş değerler (örn. hiç işlemi olmayan bir carinin sonIslemTarihi'si) her zaman
+// en sona atılır — sıralama yönünden bağımsız olarak.
+function rehberSiralamayiUygula(){
+  const alan = _rehberState.siraAlan, yon = _rehberState.siraYon;
   _rehberState.filtreli = _rehberState.filtreli.slice().sort((a,b)=>{
     let av = a[alan], bv = b[alan];
+    const avBos = (av===undefined || av===null || av==="");
+    const bvBos = (bv===undefined || bv===null || bv==="");
+    if(avBos && bvBos) return 0;
+    if(avBos) return 1;   // boş olan her zaman sona
+    if(bvBos) return -1;
     if(typeof av === "string") av = av.toLocaleLowerCase('tr');
     if(typeof bv === "string") bv = bv.toLocaleLowerCase('tr');
-    if(av < bv) return -1*_rehberState.siraYon;
-    if(av > bv) return 1*_rehberState.siraYon;
+    if(av < bv) return -1*yon;
+    if(av > bv) return 1*yon;
     return 0;
   });
-  rehberTabloCiz();
 }
 
 function rehberTabloCiz(){
@@ -2152,11 +2206,12 @@ function rehberTabloCiz(){
           <th onclick="rehberSirala('ad')">Ad${okIsareti('ad')}</th>
           <th onclick="rehberSirala('tip')">Tip${okIsareti('tip')}</th>
           <th onclick="rehberSirala('bakiye')">Bakiye${okIsareti('bakiye')}</th>
+          <th onclick="rehberSirala('sonIslemTarihi')">Son İşlem${okIsareti('sonIslemTarihi')}</th>
         </tr></thead>
         <tbody>
-          ${liste.length===0 ? '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
+          ${liste.length===0 ? '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
           liste.map((c,i)=>`<tr class="${i===_rehberState.aktifIdx?'rehber-aktif':''}" onclick="rehberSecReal(${i})" ondblclick="rehberSecReal(${i})">
-            <td>${c.cariKodu||'—'}</td><td>${c.ad}</td><td>${c.tip}</td><td class="${bakiyeSinifi(c.bakiye)}">${paraFormat(c.bakiye)}</td>
+            <td>${c.cariKodu||'—'}</td><td>${c.ad}</td><td>${c.tip}</td><td class="${bakiyeSinifi(c.bakiye)}">${paraFormat(c.bakiye)}</td><td>${c.sonIslemTarihi?tarihGoster(c.sonIslemTarihi):'—'}</td>
           </tr>`).join("")}
         </tbody>
       </table>`;
@@ -2858,7 +2913,7 @@ function satisListesiCiz(liste){
   el.innerHTML = filtreliListe.map(s=>`
     <div class="cari-item ${_satisSecili===s.id?'sel':''}" onclick="satisAc('${s.id}')">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${metinVurgula(s.cariAd, q)}</span>
+        <span class="cari-item-ad">${metinVurgula(s.cariAd, q)}${s.cariKodu?` <span class="cari-item-kod">(${metinVurgula(s.cariKodu, q)})</span>`:""}</span>
         <span class="cari-item-bakiye">${paraFormat(s.toplamTutar)}</span>
       </div>
       <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${metinVurgula(s.odemeTipi, q)}${s.siparisNo?' · '+metinVurgula(''+s.siparisNo, q):''}${s.siparisDurumu ? ` · <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}</span>
@@ -2894,6 +2949,7 @@ function satisAramaFiltrele(deger){
   const d = _satisAramaSorgu.toLocaleLowerCase('tr');
   const filtreli = !d ? _satisListe : _satisListe.filter(s =>
     s.cariAd.toLocaleLowerCase('tr').includes(d) ||
+    (s.cariKodu||"").toLocaleLowerCase('tr').includes(d) ||
     (s.odemeTipi||"").toLocaleLowerCase('tr').includes(d) ||
     (s.siparisNo!=null && (''+s.siparisNo).includes(d)) ||
     (s.efaturaNo||"").toLocaleLowerCase('tr').includes(d));
@@ -3870,7 +3926,7 @@ function satisIadeListesiCiz(liste){
   el.innerHTML = liste.map(a=>`
     <div class="cari-item ${_satisIadeSecili===a.id?'sel':''}" onclick="satisIadeAc('${a.id}')">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${metinVurgula(a.cariAd, q)}</span>
+        <span class="cari-item-ad">${metinVurgula(a.cariAd, q)}${a.cariKodu?` <span class="cari-item-kod">(${metinVurgula(a.cariKodu, q)})</span>`:""}</span>
         <span class="cari-item-bakiye">${paraFormat(a.toplamTutar)}</span>
       </div>
       <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(a.tarih)}</b></span>
@@ -3880,7 +3936,7 @@ function satisIadeListesiCiz(liste){
 function satisIadeAramaFiltrele(deger){
   _satisIadeAramaSorgu = deger.trim();
   const d = _satisIadeAramaSorgu.toLocaleLowerCase('tr');
-  const filtreli = !d ? _satisIadeListe : _satisIadeListe.filter(a => a.cariAd.toLocaleLowerCase('tr').includes(d));
+  const filtreli = !d ? _satisIadeListe : _satisIadeListe.filter(a => a.cariAd.toLocaleLowerCase('tr').includes(d) || (a.cariKodu||"").toLocaleLowerCase('tr').includes(d));
   satisIadeListesiCiz(filtreli);
 }
 
@@ -4197,7 +4253,7 @@ function alisListesiCiz(liste){
   el.innerHTML = liste.map(a=>`
     <div class="cari-item ${_alisSecili===a.id?'sel':''}" onclick="alisAc('${a.id}')">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${a.cariAd}${a.cariKodu?` <span style="font-weight:400;color:var(--text3);font-size:11px">(${a.cariKodu})</span>`:""}</span>
+        <span class="cari-item-ad">${a.cariAd}${a.cariKodu?` <span class="cari-item-kod">(${a.cariKodu})</span>`:""}</span>
         <span class="cari-item-bakiye">${paraFormat(a.toplamTutar)}</span>
       </div>
       <span class="cari-item-tip">${a.faturaNo?`<b style="color:var(--blue)">#${a.faturaNo}</b> · `:""}<b class="tarih-vurgu">${tarihGoster(a.tarih)}</b> · ${a.odemeTipi}</span>
@@ -4206,7 +4262,7 @@ function alisListesiCiz(liste){
 
 function alisAramaFiltrele(deger){
   const d = deger.trim().toLocaleLowerCase('tr');
-  const filtreli = !d ? _alisListe : _alisListe.filter(a => a.cariAd.toLocaleLowerCase('tr').includes(d));
+  const filtreli = !d ? _alisListe : _alisListe.filter(a => a.cariAd.toLocaleLowerCase('tr').includes(d) || (a.cariKodu||"").toLocaleLowerCase('tr').includes(d));
   alisListesiCiz(filtreli);
 }
 
@@ -5595,7 +5651,7 @@ function tahsilatListesiCiz(liste){
   el.innerHTML = liste.map(t=>`
     <div class="cari-item ${_tahsilatSecili===t.id?'sel':''}" onclick="tahsilatAc('${t.id}')">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${metinVurgula(t.cariAd, q)}</span>
+        <span class="cari-item-ad">${metinVurgula(t.cariAd, q)}${t.cariKodu?` <span class="cari-item-kod">(${metinVurgula(t.cariKodu, q)})</span>`:""}</span>
         <span class="cari-item-bakiye">${paraFormat(t.tutar)}</span>
       </div>
       <span class="cari-item-tip">${tarihGoster(t.tarih)} · ${metinVurgula(t.yontem, q)}</span>
@@ -5606,7 +5662,7 @@ function tahsilatAramaFiltrele(deger){
   _tahsilatAramaSorgu = deger.trim();
   const d = _tahsilatAramaSorgu.toLocaleLowerCase('tr');
   const filtreli = !d ? _tahsilatListe : _tahsilatListe.filter(t =>
-    t.cariAd.toLocaleLowerCase('tr').includes(d) || (t.yontem||"").toLocaleLowerCase('tr').includes(d));
+    t.cariAd.toLocaleLowerCase('tr').includes(d) || (t.cariKodu||"").toLocaleLowerCase('tr').includes(d) || (t.yontem||"").toLocaleLowerCase('tr').includes(d));
   tahsilatListesiCiz(filtreli);
 }
 
@@ -5867,7 +5923,7 @@ function odemeListesiCiz(liste){
   el.innerHTML = liste.map(o=>`
     <div class="cari-item ${_odemeSecili===o.id?'sel':''}" onclick="odemeAc('${o.id}')">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${metinVurgula(o.cariAd, q)}</span>
+        <span class="cari-item-ad">${metinVurgula(o.cariAd, q)}${o.cariKodu?` <span class="cari-item-kod">(${metinVurgula(o.cariKodu, q)})</span>`:""}</span>
         <span class="cari-item-bakiye">${paraFormat(o.tutar)}</span>
       </div>
       <span class="cari-item-tip">${tarihGoster(o.tarih)} · ${metinVurgula(o.yontem, q)}</span>
@@ -5878,7 +5934,7 @@ function odemeAramaFiltrele(deger){
   _odemeAramaSorgu = deger.trim();
   const d = _odemeAramaSorgu.toLocaleLowerCase('tr');
   const filtreli = !d ? _odemeListe : _odemeListe.filter(o =>
-    o.cariAd.toLocaleLowerCase('tr').includes(d) || (o.yontem||"").toLocaleLowerCase('tr').includes(d));
+    o.cariAd.toLocaleLowerCase('tr').includes(d) || (o.cariKodu||"").toLocaleLowerCase('tr').includes(d) || (o.yontem||"").toLocaleLowerCase('tr').includes(d));
   odemeListesiCiz(filtreli);
 }
 
@@ -7047,8 +7103,8 @@ function cariVirmanListesiCiz(){
         ${_cvirmanListe.map(v=>`
           <tr>
             <td>${tarihGoster(v.tarih)}</td>
-            <td>${v.kaynakCariAd}</td>
-            <td>${v.hedefCariAd}</td>
+            <td>${v.kaynakCariAd}${v.kaynakCariKodu?` <span class="cari-item-kod">(${v.kaynakCariKodu})</span>`:""}</td>
+            <td>${v.hedefCariAd}${v.hedefCariKodu?` <span class="cari-item-kod">(${v.hedefCariKodu})</span>`:""}</td>
             <td>${paraFormat(v.tutar)}</td>
             <td>${v.aciklama || "—"}</td>
             <td style="white-space:nowrap">
