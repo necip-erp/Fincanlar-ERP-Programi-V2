@@ -5271,13 +5271,17 @@ function bfmKalemSatiriHTML(k, i){
           <div id="bfm-stokoneri-${i}" class="fiyat-gecmis-kutu" style="display:none;position:absolute;z-index:20"></div>
         </div>
         <button type="button" class="btn" style="padding:2px 6px;font-size:11px" onclick="bfmStokKartiAc(${i})" title="Seçili stok kartını aç">📇</button>
+        <button type="button" class="btn" style="padding:2px 6px;font-size:11px" onclick="bfmYeniStokAc(${i})" title="Marka/Ürün Grubu/Alt Ürün Grubu seçerek 12 haneli kod öner ve yeni stok kartı aç">🔧</button>
       </div>
-      <label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text3);margin-top:3px;white-space:nowrap">
+      <label style="display:none">
         <input type="checkbox" id="bfm-yenistokac-${i}" style="width:auto" onchange="bfmYeniStokAc(${i})"> yeni stok aç
       </label>` : `
-      <input id="bfm-stokkodu-${i}" type="text" value="${k.stokKodu||''}" style="width:110px" placeholder="zorunlu">
+      <div style="display:flex;align-items:center;gap:4px">
+        <input id="bfm-stokkodu-${i}" type="text" value="${k.stokKodu||''}" style="width:90px" placeholder="zorunlu">
+        <button type="button" class="btn" style="padding:2px 6px;font-size:11px" onclick="bfmYeniStokAc(${i})" title="Marka/Ürün Grubu/Alt Ürün Grubu seçerek 12 haneli kod öner ve yeni stok kartı aç">🔧</button>
+      </div>
       ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" ${k.yeniStokIsaretli===true?'checked':''} style="width:auto"> yeni stok kartı</label>` : ""}
-      <label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text3);margin-top:3px;white-space:nowrap">
+      <label style="display:none">
         <input type="checkbox" id="bfm-yenistokac-${i}" style="width:auto" onchange="bfmYeniStokAc(${i})"> yeni stok aç
       </label>`;
   return `
