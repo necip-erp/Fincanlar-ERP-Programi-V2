@@ -1517,11 +1517,11 @@ function sonIslemlerYukle(){
 }
 // cariHareketIslemeGit fonksiyonundaki tip yönlendirmesiyle aynı deseni kullanır.
 function sonIslemAc(tip, id){
-  if(tip === "SATIS"){ modulAc("satis"); satisAc(id); }
-  else if(tip === "ALIS"){ modulAc("alis"); alisAltModulAc("giris"); alisAc(id); }
-  else if(tip === "TAHSILAT"){ modulAc("tahsilat"); tahsilatAc(id); }
-  else if(tip === "ODEME"){ modulAc("odeme"); odemeAc(id); }
-  else if(tip === "CEK"){ modulAc("ceksenet"); cekSenetAc(id); }
+  if(tip === "SATIS"){ kayitSekmesindeAc("satis","📤","Satış #"+id,"SATIS:"+id, ()=>satisAc(id)); }
+  else if(tip === "ALIS"){ kayitSekmesindeAc("alis","📥","Alış #"+id,"ALIS:"+id, ()=>{ alisAltModulAc("giris"); alisAc(id); }); }
+  else if(tip === "TAHSILAT"){ kayitSekmesindeAc("tahsilat","💰","Tahsilat #"+id,"TAHSILAT:"+id, ()=>{ if(!_tahsilatYuklendi) tahsilatListesiYukle(); tahsilatAc(id); }); }
+  else if(tip === "ODEME"){ kayitSekmesindeAc("odeme","💳","Ödeme #"+id,"ODEME:"+id, ()=>{ if(!_odemeYuklendi) odemeListesiYukle(); odemeAc(id); }); }
+  else if(tip === "CEK"){ kayitSekmesindeAc("ceksenet","🧾","Çek/Senet #"+id,"CEK:"+id, ()=>{ if(!_cekSenetYuklendi) cekSenetListesiYukle(); cekSenetAc(id); }); }
   else if(tip === "STOK"){ modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("hareket"); }
 }
 // NOT: İlk çağrı burada YAPILMIYOR (bkz. bugunOzetCiz ile aynı sebep) — CARI_API/cariApi
@@ -1584,11 +1584,68 @@ function kayitYeniSekmedeAc(tip, id){
 // modül id'lerinin sırası; _aktifSekme: şu an gösterilen modül (Ana Sayfa'daysa null).
 let _acikSekmeler = [];
 let _aktifSekme = null;
+
+// ── Kayıt sekmeleri: bir modülün ANA sekmesi (liste/seçim ekranı) zaten açıkken,
+// başka bir ekrandan (Cari Hareketi, BFM, Stok Hareket Raporu, Son İşlemler, Cari
+// Siparişleri vb.) o modülde FARKLI bir kayıt açılmak istendiğinde, mevcut sekmeyi
+// güncellemek yerine o kayıt için AYRI bir sekme açılır — böylece aynı modülün
+// birden fazla kaydı aynı anda farklı sekmelerde açık kalabilir (kullanıcı isteği,
+// 15 Eyl 2026). kimlik: aynı kaydın tekrar tıklanmasında sekme çoğalmasın diye
+// modül+tip+id'ye göre benzersiz olmalı (ör. "ALIS:123", "ALISIADE:123").
+let _kayitSekmeVeri = {};      // sekmeId -> {modulId, ikon, etiket, kimlik, ac}
+let _kayitSekmeSayaci = 0;
+
+function kayitSekmesindeAc(modulId, ikon, etiket, kimlik, acFonksiyonu){
+  const mevcutId = Object.keys(_kayitSekmeVeri).find(sid => _kayitSekmeVeri[sid].kimlik === kimlik);
+  let sekmeId = mevcutId;
+  if(!sekmeId){
+    sekmeId = "ks_" + modulId + "_" + (++_kayitSekmeSayaci);
+    _kayitSekmeVeri[sekmeId] = {modulId, ikon, etiket, kimlik, ac: acFonksiyonu};
+    _acikSekmeler.push(sekmeId);
+  } else {
+    // Aynı kayıt sekmesine tekrar gelindi — en güncel etiket/aç fonksiyonuyla yenile.
+    _kayitSekmeVeri[sekmeId].etiket = etiket;
+    _kayitSekmeVeri[sekmeId].ac = acFonksiyonu;
+  }
+  kayitSekmesiniGoster(sekmeId);
+}
+
+function kayitSekmesiniGoster(sekmeId){
+  const veri = _kayitSekmeVeri[sekmeId];
+  if(!veri) return;
+  document.getElementById("home").style.display = "none";
+  document.querySelectorAll(".modview").forEach(v=>v.classList.remove("active"));
+  const el = document.getElementById("mod-"+veri.modulId);
+  if(el) el.classList.add("active");
+  document.getElementById("home-btn").classList.add("show");
+  document.getElementById("modul-switcher-btn").classList.add("show");
+  const baslikEl = document.getElementById("sayfa-baslik");
+  if(baslikEl){ baslikEl.textContent = veri.ikon + " " + veri.etiket; baslikEl.classList.add("show"); }
+  document.title = veri.ikon + " " + veri.etiket + " · Fincanlar ERP";
+  modulSwitcherKapat();
+  _aktifSekme = sekmeId;
+  try{ veri.ac(); }catch(hata){ console.error("Kayıt sekmesi açılırken hata (" + sekmeId + "):", hata); }
+  sekmeSeridiCiz();
+}
+
+// Sekme şeridindeki bir sekmeye (düz modül sekmesi veya kayıt sekmesi fark etmeksizin)
+// gitmek için tek giriş noktası — sekmeGezin ve sekmeKapat buradan çağırır.
+function sekmeyeGit(id){
+  if(_kayitSekmeVeri[id]) kayitSekmesiniGoster(id); else modulAc(id);
+}
+
 function sekmeSeridiCiz(){
   const el = document.getElementById("sekme-seridi");
   if(!el) return;
   const anaPill = `<div class="sekme${_aktifSekme===null?" aktif":""}" onclick="gitAnaSayfa()">🏠 Ana Sayfa</div>`;
   const digerleri = _acikSekmeler.map(id=>{
+    const kv = _kayitSekmeVeri[id];
+    if(kv){
+      return `<div class="sekme${id===_aktifSekme?" aktif":""}" onclick="kayitSekmesiniGoster('${id}')" onmousedown="if(event.button===1){event.preventDefault();}" onauxclick="if(event.button===1){event.preventDefault(); sekmeKapat('${id}');}">
+        <span>${kv.ikon} ${kv.etiket}</span>
+        <span class="sekme-kapat" onclick="event.stopPropagation(); sekmeKapat('${id}')">✕</span>
+      </div>`;
+    }
     const m = MODULLER.find(x=>x.id===id);
     if(!m) return "";
     return `<div class="sekme${id===_aktifSekme?" aktif":""}" onclick="modulAc('${id}')" onmousedown="if(event.button===1){event.preventDefault();}" onauxclick="if(event.button===1){event.preventDefault(); sekmeKapat('${id}');}">
@@ -1605,9 +1662,10 @@ function sekmeSeridiCiz(){
 }
 function sekmeKapat(id){
   _acikSekmeler = _acikSekmeler.filter(x=>x!==id);
+  delete _kayitSekmeVeri[id];
   if(_aktifSekme === id){
     const kalan = _acikSekmeler[_acikSekmeler.length-1];
-    if(kalan) modulAc(kalan); else gitAnaSayfa();
+    if(kalan) sekmeyeGit(kalan); else gitAnaSayfa();
     return;
   }
   sekmeSeridiCiz();
@@ -1624,7 +1682,7 @@ function sekmeGezin(yon){
   if(yeniIdx < 0) yeniIdx = sira.length - 1;
   if(yeniIdx >= sira.length) yeniIdx = 0;
   const hedef = sira[yeniIdx];
-  if(hedef === null) gitAnaSayfa(); else modulAc(hedef);
+  if(hedef === null) gitAnaSayfa(); else sekmeyeGit(hedef);
 }
 
 function modulAc(id){
@@ -2617,14 +2675,14 @@ function cariHareketIslemeGit(aciklama){
   const m = aciklama.match(/^(SATISIADE|SATIS|ALISIADE|ALIS|TAHSILAT|ODEME|CEK|CARI):([a-zA-Z0-9_]+)/);
   if(!m) return;
   const tip = m[1], id = m[2];
-  if(tip === "SATISIADE"){ modulAc("satis"); satisAltModulAc("Iade"); satisIadeAc(id); }
-  else if(tip === "SATIS"){ modulAc("satis"); satisAc(id); }
-  else if(tip === "ALISIADE"){ modulAc("alis"); alisAltModulAc("iade"); alisIadeAc(id); }
-  else if(tip === "ALIS"){ modulAc("alis"); alisAltModulAc("giris"); alisAc(id); }
-  else if(tip === "TAHSILAT"){ modulAc("tahsilat"); tahsilatAc(id); }
-  else if(tip === "ODEME"){ modulAc("odeme"); odemeAc(id); }
-  else if(tip === "CEK"){ modulAc("ceksenet"); cekSenetAc(id); }
-  else if(tip === "CARI"){ modulAc("cari"); cariAc(id); }
+  if(tip === "SATISIADE"){ kayitSekmesindeAc("satis","📤","Satış İade #"+id,"SATISIADE:"+id, ()=>{ satisAltModulAc("Iade"); satisIadeAc(id); }); }
+  else if(tip === "SATIS"){ kayitSekmesindeAc("satis","📤","Satış #"+id,"SATIS:"+id, ()=>satisAc(id)); }
+  else if(tip === "ALISIADE"){ kayitSekmesindeAc("alis","📥","Alış İade #"+id,"ALISIADE:"+id, ()=>{ alisAltModulAc("iade"); alisIadeAc(id); }); }
+  else if(tip === "ALIS"){ kayitSekmesindeAc("alis","📥","Alış #"+id,"ALIS:"+id, ()=>{ alisAltModulAc("giris"); alisAc(id); }); }
+  else if(tip === "TAHSILAT"){ kayitSekmesindeAc("tahsilat","💰","Tahsilat #"+id,"TAHSILAT:"+id, ()=>{ if(!_tahsilatYuklendi) tahsilatListesiYukle(); tahsilatAc(id); }); }
+  else if(tip === "ODEME"){ kayitSekmesindeAc("odeme","💳","Ödeme #"+id,"ODEME:"+id, ()=>{ if(!_odemeYuklendi) odemeListesiYukle(); odemeAc(id); }); }
+  else if(tip === "CEK"){ kayitSekmesindeAc("ceksenet","🧾","Çek/Senet #"+id,"CEK:"+id, ()=>{ if(!_cekSenetYuklendi) cekSenetListesiYukle(); cekSenetAc(id); }); }
+  else if(tip === "CARI"){ kayitSekmesindeAc("cari","👥","Cari #"+id,"CARI:"+id, ()=>{ if(!_cariYuklendi) cariListesiYukle(); if(!_plasiyerYuklendi) plasiyerListesiYukle(); cariAc(id); }); }
 }
 
 // Sipariş/Fatura/Tahsilat gibi ekranlardaki cari adının yanına konan "🔗 Cariyi Aç"
@@ -2652,7 +2710,7 @@ function cariSiparisleriGosterGizle(cariId){
         <thead><tr><th>Tarih</th><th>Tutar</th><th>Durum</th></tr></thead>
         <tbody>
           ${res.siparisler.map(s=>`
-            <tr class="hk-row" onclick="modulAc('satis');satisAc('${s.id}')" title="Siparişi açmak için tıklayın">
+            <tr class="hk-row" onclick="kayitSekmesindeAc('satis','📤','Satış #${s.id}','SATIS:${s.id}',()=>satisAc('${s.id}'))" title="Siparişi açmak için tıklayın">
               <td>${tarihGoster(s.tarih)}</td>
               <td>${paraFormat(s.toplamTutar)}</td>
               <td><span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span></td>
@@ -9170,10 +9228,10 @@ function stokHareketAramaFiltrele(){
 // Alış İadesi/Satış İadesi kaydını kendi modülünde detay görünümünde açar (bkz. cariHareketIslemeGit
 // ile aynı yönlendirme mantığı).
 function stokHareketBelgeAc(belgeTipi, belgeNo){
-  if(belgeTipi === "Satış Faturası"){ modulAc("satis"); satisAc(belgeNo); }
-  else if(belgeTipi === "Alış Faturası"){ modulAc("alis"); alisAltModulAc("giris"); alisAc(belgeNo); }
-  else if(belgeTipi === "Alış İadesi"){ modulAc("alis"); alisAltModulAc("iade"); alisIadeAc(belgeNo); }
-  else if(belgeTipi === "Satış İadesi"){ modulAc("satis"); satisAltModulAc("Iade"); satisIadeAc(belgeNo); }
+  if(belgeTipi === "Satış Faturası"){ kayitSekmesindeAc("satis","📤","Satış #"+belgeNo,"SATIS:"+belgeNo, ()=>satisAc(belgeNo)); }
+  else if(belgeTipi === "Alış Faturası"){ kayitSekmesindeAc("alis","📥","Alış #"+belgeNo,"ALIS:"+belgeNo, ()=>{ alisAltModulAc("giris"); alisAc(belgeNo); }); }
+  else if(belgeTipi === "Alış İadesi"){ kayitSekmesindeAc("alis","📥","Alış İade #"+belgeNo,"ALISIADE:"+belgeNo, ()=>{ alisAltModulAc("iade"); alisIadeAc(belgeNo); }); }
+  else if(belgeTipi === "Satış İadesi"){ kayitSekmesindeAc("satis","📤","Satış İade #"+belgeNo,"SATISIADE:"+belgeNo, ()=>{ satisAltModulAc("Iade"); satisIadeAc(belgeNo); }); }
 }
 
 function stokHareketRaporuTemizle(){
