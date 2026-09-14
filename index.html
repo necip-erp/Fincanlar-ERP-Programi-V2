@@ -2284,6 +2284,40 @@ function oneriKlavyeYonet(e, kutuId){
 // ── Sol liste panelleri (Cari/Satış/Tahsilat/Ödeme/Satış İade) için ortak
 // arama yardımcıları: HTML kaçışı, eşleşen metni vurgulama, klavye ile gezinme
 // ve arama sonucu boşken sorguyu gösteren mesaj. ──
+// ── Esnek metin eşleştirme: Cari VE Stok aramalarında ortak kullanılır ──
+// Üç kademeli dener: (1) düz alt-dize eşleşmesi, (2) boşluklar yoksayılarak eşleşme
+// (örn. "ahmetmutlu" -> "Ahmet Mutlu"), (3) kelime-başı zinciri (örn. "isa bey" ->
+// "Isabella Beyaz": her arama kelimesi, hedefteki kelimelerin BAŞINDAN, sırayla eşleşir).
+function esnekNormalize_(s){
+  // 'I/İ/ı/i' hepsi TEK bir harfe indirgeniyor — aksi halde Türkçe yerelinde
+  // "I".toLocaleLowerCase('tr') -> "ı" olur ve "Isabella" gibi yabancı/marka isimleri
+  // "isa" araması ile asla eşleşmez. Diğer Türkçe harfler normal kalır.
+  return String(s||"").replace(/[İIıi]/g, "i").toLocaleLowerCase('tr').trim();
+}
+function esnekEslesirMi(hedef, sorgu){
+  if(!sorgu) return true;
+  const h = esnekNormalize_(hedef);
+  const q = esnekNormalize_(sorgu);
+  if(!q) return true;
+  if(h.includes(q)) return true;
+  const hBosluksuz = h.replace(/\s+/g,"");
+  const qBosluksuz = q.replace(/\s+/g,"");
+  if(qBosluksuz && hBosluksuz.includes(qBosluksuz)) return true;
+  const hKelimeler = h.split(/\s+/).filter(Boolean);
+  const qKelimeler = q.split(/\s+/).filter(Boolean);
+  if(qKelimeler.length === 0) return true;
+  let hIdx = 0;
+  for(const qk of qKelimeler){
+    let bulundu = false;
+    while(hIdx < hKelimeler.length){
+      if(hKelimeler[hIdx].startsWith(qk)){ bulundu = true; hIdx++; break; }
+      hIdx++;
+    }
+    if(!bulundu) return false;
+  }
+  return true;
+}
+
 function htmlKacis(metin){
   return String(metin==null?"":metin).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -2422,7 +2456,7 @@ function cariAramaFiltrele(deger){
   _cariAramaSorgu = deger.trim();
   const d = _cariAramaSorgu.toLocaleLowerCase('tr');
   const filtreli = !d ? _cariListe : _cariListe.filter(c =>
-    c.ad.toLocaleLowerCase('tr').includes(d) || (c.telefon||"").includes(d) || (c.cariKodu||"").toLocaleLowerCase('tr').includes(d) || (c.adres||"").toLocaleLowerCase('tr').includes(d));
+    esnekEslesirMi(c.ad, d) || (c.telefon||"").includes(d) || (c.cariKodu||"").toLocaleLowerCase('tr').includes(d) || (c.adres||"").toLocaleLowerCase('tr').includes(d));
   cariListesiCiz(filtreli);
 }
 
@@ -5253,6 +5287,7 @@ function alisBekleyenOnayModalAc(faturaNo){
   window._bfmAktifFatura = f;
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
   f.kalemler.forEach((k,i)=>bfmSatirGuncelle(i));
+  bfmOnerileriGuncelle(); // _stokTanimListe önceden yüklenmişse öneriler hemen görünsün
   if(yanda && f.faturaNo) bfmZoomIlkDegerAta("bfm-onay-iframe","bfm-onay-zoom-yuzde",0.75);
 }
 
@@ -5280,6 +5315,7 @@ function bfmKalemSatiriHTML(k, i){
         <input id="bfm-stokkodu-${i}" type="text" value="${k.stokKodu||''}" style="width:90px" placeholder="zorunlu">
         <button type="button" class="btn" style="padding:2px 6px;font-size:11px" onclick="bfmYeniStokAc(${i})" title="Marka/Ürün Grubu/Alt Ürün Grubu seçerek 12 haneli kod öner ve yeni stok kartı aç">🔧</button>
       </div>
+      <div id="bfm-adoneri-${i}"></div>
       ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" ${k.yeniStokIsaretli===true?'checked':''} style="width:auto"> yeni stok kartı</label>` : ""}
       <label style="display:none">
         <input type="checkbox" id="bfm-yenistokac-${i}" style="width:auto" onchange="bfmYeniStokAc(${i})"> yeni stok aç
@@ -5394,7 +5430,7 @@ function bfmStokOneriGoster(i){
   const q = (document.getElementById(`bfm-stokara-${i}`).value || "").trim().toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
   const eslesenler = (_stokTanimListe || []).filter(s =>
-    (s.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q)
+    esnekEslesirMi(s.stokAdi, q) || (s.stokKodu||"").toLocaleLowerCase('tr').includes(q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
   kutu.innerHTML = eslesenler.map((s,j)=>`
@@ -5421,6 +5457,65 @@ function bfmStokSec(i,j){
 // Birleştirilmiş satırın yanındaki "yeni stok aç" kutusu işaretlenince tetiklenir: kutuyu
 // hemen geri bırakıp (kalıcı bir durum değil, tek seferlik tetikleyici) Yeni Stok Tanımı
 // modalını açar; kaydedilince oluşan stoğun kodu/adı doğrudan bu satıra yazılır.
+// ── Ürün adı benzerlik skoru: BFM'de "bu ürünü zaten böyle kodlamış mıydık?" önerisi için ──
+// esnekEslesirMi'den farkı: orada kullanıcı KISA bir arama yazıp UZUN bir listede arar
+// (kelime sırası ve tamlık önemli). Burada ise iki BAĞIMSIZ tam ürün açıklaması (fatura
+// satırındaki tedarikçi metni ile bizim stok adımız) karşılaştırılıyor — hangisinin daha
+// uzun/detaylı olduğu belli değil, kelime sırası da farklı olabilir. Bu yüzden kelime
+// kelime (sırasız, fazlalıklara toleranslı) bir örtüşme oranı hesaplanır.
+function benzerUrunSkoru_(ad1, ad2){
+  const kelimeler = s => esnekNormalize_(s).split(/\s+/).filter(w=>w.length>=2);
+  const k1 = kelimeler(ad1), k2 = kelimeler(ad2);
+  if(k1.length < 2 || k2.length < 2) return 0; // tek kelimelik adlar (örn. yalnız bir ebat) güvenilir değil
+  let eslesen = 0;
+  const kullanildi = new Array(k2.length).fill(false);
+  k1.forEach(w1=>{
+    for(let j=0;j<k2.length;j++){
+      if(kullanildi[j]) continue;
+      if(k2[j].startsWith(w1) || w1.startsWith(k2[j])){ kullanildi[j]=true; eslesen++; break; }
+    }
+  });
+  return eslesen / Math.min(k1.length, k2.length);
+}
+const BENZER_URUN_ESIGI = 0.6; // bu oranın altı öneri olarak gösterilmez (yanlış pozitif riski)
+
+// Faturada stok kodu boş gelen (kodsuz/"stoksuz" e-fatura) satırlar için, ürün adına göre
+// esnek eşleştirme ile mevcut stok kartları arasında bir benzerlik arar. Otomatik SEÇMEZ —
+// sadece "böyle bir kart zaten var, bunu mu kastettin?" diye tıklanabilir bir öneri gösterir;
+// aynı ürün için mükerrer kart açılmasını önlemeyi amaçlar. _stokTanimListe henüz
+// yüklenmemişse (async) sessizce çıkar; stokTanimListesiYukle tamamlandığında tekrar çağrılır.
+function bfmOnerileriGuncelle(){
+  const f = window._bfmAktifFatura;
+  if(!f || !_stokTanimListe || _stokTanimListe.length===0) return;
+  f.kalemler.forEach((k,i)=>{
+    if(k.birlesikMi || k.stokKodu) return; // zaten kodu var ya da birleştirilmiş satır — öneri gerekmez
+    const kutu = document.getElementById(`bfm-adoneri-${i}`);
+    if(!kutu) return;
+    let enIyi = null, enIyiSkor = 0;
+    _stokTanimListe.forEach(s=>{
+      const skor = benzerUrunSkoru_(s.stokAdi, k.urunAdi);
+      if(skor > enIyiSkor){ enIyiSkor = skor; enIyi = s; }
+    });
+    if(!enIyi || enIyiSkor < BENZER_URUN_ESIGI){ kutu.innerHTML = ""; return; }
+    kutu.innerHTML = `<div style="font-size:10.5px;color:var(--blue);margin-top:3px;cursor:pointer;line-height:1.3" onclick="bfmOneriKullan(${i},'${enIyi.id}')">
+      🔎 Benzer bulundu: <b>${htmlKacis(enIyi.stokAdi)}</b> (${enIyi.stokKodu||'—'}) — kullan</div>`;
+  });
+}
+
+// Kullanıcı bir ürün adı önerisine tıkladığında: o stok kartının kodunu satıra uygular
+// (yeni kart AÇMAZ — var olan karta bağlar, tıpkı elle kod yazmış gibi).
+function bfmOneriKullan(i, stokId){
+  const s = (_stokTanimListe||[]).find(x=>x.id===stokId);
+  if(!s) return;
+  const el = document.getElementById(`bfm-stokkodu-${i}`);
+  if(el) el.value = s.stokKodu;
+  const oneriKutu = document.getElementById(`bfm-adoneri-${i}`);
+  if(oneriKutu) oneriKutu.innerHTML = "";
+  const f = window._bfmAktifFatura;
+  if(f && f.kalemler[i]){ f.kalemler[i].stokKodu = s.stokKodu; f.kalemler[i].stokKoduAdi = s.stokAdi; }
+  bfmSatirGuncelle(i);
+}
+
 function bfmYeniStokAc(i){
   const kutu = document.getElementById(`bfm-yenistokac-${i}`);
   if(kutu) kutu.checked = false;
@@ -5432,6 +5527,8 @@ function bfmYeniStokAc(i){
     document.getElementById(`bfm-stokkodu-${i}`).value = yeni.stokKodu || "";
     const aramaEl = document.getElementById(`bfm-stokara-${i}`);
     if(aramaEl) aramaEl.value = yeni.stokAdi || "";
+    const oneriKutu = document.getElementById(`bfm-adoneri-${i}`);
+    if(oneriKutu) oneriKutu.innerHTML = "";
     if(f && f.kalemler[i]){ f.kalemler[i].stokKoduAdi = yeni.stokAdi; f.kalemler[i].stokKodu = yeni.stokKodu; }
     bfmSatirGuncelle(i);
   }, faturaKoduIpucu);
@@ -8396,13 +8493,14 @@ function _stokTanimGuncelAramaTerimiIleCiz(){
 function stokTanimListesiYukle(){
   _stokTanimYuklendi = true;
   const onbellek = onbellekOku("stokTanimListesi", 60000);
-  if(onbellek){ _stokTanimListe = onbellek; _stokTanimGuncelAramaTerimiIleCiz(); }
+  if(onbellek){ _stokTanimListe = onbellek; _stokTanimGuncelAramaTerimiIleCiz(); bfmOnerileriGuncelle(); }
   else document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getStokTanimListesi").then(res=>{
     if(!res.ok){ if(!onbellek) document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _stokTanimListe = res.kalemler;
     onbellekYaz("stokTanimListesi", res.kalemler);
     _stokTanimGuncelAramaTerimiIleCiz();
+    bfmOnerileriGuncelle();
   }).catch(err=>{
     if(!onbellek) document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
@@ -8463,7 +8561,7 @@ function stokTanimAramaFiltrele(deger){
   _stokTanimRenderLimit = 80;
   const d = deger.trim().toLocaleLowerCase('tr');
   const filtreli = !d ? _stokTanimListe : _stokTanimListe.filter(k =>
-    k.stokAdi.toLocaleLowerCase('tr').includes(d) || (k.stokKodu||"").toLocaleLowerCase('tr').includes(d));
+    esnekEslesirMi(k.stokAdi, d) || (k.stokKodu||"").toLocaleLowerCase('tr').includes(d));
   stokTanimListesiCiz(filtreli);
 }
 
