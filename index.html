@@ -1490,7 +1490,13 @@ function sonIslemlerKatlaAc(){
 function sonIslemlerYukle(){
   const el = document.getElementById("son-islemler-liste");
   if(!el) return;
-  el.innerHTML = `<div class="son-islem-bos">Yükleniyor...</div>`;
+  // Kullanıcı Ana Sayfa'ya her gidiş-gelişinde bu liste ARKA PLANDA sessizce
+  // tazelenir (bkz. gitAnaSayfa) — veri gelene kadar ekrandaki ESKİ liste
+  // olduğu gibi kalır, "Yükleniyor..." sadece hiç veri yokken (ilk açılış veya
+  // önceki deneme hiç başarılı olmadıysa) gösterilir; böylece her gidiş-gelişte
+  // kullanıcının fark edeceği bir yanıp-sönme olmaz.
+  const ilkYukleme = el.dataset.dolu !== "1";
+  if(ilkYukleme) el.innerHTML = `<div class="son-islem-bos">Yükleniyor...</div>`;
   // Apps Script ilk (soğuk) istekte birkaç saniye gecikebilir — 15 sn içinde
   // cevap gelmezse kullanıcıyı sonsuza dek "Yükleniyor..." ekranında bırakmak
   // yerine "Tekrar Dene" seçeneği gösteriyoruz.
@@ -1498,6 +1504,7 @@ function sonIslemlerYukle(){
   Promise.race([cariApi("getSonIslemler", {limit:20}), zamanAsimi]).then(res=>{
     if(!res || !res.ok || !res.islemler || res.islemler.length===0){
       el.innerHTML = `<div class="son-islem-bos">Henüz işlem yok.</div>`;
+      el.dataset.dolu = "1";
       return;
     }
     el.innerHTML = res.islemler.map(k=>{
@@ -1513,7 +1520,14 @@ function sonIslemlerYukle(){
         </div>
       </div>`;
     }).join("");
-  }).catch(()=>{ el.innerHTML = `<div class="son-islem-bos">Yüklenemedi. <span style="color:var(--accent);cursor:pointer;font-weight:700" onclick="sonIslemlerYukle()">↻ Tekrar dene</span></div>`; });
+    el.dataset.dolu = "1";
+  }).catch(()=>{
+    // Arka plandaki sessiz yenileme başarısız olduysa ve ekranda zaten (eski) bir
+    // liste görünüyorsa onu koru, kullanıcıyı rahatsız etmeden sessizce vazgeç —
+    // hata ekranı sadece hiç veri gösterilemediyse (ilk yükleme) çıkar.
+    if(!ilkYukleme) return;
+    el.innerHTML = `<div class="son-islem-bos">Yüklenemedi. <span style="color:var(--accent);cursor:pointer;font-weight:700" onclick="sonIslemlerYukle()">↻ Tekrar dene</span></div>`;
+  });
 }
 // cariHareketIslemeGit fonksiyonundaki tip yönlendirmesiyle aynı deseni kullanır.
 function sonIslemAc(tip, id){
