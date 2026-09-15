@@ -749,6 +749,16 @@ setInterval(topbarSaatGuncelle, 10000);
         <span class="liste-sonuc-sayisi" id="cari-sonuc-sayisi"></span>
         <button class="cari-add-btn" onclick="cariModalAc()" title="Yeni cari ekle">+</button>
       </div>
+      <div class="cari-list-head" style="padding-top:0;gap:6px">
+        <select id="cari-sirala-select" title="Sıralama kriteri" onchange="cariSiralaSecimden(this.value)" style="flex:1;min-width:0">
+          <option value="" selected>Sırala: Varsayılan (Ada göre)</option>
+        </select>
+        <select id="cari-tip-filtre-select" title="Cari tipine göre filtrele" onchange="cariTipFiltreSecimden(this.value)" style="flex:0 0 auto">
+          <option value="">Hepsi</option>
+          <option value="Müşteri">Müşteri</option>
+          <option value="Tedarikçi">Tedarikçi</option>
+        </select>
+      </div>
       <div class="cari-items" id="cari-items"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
     <div class="cari-detail-panel" id="cari-detail-panel">
@@ -2164,6 +2174,29 @@ const REHBER_SIRALAMA_SECENEKLERI = {
 function rehberSiralamaSecenekleriHTML(tip){
   return REHBER_SIRALAMA_SECENEKLERI[tip].map((s,i)=>`<option value="${i}">${s.etiket}</option>`).join("");
 }
+// Cari ana modülünün sol listesi için sıralama/tip filtresi durumu — Cari Rehberi
+// modalındaki "Sırala" özelliğinin AYNISI, kullanıcı isteğiyle ana listeye de eklendi.
+let _cariSiraAlan = null;
+let _cariSiraYon = 1;
+let _cariTipFiltre = "";
+(function(){
+  const sel = document.getElementById("cari-sirala-select");
+  if(sel) sel.insertAdjacentHTML("beforeend", rehberSiralamaSecenekleriHTML('cari'));
+})();
+function cariSiralaSecimden(idxStr){
+  if(idxStr === ""){ _cariSiraAlan = null; _cariSiraYon = 1; }
+  else {
+    const opt = REHBER_SIRALAMA_SECENEKLERI.cari[parseInt(idxStr, 10)];
+    if(!opt) return;
+    _cariSiraAlan = opt.alan;
+    _cariSiraYon = opt.yon;
+  }
+  cariAramaFiltrele(_cariAramaSorgu);
+}
+function cariTipFiltreSecimden(deger){
+  _cariTipFiltre = deger;
+  cariAramaFiltrele(_cariAramaSorgu);
+}
 
 // Açılır menüden bir sıralama kriteri seçildiğinde çağrılır (index olarak gelir).
 function rehberSiralaSecimden(idxStr){
@@ -2269,8 +2302,14 @@ function rehberSirala(alan){
 // null/boş değerler (örn. hiç işlemi olmayan bir carinin sonIslemTarihi'si) her zaman
 // en sona atılır — sıralama yönünden bağımsız olarak.
 function rehberSiralamayiUygula(){
-  const alan = _rehberState.siraAlan, yon = _rehberState.siraYon;
-  _rehberState.filtreli = _rehberState.filtreli.slice().sort((a,b)=>{
+  _rehberState.filtreli = dizisiSirala(_rehberState.filtreli, _rehberState.siraAlan, _rehberState.siraYon);
+}
+// Rehber modalı ve Cari ana modülünün sol listesi TARAFINDAN ORTAK kullanılan
+// genel sıralama yardımcısı — boş alanlar her zaman sona, metinler Türkçe
+// yerelinde karşılaştırılıyor.
+function dizisiSirala(liste, alan, yon){
+  if(!alan) return liste;
+  return liste.slice().sort((a,b)=>{
     let av = a[alan], bv = b[alan];
     const avBos = (av===undefined || av===null || av==="");
     const bvBos = (bv===undefined || bv===null || bv==="");
@@ -2545,8 +2584,10 @@ function cariAramaFiltrele(deger){
   _cariRenderLimit = 80; // yeni bir arama = baştan say
   _cariAramaSorgu = deger.trim();
   const d = _cariAramaSorgu.toLocaleLowerCase('tr');
-  const filtreli = !d ? _cariListe : _cariListe.filter(c =>
+  let filtreli = !d ? _cariListe : _cariListe.filter(c =>
     esnekEslesirMi(c.ad, d) || (c.telefon||"").includes(d) || (c.cariKodu||"").toLocaleLowerCase('tr').includes(d) || (c.adres||"").toLocaleLowerCase('tr').includes(d));
+  if(_cariTipFiltre) filtreli = filtreli.filter(c => c.tip === _cariTipFiltre);
+  if(_cariSiraAlan) filtreli = dizisiSirala(filtreli, _cariSiraAlan, _cariSiraYon);
   cariListesiCiz(filtreli);
 }
 
@@ -2561,7 +2602,10 @@ function cariAc(id){
   }).catch(err=>{
     panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>Bağlantı hatası: '+err.message+'</p></div>';
   });
-  cariListesiCiz(_cariListe);
+  // Sadece seçili satırın vurgusunu güncellemek için: o an ekranda ne gösteriliyorsa
+  // (aktif arama/tip filtresi/sıralama sonucu) onu yeniden çiz — ham _cariListe ile
+  // çizersek cari seçildiğinde aktif filtre/sıralama sıfırlanmış gibi görünürdü.
+  cariListesiCiz(_cariSonGosterilenListe || _cariListe);
 }
 
 function cariListeyeDon(){
