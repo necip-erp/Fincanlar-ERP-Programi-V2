@@ -720,10 +720,10 @@ setInterval(topbarSaatGuncelle, 10000);
           <select id="shr-urun-secim"><option value="">— Tüm ürünler —</option></select>
         </div>
         <div class="fld" style="max-width:180px"><label>Marka</label>
-          <select id="shr-marka-secim" onchange="stokHareketRaporuCiz()"><option value="">— Tüm markalar —</option></select>
+          <select id="shr-marka-secim" onchange="stokHareketAramaFiltrele()"><option value="">— Tüm markalar —</option></select>
         </div>
         <div class="fld" style="max-width:180px"><label>Ebat</label>
-          <select id="shr-ebat-secim" onchange="stokHareketRaporuCiz()"><option value="">— Tüm ebatlar —</option></select>
+          <select id="shr-ebat-secim" onchange="stokHareketAramaFiltrele()"><option value="">— Tüm ebatlar —</option></select>
         </div>
         <div class="fld" style="max-width:260px"><label>Ara</label>
           <input type="text" id="shr-arama" placeholder="Ürün, stok kodu, belge no, açıklama..." oninput="stokHareketAramaFiltrele(this.value)">
@@ -9375,6 +9375,7 @@ function stokHareketRaporuYukle(){
   cariApi("getStokHareketListesi", {baslangic, bitis, stokTanimId}).then(res=>{
     if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _shrSonuc = res;
+    _shrGosterilenAdet = SHR_SAYFA_ADIM;
     stokHareketKalanHesapla(_shrSonuc.hareketler);
     stokHareketRaporuCiz();
   }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
@@ -9402,6 +9403,11 @@ const STOK_HAREKET_BELGE_TIPLERI = {"Satış Faturası":1, "Alış Faturası":1,
 // Stok Hareket Raporu tablosunun sıralama durumu — üst başlığa tıklanınca değişir.
 // Sütun başlıklarına tıklandığında artan/azalan (asc/desc) arasında geçiş yapılır.
 let _shrSirala = { anahtar: "tarih", yon: "desc" };
+// Uzun tarih aralıklarında (özellikle "Tümü" ile) binlerce satır tek seferde DOM'a
+// basılmasın diye tabloyu adım adım açıyoruz; her "Daha fazla göster" tıklaması
+// bu sınırı SHR_SAYFA_ADIM kadar artırır. Yeni bir Filtrele/Tümü/arama'da sıfırlanır.
+const SHR_SAYFA_ADIM = 200;
+let _shrGosterilenAdet = SHR_SAYFA_ADIM;
 const SHR_SUTUNLAR = [
   { anahtar: "tarih",     baslik: "Tarih",      al: h => h.tarih || "" },
   { anahtar: "stokKodu",  baslik: "Stok Kodu",  al: h => (h.stokKodu||"").toLocaleLowerCase('tr') },
@@ -9466,6 +9472,12 @@ function stokHareketRaporuCiz(){
     return `<th class="siralanabilir${aktif?' aktif':''}" onclick="stokHareketSirala('${s.anahtar}')">${s.baslik} <span class="ok">${ok}</span></th>`;
   }).join("") + "<th></th>";
 
+  // Uzun aralıklarda (özellikle tarih filtresi temizlenip "Tümü" seçildiğinde) tüm
+  // hareketleri tek seferde DOM'a basmak yerine adım adım gösteriyoruz.
+  const toplamEslesen = hareketler.length;
+  const gosterilecekler = hareketler.slice(0, _shrGosterilenAdet);
+  const dahaFazlaVar = toplamEslesen > gosterilecekler.length;
+
   el.innerHTML = `
     <div class="finans-kartlar">
       <div class="finans-kart"><div class="lbl">Toplam Giriş</div><div class="num">${miktarFormat(_shrSonuc.girisToplam)}</div></div>
@@ -9474,7 +9486,7 @@ function stokHareketRaporuCiz(){
     <table class="rapor-tbl">
       <thead><tr>${basliklar}</tr></thead>
       <tbody>
-        ${hareketler.map(h=>{
+        ${gosterilecekler.map(h=>{
           const belgeliMi = STOK_HAREKET_BELGE_TIPLERI[h.belgeTipi] && h.belgeNo;
           const btn = belgeliMi ? `<button class="btn" style="font-size:11px;padding:4px 8px" onclick="stokHareketBelgeAc('${h.belgeTipi}','${h.belgeNo}')" title="İlgili belgeyi aç">📄 Aç</button>` : "";
           const giris = h.hareketTipi==="Giriş" ? miktarFormat(h.miktar) : "";
@@ -9482,10 +9494,20 @@ function stokHareketRaporuCiz(){
           return `<tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td class="hk-alacak">${giris}</td><td class="hk-borc">${cikis}</td><td>${miktarFormat(h.kalan)}</td><td>${h.birim}</td><td>${h.belgeTipi||''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td><td>${btn}</td></tr>`;
         }).join("")}
       </tbody>
-    </table>`;
+    </table>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+      <span style="font-size:12px;color:var(--text3)">${gosterilecekler.length} / ${toplamEslesen} satır gösteriliyor</span>
+      ${dahaFazlaVar ? `<button class="btn" onclick="stokHareketDahaFazlaGoster()">⬇️ Daha fazla göster (+${Math.min(SHR_SAYFA_ADIM, toplamEslesen-gosterilecekler.length)})</button>` : ""}
+    </div>`;
+}
+
+function stokHareketDahaFazlaGoster(){
+  _shrGosterilenAdet += SHR_SAYFA_ADIM;
+  stokHareketRaporuCiz();
 }
 
 function stokHareketAramaFiltrele(){
+  _shrGosterilenAdet = SHR_SAYFA_ADIM;
   stokHareketRaporuCiz();
 }
 
