@@ -6322,6 +6322,49 @@ function edmXmlOznitelik_(xml, etiket, oznitelik) {
   return m ? m[1] : "";
 }
 
+// EDM/GİB'in GetInvoiceStatus'ta döndürdüğü STATUS / STATUS_DESCRIPTION / RESPONSE_DESCRIPTION
+// alanları İngilizce kısa kodlar olarak geliyor (ör. "PACKAGE-PROCESSING", "PROCESSING", "SEND").
+// Bu sözlük bunları Türkçe karşılığa çevirir. YENİ BİR KOD GÖRÜLÜRSE: sadece bu objeye
+// "KOD": "Türkçe karşılığı" satırı eklemek yeterli — anahtar boşluk/tire farkı gözetmeden
+// eşleşir (edmDurumTurkce_ normalize eder). Şu ana kadar canlıda fiilen görülenler: SEND,
+// PROCESSING. PACKAGE-PROCESSING kullanıcı tarafından beklenen bir diğer örnek. Geri kalanlar
+// yaygın e-Fatura/GİB terimleri için önden eklenmiş makul karşılıklardır; EDM'den hiç
+// gelmeseler de zararsızdır, gelirlerse otomatik çevrilmiş olur.
+const EDM_DURUM_KODLARI = {
+  "SEND": "Gönderildi",
+  "SENT": "Gönderildi",
+  "PROCESSING": "İşleniyor",
+  "PACKAGE-PROCESSING": "Paket İşleniyor",
+  "PACKAGEPROCESSING": "Paket İşleniyor",
+  "SUCCESS": "Başarılı",
+  "SUCCESSFUL": "Başarılı",
+  "SUCCESFUL": "Başarılı",
+  "COMPLETED": "Tamamlandı",
+  "ACCEPT": "Kabul Edildi",
+  "ACCEPTED": "Kabul Edildi",
+  "REJECT": "Reddedildi",
+  "REJECTED": "Reddedildi",
+  "NACK": "Reddedildi",
+  "ERROR": "Hata",
+  "FAIL": "Başarısız",
+  "FAILED": "Başarısız",
+  "CANCEL": "İptal Edildi",
+  "CANCELLED": "İptal Edildi",
+  "CANCELED": "İptal Edildi",
+};
+
+// Ham bir EDM/GİB durum kodunu ("PACKAGE - PROCESSING" gibi boşluklu varyantlar dahil)
+// EDM_DURUM_KODLARI'nde arar; bulursa "Türkçe (HAM_KOD)" biçiminde, bulamazsa ham kodu
+// OLDUĞU GİBİ döner — bilinmeyen bir kod asla hata vermez veya gizlenmez, sadece
+// çevrilmeden görünür (bu da yeni kodun ne zaman sözlüğe eklenmesi gerektiğini gösterir).
+function edmDurumTurkce_(kod) {
+  const ham = String(kod || "").trim();
+  if (!ham) return ham;
+  const anahtar = ham.toUpperCase().replace(/\s+/g, "");
+  const ceviri = EDM_DURUM_KODLARI[anahtar];
+  return ceviri ? (ceviri + " (" + ham + ")") : ham;
+}
+
 // SESSION_ID'yi 20 dk cache'ler; her sorguda yeniden login atmayı önler.
 function edmLogin_(ayar) {
   const kanal = ayar.url.indexOf("test") > -1 ? "TEST" : "PROD";
@@ -6690,7 +6733,11 @@ function edmFaturaDurumSorgula(body) {
       yanitKodu: edmXmlDegeri_(xml, "RESPONSE_CODE"),
       yanitAciklama: edmXmlDegeri_(xml, "RESPONSE_DESCRIPTION"),
     };
-    const ozetParcalar = [sonuc.status, sonuc.statusAciklama, sonuc.yanitAciklama].filter(function(x){ return x; });
+    // Ham kodları Türkçeleştir (bkz. edmDurumTurkce_) — bilinmeyen bir kod olduğu gibi kalır.
+    sonuc.statusTr = edmDurumTurkce_(sonuc.status);
+    sonuc.statusAciklamaTr = edmDurumTurkce_(sonuc.statusAciklama);
+    sonuc.yanitAciklamaTr = edmDurumTurkce_(sonuc.yanitAciklama);
+    const ozetParcalar = [sonuc.statusTr, sonuc.statusAciklamaTr, sonuc.yanitAciklamaTr].filter(function(x){ return x; });
     sonuc.ozet = ozetParcalar.length ? ozetParcalar.join(" — ") : "Durum bilgisi henüz yok";
     satisEfaturaDurumKaydet_(kayit.rowIndex, sonuc.ozet);
     return sonuc;
@@ -6901,7 +6948,7 @@ function edmFaturaGonderTest(body) {
       otomatikDurum = { ok: false, hata: "Otomatik durum sorgusu başarısız: " + durumErr.message };
     }
 
-    return { ok: true, durum: status || "Gönderildi", aliciUnvan: alici.title, efaturaNo: gercekFaturaNo, uuid: gercekUuid, ozetXml: xml.substring(0, 800), otomatikDurumSorgusu: otomatikDurum };
+    return { ok: true, durum: edmDurumTurkce_(status) || "Gönderildi", aliciUnvan: alici.title, efaturaNo: gercekFaturaNo, uuid: gercekUuid, ozetXml: xml.substring(0, 800), otomatikDurumSorgusu: otomatikDurum };
   } catch (err) {
     return { ok: false, hata: "EDM gönderim hatası: " + err.message };
   }

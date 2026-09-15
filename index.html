@@ -3571,8 +3571,8 @@ function satisEdmDurumSorgula(id){
     alert(
       "Portal Durumu\n\n" +
       "E-Fatura No: "+(res.efaturaNo||"—")+"\n" +
-      "EDM Durumu: "+(res.statusAciklama||res.status||"—")+"\n" +
-      "Ticari Yanıt: "+(res.yanitAciklama||"—")
+      "EDM Durumu: "+(res.statusAciklamaTr||res.statusTr||res.statusAciklama||res.status||"—")+"\n" +
+      "Ticari Yanıt: "+(res.yanitAciklamaTr||res.yanitAciklama||"—")
     );
     satisAc(id);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
