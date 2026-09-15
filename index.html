@@ -3334,9 +3334,11 @@ function satisFisYazdir(id){
 // test mükellefine (3230512384) yönlendirilir — gerçek cariye ASLA gönderilmez.
 // Backend ayrıca sadece EDM_URL "test" içerdiğinde çalışır, canlıda reddeder.
 //
-// İKİ AŞAMALI ONAY: (1) genel bir "devam edilsin mi" onayı, (2) faturanın
-// tutar/cari/kalem özetini gösteren AYRI bir 2. onay ekranı — kullanıcı
-// hangi faturanın gönderileceğini son kez, rakamlarla görüp onaylar.
+// İKİ AŞAMALI ONAY: (1) genel bir "devam edilsin mi" onayı, (2) faturanın gerçek
+// FATURA GÖRÜNÜMÜNDE (belgeFormuHTMLOlustur ile aynı görsel) gösterildiği, sayfa
+// içinde geniş bir onay ekranı — kullanıcı hangi faturanın gönderileceğini son
+// kez, resmi fatura formatında görüp onaylar (kullanıcı isteği: browser confirm()
+// yerine sayfa içi/uzun/fatura formatlı ekran, 15 Eyl 2026).
 function satisEdmTestGonder(id){
   if(!confirm("Bu faturanın kalem/tutar bilgileriyle EDM TEST ortamına bir DENEME e-Fatura gönderimi yapılacak (alıcı: EDM'in test mükellefi, gerçek cariniz DEĞİL). Devam edilsin mi?")) return;
 
@@ -3344,29 +3346,54 @@ function satisEdmTestGonder(id){
     if(!detay.ok){ alert("Fatura bilgisi alınamadı: "+(detay.hata||"bilinmiyor")); return; }
     const s = detay.satis, kalemler = detay.kalemler || [];
     const t = s.toplamlar || {};
-    const kalemOzet = kalemler.map(k=>"  • "+k.urunAdi+"  —  "+miktarFormat(k.miktar)+" "+k.birim+" x "+fiyatFormat(k.birimFiyat)+"  =  "+paraFormat(k.tutar)).join("\n");
-    const ozetMetni =
-      "AŞAĞIDAKİ FATURA EDM TEST ORTAMINA GÖNDERİLECEK:\n\n" +
-      "Cari: " + (s.cariAd||"—") + "\n" +
-      "Tarih: " + (s.tarih||"—") + "\n" +
-      "Kalem sayısı: " + kalemler.length + "\n" +
-      (kalemOzet ? (kalemOzet + "\n\n") : "\n") +
-      "Ara Toplam: " + paraFormat(t.araToplam||0) + "\n" +
-      "KDV Toplam: " + paraFormat(t.kdvToplam||0) + "\n" +
-      "GENEL TOPLAM: " + paraFormat(s.toplamTutar||t.genelToplam||0) + "\n\n" +
-      "Bu bilgilerle göndermeyi onaylıyor musunuz?";
-    if(!confirm(ozetMetni)) return;
+    cariApi("getCariDetay", {cariId: s.cariId}).catch(()=>({ok:false})).then(cres=>{
+      const c = cres.ok ? cres.cari : {};
+      edmOnayEkraniGoster(s, kalemler, t, c, id);
+    });
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
 
-    cariApi("edmFaturaGonderTest", {satisId:id}).then(res=>{
-      if(!res.ok){ alert("EDM gönderim hatası:\n\n"+(res.hata||"bilinmiyor")); return; }
-      let mesaj = "✅ EDM'e deneme gönderimi başarılı.\n\nAlıcı: "+(res.aliciUnvan||"—")+"\nE-Fatura No: "+(res.efaturaNo||"—")+"\nDurum: "+(res.durum||"—");
-      const od = res.otomatikDurumSorgusu;
-      if(od){
-        mesaj += od.ok ? ("\n\nPortal durumu: "+(od.ozet||"—")) : ("\n\n(Otomatik portal durum sorgusu henüz sonuç vermedi: "+(od.hata||"")+")");
-      }
-      alert(mesaj);
-      satisAc(id);
-    }).catch(err=>alert("Bağlantı hatası: "+err.message));
+function edmOnayEkraniKapat(){
+  const el = document.getElementById("edm-onay-overlay");
+  if(el) el.remove();
+}
+// EDM'e göndermeden önceki son onay ekranı — faturayı gerçek fatura formunda
+// (belgeFormuHTMLOlustur ile aynı fonksiyon) gösterir, "Onayla ve Gönder"/"İptal"
+// düğmeleri ile karar verilir.
+function edmOnayEkraniGoster(s, kalemler, t, c, satisId){
+  edmOnayEkraniKapat();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "edm-onay-overlay";
+  overlay.innerHTML = `
+    <div class="modal-box modal-box-xwide" style="max-height:92vh;display:flex;flex-direction:column">
+      <h3 style="flex-shrink:0;margin:0 0 6px">🧪 EDM Test Ortamına Gönderim — Son Onay</h3>
+      <p style="flex-shrink:0;margin:0 0 14px;font-size:13px;color:var(--text3)">
+        Aşağıdaki fatura EDM TEST ortamına DENEME olarak gönderilecek (alıcı her zaman
+        EDM'in kendi test mükellefidir, gerçek cariniz DEĞİLDİR). Göndermeden önce
+        rakamları son kez kontrol edin.
+      </p>
+      <div style="flex:1;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:20px;background:#fff">
+        ${belgeFormuHTMLOlustur(s, kalemler, t, c)}
+      </div>
+      <div class="modal-actions" style="flex-shrink:0;margin-top:16px">
+        <button class="btn" onclick="edmOnayEkraniKapat()">İptal</button>
+        <button class="btn btn-primary" onclick="edmOnayEkraniOnayla('${satisId}')">✅ Onayla ve Gönder</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function edmOnayEkraniOnayla(satisId){
+  edmOnayEkraniKapat();
+  cariApi("edmFaturaGonderTest", {satisId}).then(res=>{
+    if(!res.ok){ alert("EDM gönderim hatası:\n\n"+(res.hata||"bilinmiyor")); return; }
+    let mesaj = "✅ EDM'e deneme gönderimi başarılı.\n\nAlıcı: "+(res.aliciUnvan||"—")+"\nE-Fatura No: "+(res.efaturaNo||"—")+"\nDurum: "+(res.durum||"—");
+    const od = res.otomatikDurumSorgusu;
+    if(od){
+      mesaj += od.ok ? ("\n\nPortal durumu: "+(od.ozet||"—")) : ("\n\n(Otomatik portal durum sorgusu henüz sonuç vermedi: "+(od.hata||"")+")");
+    }
+    alert(mesaj);
+    satisAc(satisId);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
@@ -3416,12 +3443,21 @@ function belgeFormuMiktar2(k){
 function belgeFormuCiz(s, kalemler, t, c){
   const eski = document.getElementById("fis-yazdirilacak");
   if(eski) eski.remove();
-  const tip = s.belgeTipi || "Fatura";
-  const baslik = tip === "Sipariş" ? "SİPARİŞ FORMU" : (tip === "Teklif" ? "TEKLİF FORMU" : "FATURA");
   const div = document.createElement("div");
   div.id = "fis-yazdirilacak";
   div.style.cssText = "max-width:1000px;margin:20px auto;font-family:inherit;color:#111";
-  div.innerHTML = `
+  div.innerHTML = belgeFormuHTMLOlustur(s, kalemler, t, c);
+  document.body.appendChild(div);
+  window.print();
+  setTimeout(()=>{ div.remove(); }, 500);
+}
+// Fatura/Teklif/Sipariş'in görsel HTML'ini üretir — hem yazdırma (belgeFormuCiz)
+// hem de EDM gönderim öncesi son onay ekranı (edmOnayEkraniGoster) TARAFINDAN
+// ORTAK kullanılır ki ikisi aynı resmi görünüme sahip olsun.
+function belgeFormuHTMLOlustur(s, kalemler, t, c){
+  const tip = s.belgeTipi || "Fatura";
+  const baslik = tip === "Sipariş" ? "SİPARİŞ FORMU" : (tip === "Teklif" ? "TEKLİF FORMU" : "FATURA");
+  return `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
       <img src="./fincanlar-logo.png" alt="Fincanlar" style="height:64px;width:auto">
       <h2 style="margin:6px 0 0;letter-spacing:1px">=== ${baslik} ===</h2>
@@ -3466,9 +3502,6 @@ function belgeFormuCiz(s, kalemler, t, c){
         <tr style="font-weight:800;font-size:15px"><td style="padding:6px 10px 0 0">GENEL TOPLAM</td><td style="padding:6px 0 0;text-align:right">: ${paraFormat(t.genelToplam||0)}</td></tr>
       </table>
     </div>`;
-  document.body.appendChild(div);
-  window.print();
-  setTimeout(()=>{ div.remove(); }, 500);
 }
 
 // Silme onaylarında ortak, ayrıntılı uyarı metni — "ne siliniyor" net görünsün diye.
