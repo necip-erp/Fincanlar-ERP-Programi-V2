@@ -1835,6 +1835,24 @@ function kisayolMetni(e){
   return parcalar.join("+");
 }
 document.addEventListener("keydown", function(e){
+  // F5 → Cari Rehberi, F6 → Stok Rehberi: imleç bir cari/ürün arama kutusunun İÇİNDEYKEN
+  // basılırsa, o kutunun yanındaki 🔍 rehber butonuyla AYNI işlevi tetikler (rehberden
+  // seçilen kayıt doğrudan o hücreye yazılır) — kutunun kendi 🔍 butonuna tıklamakla
+  // birebir aynı sonucu verir. İlgili bir kutuda değilken F5/F6'nın normal tarayıcı
+  // davranışına (sayfa yenileme / adres çubuğu) karışılmaz.
+  if(e.key === "F5" || e.key === "F6"){
+    const aktif = document.activeElement;
+    const buton = aktif && aktif.nextElementSibling;
+    const beklenenBaslik = e.key === "F5" ? "Cari Rehberi" : "Stok Rehberi";
+    if(buton && buton.classList && buton.classList.contains("rehber-ac-btn") && buton.title === beklenenBaslik){
+      e.preventDefault();
+      buton.click();
+      return;
+    }
+    // eşleşme yoksa aşağıdaki genel kısayol mantığına devam ETME — F5/F6 için
+    // başka bir kısayol tanımlı değil, tarayıcının kendi davranışına bırakılır.
+    return;
+  }
   // Bir input/textarea/select içinde yazıyorsak kısayolları devre dışı bırak (Esc hariç)
   const hedefEtiket = (e.target.tagName||"").toLowerCase();
   const yaziAlaniIcinde = ["input","textarea","select"].includes(hedefEtiket);
@@ -8711,6 +8729,13 @@ function stokTanimAramaFiltrele(deger){
   stokTanimListesiCiz(filtreli);
 }
 
+// "Yeni Stok Tanımı" ekranında henüz kaydedilmeden yazılan/yapıştırılan Stok Kodu
+// ve Stok Adı — kullanıcı modalden çıkıp (ör. yanlışlıkla) tekrar "Yeni Stok Tanımı"
+// açtığında bu değerler kaybolmasın diye önbelleğe alınır (kaydetme başarılı olunca
+// temizlenir). Sadece YENİ kayıt modunda (editId yok) devrede; bir kartı düzenlerken
+// yazılanlar bu önbelleğe karışmaz.
+let _stokTanimSonKod = "";
+let _stokTanimSonAd = "";
 function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
   window._stokTanimKaydedildiCB = onKaydedildi || null;
   // Faturadan/tedarikçiden gelen ham ürün kodu (varsa) — "🔧 Öner" butonu, firma kodu
@@ -8733,11 +8758,11 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
         <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Stok Kodu</label>
           <div style="display:flex;gap:4px">
-            <input id="st-stokkodu" type="text" value="${k?k.stokKodu:''}" placeholder="İsteğe bağlı (ilk 2 hane marka kodu)" ${k?'readonly title="Var olan bir stok kartının kodu, bağlı tüm hareketleri de taşımak için sadece \'Değiştir\' ile güncellenebilir"':''}>
+            <input id="st-stokkodu" type="text" value="${k?k.stokKodu:_stokTanimSonKod}" placeholder="İsteğe bağlı (ilk 2 hane marka kodu)" ${k?'readonly title="Var olan bir stok kartının kodu, bağlı tüm hareketleri de taşımak için sadece \'Değiştir\' ile güncellenebilir"':'oninput="_stokTanimSonKod=this.value"'}>
             ${k ? `<button type="button" class="btn" style="padding:6px 10px;white-space:nowrap" onclick="stokKoduDegistirSureci('${k.id}')">✏️ Değiştir</button>` : `<button type="button" class="btn" style="padding:6px 10px;white-space:nowrap" onclick="stokKoduOnerUygula()" title="Marka + Ürün Grubu + Alt Ürün Grubu seçiminden 12 haneli kod önerir">🔧 Öner</button>`}
           </div>
         </div>
-        <div class="fld" style="flex:2;min-width:220px;margin-bottom:0"><label>Stok Adı *</label><input id="st-stokadi" type="text" value="${k?k.stokAdi:''}"></div>
+        <div class="fld" style="flex:2;min-width:220px;margin-bottom:0"><label>Stok Adı *</label><input id="st-stokadi" type="text" value="${k?k.stokAdi:_stokTanimSonAd}" ${k?'':'oninput="_stokTanimSonAd=this.value"'}></div>
         <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Barkod</label><input id="st-barkod" type="text" value="${k?k.barkod||'':''}" placeholder="İsteğe bağlı"></div>
       </div>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
@@ -8797,6 +8822,7 @@ function stokKoduOnerUygula(){
   }).then(res=>{
     if(!res.ok){ alert("Kod önerilemedi: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("st-stokkodu").value = res.stokKodu;
+    _stokTanimSonKod = res.stokKodu;
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
@@ -8843,6 +8869,9 @@ function stokTanimKaydet(id){
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("stoktanim-modal-overlay").remove();
     stokTanimListesiYukle();
+    // Kayıt başarıyla tamamlandı — bir sonraki "Yeni Stok Tanımı" açılışında eski
+    // yapıştırılan kod/ad önerilmesin diye önbellek temizlenir.
+    if(!id){ _stokTanimSonKod = ""; _stokTanimSonAd = ""; }
     // Bu modal başka bir ekrandan (örn. Bekleyen Alış Faturaları gruplama) "yeni stok aç"
     // tetikleyicisiyle açıldıysa, oluşan stoğun kodu/adı çağıran ekrana geri bildirilir.
     if(window._stokTanimKaydedildiCB){
