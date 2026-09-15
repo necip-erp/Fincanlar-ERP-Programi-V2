@@ -3121,6 +3121,7 @@ function satisDetayCiz(res){
       <button class="btn btn-primary" onclick="satisFisYazdir('${s.id}')">🖨 Yazdır</button>
       ${s.belgeTipi==='Fatura' ? `<button class="btn" title="EDM test ortamına DENEME e-Fatura gönderimi (test alıcısına)" onclick="satisEdmTestGonder('${s.id}')">🧪 EDM'e Test Gönder</button>` : ''}
       ${s.belgeTipi==='Fatura' && s.efaturaUuid ? `<button class="btn" title="EDM/GİB portalındaki güncel durumu sorgula" onclick="satisEdmDurumSorgula('${s.id}')">🔄 Durumu Sorgula</button>` : ''}
+      ${s.belgeTipi==='Fatura' && s.efaturaUuid ? `<button class="btn" title="EDM'e gönderilen faturanın resmi görünümünü göster" onclick="satisEfaturaGorselGoster('${s.id}')">🖼️ Resmi Görüntüle</button>` : ''}
       <button class="btn btn-danger" onclick="satisSilOnay('${s.id}')">🗑 Satışı Sil</button>
     </div>
     <table class="hareket-tbl">
@@ -3410,6 +3411,60 @@ function satisEdmDurumSorgula(id){
     );
     satisAc(id);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// EDM'e gönderilmiş bir faturanın "resmi" e-Fatura görünümünü (UBL-TR alanlarından
+// üretilen HTML) sayfa içinde geniş bir ekranda gösterir — kullanıcının "Yazdır"
+// çıktısının veri açısından yeterli ama resmi fatura görünümü YERİNE GEÇMEDİĞİNİ
+// belirtmesi üzerine eklendi (15 Eyl 2026). Not: Apps Script'te XSLT işleyici
+// olmadığından GİB'in TEMELFATURA XSLT'si birebir çalıştırılamıyor; bu ekran aynı
+// alanlardan standart e-Fatura görsel düzenine sahip bir yaklaşık üretiyor (bkz.
+// backend edmResmiFaturaHTMLOlustur_ yorumu). Ham UBL-XML de "Ham XML" ile açılabilir.
+function edmGorselKapat(){
+  const el = document.getElementById("edm-gorsel-overlay");
+  if(el) el.remove();
+}
+function satisEfaturaGorselGoster(id){
+  cariApi("getSatisEfaturaGorsel", {satisId:id}).then(res=>{
+    if(!res.ok){ alert("Resmi görsel alınamadı:\n\n"+(res.hata||"bilinmiyor")); return; }
+    edmGorselKapat();
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.id = "edm-gorsel-overlay";
+    overlay.innerHTML = `
+      <div class="modal-box modal-box-xwide" style="max-height:92vh;display:flex;flex-direction:column">
+        <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h3 style="margin:0">🖼️ Resmi Görünüm</h3>
+          <span style="font-size:11px;color:var(--text3)">GİB portalındaki görüntüleyicinin birebir aynısı değildir, bkz. alt not</span>
+        </div>
+        <div id="edm-gorsel-icerik" style="flex:1;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:24px;background:#fff">
+          ${res.html}
+        </div>
+        <div class="modal-actions" style="flex-shrink:0;margin-top:16px">
+          <button class="btn" onclick="edmGorselKapat()">Kapat</button>
+          ${res.xml ? `<button class="btn" onclick="edmGorselHamXmlGoster('${id}')">📄 Ham XML</button>` : ''}
+          <button class="btn btn-primary" onclick="edmGorselYazdir()">🖨️ Yazdır</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.dataset.xml = res.xml || "";
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+function edmGorselYazdir(){
+  const icerik = document.getElementById("edm-gorsel-icerik");
+  if(!icerik) return;
+  const pencere = window.open("", "_blank");
+  pencere.document.write("<html><head><title>e-Fatura</title></head><body>"+icerik.innerHTML+"</body></html>");
+  pencere.document.close();
+  pencere.focus();
+  setTimeout(()=>{ pencere.print(); }, 300);
+}
+function edmGorselHamXmlGoster(id){
+  const overlay = document.getElementById("edm-gorsel-overlay");
+  const xml = overlay ? overlay.dataset.xml : "";
+  if(!xml){ alert("Ham XML bulunamadı."); return; }
+  const icerik = document.getElementById("edm-gorsel-icerik");
+  icerik.innerHTML = `<pre style="white-space:pre-wrap;word-break:break-all;font-size:11.5px;color:#111;margin:0">${xml.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</pre>`;
 }
 
 // ★ Fatura/Teklif/Sipariş çıktısı — üçü de aynı görsele (kullanıcının paylaştığı eski

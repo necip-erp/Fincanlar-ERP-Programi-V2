@@ -653,6 +653,7 @@ function handleRequest(e) {
       case "plasiyerSiraGuncelle": result = plasiyerSiraGuncelle(body); break;
       case "edmCariSorgula":  result = edmCariSorgula(body); break;
       case "edmFaturaGonderTest": result = edmFaturaGonderTest(body); break;
+      case "getSatisEfaturaGorsel": result = satisEfaturaGorselAl(body); break;
       case "edmFaturaDurumSorgula": result = edmFaturaDurumSorgula(body); break;
       case "birimSiraGuncelle":     result = birimSiraGuncelle(body); break;
       case "basitTanimSiraGuncelle": result = basitTanimSiraGuncelle(body); break;
@@ -1254,6 +1255,21 @@ function ensureSatisBelgeTipiColonu(sheet) {
   const h19 = sheet.getRange(1, 19).getValue();
   if (String(h19 || "") !== "EFATURA_DURUM") {
     sheet.getRange(1, 19).setValue("EFATURA_DURUM").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  // EDM'e gönderilirken üretilen HAM UBL-TR 1.2 XML'i (SendInvoice isteğinin
+  // CONTENT'ine konan içeriğin ta kendisi) — ileride "Resmi Görüntüle" ekranında
+  // hem ham XML'i göstermek hem de görseli o an Sheets'teki (değişmiş olabilecek)
+  // veriden değil, GERÇEKTEN GÖNDERİLEN veriden üretmek için saklanır.
+  const h20 = sheet.getRange(1, 20).getValue();
+  if (String(h20 || "") !== "EFATURA_UBL_XML") {
+    sheet.getRange(1, 20).setValue("EFATURA_UBL_XML").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  // Yukarıdaki XML'in üretildiği alanların JSON anlık görüntüsü (satıcı/alıcı VKN,
+  // ünvan, kalemler, toplamlar, tarih/saat) — resmi görsel ekranı XML'i tekrar
+  // ayrıştırmak yerine doğrudan bu JSON'dan (daha sağlam/basit) çiziyor.
+  const h21 = sheet.getRange(1, 21).getValue();
+  if (String(h21 || "") !== "EFATURA_GORSEL_VERI") {
+    sheet.getRange(1, 21).setValue("EFATURA_GORSEL_VERI").setFontWeight("bold").setBackground("#e8edf5");
   }
 }
 
@@ -6494,7 +6510,7 @@ function edmFaturaNoUret_() {
 // Başarılı EDM gönderiminden sonra üretilen resmi e-Fatura numarasını ve GİB
 // UUID'sini Satış kaydına geri yazar (ERP ile GİB kaydı arasında numara
 // tutarlılığı için, ve UUID sonraki durum sorgulamalarında anahtar olarak kullanılır).
-function satisEfaturaNoKaydet_(satisId, efaturaNo, uuid) {
+function satisEfaturaNoKaydet_(satisId, efaturaNo, uuid, ublXml, gorselVeriJson) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
@@ -6504,6 +6520,8 @@ function satisEfaturaNoKaydet_(satisId, efaturaNo, uuid) {
     if (String(data[i][0]) === String(satisId)) {
       sSheet.getRange(i + 1, 17).setValue(efaturaNo);
       if (uuid) sSheet.getRange(i + 1, 18).setValue(uuid);
+      if (ublXml) sSheet.getRange(i + 1, 20).setValue(ublXml);
+      if (gorselVeriJson) sSheet.getRange(i + 1, 21).setValue(gorselVeriJson);
       return true;
     }
   }
@@ -6525,10 +6543,92 @@ function satisEfaturaBilgisiAl_(satisId) {
         efaturaNo: String(data[i][16] || ""),
         uuid: String(data[i][17] || ""),
         durum: String(data[i][18] || ""),
+        ublXml: String(data[i][19] || ""),
+        gorselVeriJson: String(data[i][20] || ""),
       };
     }
   }
   return null;
+}
+
+// EDM'e gönderilen bir e-Faturanın "resmi" görünümünü üretir. XML'i tekrar
+// ayrıştırmak yerine, gönderim anında saklanan JSON anlık görüntüsünden
+// (EFATURA_GORSEL_VERI) çiziyor — gönderilenle TAM AYNI veriyi garanti eder.
+// Ham UBL-XML'i de (indirmek/incelemek isteyenler için) ayrıca döndürür.
+function satisEfaturaGorselAl(body) {
+  const satisId = body.satisId;
+  if (!satisId) return { ok: false, hata: "satisId gerekli" };
+  const bilgi = satisEfaturaBilgisiAl_(satisId);
+  if (!bilgi || !bilgi.efaturaNo) return { ok: false, hata: "Bu fatura henüz EDM'e gönderilmemiş." };
+  if (!bilgi.gorselVeriJson) {
+    return { ok: false, hata: "Bu fatura için resmi görsel verisi kaydedilmemiş (muhtemelen bu özellik eklenmeden önce gönderilmiş). Yeni bir gönderimde görsel otomatik kaydedilecek." };
+  }
+  let veri;
+  try { veri = JSON.parse(bilgi.gorselVeriJson); }
+  catch (e) { return { ok: false, hata: "Görsel verisi okunamadı: " + e.message }; }
+  return { ok: true, html: edmResmiFaturaHTMLOlustur_(veri), xml: bilgi.ublXml || "" };
+}
+
+// EDM'e gönderilen UBL-TR TEMELFATURA'nın alanlarından, o belgenin resmi
+// e-Fatura görünümüne benzer bir HTML üretir. Not: Apps Script'te (V8 çalışma
+// zamanı) yerleşik bir XSLT işleyici bulunmuyor; bu yüzden GİB'in TEMELFATURA
+// XSLT şablonu birebir/byte-byte çalıştırılamıyor — bunun yerine AYNI alanlardan
+// (satıcı/alıcı VKN-ünvan, kalemler, KDV, toplamlar, ETTN/UUID) standart e-Fatura
+// görsel düzenine (üst bilgi bandı, satıcı/alıcı kutuları, kalem tablosu, toplamlar)
+// sahip bir HTML üretiliyor. Ham UBL-XML de ayrıca (satisEfaturaGorselAl ile)
+// döndürülüyor ki isteyen ham veriyi de görebilsin.
+function edmResmiFaturaHTMLOlustur_(v) {
+  const s = EDM_SELLER;
+  const kalemSatirlari = (v.kalemler || []).map(function(k, idx) {
+    return '<tr>' +
+      '<td style="text-align:center">' + (idx + 1) + '</td>' +
+      '<td>' + edmXmlEscape_(k.urunAdi) + '</td>' +
+      '<td style="text-align:right">' + Number(k.miktar).toLocaleString('tr-TR') + '</td>' +
+      '<td>' + edmXmlEscape_(k.birim || '') + '</td>' +
+      '<td style="text-align:right">' + Number(k.birimFiyat).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:4}) + '</td>' +
+      '<td style="text-align:right">%' + (k.kdvOrani || 0) + '</td>' +
+      '<td style="text-align:right">' + Number(k.kdvTutari).toLocaleString('tr-TR', {minimumFractionDigits:2}) + '</td>' +
+      '<td style="text-align:right">' + Number(k.tutar).toLocaleString('tr-TR', {minimumFractionDigits:2}) + '</td>' +
+      '</tr>';
+  }).join('');
+  const para = function(n){ return Number(n||0).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' TL'; };
+  return '' +
+    '<div style="font-family:Arial,Helvetica,sans-serif;color:#111;max-width:1000px;margin:0 auto">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1a3b6d;padding-bottom:10px;margin-bottom:14px">' +
+    '<div><div style="font-size:20px;font-weight:800;color:#1a3b6d;letter-spacing:1px">e-FATURA</div>' +
+    '<div style="font-size:11px;color:#555;margin-top:2px">TEMELFATURA senaryosu · UBL-TR 1.2</div></div>' +
+    '<table style="font-size:11.5px;border-collapse:collapse">' +
+    '<tr><td style="color:#555;padding:1px 8px 1px 0">Fatura No</td><td><b>' + edmXmlEscape_(v.faturaNo||'—') + '</b></td></tr>' +
+    '<tr><td style="color:#555;padding:1px 8px 1px 0">ETTN (UUID)</td><td style="font-family:monospace">' + edmXmlEscape_(v.uuid||'—') + '</td></tr>' +
+    '<tr><td style="color:#555;padding:1px 8px 1px 0">Düzenleme Tarihi</td><td>' + edmXmlEscape_(v.tarih||'—') + '</td></tr>' +
+    '<tr><td style="color:#555;padding:1px 8px 1px 0">Düzenleme Saati</td><td>' + edmXmlEscape_(v.saat||'—') + '</td></tr>' +
+    '</table></div>' +
+    '<div style="display:flex;gap:16px;margin-bottom:14px">' +
+    '<div style="flex:1;border:1px solid #ccc;border-radius:6px;padding:10px 12px">' +
+    '<div style="font-size:10px;font-weight:700;color:#1a3b6d;text-transform:uppercase;margin-bottom:6px">Satıcı</div>' +
+    '<div style="font-size:12.5px;font-weight:700">' + edmXmlEscape_(s.unvan) + '</div>' +
+    '<div style="font-size:11.5px;color:#333;margin-top:2px">VKN: ' + edmXmlEscape_(v.saticiVkn||s.vkn) + '</div>' +
+    '<div style="font-size:11.5px;color:#333">' + edmXmlEscape_(s.adres) + ', ' + edmXmlEscape_(s.ilce) + '/' + edmXmlEscape_(s.il) + '</div>' +
+    '<div style="font-size:11.5px;color:#333">Vergi Dairesi: ' + edmXmlEscape_(s.vergiDairesi) + '</div></div>' +
+    '<div style="flex:1;border:1px solid #ccc;border-radius:6px;padding:10px 12px">' +
+    '<div style="font-size:10px;font-weight:700;color:#1a3b6d;text-transform:uppercase;margin-bottom:6px">Alıcı</div>' +
+    '<div style="font-size:12.5px;font-weight:700">' + edmXmlEscape_(v.aliciUnvan||'—') + '</div>' +
+    '<div style="font-size:11.5px;color:#333;margin-top:2px">VKN/TCKN: ' + edmXmlEscape_(v.aliciVkn||'—') + '</div>' +
+    '</div></div>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:12px" border="1" cellpadding="6">' +
+    '<thead><tr style="background:#eef1f7">' +
+    '<th>S.No</th><th>Mal/Hizmet</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>KDV Oranı</th><th>KDV Tutarı</th><th>Mal/Hizmet Tutarı</th>' +
+    '</tr></thead><tbody>' + kalemSatirlari + '</tbody></table>' +
+    '<div style="display:flex;justify-content:flex-end;margin-top:14px">' +
+    '<table style="border-collapse:collapse;font-size:12.5px;min-width:280px">' +
+    '<tr><td style="color:#555;padding:2px 10px 2px 0">Mal Hizmet Toplam Tutarı</td><td style="text-align:right">' + para(v.araToplam) + '</td></tr>' +
+    '<tr><td style="color:#555;padding:2px 10px 2px 0">Hesaplanan KDV</td><td style="text-align:right">' + para(v.kdvToplam) + '</td></tr>' +
+    '<tr style="font-weight:800;font-size:14px;border-top:1px solid #ccc"><td style="padding:6px 10px 0 0">Vergiler Dahil Toplam Tutar</td><td style="text-align:right;padding-top:6px">' + para(v.genelToplam) + '</td></tr>' +
+    '</table></div>' +
+    '<div style="margin-top:18px;font-size:10.5px;color:#777;border-top:1px solid #eee;padding-top:8px">' +
+    'Bu görünüm, EDM\'e gönderilen UBL-TR 1.2 TEMELFATURA belgesindeki alanlardan üretilmiştir. ' +
+    'GİB portalındaki resmi görüntüleyicinin birebir aynısı değildir; belgenin hukuki geçerliliği ETTN (' + edmXmlEscape_(v.uuid||'—') + ') ile GİB nezdinde sorgulanabilir.' +
+    '</div></div>';
 }
 
 // Sorgulanan portal durumunu (GetInvoiceStatus'tan gelen özet metni) Satış
@@ -6764,7 +6864,17 @@ function edmFaturaGonderTest(body) {
     const edmGercekUuid = edmXmlOznitelik_(xml, "INVOICE", "UUID");
     const gercekFaturaNo = edmGercekNo || xmlParams.faturaNo;
     const gercekUuid = edmGercekUuid || xmlParams.uuid;
-    satisEfaturaNoKaydet_(satisId, gercekFaturaNo, gercekUuid);
+    // "Resmi Görüntüle" ekranı için: hem gönderilen ham UBL-XML'i hem de o XML'in
+    // üretildiği alanların JSON anlık görüntüsünü saklıyoruz — görsel her zaman
+    // GERÇEKTEN GÖNDERİLEN veriden çizilsin, sonradan Sheets'te değişen veriden değil.
+    const gorselVeri = {
+      faturaNo: gercekFaturaNo, uuid: gercekUuid,
+      tarih: xmlParams.tarih, saat: xmlParams.saat,
+      saticiVkn: xmlParams.saticiVkn, aliciVkn: xmlParams.aliciVkn, aliciUnvan: xmlParams.aliciUnvan,
+      kalemler: xmlParams.kalemler,
+      araToplam: xmlParams.araToplam, kdvToplam: xmlParams.kdvToplam, genelToplam: xmlParams.genelToplam,
+    };
+    satisEfaturaNoKaydet_(satisId, gercekFaturaNo, gercekUuid, invoiceXml, JSON.stringify(gorselVeri));
 
     // Gönderim başarılı olur olmaz portal durumunu otomatik sorgula (best-effort —
     // GİB'in durumu işlemesi biraz zaman alabileceğinden bu sorgu başarısız ya da
