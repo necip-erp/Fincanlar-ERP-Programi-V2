@@ -1859,22 +1859,22 @@ function kisayolMetni(e){
   return parcalar.join("+");
 }
 document.addEventListener("keydown", function(e){
-  // F5 → Cari Rehberi, F6 → Stok Rehberi: imleç bir cari/ürün arama kutusunun İÇİNDEYKEN
+  // F1 → Cari Rehberi, F2 → Stok Rehberi: imleç bir cari/ürün arama kutusunun İÇİNDEYKEN
   // basılırsa, o kutunun yanındaki 🔍 rehber butonuyla AYNI işlevi tetikler (rehberden
   // seçilen kayıt doğrudan o hücreye yazılır) — kutunun kendi 🔍 butonuna tıklamakla
-  // birebir aynı sonucu verir. İlgili bir kutuda değilken F5/F6'nın normal tarayıcı
-  // davranışına (sayfa yenileme / adres çubuğu) karışılmaz.
-  if(e.key === "F5" || e.key === "F6"){
+  // birebir aynı sonucu verir. F5/F6 DEĞİL F1/F2 seçildi: F5 tarayıcının "sayfayı
+  // yenile" işlevini (kullanıcı bunu isteyebilir) bozmasın, F6 de tarayıcıya göre
+  // adres çubuğuna atlayıp kafa karıştırmasın diye — F1/F2'nin bu uygulama içinde
+  // taşınan bir varsayılan davranışı olmadığından her zaman (eşleşme yoksa bile)
+  // preventDefault ediliyor ki en azından zararsız kalsın.
+  if(e.key === "F1" || e.key === "F2"){
+    e.preventDefault();
     const aktif = document.activeElement;
     const buton = aktif && aktif.nextElementSibling;
-    const beklenenBaslik = e.key === "F5" ? "Cari Rehberi" : "Stok Rehberi";
+    const beklenenBaslik = e.key === "F1" ? "Cari Rehberi" : "Stok Rehberi";
     if(buton && buton.classList && buton.classList.contains("rehber-ac-btn") && buton.title === beklenenBaslik){
-      e.preventDefault();
       buton.click();
-      return;
     }
-    // eşleşme yoksa aşağıdaki genel kısayol mantığına devam ETME — F5/F6 için
-    // başka bir kısayol tanımlı değil, tarayıcının kendi davranışına bırakılır.
     return;
   }
   // Bir input/textarea/select içinde yazıyorsak kısayolları devre dışı bırak (Esc hariç)
@@ -9464,6 +9464,20 @@ function stokHareketRaporuTemizle(){
 // yapılırsa cariApi henüz tanımlanmadan çalışıp script'in geri kalanını bozuyordu).
 if(typeof bugunOzetCiz === "function") bugunOzetCiz();
 if(typeof sonIslemlerYukle === "function") sonIslemlerYukle();
+
+// F5/Ctrl+R gibi bir tarayıcı yenilemesi (veya sekmeyi/pencereyi kapatma) bu SPA'da TÜM
+// açık sekmeleri (satış/alış kayıtları, kayıt sekmeleri) sessizce siler — hiçbir uyarı
+// olmadan. Açık en az bir sekme varsa tarayıcının kendi "Bu sayfadan ayrılmak istediğinize
+// emin misiniz?" uyarısını tetikleyerek yanlışlıkla F5'e basmanın veya sekmeyi kapatmanın
+// fark edilmeden veri/iş kaybına yol açmasını önlüyoruz. Hiç açık sekme yoksa (sadece Ana
+// Sayfa'dayken) engelsiz F5/kapatma serbest.
+window.addEventListener("beforeunload", function(e){
+  if(typeof _acikSekmeler !== "undefined" && _acikSekmeler.length > 0){
+    e.preventDefault();
+    e.returnValue = "";
+    return "";
+  }
+});
 </script>
 
 <script>
