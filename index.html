@@ -1861,12 +1861,10 @@ function kisayolMetni(e){
 document.addEventListener("keydown", function(e){
   // F1 → Cari Rehberi, F2 → Stok Rehberi: imleç bir cari/ürün arama kutusunun İÇİNDEYKEN
   // basılırsa, o kutunun yanındaki 🔍 rehber butonuyla AYNI işlevi tetikler (rehberden
-  // seçilen kayıt doğrudan o hücreye yazılır) — kutunun kendi 🔍 butonuna tıklamakla
-  // birebir aynı sonucu verir. F5/F6 DEĞİL F1/F2 seçildi: F5 tarayıcının "sayfayı
-  // yenile" işlevini (kullanıcı bunu isteyebilir) bozmasın, F6 de tarayıcıya göre
-  // adres çubuğuna atlayıp kafa karıştırmasın diye — F1/F2'nin bu uygulama içinde
-  // taşınan bir varsayılan davranışı olmadığından her zaman (eşleşme yoksa bile)
-  // preventDefault ediliyor ki en azından zararsız kalsın.
+  // seçilen kayıt doğrudan o hücreye yazılır). İlgili bir kutuda DEĞİLSEK (ör. Ana
+  // Sayfa'dayken veya herhangi bir ekranda, sadece bir stok/cari bilgisine -telefon
+  // numarası gibi- BAKMAK isteniyorsa) rehber yine de açılır, ama hiçbir alana yazmadan
+  // SADECE ARAMA/BAKMA amaçlı (callback yok, bir satıra tıklamak sadece rehberi kapatır).
   if(e.key === "F1" || e.key === "F2"){
     e.preventDefault();
     const aktif = document.activeElement;
@@ -1874,6 +1872,8 @@ document.addEventListener("keydown", function(e){
     const beklenenBaslik = e.key === "F1" ? "Cari Rehberi" : "Stok Rehberi";
     if(buton && buton.classList && buton.classList.contains("rehber-ac-btn") && buton.title === beklenenBaslik){
       buton.click();
+    } else {
+      rehberAc(e.key === "F1" ? "cari" : "stok", null);
     }
     return;
   }
@@ -2162,6 +2162,7 @@ const REHBER_SIRALAMA_SECENEKLERI = {
     {etiket:"Borca göre (en çok borçlu önce)", alan:"bakiye", yon:-1},
     {etiket:"Alacağa göre (en çok alacaklı önce)", alan:"bakiye", yon:1},
     {etiket:"Son işleme göre (en yeni önce)", alan:"sonIslemTarihi", yon:-1},
+    {etiket:"Telefona göre (A→Z)", alan:"telefon", yon:1},
   ],
   stok: [
     {etiket:"Koda göre (A→Z)", alan:"stokKodu", yon:1},
@@ -2280,7 +2281,7 @@ function rehberFiltrele(deger){
   let filtreli = _rehberState.satirlar;
   if(q){
     filtreli = filtreli.filter(k=>{
-      if(tip==='cari') return (k.ad||"").toLocaleLowerCase('tr').includes(q) || (k.cariKodu||"").toLocaleLowerCase('tr').includes(q);
+      if(tip==='cari') return esnekEslesirMi(k.ad, q) || (k.cariKodu||"").toLocaleLowerCase('tr').includes(q) || (k.telefon||"").includes(q);
       return (k.stokAdi||"").toLocaleLowerCase('tr').includes(q) || (k.stokKodu||"").toLocaleLowerCase('tr').includes(q) ||
              (k.markaKodu||"").toLocaleLowerCase('tr').includes(q) || (k.barkod||"").toLocaleLowerCase('tr').includes(q);
     });
@@ -2337,14 +2338,15 @@ function rehberTabloCiz(){
         <thead><tr>
           <th onclick="rehberSirala('cariKodu')">Kod${okIsareti('cariKodu')}</th>
           <th onclick="rehberSirala('ad')">Ad${okIsareti('ad')}</th>
+          <th onclick="rehberSirala('telefon')">Telefon${okIsareti('telefon')}</th>
           <th onclick="rehberSirala('tip')">Tip${okIsareti('tip')}</th>
           <th onclick="rehberSirala('bakiye')">Bakiye${okIsareti('bakiye')}</th>
           <th onclick="rehberSirala('sonIslemTarihi')">Son İşlem${okIsareti('sonIslemTarihi')}</th>
         </tr></thead>
         <tbody>
-          ${liste.length===0 ? '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
+          ${liste.length===0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
           liste.map((c,i)=>`<tr class="${i===_rehberState.aktifIdx?'rehber-aktif':''}" onclick="rehberSecReal(${i})" ondblclick="rehberSecReal(${i})">
-            <td>${c.cariKodu||'—'}</td><td>${c.ad}</td><td>${c.tip}</td><td class="${bakiyeSinifi(c.bakiye)}">${paraFormat(c.bakiye)}</td><td>${c.sonIslemTarihi?tarihGoster(c.sonIslemTarihi):'—'}</td>
+            <td>${c.cariKodu||'—'}</td><td>${c.ad}</td><td>${c.telefon||'—'}</td><td>${c.tip}</td><td class="${bakiyeSinifi(c.bakiye)}">${paraFormat(c.bakiye)}</td><td>${c.sonIslemTarihi?tarihGoster(c.sonIslemTarihi):'—'}</td>
           </tr>`).join("")}
         </tbody>
       </table>`;
