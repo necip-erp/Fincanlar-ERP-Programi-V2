@@ -884,10 +884,22 @@ setInterval(topbarSaatGuncelle, 10000);
           <button class="belge-tab" data-tip="Teklif" onclick="satisBelgeTipiDegistir('Teklif')">Teklif</button>
           <button class="belge-tab" data-tip="Sipariş" onclick="satisBelgeTipiDegistir('Sipariş')">Sipariş</button>
         </div>
+        <!-- 1. kademe filtre: sadece Fatura sekmesinde anlamlı (EDM gönderimi sadece Fatura'da var) -->
+        <div class="belge-tipi-sekmeler" id="satis-edm-filtre-sekmeler">
+          <button class="belge-tab active" data-edm="" onclick="satisEdmFiltreSecimden('')">Tümü</button>
+          <button class="belge-tab" data-edm="gonderildi" onclick="satisEdmFiltreSecimden('gonderildi')">📤 EDM'e Gönderilen</button>
+          <button class="belge-tab" data-edm="gonderilmedi" onclick="satisEdmFiltreSecimden('gonderilmedi')">Gönderilmeyen</button>
+        </div>
         <div class="cari-list-head">
           <input id="satis-ara" placeholder="Satış ara (müşteri, sipariş no...)..." autocomplete="off" oninput="satisAramaFiltrele(this.value)" onkeydown="listeKlavyeYonet(event,'satis-ara','satis-items')">
           <span class="liste-sonuc-sayisi" id="satis-sonuc-sayisi"></span>
           <button class="cari-add-btn" onclick="satisModalAc()" title="Yeni ekle">+</button>
+        </div>
+        <!-- 2. kademe (alt) filtre: Cari sayfasındaki "Sırala" ile aynı mantık -->
+        <div class="cari-list-head" style="padding-top:0;gap:6px">
+          <select id="satis-sirala-select" title="Sıralama kriteri" onchange="satisSiralaSecimden(this.value)" style="flex:1;min-width:0">
+            <option value="" selected>Sırala: Varsayılan (en yeni önce)</option>
+          </select>
         </div>
         <div class="cari-items" id="satis-items"><div class="cari-empty">Yükleniyor...</div></div>
       </div>
@@ -3007,6 +3019,40 @@ let _satisSecili = null;
 let _yeniSatisKalemleri = [];
 let _satisDuzenleId = null; // dolu ise satisKaydet güncelleme (updateSatis) yapar, yeni kayıt oluşturmaz
 
+// ── Fatura listesi: 1. kademe (EDM'e gönderilen/gönderilmeyen) + 2. kademe (sıralama) filtre ──
+// 1. kademe: efaturaNo doluysa "gonderildi", boşsa "gonderilmedi". Sadece Fatura sekmesinde gösterilir.
+let _satisEdmFiltre = ""; // "" = Tümü, "gonderildi", "gonderilmedi"
+// 2. kademe: Cari sayfasındaki "Sırala" menüsüyle AYNI mantık (dizisiSirala ortak yardımcısı).
+let _satisSiraAlan = null;
+let _satisSiraYon = 1;
+const SATIS_SIRALAMA_SECENEKLERI = [
+  {etiket:"Cari Koduna göre (A→Z)", alan:"cariKodu", yon:1},
+  {etiket:"Cari Adına göre (A→Z)", alan:"cariAd", yon:1},
+  {etiket:"Tarihe göre (yeniden eskiye)", alan:"tarih", yon:-1},
+  {etiket:"Tarihe göre (eskiden yeniye)", alan:"tarih", yon:1},
+  {etiket:"Tutara göre (çoktan aza)", alan:"toplamTutar", yon:-1},
+  {etiket:"Tutara göre (azdan çoğa)", alan:"toplamTutar", yon:1},
+];
+(function(){
+  const sel = document.getElementById("satis-sirala-select");
+  if(sel) sel.insertAdjacentHTML("beforeend", SATIS_SIRALAMA_SECENEKLERI.map((s,i)=>`<option value="${i}">${s.etiket}</option>`).join(""));
+})();
+function satisSiralaSecimden(idxStr){
+  if(idxStr === ""){ _satisSiraAlan = null; _satisSiraYon = 1; }
+  else {
+    const opt = SATIS_SIRALAMA_SECENEKLERI[parseInt(idxStr, 10)];
+    if(!opt) return;
+    _satisSiraAlan = opt.alan;
+    _satisSiraYon = opt.yon;
+  }
+  satisListesiCiz(satisAramaliListe());
+}
+function satisEdmFiltreSecimden(deger){
+  _satisEdmFiltre = deger;
+  document.querySelectorAll("#satis-edm-filtre-sekmeler .belge-tab").forEach(b=>b.classList.toggle("active", b.dataset.edm===deger));
+  satisListesiCiz(satisAramaliListe());
+}
+
 function satisListesiYukle(){
   _satisYuklendi = true;
   const onbellek = onbellekOku("satisListesi", 60000);
@@ -3077,8 +3123,15 @@ let _satisAramaSorgu = "";
 function satisListesiCiz(liste){
   const el = document.getElementById("satis-items");
   const sayacEl = document.getElementById("satis-sonuc-sayisi");
-  const filtreliListe = liste.filter(s => (s.belgeTipi||"Fatura") === _satisAktifBelgeTipi);
-  if(sayacEl) sayacEl.textContent = _satisAramaSorgu ? (filtreliListe.length + " sonuç") : "";
+  let filtreliListe = liste.filter(s => (s.belgeTipi||"Fatura") === _satisAktifBelgeTipi);
+  // 1. kademe: EDM'e gönderilen/gönderilmeyen (sadece Fatura sekmesinde anlamlı, ama liste
+  // her ihtimale karşı diğer belge tiplerinde de filtreyi görmezden gelmez — çünkü onlarda
+  // zaten efaturaNo hiç dolmaz, filtre "gonderilmedi" ile aynı sonucu verir).
+  if(_satisEdmFiltre === "gonderildi") filtreliListe = filtreliListe.filter(s => !!s.efaturaNo);
+  else if(_satisEdmFiltre === "gonderilmedi") filtreliListe = filtreliListe.filter(s => !s.efaturaNo);
+  // 2. kademe: seçili sıralama kriteri (ortak dizisiSirala yardımcısı, Cari'deki ile aynı)
+  if(_satisSiraAlan) filtreliListe = dizisiSirala(filtreliListe, _satisSiraAlan, _satisSiraYon);
+  if(sayacEl) sayacEl.textContent = (_satisAramaSorgu || _satisEdmFiltre) ? (filtreliListe.length + " sonuç") : "";
   if(filtreliListe.length === 0){
     el.innerHTML = aramaBosSonucHTML(_satisAramaSorgu, "satis-ara", 'Bu türde kayıt yok. "+" ile ekleyin.');
     return;
@@ -3090,7 +3143,7 @@ function satisListesiCiz(liste){
         <span class="cari-item-ad">${metinVurgula(s.cariAd, q)}${s.cariKodu?` <span class="cari-item-kod">(${metinVurgula(s.cariKodu, q)})</span>`:""}</span>
         <span class="cari-item-bakiye">${paraFormat(s.toplamTutar)}</span>
       </div>
-      <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${metinVurgula(s.odemeTipi, q)}${s.siparisNo?' · '+metinVurgula(''+s.siparisNo, q):''}${s.siparisDurumu ? ` · <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}</span>
+      <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${metinVurgula(s.odemeTipi, q)}${s.siparisNo?' · '+metinVurgula(''+s.siparisNo, q):''}${s.siparisDurumu ? ` · <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}${s.efaturaNo ? ` · <span class="hk-alacak">📤 EDM'e Gönderildi</span>` : ''}</span>
     </div>`).join("");
 }
 
@@ -3114,20 +3167,35 @@ function siparisDurumKaydet(id){
 function satisBelgeTipiDegistir(tip){
   _satisAktifBelgeTipi = tip;
   document.querySelectorAll(".belge-tab").forEach(b=>b.classList.toggle("active", b.dataset.tip===tip));
-  satisListesiCiz(_satisListe);
+  // EDM gönderim filtresi sadece Fatura sekmesinde gösterilir/anlamlıdır — başka bir
+  // sekmeye geçilince gizlenir ve "Tümü"ne sıfırlanır ki geri dönüldüğünde şaşırtmasın.
+  const edmSekmeler = document.getElementById("satis-edm-filtre-sekmeler");
+  if(edmSekmeler) edmSekmeler.style.display = (tip === "Fatura") ? "flex" : "none";
+  if(tip !== "Fatura" && _satisEdmFiltre !== ""){
+    _satisEdmFiltre = "";
+    if(edmSekmeler) edmSekmeler.querySelectorAll(".belge-tab").forEach(b=>b.classList.toggle("active", b.dataset.edm===""));
+  }
+  satisListesiCiz(satisAramaliListe());
   satisSonFaturalarGoster();
 }
 
-function satisAramaFiltrele(deger){
-  _satisAramaSorgu = deger.trim();
+// Sadece arama sorgusuna göre filtreler (1. ve 2. kademe EDM/sıralama filtreleri
+// satisListesiCiz içinde ayrıca uygulanır) — böylece arama, EDM filtresi ve sıralama
+// hangi sırayla değişirse değişsin hep birlikte tutarlı çalışır.
+function satisAramaliListe(){
   const d = _satisAramaSorgu.toLocaleLowerCase('tr');
-  const filtreli = !d ? _satisListe : _satisListe.filter(s =>
+  if(!d) return _satisListe;
+  return _satisListe.filter(s =>
     s.cariAd.toLocaleLowerCase('tr').includes(d) ||
     (s.cariKodu||"").toLocaleLowerCase('tr').includes(d) ||
     (s.odemeTipi||"").toLocaleLowerCase('tr').includes(d) ||
     (s.siparisNo!=null && (''+s.siparisNo).includes(d)) ||
     (s.efaturaNo||"").toLocaleLowerCase('tr').includes(d));
-  satisListesiCiz(filtreli);
+}
+
+function satisAramaFiltrele(deger){
+  _satisAramaSorgu = deger.trim();
+  satisListesiCiz(satisAramaliListe());
 }
 
 function satisAc(id){
@@ -3164,12 +3232,31 @@ function satisListeyeDon(){
   document.getElementById("mod-satis").classList.remove("detay-acik");
 }
 
+// EDM'e gönderilmiş bir faturanın (Satış ekranındaki içerik görünümü ve yazdırma/EDM onay
+// çıktısı — belgeFormuHTMLOlustur TARAFINDAN DA kullanılır) çok belirgin biçimde
+// E-FATURA/E-ARŞİV olduğunu gösteren büyük punto, renkli rozet. `c` verilirse (belgeFormuHTMLOlustur
+// çağrısında olduğu gibi, doğrudan getCariDetay sonucu) oradaki eFatura alanı kullanılır;
+// verilmezse getSatisDetay'ın satış nesnesine eklediği cariEFatura alanına bakılır.
+// EDM bağlantısı olmayan (e-Fatura'ya kayıtlı DEĞİL) bir cariye kesilen gönderim e-Arşiv
+// sayılır — edmBaglantisiVarMi_ backend fonksiyonuyla aynı varsayım.
+function edmRozetHTML(s, c){
+  if(!s || !s.efaturaNo) return "";
+  const eFaturaMi = (c ? c.eFatura : s.cariEFatura) === "Evet";
+  const tipi = eFaturaMi ? "E-FATURA" : "E-ARŞİV FATURASI";
+  const renk = eFaturaMi ? "#0d6efd" : "#8a3ffc";
+  return `<div style="margin:0 0 14px;padding:12px 18px;background:${renk};color:#fff;border-radius:10px;text-align:center;font-size:24px;font-weight:900;letter-spacing:2px;box-shadow:0 2px 8px rgba(0,0,0,.15)">
+    📤 ${tipi}
+    <div style="font-size:13px;font-weight:600;letter-spacing:0;margin-top:4px;opacity:.95">EDM'e gönderildi · No: ${s.efaturaNo}${s.efaturaDurum?(' · Portal Durumu: '+s.efaturaDurum):''}</div>
+  </div>`;
+}
+
 function satisDetayCiz(res){
   const s = res.satis, kalemler = res.kalemler;
   const panel = document.getElementById("satis-detail-panel");
   const siparis = s.belgeTipi === "Sipariş";
   panel.innerHTML = `
     <button class="cari-back-btn" onclick="satisListeyeDon()">← Listeye dön</button>
+    ${edmRozetHTML(s)}
     <div class="cari-detail-head">
       <div>
         <h2>${s.cariAd} ${s.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${s.cariId}')" title="Cari Hareket ekranını sekme olarak aç">🔗 Cariyi Aç</button>` : ''}</h2>
@@ -3595,6 +3682,7 @@ function belgeFormuHTMLOlustur(s, kalemler, t, c){
       <img src="./fincanlar-logo.png" alt="Fincanlar" style="height:64px;width:auto">
       <h2 style="margin:6px 0 0;letter-spacing:1px">=== ${baslik} ===</h2>
     </div>
+    ${edmRozetHTML(s, c)}
     <div style="display:flex;justify-content:space-between;gap:24px;margin-bottom:14px;font-size:13.5px">
       <table style="border-collapse:collapse">
         <tr><td style="padding:2px 10px 2px 0;color:#555">CARİ KODU</td><td>: <b>${c.cariKodu||'—'}</b></td></tr>

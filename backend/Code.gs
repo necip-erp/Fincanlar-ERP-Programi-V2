@@ -1388,6 +1388,10 @@ function getSatisListesi() {
       siparisNo: String(row[15] || ""),
       siparisManuelDurum: elleSecilenDurum || "Beklemede",
       siparisDurumu: belgeTipi === "Sipariş" ? siparisDurumHesapla(elleSecilenDurum, f && f.tamamiFaturalandi, f ? f.hicFaturalanmadi : true) : "",
+      // Liste ekranındaki "EDM'e Gönderilen / Gönderilmeyen" iki kademeli filtreleme
+      // için: efaturaNo doluysa bu fatura EDM'e gönderilmiş demektir.
+      efaturaNo: String(row[16] || ""),
+      efaturaDurum: String(row[18] || ""),
     });
   }
   sonuc.reverse(); // ID zaman damgalı olduğundan ekleme sırası = kronolojik; en yeni en üstte
@@ -1429,6 +1433,17 @@ function getSatisDetay(satisId) {
     }
   }
   if (!satis) return { ok: false, hata: "Satış bulunamadı" };
+
+  // EDM'e gönderilmiş bir faturaysa, içerik ekranında "E-FATURA" mı "E-ARŞİV" mi olduğunu
+  // belirgin gösterebilmek için carinin e-Fatura/e-Arşiv mükellefiyet bilgisini de ekliyoruz
+  // (edmBaglantisiVarMi_ ile aynı mantık: e-Fatura'ya kayıtlı DEĞİLSE e-Arşiv varsayılır).
+  if (satis.efaturaNo && satis.cariId) {
+    const cariRes = getCariDetay(satis.cariId);
+    if (cariRes.ok) {
+      satis.cariEFatura = cariRes.cari.eFatura;
+      satis.cariEArsiv = cariRes.cari.eArsiv;
+    }
+  }
 
   const kData = kSheet.getDataRange().getValues();
   const kalemler = [];
