@@ -632,6 +632,7 @@ function handleRequest(e) {
       case "silPosBankaAktarim": result = silPosBankaAktarim(body); break;
       case "getMuhasebeRaporu": result = getMuhasebeRaporu(body); break;
       case "getStokHareketListesi": result = getStokHareketListesi(body); break;
+      case "getAlisKdvGecmisListesi": result = getAlisKdvGecmisListesi(); break;
       case "getSonIslemler": result = getSonIslemler(body); break;
       case "stokHareketGecmisiDoldur": result = stokHareketGecmisiDoldur(); break;
       case "cariHareketGecmisiDoldur": result = cariHareketGecmisiDoldur(); break;
@@ -6363,6 +6364,70 @@ function edmDurumTurkce_(kod) {
   const anahtar = ham.toUpperCase().replace(/\s+/g, "");
   const ceviri = EDM_DURUM_KODLARI[anahtar];
   return ceviri ? (ceviri + " (" + ham + ")") : ham;
+}
+
+// SADECE ÖNİZLEME — hiçbir veriyi değiştirmez, sadece LİSTELER. 3 Eylül 2026'daki (commit
+// 43a46fb) KDV düzeltmesinden ÖNCE girilmiş Alış kalemlerinde KDV_ORANI kolonu hiç yoktu;
+// bu yüzden o dönemde yazılmış satırların 9. hücresi (KDV_ORANI) TAMAMEN BOŞ ("") kalır.
+// Düzeltmeden SONRA girilen bir kalemde KDV %0 bile olsa hücreye açıkça 0 yazılıyor — bu
+// sayede "gerçekten eski/hiç kaydedilmemiş" satırlarla "post-fix gerçek %0 KDV'li" satırlar
+// güvenle ayırt edilebiliyor (ikisi de parseFloat(...)||0 ile aynı görünür, o yüzden burada
+// ham hücre değerine bakılıyor). O dönemde TUTAR = Miktar × Birim Fiyat, yani KDV HARİÇ
+// kaydedilmişti; bu da hem Alislar.TOPLAM_TUTAR'a hem ilgili Cari hareketine KDV'siz
+// yansımış demek. Kullanıcı her fatura için doğru KDV oranını kendisi görüp gireceği için
+// burada HİÇBİR ORAN VARSAYILMIYOR — sadece etkilenen faturalar/kalemler ham haliyle
+// dönüyor. Gerçek düzeltmeyi (Cari bakiyeye dokunup dokunmama dahil) uygulayacak AYRI bir
+// fonksiyon henüz eklenmedi; kullanıcı bu önizlemeyi gördükten sonra karar verecek.
+function getAlisKdvGecmisListesi() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+  const kSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
+    ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
+  ensureAlisKalemKdvColonu(kSheet);
+
+  const kData = kSheet.getDataRange().getValues();
+  const kalemlerByAlisId = {};
+  for (let i = 1; i < kData.length; i++) {
+    const row = kData[i];
+    if (!row[0]) continue;
+    const kdvHucresi = row[8]; // ham hücre — "" ise kolon o satır için hiç yazılmamış (eski kayıt)
+    if (kdvHucresi !== "") continue; // KDV_ORANI kayıtlı (post-fix) — bu kalem etkilenmiyor
+    const alisId = String(row[1] || "");
+    if (!alisId) continue;
+    if (!kalemlerByAlisId[alisId]) kalemlerByAlisId[alisId] = [];
+    kalemlerByAlisId[alisId].push({
+      id: String(row[0]), urunAdi: String(row[2] || ""), miktar: parseFloat(row[3]) || 0,
+      birim: String(row[4] || ""), birimFiyat: parseFloat(row[5]) || 0, tutar: parseFloat(row[6]) || 0,
+      stokKodu: String(row[7] || ""),
+    });
+  }
+
+  const etkilenenAlisIdleri = Object.keys(kalemlerByAlisId);
+  if (etkilenenAlisIdleri.length === 0) {
+    return { ok: true, faturalar: [], faturaSayisi: 0, kalemSayisi: 0 };
+  }
+
+  const aData = aSheet.getDataRange().getValues();
+  const faturalar = [];
+  let kalemSayisi = 0;
+  for (let i = 1; i < aData.length; i++) {
+    const row = aData[i];
+    const id = String(row[0] || "");
+    if (!id || !kalemlerByAlisId[id]) continue;
+    const kalemler = kalemlerByAlisId[id];
+    kalemSayisi += kalemler.length;
+    const mevcutKalemToplami = kalemler.reduce(function (t, k) { return t + k.tutar; }, 0);
+    faturalar.push({
+      alisId: id, tarih: hucreTarihStr(row[1]), cariAd: String(row[3] || ""),
+      mevcutKayitliToplam: parseFloat(row[4]) || 0, // Alislar.TOPLAM_TUTAR (normalde kalem toplamıyla aynı)
+      mevcutKalemToplami: mevcutKalemToplami,
+      kalemler: kalemler,
+    });
+  }
+  faturalar.sort(function (a, b) { return a.tarih < b.tarih ? 1 : (a.tarih > b.tarih ? -1 : 0); });
+
+  return { ok: true, faturalar: faturalar, faturaSayisi: faturalar.length, kalemSayisi: kalemSayisi };
 }
 
 // SESSION_ID'yi 20 dk cache'ler; her sorguda yeniden login atmayı önler.

@@ -1176,6 +1176,19 @@ setInterval(topbarSaatGuncelle, 10000);
       </div>
       <div id="edmonek-liste"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Geçmiş Alış KDV Düzeltmesi (Önizleme)</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">
+        3 Eylül 2026'daki KDV düzeltmesinden ÖNCE girilmiş Alış faturalarında KDV oranı hiç
+        kaydedilmiyordu; o dönemki tutarlar KDV HARİÇ olarak hem fatura toplamına hem Cari
+        hesaba işlenmiş olabilir. Aşağıdaki liste SADECE bir önizlemedir — <b>hiçbir kayıt
+        değiştirilmez</b>. Her fatura için KDV oranını kendiniz girip "Düzeltilmiş Toplam"ı
+        görebilirsiniz; gerçek uygulama (Cari bakiyeye dokunup dokunmayacağı dahil) ayrı bir
+        adımda, siz onayladıktan sonra yapılacak.
+      </p>
+      <button class="btn btn-primary" onclick="alisKdvGecmisYukle()">🔍 Listeyi Yükle</button>
+      <div id="alis-kdv-gecmis-liste" style="margin-top:14px"></div>
+    </div>
   </div>
 </div>
 
@@ -5495,6 +5508,72 @@ function edmOnekEslesmeSilOnay(onek){
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     edmOnekEslesmeYukle();
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ════════════════════════════════════════════════
+// Geçmiş Alış KDV Düzeltmesi — SADECE ÖNİZLEME (bkz. backend getAlisKdvGecmisListesi
+// yorumu). Hiçbir "Uygula" butonu YOK; bu ekran sadece 3 Eylül 2026 KDV düzeltmesinden
+// önce girilmiş, KDV oranı hiç kaydedilmemiş Alış faturalarını listeler ve kullanıcının
+// girdiği orana göre "olsaydı ne olurdu" önizlemesi hesaplar. Gerçek düzeltme (Cari
+// bakiyeye dokunup dokunmayacağı dahil) ayrı, henüz eklenmemiş bir adımda yapılacak.
+let _akgListe = {}; // alisId -> {mevcutKalemToplami, ...} — canlı hesaplama için
+function alisKdvGecmisYukle(){
+  const el = document.getElementById("alis-kdv-gecmis-liste");
+  el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  cariApi("getAlisKdvGecmisListesi").then(res=>{
+    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    alisKdvGecmisCiz(res);
+  }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+
+function alisKdvGecmisCiz(res){
+  const el = document.getElementById("alis-kdv-gecmis-liste");
+  _akgListe = {};
+  if(res.faturaSayisi === 0){
+    el.innerHTML = '<div class="cari-empty">✅ KDV oranı kaydedilmemiş eski Alış faturası bulunamadı.</div>';
+    return;
+  }
+  const mevcutGenelToplam = res.faturalar.reduce((t,f)=>t+f.mevcutKalemToplami, 0);
+  el.innerHTML = `
+    <p style="font-size:13px;color:var(--text2);margin:0 0 12px">
+      <b>${res.faturaSayisi}</b> fatura, <b>${res.kalemSayisi}</b> kalem etkileniyor —
+      mevcut (KDV hariç görünen) toplam: <b>${paraFormat(mevcutGenelToplam)}</b>.
+      Aşağıda her fatura için KDV% girip düzeltilmiş toplamı görebilirsiniz.
+    </p>
+    ${res.faturalar.map(f=>{
+      _akgListe[f.alisId] = f;
+      return `
+      <div class="finans-panel" style="margin-bottom:10px;padding:14px">
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
+          <div><b>${f.cariAd||'—'}</b> — ${tarihGoster(f.tarih)} <span style="color:var(--text3);font-size:12px">(Alış #${f.alisId})</span></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="font-size:12px">KDV%</label>
+            <input type="number" id="akg-oran-${f.alisId}" value="20" min="0" max="100" step="0.5" style="width:70px" oninput="alisKdvGecmisHesapla('${f.alisId}')">
+          </div>
+        </div>
+        <table class="rapor-tbl" style="margin-top:8px">
+          <thead><tr><th>Ürün</th><th>Miktar</th><th>Birim Fiyat</th><th>Tutar (KDV Hariç)</th></tr></thead>
+          <tbody>
+            ${f.kalemler.map(k=>`<tr><td>${k.urunAdi}</td><td>${miktarFormat(k.miktar)} ${k.birim}</td><td>${paraFormat(k.birimFiyat)}</td><td>${paraFormat(k.tutar)}</td></tr>`).join("")}
+          </tbody>
+        </table>
+        <div style="display:flex;gap:24px;margin-top:8px;font-size:13px;flex-wrap:wrap">
+          <div>Mevcut Toplam (KDV Hariç): <b>${paraFormat(f.mevcutKalemToplami)}</b></div>
+          <div>Düzeltilmiş Toplam: <b id="akg-duzeltilmis-${f.alisId}">${paraFormat(f.mevcutKalemToplami*1.2)}</b></div>
+          <div>Fark (eklenecek KDV): <b id="akg-fark-${f.alisId}">${paraFormat(f.mevcutKalemToplami*0.2)}</b></div>
+        </div>
+      </div>`;
+    }).join("")}`;
+}
+
+function alisKdvGecmisHesapla(alisId){
+  const f = _akgListe[alisId];
+  if(!f) return;
+  const oran = parseFloat(document.getElementById("akg-oran-"+alisId).value) || 0;
+  const duzeltilmis = f.mevcutKalemToplami * (1 + oran/100);
+  const fark = duzeltilmis - f.mevcutKalemToplami;
+  document.getElementById("akg-duzeltilmis-"+alisId).textContent = paraFormat(duzeltilmis);
+  document.getElementById("akg-fark-"+alisId).textContent = paraFormat(fark);
 }
 
 // Kullanıcı BFM'deki "Bu cariyi kullan" önek-önerisi bağlantısına tıklayınca çağrılır —
