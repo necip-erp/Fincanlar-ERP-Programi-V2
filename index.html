@@ -5721,7 +5721,7 @@ function bfmKalemSatiriHTML(k, i){
           <td><input id="bfm-fiyat-${i}" type="number" min="0" step="0.01" value="${k.birimFiyat||k.netFiyat}" style="width:100px" oninput="bfmSatirGuncelle(${i})"></td>
           <td><input id="bfm-isk1-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
           <td><input id="bfm-isk2-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto2||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
-          <td>%${k.kdvOrani}</td>
+          <td><input id="bfm-kdv-${i}" type="number" min="0" max="100" step="0.01" value="${k.kdvOrani}" style="width:60px${bfmKdvSupheliMi(k.kdvOrani)?';border-color:var(--red);background:#fdecea':''}" title="${bfmKdvSupheliMi(k.kdvOrani)?'⚠️ FATURAFIYAT kaynağından şüpheli bir KDV oranı geldi (>%'+BFM_KDV_UST_SINIR+'). Muhtemelen bu alana bir tutar yazılmış — faturaya bakıp doğru oranı siz girin.':'FATURAFIYAT kaynağından gelen oran — gerekirse düzeltin'}" oninput="bfmSatirGuncelle(${i})"></td>
           <td id="bfm-tutar-${i}" style="font-weight:600;text-align:right;padding-right:8px"></td>
           <td style="text-align:center"><button type="button" class="btn btn-danger" style="padding:2px 7px;font-size:12px" onclick="bfmKalemSil(${i})" title="Bu satırı sil">🗑️</button></td>
         </tr>`;
@@ -5978,10 +5978,21 @@ function bfmBirimSecenekleriHTML(stokKodu, urunAdi, seciliBirim){
   return `<option value="adet" ${secili==="adet"?'selected':''}>adet</option><option value="m2" ${secili==="m2"?'selected':''}>m²</option><option value="paket" ${secili==="paket"?'selected':''}>paket</option><option value="kg" ${secili==="kg"?'selected':''}>kg</option>`;
 }
 
+// FATURAFIYAT'ı besleyen dış otomasyonda ara sıra KDV_ORANI hücresine (yüzde yerine)
+// bir TUTAR yazıldığı görülüyor (ör. "45.60"). Türkiye'de bilinen hiçbir KDV oranı bu
+// sınırı geçmediği için, üstündeki her değer "muhtemelen tutar" kabul edilip BFM onay
+// ekranında kırmızı çerçeve+uyarı ile işaretleniyor — otomatik düzeltilmiyor, kullanıcı
+// faturaya bakıp elle düzeltiyor (alan zaten düzenlenebilir).
+const BFM_KDV_UST_SINIR = 30;
+function bfmKdvSupheliMi(kdvOrani){
+  const n = parseFloat(kdvOrani);
+  return isNaN(n) || n < 0 || n > BFM_KDV_UST_SINIR;
+}
+
 function bfmSatirGuncelle(i){
   const f = window._bfmAktifFatura;
   if(!f || !f.kalemler[i]) return;
-  const kdvOrani = f.kalemler[i].kdvOrani || 0;
+  const kdvOrani = parseFloat((document.getElementById(`bfm-kdv-${i}`)||{}).value) || 0;
   const nakliyePayi = f.kalemler[i].nakliyePayi || 0;
   const miktar = parseFloat((document.getElementById(`bfm-miktar-${i}`)||{}).value) || 0;
   const fiyat = parseFloat((document.getElementById(`bfm-fiyat-${i}`)||{}).value) || 0;
@@ -5999,7 +6010,7 @@ function bfmGenelToplamGuncelle(){
   if(!f) return;
   let toplam = 0;
   f.kalemler.forEach((k,i)=>{
-    const kdvOrani = k.kdvOrani || 0;
+    const kdvOrani = parseFloat((document.getElementById(`bfm-kdv-${i}`)||{}).value) || 0;
     const nakliyePayi = k.nakliyePayi || 0;
     const miktar = parseFloat((document.getElementById(`bfm-miktar-${i}`)||{}).value) || 0;
     const fiyat = parseFloat((document.getElementById(`bfm-fiyat-${i}`)||{}).value) || 0;
@@ -6046,6 +6057,7 @@ function alisBekleyenOnayla(faturaNo){
   const f = window._bfmAktifFatura;
   if(!f) return;
   const kalemler = [];
+  const supheliUyarilar = [];
   for(let i=0; i<f.kalemler.length; i++){
     const miktar = parseFloat(document.getElementById(`bfm-miktar-${i}`).value) || 0;
     if(miktar <= 0) continue; // Miktarı boş bırakılan satırlar alışa dahil edilmez.
@@ -6065,7 +6077,14 @@ function alisBekleyenOnayla(faturaNo){
     // "Genel Toplam" KDV DAHİL gösteriliyordu (bkz. bfmGenelToplamGuncelle) ama onaya
     // kdvOrani hiç gönderilmiyordu — sistem KDV'siz tutarı kaydediyordu. Artık kdvOrani da
     // gönderiliyor; saveAlis artık TUTAR/toplamTutar'ı (ve Cari Alacak'ı) KDV DAHİL hesaplıyor.
-    const kdvOrani = f.kalemler[i].kdvOrani || 0;
+    // ★ DÜZELTME 2: kdvOrani artık f.kalemler[i]'den (dış otomasyonun ham değeri) değil,
+    // BFM ekranındaki düzenlenebilir bfm-kdv-${i} alanından okunuyor — FATURAFIYAT'ta bu
+    // alana bazen oran yerine tutar yazıldığı görülüyor; ekranda kırmızıyla işaretlenip
+    // kullanıcı onaylamadan önce düzeltebiliyor (bkz. bfmKdvSupheliMi).
+    const kdvOrani = parseFloat(document.getElementById(`bfm-kdv-${i}`).value) || 0;
+    if(bfmKdvSupheliMi(kdvOrani)){
+      supheliUyarilar.push(`"${f.kalemler[i].urunAdi}" (KDV %${kdvOrani})`);
+    }
     const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100) + (f.kalemler[i].nakliyePayi || 0);
     // Fatura altı "Brüt Toplam / İskonto" gösterimi için satır düzeyi liste fiyatı ve
     // birleşik indirim %'si de gönderiliyor (BIRIM_FIYAT hesaplarda hâlâ net kalıyor).
@@ -6084,6 +6103,15 @@ function alisBekleyenOnayla(faturaNo){
     });
   }
   if(kalemler.length === 0){ alert("En az bir kaleme miktar girmelisiniz"); return; }
+  if(supheliUyarilar.length > 0){
+    const devamEt = confirm(
+      "⚠️ Şüpheli KDV oranı tespit edildi (bu alana muhtemelen bir tutar yazılmış):\n\n" +
+      supheliUyarilar.join("\n") +
+      "\n\nYine de bu oranlarla onaylamak istediğinize emin misiniz? " +
+      "(İptal'e basıp faturaya bakarak doğru oranı KDV% sütununa girebilirsiniz.)"
+    );
+    if(!devamEt) return;
+  }
   const cariId = document.getElementById("bfm-cari").value;
   const serbestAd = document.getElementById("bfm-cari-arama").value.trim();
   if(!cariId && !serbestAd){ alert("Bu faturayı hangi cariye işleyeceğimizi belirtmelisiniz"); return; }
