@@ -4483,12 +4483,13 @@ function getMuhasebeRaporu(body) {
       ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
     ensureSatisBelgeTipiColonu(sSheet);
     const sData = sSheet.getDataRange().getValues();
-    const satisBelgeTipi = {}, satisTarih = {};
+    const satisBelgeTipi = {}, satisTarih = {}, satisCariAd = {};
     for (let i = 1; i < sData.length; i++) {
       const id = String(sData[i][0] || "");
       if (!id) continue;
       satisBelgeTipi[id] = String(sData[i][8] || "") || "Fatura";
       satisTarih[id] = hucreTarihStr(sData[i][1]);
+      satisCariAd[id] = String(sData[i][3] || "");
     }
 
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
@@ -4497,14 +4498,23 @@ function getMuhasebeRaporu(body) {
     const urunMap = {};
     // Ürün adı + stok kodu birlikte anahtar oluşturur — aynı üründe zaman içinde stok kodu
     // değiştiyse (veya hiç girilmediyse) satırlar birbirine karışmaz.
+    function eslesiyorMu(urunAdi, stokKodu) {
+      if (!stokKoduFiltre) return true;
+      return String(stokKodu || "").toLocaleLowerCase('tr').includes(stokKoduFiltre) || String(urunAdi || "").toLocaleLowerCase('tr').includes(stokKoduFiltre);
+    }
     function urunEkle(urunAdi, stokKodu, miktar, tutar, yon) {
-      if (stokKoduFiltre && !String(stokKodu || "").toLocaleLowerCase('tr').includes(stokKoduFiltre) && !String(urunAdi || "").toLocaleLowerCase('tr').includes(stokKoduFiltre)) return;
+      if (!eslesiyorMu(urunAdi, stokKodu)) return;
       const anahtar = urunAdi + "||" + (stokKodu || "");
       if (!urunMap[anahtar]) urunMap[anahtar] = { urunAdi: urunAdi, stokKodu: stokKodu || "", girisMiktar: 0, cikisMiktar: 0, tutar: 0 };
       if (yon === "giris") urunMap[anahtar].girisMiktar += miktar; else urunMap[anahtar].cikisMiktar += miktar;
       urunMap[anahtar].tutar += tutar;
     }
 
+    // Stok bazlı sipariş raporu: bir stok seçilince (stokKoduFiltre dolu), o stoğa ait her
+    // Sipariş kalemini tek tek de döndürüyoruz ("bekleyen" mi yoksa fatura edilmiş mi
+    // görülebilsin diye) — FATURALANAN_MIKTAR alanına göre. Filtre boşsa (tüm ürünler)
+    // bu liste boş kalır, sadece aggregate tablo gösterilir (çok kalabalık olmasın diye).
+    const siparisDetaylari = [];
     for (let i = 1; i < kData.length; i++) {
       const row = kData[i];
       const satisId = String(row[1] || "");
@@ -4518,8 +4528,21 @@ function getMuhasebeRaporu(body) {
       // Fiili stok hareketi raporu (urunBazliHareket) sadece kesilmiş Faturaları
       // çıkış sayar — Teklif ve Sipariş henüz malın stoktan çıktığı anlamına gelmez.
       if (tip === "urunBazliHareket" && belgeTipi !== "Fatura") continue;
-      urunEkle(urunAdi, String(row[10] || ""), parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
+      const stokKodu = String(row[10] || "");
+      urunEkle(urunAdi, stokKodu, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
+      if (tip === "urunBazliSiparis" && stokKoduFiltre && eslesiyorMu(urunAdi, stokKodu)) {
+        const miktar = parseFloat(row[3]) || 0;
+        const faturalananMiktar = Math.min(miktar, parseFloat(row[9]) || 0);
+        const kalanMiktar = Math.max(0, miktar - faturalananMiktar);
+        siparisDetaylari.push({
+          satisId: satisId, tarih: tarih, cariAd: satisCariAd[satisId] || "",
+          urunAdi: urunAdi, stokKodu: stokKodu, birim: String(row[4] || ""),
+          miktar: miktar, faturalananMiktar: faturalananMiktar, kalanMiktar: kalanMiktar,
+          durum: kalanMiktar > 0.0001 ? (faturalananMiktar > 0.0001 ? "Kısmen Faturalandı" : "Bekliyor") : "Faturalandı",
+        });
+      }
     }
+    siparisDetaylari.sort((a, b) => (a.tarih < b.tarih ? 1 : (a.tarih > b.tarih ? -1 : 0)));
 
     // Ürün Bazlı Hareket Raporu ayrıca alış (giriş) ve alış iadesi (giriş azaltan) hareketlerini de kapsar.
     let diagAlisKayitSayisi = null, diagAlisKalemSayisi = null;
@@ -4596,6 +4619,7 @@ function getMuhasebeRaporu(body) {
 
     const satirlar = Object.values(urunMap).sort((a, b) => b.tutar - a.tutar);
     const sonuc = { ok: true, tip: tip, satirlar: satirlar, toplam: satirlar.reduce((t, s) => t + s.tutar, 0) };
+    if (tip === "urunBazliSiparis" && stokKoduFiltre) sonuc.siparisDetaylari = siparisDetaylari;
     // GEÇİCİ TEŞHİS: rapor beklenmedik şekilde boş geldiğinde ham veri sayılarını görmek için.
     if (tip === "urunBazliHareket" && satirlar.length === 0) {
       sonuc.diag = {
