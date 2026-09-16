@@ -633,6 +633,7 @@ function handleRequest(e) {
       case "getMuhasebeRaporu": result = getMuhasebeRaporu(body); break;
       case "getStokHareketListesi": result = getStokHareketListesi(body); break;
       case "getAlisKdvGecmisListesi": result = getAlisKdvGecmisListesi(); break;
+      case "getEdmPortalGirisLinki": result = getEdmPortalGirisLinki(); break;
       case "getSonIslemler": result = getSonIslemler(body); break;
       case "stokHareketGecmisiDoldur": result = stokHareketGecmisiDoldur(); break;
       case "cariHareketGecmisiDoldur": result = cariHareketGecmisiDoldur(); break;
@@ -6319,6 +6320,20 @@ function edmAyarlariniAl_() {
   };
 }
 
+// EDM'e gönderilen bir faturanın yanına "EDM Portalında Aç" linki koyabilmek için: SOAP
+// servis adresiyle (EDM_URL) AYNI sunucudaki web arayüzünün (EFaturaUI) giriş sayfasını
+// döndürür (ör. canlıda https://portal2.edmbilisim.com.tr/EFaturaUI/Login.aspx). EDM'in
+// web arayüzü oturum/giriş gerektirdiği için doğrudan İLGİLİ FATURAYA (login atlanarak)
+// gidilemiyor — kullanıcı giriş yaptıktan sonra E-Fatura No/UUID ile arayabilsin diye
+// bu bilgiler de linkle birlikte ayrıca gösteriliyor (bkz. frontend satisEfaturaPortalLinki).
+function getEdmPortalGirisLinki() {
+  const ayar = edmAyarlariniAl_();
+  if (!ayar.url) return { ok: false, hata: "EDM_URL tanımlı değil." };
+  const m = ayar.url.match(/^(https?:\/\/[^\/]+)/i);
+  if (!m) return { ok: false, hata: "EDM_URL adresinden sunucu adı çözülemedi." };
+  return { ok: true, url: m[1] + "/EFaturaUI/Login.aspx" };
+}
+
 function edmRequestHeaderBlock_(sessionId, kanal) {
   return '<REQUEST_HEADER xmlns="">' +
     '<SESSION_ID>' + sessionId + '</SESSION_ID>' +
@@ -6366,8 +6381,8 @@ function edmXmlOznitelik_(xml, etiket, oznitelik) {
 // Bu sözlük bunları Türkçe karşılığa çevirir. YENİ BİR KOD GÖRÜLÜRSE: sadece bu objeye
 // "KOD": "Türkçe karşılığı" satırı eklemek yeterli — anahtar boşluk/tire farkı gözetmeden
 // eşleşir (edmDurumTurkce_ normalize eder). Şu ana kadar canlıda fiilen görülenler: SEND,
-// PROCESSING. PACKAGE-PROCESSING kullanıcı tarafından beklenen bir diğer örnek. Geri kalanlar
-// yaygın e-Fatura/GİB terimleri için önden eklenmiş makul karşılıklardır; EDM'den hiç
+// PROCESSING, SUCCEED. PACKAGE-PROCESSING kullanıcı tarafından beklenen bir diğer örnek. Geri
+// kalanlar yaygın e-Fatura/GİB terimleri için önden eklenmiş makul karşılıklardır; EDM'den hiç
 // gelmeseler de zararsızdır, gelirlerse otomatik çevrilmiş olur.
 const EDM_DURUM_KODLARI = {
   "SEND": "Gönderildi",
@@ -6376,6 +6391,8 @@ const EDM_DURUM_KODLARI = {
   "PACKAGE-PROCESSING": "Paket İşleniyor",
   "PACKAGEPROCESSING": "Paket İşleniyor",
   "SUCCESS": "Başarılı",
+  "SUCCEED": "Başarılı",
+  "SUCCEEDED": "Başarılı",
   "SUCCESSFUL": "Başarılı",
   "SUCCESFUL": "Başarılı",
   "COMPLETED": "Tamamlandı",

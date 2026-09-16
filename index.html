@@ -1918,6 +1918,21 @@ document.addEventListener("keydown", function(e){
   const kisayollar = kisayollariAl();
   const basilan = kisayolMetni(e);
   if(basilan === kisayollar._geri){
+    // Ekranın önünde açık bir (salt-görüntüleme amaçlı, kaydetme içermeyen) modal
+    // varsa Esc önce ONU kapatsın — aksi halde arkadaki ekran Ana Sayfa'ya geçerken
+    // modal görsel olarak açık kalıyordu (ör. "🖼️ Resmi Görüntüle"). Modal, kendi
+    // oluşturulduğu yerde data-esc-kapat="fonksiyonAdi" ile bunu işaretler; işaretli
+    // değilse (form/kaydetme içeren modallar) eski davranış (Ana Sayfa'ya git) sürer.
+    const acikModaller = document.querySelectorAll(".modal-overlay[data-esc-kapat]");
+    if(acikModaller.length){
+      const sonModal = acikModaller[acikModaller.length-1];
+      const kapatFn = window[sonModal.dataset.escKapat];
+      if(typeof kapatFn === "function"){
+        e.preventDefault();
+        kapatFn();
+        return;
+      }
+    }
     e.preventDefault();
     gitAnaSayfa();
     return;
@@ -3308,6 +3323,7 @@ function satisDetayCiz(res){
       ${s.belgeTipi==='Fatura' ? `<button class="btn" title="EDM test ortamına DENEME e-Fatura gönderimi (test alıcısına)" onclick="satisEdmTestGonder('${s.id}')">🧪 EDM'e Test Gönder</button>` : ''}
       ${s.belgeTipi==='Fatura' && s.efaturaUuid ? `<button class="btn" title="EDM/GİB portalındaki güncel durumu sorgula" onclick="satisEdmDurumSorgula('${s.id}')">🔄 Durumu Sorgula</button>` : ''}
       ${s.belgeTipi==='Fatura' && s.efaturaUuid ? `<button class="btn" title="EDM'e gönderilen faturanın resmi görünümünü göster" onclick="satisEfaturaGorselGoster('${s.id}')">🖼️ Resmi Görüntüle</button>` : ''}
+      ${s.belgeTipi==='Fatura' && s.efaturaUuid ? `<button class="btn" title="EDM portalını yeni sekmede açar (giriş gerektirir) — E-Fatura No/UUID panoya kopyalanır, portalda onunla arayabilirsiniz" onclick="edmPortaldaAc('${s.efaturaNo||''}','${s.efaturaUuid||''}')">🔗 EDM Portalında Aç</button>` : ''}
       <button class="btn btn-danger" onclick="satisSilOnay('${s.id}')">🗑 Satışı Sil</button>
     </div>
     <table class="hareket-tbl">
@@ -3610,6 +3626,32 @@ function edmGorselKapat(){
   const el = document.getElementById("edm-gorsel-overlay");
   if(el) el.remove();
 }
+let _edmPortalLinkCache = null;
+// EDM'in web arayüzü (EFaturaUI) oturum/giriş gerektirdiği için, bir SOAP çağrısıyla
+// doğrudan İLGİLİ FATURAYA gidilemiyor — bu yüzden portalın giriş sayfasını yeni sekmede
+// açıyoruz ve E-Fatura No'yu panoya kopyalıyoruz ki kullanıcı giriş yaptıktan sonra
+// portaldaki arama kutusuna yapıştırıp faturayı bulabilsin.
+function edmPortaldaAc(efaturaNo, uuid){
+  const aramaDegeri = efaturaNo || uuid || "";
+  const kopyalaVeAc = (url) => {
+    const ac = () => window.open(url, "_blank");
+    if(aramaDegeri && navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(aramaDegeri).then(()=>{
+        toastGoster("E-Fatura No panoya kopyalandı: "+aramaDegeri+" — EDM'de giriş yapıp arama kutusuna yapıştırabilirsiniz");
+        ac();
+      }).catch(()=>{ ac(); });
+    } else {
+      ac();
+    }
+  };
+  if(_edmPortalLinkCache){ kopyalaVeAc(_edmPortalLinkCache); return; }
+  cariApi("getEdmPortalGirisLinki").then(res=>{
+    if(!res.ok){ alert("EDM portal linki alınamadı:\n\n"+(res.hata||"bilinmiyor")); return; }
+    _edmPortalLinkCache = res.url;
+    kopyalaVeAc(res.url);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
 function satisEfaturaGorselGoster(id){
   cariApi("getSatisEfaturaGorsel", {satisId:id}).then(res=>{
     if(!res.ok){ alert("Resmi görsel alınamadı:\n\n"+(res.hata||"bilinmiyor")); return; }
@@ -3617,6 +3659,9 @@ function satisEfaturaGorselGoster(id){
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.id = "edm-gorsel-overlay";
+    // Sadece görüntüleme amaçlı, formu/kaydetme YOK — bu yüzden Esc ile güvenle
+    // kapatılabilir (bkz. global Esc yakalayıcı: modal-overlay[data-esc-kapat]).
+    overlay.dataset.escKapat = "edmGorselKapat";
     overlay.innerHTML = `
       <div class="modal-box modal-box-xwide" style="max-height:92vh;display:flex;flex-direction:column">
         <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
