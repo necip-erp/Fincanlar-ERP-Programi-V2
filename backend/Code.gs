@@ -939,10 +939,12 @@ function vadesiGecmisAlacaklar() {
 
   const hData = hSheet.getDataRange().getValues();
   const cariAdMap = {};
+  const cariKoduMap = {};
   const bakiyeMap = {};
   for (let i = 1; i < hData.length; i++) {
     if (!hData[i][0]) continue;
     cariAdMap[String(hData[i][0])] = String(hData[i][2] || "");
+    cariKoduMap[String(hData[i][0])] = String(hData[i][8] || "");
   }
 
   const hkData = hkSheet.getDataRange().getValues();
@@ -969,7 +971,7 @@ function vadesiGecmisAlacaklar() {
     if (vade >= bugun) continue; // henüz vadesi gelmemiş
     if ((bakiyeMap[cariId] || 0) <= 0) continue; // carinin borcu kalmamış
     sonuc.push({
-      id: String(row[0]), cariId: cariId, cariAd: cariAdMap[cariId] || "",
+      id: String(row[0]), cariId: cariId, cariAd: cariAdMap[cariId] || "", cariKodu: cariKoduMap[cariId] || "",
       tarih: hucreTarihStr(row[2]), tutar: parseFloat(row[4]) || 0,
       aciklama: String(row[5] || ""), vade: vade,
       gecikenGunSayisi: Math.round((new Date(bugun) - new Date(vade)) / 86400000),
@@ -4246,6 +4248,7 @@ function getRaporOzet(body) {
 // kasaHareketleriTopla ve getMuhasebeRaporu bu ham listeyi birden çok kez agregeleyebilir.
 function kasaNakitHamListesiOku(ss) {
   const liste = [];
+  const cariKoduMap = cariKoduHaritasiOlustur(ss);
 
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
@@ -4257,7 +4260,7 @@ function kasaNakitHamListesiOku(ss) {
     const belgeTipi = String(row[8] || "") || "Fatura";
     if (belgeTipi !== "Fatura" || String(row[5] || "") !== "Nakit") continue;
     liste.push({ id: String(row[0]), tip: "SATIS", tarih: hucreTarihStr(row[1]), yon: "Giriş", kaynak: "Satış Faturası",
-      cariAd: String(row[3] || ""), tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
+      cariAd: String(row[3] || ""), cariKodu: cariKoduMap[String(row[2] || "")] || "", tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
   }
 
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
@@ -4268,7 +4271,7 @@ function kasaNakitHamListesiOku(ss) {
     if (!row[0]) continue;
     if (String(row[5] || "") !== "Nakit") continue;
     liste.push({ id: String(row[0]), tip: "ALIS", tarih: hucreTarihStr(row[1]), yon: "Çıkış", kaynak: "Alış Faturası",
-      cariAd: String(row[3] || ""), tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
+      cariAd: String(row[3] || ""), cariKodu: cariKoduMap[String(row[2] || "")] || "", tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
   }
 
   const tSheet = getOrCreateSheet(ss, SHEETS.tahsilatlar,
@@ -4279,7 +4282,7 @@ function kasaNakitHamListesiOku(ss) {
     if (!row[0]) continue;
     if (String(row[5] || "") !== "Nakit") continue;
     liste.push({ id: String(row[0]), tip: "TAHSILAT", tarih: hucreTarihStr(row[1]), yon: "Giriş", kaynak: "Tahsilat",
-      cariAd: String(row[3] || ""), tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
+      cariAd: String(row[3] || ""), cariKodu: cariKoduMap[String(row[2] || "")] || "", tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
   }
 
   const oSheet = getOrCreateSheet(ss, SHEETS.odemeler,
@@ -4296,7 +4299,7 @@ function kasaNakitHamListesiOku(ss) {
     const gosterilecekAd = cariAd || hedefAd || "—";
     liste.push({ id: String(row[0]), tip: "ODEME", tarih: hucreTarihStr(row[1]), yon: "Çıkış",
       kaynak: hedefTipi === "Cari" ? "Ödeme" : "Ödeme (" + hedefTipi + ")",
-      cariAd: gosterilecekAd, tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
+      cariAd: gosterilecekAd, cariKodu: hedefTipi === "Cari" ? (cariKoduMap[String(row[2] || "")] || "") : "", tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
   }
 
   return liste;
@@ -4367,6 +4370,7 @@ function getMuhasebeRaporu(body) {
   if (tip === "alisFatura") {
     const sheet = getOrCreateSheet(ss, SHEETS.alislar,
       ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+    const cariKoduMap = cariKoduHaritasiOlustur(ss);
     const data = sheet.getDataRange().getValues();
     const satirlar = [];
     let toplam = 0;
@@ -4375,7 +4379,7 @@ function getMuhasebeRaporu(body) {
       if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
       const tutar = parseFloat(row[4]) || 0;
       toplam += tutar;
-      satirlar.push({ id: String(row[0]), tarih: hucreTarihStr(row[1]), cariAd: String(row[3] || ""),
+      satirlar.push({ id: String(row[0]), tarih: hucreTarihStr(row[1]), cariAd: String(row[3] || ""), cariKodu: cariKoduMap[String(row[2] || "")] || "",
         tutar: tutar, odemeTipi: String(row[5] || ""), aciklama: String(row[6] || "") });
     }
     satirlar.sort((a, b) => a.tarih < b.tarih ? 1 : -1);
@@ -4386,6 +4390,7 @@ function getMuhasebeRaporu(body) {
     const sheet = getOrCreateSheet(ss, SHEETS.satislar,
       ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
     ensureSatisBelgeTipiColonu(sheet);
+    const cariKoduMap = cariKoduHaritasiOlustur(ss);
     const data = sheet.getDataRange().getValues();
     const satirlar = [];
     let toplam = 0;
@@ -4396,7 +4401,7 @@ function getMuhasebeRaporu(body) {
       if (belgeTipi !== "Fatura") continue;
       const tutar = parseFloat(row[4]) || 0;
       toplam += tutar;
-      satirlar.push({ id: String(row[0]), tarih: hucreTarihStr(row[1]), cariAd: String(row[3] || ""),
+      satirlar.push({ id: String(row[0]), tarih: hucreTarihStr(row[1]), cariAd: String(row[3] || ""), cariKodu: cariKoduMap[String(row[2] || "")] || "",
         tutar: tutar, odemeTipi: String(row[5] || ""), aciklama: String(row[6] || "") });
     }
     satirlar.sort((a, b) => a.tarih < b.tarih ? 1 : -1);
@@ -4483,13 +4488,15 @@ function getMuhasebeRaporu(body) {
       ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
     ensureSatisBelgeTipiColonu(sSheet);
     const sData = sSheet.getDataRange().getValues();
-    const satisBelgeTipi = {}, satisTarih = {}, satisCariAd = {};
+    const cariKoduMap = cariKoduHaritasiOlustur(ss);
+    const satisBelgeTipi = {}, satisTarih = {}, satisCariAd = {}, satisCariKodu = {};
     for (let i = 1; i < sData.length; i++) {
       const id = String(sData[i][0] || "");
       if (!id) continue;
       satisBelgeTipi[id] = String(sData[i][8] || "") || "Fatura";
       satisTarih[id] = hucreTarihStr(sData[i][1]);
       satisCariAd[id] = String(sData[i][3] || "");
+      satisCariKodu[id] = cariKoduMap[String(sData[i][2] || "")] || "";
     }
 
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
@@ -4532,12 +4539,19 @@ function getMuhasebeRaporu(body) {
       urunEkle(urunAdi, stokKodu, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
       if (tip === "urunBazliSiparis" && stokKoduFiltre && eslesiyorMu(urunAdi, stokKodu)) {
         const miktar = parseFloat(row[3]) || 0;
+        const tutarToplam = parseFloat(row[6]) || 0;
         const faturalananMiktar = Math.min(miktar, parseFloat(row[9]) || 0);
         const kalanMiktar = Math.max(0, miktar - faturalananMiktar);
+        // Fatura edilen/bekleyen TUTAR, miktar oranına göre orantılı hesaplanır — sipariş
+        // kaleminin TUTAR'ı hep TAM sipariş miktarı üzerinden tek satırda tutulur, kısmi
+        // faturalanma ayrı bir satır/tutar olarak saklanmaz (bkz. siparistenFaturaOlustur).
+        const faturalananTutar = miktar > 0 ? tutarToplam * (faturalananMiktar / miktar) : 0;
+        const kalanTutar = Math.max(0, tutarToplam - faturalananTutar);
         siparisDetaylari.push({
-          satisId: satisId, tarih: tarih, cariAd: satisCariAd[satisId] || "",
+          satisId: satisId, tarih: tarih, cariAd: satisCariAd[satisId] || "", cariKodu: satisCariKodu[satisId] || "",
           urunAdi: urunAdi, stokKodu: stokKodu, birim: String(row[4] || ""),
           miktar: miktar, faturalananMiktar: faturalananMiktar, kalanMiktar: kalanMiktar,
+          tutar: tutarToplam, faturalananTutar: faturalananTutar, kalanTutar: kalanTutar,
           durum: kalanMiktar > 0.0001 ? (faturalananMiktar > 0.0001 ? "Kısmen Faturalandı" : "Bekliyor") : "Faturalandı",
         });
       }

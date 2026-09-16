@@ -980,7 +980,7 @@ setInterval(topbarSaatGuncelle, 10000);
           <input type="date" id="mr-kasa-gun" onchange="muhasebeRaporuYukle()">
         </div>
       </div>
-      <div id="mr-stokkodu-alani" style="display:none;max-width:280px;margin-bottom:14px" class="fld">
+      <div id="mr-stokkodu-alani" style="display:none;max-width:420px;margin-bottom:14px" class="fld">
         <label>Stok Kodu veya Ürün Adı ile filtrele (opsiyonel)</label>
         <div style="position:relative">
           <input type="text" id="mr-stokkodu" placeholder="Örn. 120.01.001 veya Seramik..." autocomplete="off"
@@ -988,9 +988,9 @@ setInterval(topbarSaatGuncelle, 10000);
                  onfocus="mrStokOneriGoster()"
                  onblur="setTimeout(()=>mrStokOneriKapat(),200)"
                  onkeydown="oneriKlavyeYonet(event,'mr-stok-oneri')">
-          <div id="mr-stok-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+          <div id="mr-stok-oneri" class="fiyat-gecmis-kutu" style="display:none;min-width:340px"></div>
         </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">Yazarken çıkan öneriden TAM stok kodunu seçerseniz filtre net (birebir) çalışır; serbest yazım kısmi eşleşme yapar.</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;max-width:420px">Öneriden TAM stok kodunu seçerseniz filtre net (birebir) çalışır; serbest yazım kısmi eşleşme yapar.</div>
       </div>
       <div id="mr-icerik"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
@@ -7465,7 +7465,7 @@ function kasaRaporuSatirlariHtml(satirlar){
   return satirlar.map(s=>{
     const tip = kasaSatirTipiBul(s.kaynak);
     const tiklanabilir = tip ? `style="cursor:pointer" onclick="kayitYeniSekmedeAc('${tip}','${s.id}')" title="İlgili kaydı sekme olarak aç"` : "";
-    return `<tr ${tiklanabilir}><td>${tarihGoster(s.tarih)}</td><td class="${s.yon==='Giriş'?'hk-alacak':'hk-borc'}">${s.yon}</td><td>${s.kaynak}</td><td>${s.cariAd||''}</td><td>${paraFormat(s.tutar)}</td><td>${s.aciklama||''}</td></tr>`;
+    return `<tr ${tiklanabilir}><td>${tarihGoster(s.tarih)}</td><td class="${s.yon==='Giriş'?'hk-alacak':'hk-borc'}">${s.yon}</td><td>${s.kaynak}</td><td>${s.cariKodu||'—'}</td><td>${s.cariAd||''}</td><td>${paraFormat(s.tutar)}</td><td>${s.aciklama||''}</td></tr>`;
   }).join("");
 }
 
@@ -7482,10 +7482,10 @@ function muhasebeRaporuYukle(){
       if(res.hareketler.length===0){ el.innerHTML = '<div class="cari-empty">Vadesi geçmiş alacak yok.</div>'; return; }
       el.innerHTML = `
         <table class="rapor-tbl">
-          <thead><tr><th>Cari</th><th>Vade Tarihi</th><th>Gecikme (gün)</th><th>Tutar</th><th>Açıklama</th></tr></thead>
+          <thead><tr><th>Cari Kodu</th><th>Cari</th><th>Vade Tarihi</th><th>Gecikme (gün)</th><th>Tutar</th><th>Açıklama</th></tr></thead>
           <tbody>
             ${res.hareketler.map(h=>`
-              <tr><td>${h.cariAd}</td><td class="hk-borc">${tarihGoster(h.vade)}</td><td>${h.gecikenGunSayisi}</td><td>${paraFormat(h.tutar)}</td><td>${hkAciklamaGoster(h.aciklama)}</td></tr>`).join("")}
+              <tr><td>${h.cariKodu||'—'}</td><td>${h.cariAd}</td><td class="hk-borc">${tarihGoster(h.vade)}</td><td>${h.gecikenGunSayisi}</td><td>${paraFormat(h.tutar)}</td><td>${hkAciklamaGoster(h.aciklama)}</td></tr>`).join("")}
           </tbody>
         </table>`;
     }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
@@ -7510,7 +7510,7 @@ function muhasebeRaporuYukle(){
           </div>
           ${res.satirlar.length===0 ? '<div class="cari-empty">Bu günde nakit işlem yok — bakiye devirden geliyor.</div>' : `
           <table class="rapor-tbl">
-            <thead><tr><th>Tarih</th><th>Yön</th><th>Kaynak</th><th>Cari</th><th>Tutar</th><th>Açıklama</th></tr></thead>
+            <thead><tr><th>Tarih</th><th>Yön</th><th>Kaynak</th><th>Cari Kodu</th><th>Cari</th><th>Tutar</th><th>Açıklama</th></tr></thead>
             <tbody>${kasaRaporuSatirlariHtml(res.satirlar)}</tbody>
           </table>`}`;
         return;
@@ -7523,7 +7523,7 @@ function muhasebeRaporuYukle(){
           <div class="finans-kart"><div class="lbl">Kasa Bakiyesi</div><div class="num">${paraFormat(res.bakiye)}</div></div>
         </div>
         <table class="rapor-tbl">
-          <thead><tr><th>Tarih</th><th>Yön</th><th>Kaynak</th><th>Cari</th><th>Tutar</th><th>Açıklama</th></tr></thead>
+          <thead><tr><th>Tarih</th><th>Yön</th><th>Kaynak</th><th>Cari Kodu</th><th>Cari</th><th>Tutar</th><th>Açıklama</th></tr></thead>
           <tbody>${kasaRaporuSatirlariHtml(res.satirlar)}</tbody>
         </table>`;
       return;
@@ -7554,13 +7554,18 @@ function muhasebeRaporuYukle(){
     if(tip === "alisFatura" || tip === "satisFatura"){
       el.innerHTML = `
         <table class="rapor-tbl">
-          <thead><tr><th>Tarih</th><th>Cari</th><th>Ödeme Tipi</th><th>Tutar</th><th>Açıklama</th></tr></thead>
+          <thead><tr><th>Tarih</th><th>Cari Kodu</th><th>Cari</th><th>Ödeme Tipi</th><th>Tutar</th><th>Açıklama</th></tr></thead>
           <tbody>
             ${res.satirlar.map(s=>`
-              <tr><td>${tarihGoster(s.tarih)}</td><td>${s.cariAd}</td><td>${s.odemeTipi}</td><td>${paraFormat(s.tutar)}</td><td>${s.aciklama||''}</td></tr>`).join("")}
+              <tr><td>${tarihGoster(s.tarih)}</td><td>${s.cariKodu||'—'}</td><td>${s.cariAd}</td><td>${s.odemeTipi}</td><td>${paraFormat(s.tutar)}</td><td>${s.aciklama||''}</td></tr>`).join("")}
           </tbody>
-          <tfoot><tr><td colspan="3"><b>Toplam</b></td><td colspan="2"><b>${paraFormat(res.toplam)}</b></td></tr></tfoot>
+          <tfoot><tr><td colspan="4"><b>Toplam</b></td><td colspan="2"><b>${paraFormat(res.toplam)}</b></td></tr></tfoot>
         </table>`;
+    } else if(tip === 'urunBazliSiparis' && res.siparisDetaylari && res.siparisDetaylari.length > 0){
+      // Bir stok seçilince artık aggregate özet tablosu YERİNE doğrudan bu tek/birleşik
+      // tablo gösteriliyor ("rapor ikiye bölünmüş, kafa karıştırıcı" geri bildirimi
+      // üzerine) — Sipariş Tutarı/Faturalanan Tutar/Bekleyen Tutar birlikte tek yerde.
+      el.innerHTML = mrSiparisDetayHTML(res.siparisDetaylari);
     } else {
       el.innerHTML = `
         <table class="rapor-tbl">
@@ -7570,39 +7575,48 @@ function muhasebeRaporuYukle(){
               <tr><td>${s.stokKodu||'—'}</td><td>${s.urunAdi}</td>${tip==='urunBazliHareket'?`<td>${miktarFormat(s.girisMiktar)}</td><td>${miktarFormat(s.cikisMiktar)}</td>`:`<td>${miktarFormat(s.cikisMiktar)}</td>`}<td>${paraFormat(s.tutar)}</td></tr>`).join("")}
           </tbody>
           <tfoot><tr><td colspan="${tip==='urunBazliHareket'?4:3}"><b>Toplam</b></td><td><b>${paraFormat(res.toplam)}</b></td></tr></tfoot>
-        </table>
-        ${mrSiparisDetayHTML(tip, res.siparisDetaylari)}`;
+        </table>`;
     }
   }).catch(err=>{
     el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
 }
 
-// Stok Bazlı Sipariş Raporu'nda bir stok kodu/ürün adı filtrelendiğinde (bkz. backend
+// Stok Bazlı Sipariş Raporu'nda bir stok kodu/ürün adı seçildiğinde (bkz. backend
 // getMuhasebeRaporu → siparisDetaylari), o stoğa ait TEK TEK Sipariş kalemlerini —
-// hangisi hâlâ bekliyor, hangisi (kısmen/tamamen) faturaya dönüşmüş — listeler.
-// Filtre boşsa veya sonuç yoksa hiçbir şey basmaz (aggregate tablo zaten yeterli).
-function mrSiparisDetayHTML(tip, detaylar){
-  if(tip !== "urunBazliSiparis" || !detaylar || detaylar.length === 0) return "";
+// hangisi hâlâ bekliyor, hangisi (kısmen/tamamen) faturaya dönüşmüş, ne kadarının
+// tutar olarak faturalandığı — TEK bir tabloda gösterir (eskiden ayrı bir "özet +
+// detay" iki bölüme bölünmüştü, kafa karıştırıcı bulunduğu için birleştirildi).
+// ÖNEMLİ: "Faturalanan Tutar", sipariş kaleminin TOPLAM tutarından miktar oranına göre
+// hesaplanır (tutar × faturalananMiktar/miktar) — kısmi faturalarda tutarın SEVK
+// edilen miktar üzerinden, sipariş miktarının TAMAMI üzerinden değil hesaplandığını
+// netleştirmek için Sipariş/Faturalanan/Bekleyen tutarları ayrı ayrı gösteriliyor.
+function mrSiparisDetayHTML(detaylar){
   const durumRenk = { "Bekliyor": "var(--text3)", "Kısmen Faturalandı": "var(--amber)", "Faturalandı": "var(--green)" };
   const durumBg = { "Bekliyor": "var(--bg3)", "Kısmen Faturalandı": "#fff4e0", "Faturalandı": "var(--green-l)" };
   const toplamMiktar = detaylar.reduce((t,d)=>t+d.miktar,0);
-  const toplamFaturalanan = detaylar.reduce((t,d)=>t+d.faturalananMiktar,0);
-  const toplamBekleyen = detaylar.reduce((t,d)=>t+d.kalanMiktar,0);
+  const toplamFaturalananMiktar = detaylar.reduce((t,d)=>t+d.faturalananMiktar,0);
+  const toplamBekleyenMiktar = detaylar.reduce((t,d)=>t+d.kalanMiktar,0);
+  const toplamTutar = detaylar.reduce((t,d)=>t+d.tutar,0);
+  const toplamFaturalananTutar = detaylar.reduce((t,d)=>t+d.faturalananTutar,0);
+  const toplamBekleyenTutar = detaylar.reduce((t,d)=>t+d.kalanTutar,0);
   return `
-    <div class="rapor-baslik" style="margin-top:22px">Sipariş Detayı (seçili stok)</div>
-    <div class="finans-kartlar" style="margin-top:8px">
+    <div class="finans-kartlar">
       <div class="finans-kart"><div class="lbl">Toplam Sipariş Miktarı</div><div class="num">${miktarFormat(toplamMiktar)}</div></div>
-      <div class="finans-kart"><div class="lbl">Faturalanan</div><div class="num">${miktarFormat(toplamFaturalanan)}</div></div>
-      <div class="finans-kart"><div class="lbl">Bekleyen</div><div class="num">${miktarFormat(toplamBekleyen)}</div></div>
+      <div class="finans-kart"><div class="lbl">Faturalanan Miktar</div><div class="num">${miktarFormat(toplamFaturalananMiktar)}</div></div>
+      <div class="finans-kart"><div class="lbl">Bekleyen Miktar</div><div class="num">${miktarFormat(toplamBekleyenMiktar)}</div></div>
+      <div class="finans-kart"><div class="lbl">Toplam Sipariş Tutarı</div><div class="num">${paraFormat(toplamTutar)}</div></div>
+      <div class="finans-kart"><div class="lbl">Faturalanan Tutar</div><div class="num">${paraFormat(toplamFaturalananTutar)}</div></div>
+      <div class="finans-kart"><div class="lbl">Bekleyen Tutar</div><div class="num">${paraFormat(toplamBekleyenTutar)}</div></div>
     </div>
     <table class="rapor-tbl" style="margin-top:10px">
-      <thead><tr><th>Tarih</th><th>Cari</th><th>Ürün</th><th>Miktar</th><th>Faturalanan</th><th>Bekleyen</th><th>Durum</th></tr></thead>
+      <thead><tr><th>Tarih</th><th>Cari Kodu</th><th>Cari</th><th>Ürün</th><th>Miktar</th><th>Faturalanan</th><th>Bekleyen</th><th>Sipariş Tutarı</th><th>Faturalanan Tutar</th><th>Bekleyen Tutar</th><th>Durum</th></tr></thead>
       <tbody>
         ${detaylar.map(d=>`
           <tr style="cursor:pointer" onclick="kayitYeniSekmedeAc('SATIS','${d.satisId}')" title="Sipariş kaydını yeni sekmede aç">
-            <td>${tarihGoster(d.tarih)}</td><td>${d.cariAd||'—'}</td><td>${d.urunAdi}</td>
+            <td>${tarihGoster(d.tarih)}</td><td>${d.cariKodu||'—'}</td><td>${d.cariAd||'—'}</td><td>${d.urunAdi}</td>
             <td>${miktarFormat(d.miktar)} ${d.birim||''}</td><td>${miktarFormat(d.faturalananMiktar)}</td><td>${miktarFormat(d.kalanMiktar)}</td>
+            <td>${paraFormat(d.tutar)}</td><td>${paraFormat(d.faturalananTutar)}</td><td>${paraFormat(d.kalanTutar)}</td>
             <td><span style="font-size:11.5px;font-weight:700;color:${durumRenk[d.durum]};background:${durumBg[d.durum]};padding:2px 9px;border-radius:20px;white-space:nowrap">${d.durum}</span></td>
           </tr>`).join("")}
       </tbody>
