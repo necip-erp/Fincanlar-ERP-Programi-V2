@@ -982,7 +982,15 @@ setInterval(topbarSaatGuncelle, 10000);
       </div>
       <div id="mr-stokkodu-alani" style="display:none;max-width:280px;margin-bottom:14px" class="fld">
         <label>Stok Kodu veya Ürün Adı ile filtrele (opsiyonel)</label>
-        <input type="text" id="mr-stokkodu" placeholder="Örn. 120.01.001 veya Seramik..." oninput="muhasebeRaporuStokKoduDegisti()">
+        <div style="position:relative">
+          <input type="text" id="mr-stokkodu" placeholder="Örn. 120.01.001 veya Seramik..." autocomplete="off"
+                 oninput="muhasebeRaporuStokKoduDegisti()"
+                 onfocus="mrStokOneriGoster()"
+                 onblur="setTimeout(()=>mrStokOneriKapat(),200)"
+                 onkeydown="oneriKlavyeYonet(event,'mr-stok-oneri')">
+          <div id="mr-stok-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Yazarken çıkan öneriden TAM stok kodunu seçerseniz filtre net (birebir) çalışır; serbest yazım kısmi eşleşme yapar.</div>
       </div>
       <div id="mr-icerik"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
@@ -7398,6 +7406,41 @@ let _mrStokKoduTimer = null;
 function muhasebeRaporuStokKoduDegisti(){
   clearTimeout(_mrStokKoduTimer);
   _mrStokKoduTimer = setTimeout(muhasebeRaporuYukle, 350);
+  mrStokOneriGoster();
+}
+
+// "net stok seçimi olmuyor" geri bildirimi üzerine eklendi: kullanıcı serbest metinle de
+// filtreleyebilir (eskisi gibi kısmi eşleşme) ama artık yazarken TAM stok tanımlarından bir
+// öneri listesi çıkıyor — birini seçince input'a TAM stokKodu yazılıyor, böylece backend'deki
+// eşleşme (stokKodu üzerinden) o ürüne net/birebir kilitleniyor (bkz. bfm-cari-oneri ile
+// aynı desen).
+function mrStokOneriGoster(){
+  const kutu = document.getElementById("mr-stok-oneri");
+  if(!kutu) return;
+  if(!_stokTanimListe || _stokTanimListe.length===0){ if(!_stokTanimYuklendi) stokTanimListesiYukle(); }
+  const q = (document.getElementById("mr-stokkodu").value || "").trim();
+  if(q.length < 1){ kutu.style.display = "none"; return; }
+  const eslesenler = (_stokTanimListe || []).filter(s =>
+    esnekEslesirMi(s.stokAdi||"", q) || esnekEslesirMi(s.stokKodu||"", q)
+  ).slice(0, 8);
+  if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
+  kutu.innerHTML = eslesenler.map((s,i)=>`
+    <div class="fiyat-gecmis-satir" data-oneri-idx="${i}" onclick="mrStokSec(${i})">
+      <span>${s.stokAdi}</span><b>${s.stokKodu||''}</b>
+    </div>`).join("");
+  kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+  kutu.style.display = "block";
+}
+function mrStokOneriKapat(){ const kutu = document.getElementById("mr-stok-oneri"); if(kutu) kutu.style.display = "none"; }
+function mrStokSec(i){
+  const kutu = document.getElementById("mr-stok-oneri");
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const s = eslesenler[i];
+  if(!s) return;
+  document.getElementById("mr-stokkodu").value = s.stokKodu || s.stokAdi;
+  kutu.style.display = "none";
+  clearTimeout(_mrStokKoduTimer);
+  muhasebeRaporuYukle();
 }
 
 function kasaRaporuModDegistir(mod){
