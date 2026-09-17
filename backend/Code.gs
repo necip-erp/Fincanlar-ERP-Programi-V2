@@ -404,6 +404,17 @@ function ensureCariHareketVadeColonu(sheet) {
   }
 }
 
+// Proje Kodu: Alış/Satış faturaları ve Çek/Senet girişlerinde isteğe bağlı olarak
+// girilebilen bir etiket — hangi işin/projenin harcaması veya tahsilatı olduğunu
+// takip etmek için. cariHareketEkle üzerinden merkezi olarak CariHareketler'e de
+// yazılır ki Cari raporunda proje koduna göre filtrelenebilsin.
+function ensureCariHareketProjeKoduColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 9).getValue();
+  if (String(mevcutBaslik || "") !== "PROJE_KODU") {
+    sheet.getRange(1, 9).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
 // Google E-Tablo, "2026-08-18" veya "18/08/2026 10:30" gibi tarih benzeri
 // metinleri hücreye yazılırken kendiliğinden GERÇEK bir Date değerine
 // çevirebiliyor. getValues() ile bu hücre geri okunduğunda artık bir metin
@@ -772,6 +783,7 @@ function getCariDetay(cariId) {
   ensureCariEkKolonlariHepsi(hSheet);
   const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
   ensureCariHareketVadeColonu(hkSheet);
+  ensureCariHareketProjeKoduColonu(hkSheet);
 
   const hData = hSheet.getDataRange().getValues();
   let cari = null;
@@ -801,7 +813,7 @@ function getCariDetay(cariId) {
       id: String(row[0]), cariId: String(row[1]), tarih: hucreTarihStr(row[2]),
       tip: String(row[3] || ""), tutar: parseFloat(row[4]) || 0,
       aciklama: String(row[5] || ""), kayitTarihi: hucreTarihStr(row[6]),
-      vade: hucreTarihStr(row[7]),
+      vade: hucreTarihStr(row[7]), projeKodu: String(row[8] || ""),
     });
   }
   // Tarihe göre sırala (eskiden yeniye). Aynı güne ait birden fazla hareket varsa (TARİH
@@ -919,10 +931,11 @@ function cariHareketEkle(body) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
   ensureCariHareketVadeColonu(sheet);
+  ensureCariHareketProjeKoduColonu(sheet);
   const id = "hk_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   sheet.appendRow([id, cariId, tarih, tip, tutar, String(body.aciklama || ""),
-    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), String(body.vade || "")]);
+    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), String(body.vade || ""), String(body.projeKodu || "").trim()]);
 
   cacheTemizle(["cariListesi_v3"]); // bakiye değişti, liste önbelleği bayatladı
   return { ok: true, id: id };
@@ -1275,6 +1288,13 @@ function ensureSatisBelgeTipiColonu(sheet) {
   if (String(h21 || "") !== "EFATURA_GORSEL_VERI") {
     sheet.getRange(1, 21).setValue("EFATURA_GORSEL_VERI").setFontWeight("bold").setBackground("#e8edf5");
   }
+  // İsteğe bağlı: bu faturanın/siparişin hangi işe/projeye ait olduğunu takip etmek
+  // için serbest metin etiket. cariHareketEkle çağrısına da geçilip CariHareketler'e
+  // yazılır, böylece Cari raporunda proje koduna göre filtrelenebilir.
+  const h22 = sheet.getRange(1, 22).getValue();
+  if (String(h22 || "") !== "PROJE_KODU") {
+    sheet.getRange(1, 22).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
+  }
 }
 
 // SatisKalemleri sayfası daha önce ISKONTO_YUZDE / KDV_ORANI sütunları olmadan
@@ -1432,6 +1452,7 @@ function getSatisDetay(satisId) {
         efaturaNo: String(data[i][16] || ""),
         efaturaUuid: String(data[i][17] || ""),
         efaturaDurum: String(data[i][18] || ""),
+        projeKodu: String(data[i][21] || ""),
       };
       break;
     }
@@ -1592,7 +1613,7 @@ function saveSatis(body) {
     const durumAdlari = getSiparisDurumlari().durumlar.map(d => d.ad);
     siparisDurumu = durumAdlari.includes(body.siparisDurumu) ? body.siparisDurumu : (durumAdlari[0] || "Beklemede");
   }
-  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || "")]);
+  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || ""), "", "", "", "", "", String(body.projeKodu || "").trim()]);
 
   // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
   // otomatik, minimal bir stok kartı oluşturulur (Alış modülündeki mantığın aynısı).
@@ -1638,6 +1659,7 @@ function saveSatis(body) {
         tutar: toplamTutar,
         aciklama: cariHareketAciklamaOlustur("SATIS", id, "satis_" + belgeTipi, body.aciklama),
         vade: String(body.odemeTipi || "") === "Açık Hesap" ? String(body.vade || "") : "",
+        projeKodu: body.projeKodu,
       });
     }
 
@@ -2054,6 +2076,7 @@ function updateSatis(body) {
   yeniRow[9] = dipIskontoYuzde; yeniRow[10] = bankaHesapId;
   yeniRow[13] = tutarIskontosu; yeniRow[14] = tutarIskontoKdvSonra ? 1 : 0;
   yeniRow[15] = String(body.siparisNo !== undefined ? body.siparisNo : (eskiRow[15] || ""));
+  yeniRow[21] = String(body.projeKodu !== undefined ? body.projeKodu : (eskiRow[21] || ""));
   sSheet.getRange(satirIdx, 1, 1, yeniRow.length).setValues([yeniRow]);
 
   kalemler.forEach((k, idx) => {
@@ -2134,6 +2157,7 @@ function getAlisDetay(alisId) {
   ensureAlisKalemKdvColonu(kSheet);
   ensureAlisKalemBrutIskontoColonlari(kSheet);
   ensureAlisTutarIskontosuColonu(aSheet);
+  ensureAlisProjeKoduColonu(aSheet);
 
   const data = aSheet.getDataRange().getValues();
   let alis = null;
@@ -2143,7 +2167,7 @@ function getAlisDetay(alisId) {
         id: String(data[i][0]), tarih: hucreTarihStr(data[i][1]), cariId: String(data[i][2] || ""),
         cariAd: String(data[i][3] || ""), toplamTutar: parseFloat(data[i][4]) || 0,
         odemeTipi: String(data[i][5] || ""), aciklama: String(data[i][6] || ""), kayitTarihi: hucreTarihStr(data[i][7]),
-        tutarIskontosu: parseFloat(data[i][8]) || 0,
+        tutarIskontosu: parseFloat(data[i][8]) || 0, projeKodu: String(data[i][9] || ""),
       };
       break;
     }
@@ -2185,6 +2209,16 @@ function getAlisDetay(alisId) {
 //         kalemler: [{urunAdi,miktar,birim,birimFiyat,stokKodu (opsiyonel),
 //                     stokKartiOlustur (opsiyonel, true ise stokKodu StokTanimlari'nda
 //                     yoksa otomatik yeni bir stok kartı oluşturulur)}] }
+// Alış faturasının/kaydının isteğe bağlı Proje Kodu etiketi (bkz. Satış'taki eşdeğeri,
+// ensureSatisBelgeTipiColonu içindeki PROJE_KODU açıklaması) — Alislar'da TUTAR_ISKONTOSU
+// (kolon 9) son kullanılan kolon olduğu için 10. kolona ekleniyor.
+function ensureAlisProjeKoduColonu(sheet) {
+  const h10 = sheet.getRange(1, 10).getValue();
+  if (String(h10 || "") !== "PROJE_KODU") {
+    sheet.getRange(1, 10).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
 function saveAlis(body) {
   const kalemler = Array.isArray(body.kalemler) ? body.kalemler : [];
   if (kalemler.length === 0) return { ok: false, hata: "En az bir ürün kalemi eklemelisiniz" };
@@ -2203,6 +2237,7 @@ function saveAlis(body) {
   ensureAlisKalemKdvColonu(kSheet);
   ensureAlisKalemBrutIskontoColonlari(kSheet);
   ensureAlisTutarIskontosuColonu(aSheet);
+  ensureAlisProjeKoduColonu(aSheet);
 
   // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
   // otomatik, minimal bir stok kartı oluşturulur (stok kodu + ürün adı ile).
@@ -2250,7 +2285,7 @@ function saveAlis(body) {
   const id = "al_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  aSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu]);
+  aSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim()]);
 
   kalemler.forEach((k, idx) => {
     const kId = "ak_" + Date.now() + "_" + idx;
@@ -2275,6 +2310,7 @@ function saveAlis(body) {
       tip: "Alacak",
       tutar: toplamTutar,
       aciklama: cariHareketAciklamaOlustur("ALIS", id, "alis", body.aciklama),
+      projeKodu: body.projeKodu,
     });
   }
 
@@ -2438,6 +2474,7 @@ function updateAlis(body) {
   ensureAlisKalemKdvColonu(kSheet);
   ensureAlisKalemBrutIskontoColonlari(kSheet);
   ensureAlisTutarIskontosuColonu(aSheet);
+  ensureAlisProjeKoduColonu(aSheet);
   const kData = kSheet.getDataRange().getValues();
   for (let i = kData.length - 1; i >= 1; i--) {
     if (String(kData[i][1]) === id) kSheet.deleteRow(i + 1);
@@ -2493,7 +2530,7 @@ function updateAlis(body) {
 
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = String(data[satirIdx - 1][7] || "");
-  aSheet.getRange(satirIdx, 1, 1, 9).setValues([[id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu]]);
+  aSheet.getRange(satirIdx, 1, 1, 10).setValues([[id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim()]]);
 
   kalemler.forEach((k, idx) => {
     const kId = "ak_" + Date.now() + "_" + idx;
@@ -2514,6 +2551,7 @@ function updateAlis(body) {
       tip: "Alacak",
       tutar: toplamTutar,
       aciklama: cariHareketAciklamaOlustur("ALIS", id, "alis", body.aciklama),
+      projeKodu: body.projeKodu,
     });
   }
 
@@ -3404,6 +3442,7 @@ function getCekSenetDetay(id) {
         seriNo: String(row[6] || ""), bankaAdi: String(row[7] || ""),
         duzenlenmeTarihi: hucreTarihStr(row[8]), vade: hucreTarihStr(row[9]), durum: String(row[10] || ""),
         aciklama: String(row[11] || ""), kayitTarihi: hucreTarihStr(row[12]),
+        projeKodu: String(row[14] || ""),
       };
       break;
     }
@@ -3445,18 +3484,20 @@ function saveCekSenet(body) {
   if (!cariAd) return { ok: false, hata: "Cari bulunamadı" };
 
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
+  ensureCekSenetProjeKoduColonu(sheet);
   const id = "cs_" + Date.now();
   const duzenlenmeTarihi = String(body.duzenlenmeTarihi || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const vade = String(body.vade || "");
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   sheet.appendRow([id, tip, cariId, cariAd, tutar, tutar, String(body.seriNo || ""), String(body.bankaAdi || ""),
-    duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi]);
+    duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi, "", String(body.projeKodu || "").trim()]);
 
   // Alınan çek: müşteriden aldık → borcu kapanır (Alacak). Verilen çek: tedarikçiye borcumuzu kapattık (Borç).
   cariHareketEkle({
     cariId: cariId, tarih: duzenlenmeTarihi, tip: tip === "Alınan" ? "Alacak" : "Borç", tutar: tutar,
     aciklama: cariHareketAciklamaOlustur("CEK", id, tip === "Alınan" ? "cek_alinan" : "cek_verilen", body.aciklama),
     vade: vade,
+    projeKodu: body.projeKodu,
   });
 
   cacheTemizle(["cekSenetListesi"]);
@@ -3470,6 +3511,13 @@ function ensureCekSenetCiroColonu(sheet) {
   const mevcutBaslik = sheet.getRange(1, 14).getValue();
   if (String(mevcutBaslik || "") !== "CIRO_CARI_ID") {
     sheet.getRange(1, 14).setValue("CIRO_CARI_ID").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
+function ensureCekSenetProjeKoduColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 15).getValue();
+  if (String(mevcutBaslik || "") !== "PROJE_KODU") {
+    sheet.getRange(1, 15).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
   }
 }
 

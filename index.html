@@ -192,6 +192,8 @@ body.desen-acik{
 .cari-item-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .cari-item-ad{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cari-item-tip{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.03em}
+.cari-item-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:3px}
+.cari-item-badges .hk-alacak,.cari-item-badges .hk-borc,.cari-item-badges .tip-badge{font-size:10px;padding:1px 7px}
 .cari-item-bakiye{font-size:12px;font-weight:700;white-space:nowrap}
 .bakiye-pos{color:var(--red)}
 .bakiye-neg{color:var(--green)}
@@ -2706,12 +2708,26 @@ function cariDetayCiz(res){
       <button class="btn btn-danger" onclick="cariSilOnay('${c.id}')">🗑 Cariyi Sil</button>
     </div>
 
+    <div class="fld" style="max-width:220px;margin:10px 0 6px">
+      <label>Proje Koduna Göre Filtrele</label>
+      <input type="text" id="hk-proje-filtre" placeholder="Örn. PRJ-2026-01" oninput="hkProjeFiltreDegisti()">
+    </div>
     <div id="hk-tablo-yeri"></div>
   `;
   _cariGuncelHareketler = hareketler;
   _cariGuncelId = c.id;
   _hkSiralamaKolon = null; _hkSiralamaYon = "asc"; // yeni cari açılınca varsayılan Tarih artan sıraya dön
+  _hkProjeFiltre = "";
+  document.getElementById("hk-proje-filtre").value = "";
   document.getElementById("hk-tablo-yeri").innerHTML = hareketTabloCiz(hareketler, c.id);
+}
+
+// Proje Kodu filtresi: girilen metni (büyük/küçük harf duyarsız, kısmi eşleşme) hareketin
+// projeKodu alanına göre süzer — CariHareketler'e Alış/Satış/Çek-Senet kaydından geçen
+// PROJE_KODU üzerinden çalışır (bkz. backend cariHareketEkle).
+function hkProjeFiltreDegisti(){
+  _hkProjeFiltre = document.getElementById("hk-proje-filtre").value.trim().toLocaleLowerCase('tr');
+  document.getElementById("hk-tablo-yeri").innerHTML = hareketTabloCiz(hkGosterilecekHareketleriAl(), _cariGuncelId);
 }
 
 // ── Cari Hareketler tablosu: sütun sırası sürükle-bırakla değiştirilebilir,
@@ -2744,6 +2760,7 @@ const HK_SUTUNLAR = {
   alacak:   { baslik:"Alacak",    render: h => h.tip==='Alacak' ? `<span class="hk-tutar-alacak">${paraFormat(h.tutar)}</span>` : "", sortDeger: h => h.tip==='Alacak' ? (parseFloat(h.tutar)||0) : -1 },
   vade:     { baslik:"Vade",      render: h => { if(!h.vade) return "—"; const gecti = h.tip==='Borç' && h.vade < new Date().toISOString().slice(0,10); return gecti ? `<span class="hk-borc">${tarihGoster(h.vade)}</span>` : tarihGoster(h.vade); }, sortDeger: h => h.vade || "" },
   aciklama: { baslik:"Açıklama",  render: h => hkAciklamaGoster(h.aciklama), sortDeger: h => hkAciklamaGoster(h.aciklama) || "" },
+  projeKodu:{ baslik:"Proje Kodu",render: h => h.projeKodu || "—", sortDeger: h => h.projeKodu || "" },
   bakiye:   { baslik:"Bakiye",    render: h => `<span class="${bakiyeSinifi(h.bakiyeSonrasi)}">${paraFormat(h.bakiyeSonrasi)}</span>`, sortDeger: h => parseFloat(h.bakiyeSonrasi) || 0 },
 };
 let _cariGuncelHareketler = [];
@@ -2751,10 +2768,15 @@ let _cariGuncelId = null;
 // Sütun başlığına tıklayınca artan/azalan sıralama — orijinal (backend'den gelen) sıra her
 // zaman Tarih artan olduğu için, hiç tıklanmamışken/cari değiştiğinde bu sıfırlanır.
 let _hkSiralamaKolon = null, _hkSiralamaYon = "asc";
+let _hkProjeFiltre = ""; // hkProjeFiltreDegisti ile ayarlanır, sıralama tıklamalarında da korunur
 function hkBasliktaTiklandi(kolon){
   if(_hkSiralamaKolon === kolon){ _hkSiralamaYon = (_hkSiralamaYon === "asc") ? "desc" : "asc"; }
   else { _hkSiralamaKolon = kolon; _hkSiralamaYon = "asc"; }
-  document.getElementById("hk-tablo-yeri").innerHTML = hareketTabloCiz(_cariGuncelHareketler, _cariGuncelId);
+  document.getElementById("hk-tablo-yeri").innerHTML = hareketTabloCiz(hkGosterilecekHareketleriAl(), _cariGuncelId);
+}
+function hkGosterilecekHareketleriAl(){
+  if(!_hkProjeFiltre) return _cariGuncelHareketler;
+  return _cariGuncelHareketler.filter(h => String(h.projeKodu||"").toLocaleLowerCase('tr').includes(_hkProjeFiltre));
 }
 
 function hkSutunSirasiAl(){
@@ -2858,7 +2880,7 @@ function hkKolonDrop(e){
   sira.splice(kaynakIdx,1);
   sira.splice(hedefIdx,0,_hkDragKol);
   hkSutunSirasiKaydet(sira);
-  document.getElementById("hk-tablo-yeri").innerHTML = hareketTabloCiz(_cariGuncelHareketler, _cariGuncelId);
+  document.getElementById("hk-tablo-yeri").innerHTML = hareketTabloCiz(hkGosterilecekHareketleriAl(), _cariGuncelId);
 }
 
 function hareketSil(hareketId, cariId){
@@ -3179,7 +3201,8 @@ function satisListesiCiz(liste){
         <span class="cari-item-ad">${metinVurgula(s.cariAd, q)}${s.cariKodu?` <span class="cari-item-kod">(${metinVurgula(s.cariKodu, q)})</span>`:""}</span>
         <span class="cari-item-bakiye">${paraFormat(s.toplamTutar)}</span>
       </div>
-      <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${metinVurgula(s.odemeTipi, q)}${s.siparisNo?' · '+metinVurgula(''+s.siparisNo, q):''}${s.siparisDurumu ? ` · <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}${s.efaturaNo ? ` · <span class="hk-alacak">📤 EDM'e Gönderildi</span>` : ''}</span>
+      <span class="cari-item-tip"><b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${metinVurgula(s.odemeTipi, q)}${s.siparisNo?' · '+metinVurgula(''+s.siparisNo, q):''}</span>
+      ${(s.siparisDurumu || s.efaturaNo) ? `<span class="cari-item-badges">${s.siparisDurumu ? `<span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}${s.efaturaNo ? `<span class="hk-alacak">📤 EDM'e Gönderildi</span>` : ''}</span>` : ''}
     </div>`).join("");
 }
 
@@ -3304,18 +3327,23 @@ function satisDetayCiz(res){
         <div class="lbl">Toplam Tutar</div>
       </div>
     </div>
-    ${siparis ? `
+    ${siparis && s.siparisDurumu!=='Muhasebelendi' && s.siparisDurumu!=='Kısmen Faturalandı' ? `
     <div class="fld" style="flex-direction:row;align-items:center;gap:8px;max-width:340px;margin-bottom:14px">
       <label style="min-width:110px;text-transform:none;font-size:12px;color:var(--text2)">Sipariş Durumu</label>
-      <select id="sd-siparis-durumu" ${s.siparisDurumu==='Muhasebelendi'||s.siparisDurumu==='Kısmen Faturalandı'?'disabled title="Bu sipariş faturalandığı için durum otomatik gösteriliyor"':''}>
+      <select id="sd-siparis-durumu">
         ${siparisDurumSecenekleriHTML(s.siparisManuelDurum)}
       </select>
-      ${s.siparisDurumu!=='Muhasebelendi'&&s.siparisDurumu!=='Kısmen Faturalandı' ? `<button class="btn" style="padding:6px 12px" onclick="siparisDurumKaydet('${s.id}')">Güncelle</button>` : ''}
-    </div>` : ''}
+      <button class="btn" style="padding:6px 12px" onclick="siparisDurumKaydet('${s.id}')">Güncelle</button>
+    </div>` : (siparis ? `
+    <div class="fld" style="max-width:340px;margin-bottom:14px">
+      <label style="text-transform:none;font-size:12px;color:var(--text2)">Sipariş Durumu</label>
+      <div style="font-size:12px;color:var(--text3)">Fatura kesildiği için otomatik hesaplanıyor (yukarıda görünen durum) — elle değiştirilemez.</div>
+    </div>` : '')}
     ${s.siparisNo ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Sipariş No</div><div class="v">${s.siparisNo}</div></div></div>` : ""}
     ${s.efaturaNo ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">E-Fatura No</div><div class="v">${s.efaturaNo}</div></div>${s.efaturaDurum ? `<div class="cari-info-item"><div class="k">Portal Durumu</div><div class="v">${s.efaturaDurum}</div></div>` : ""}</div>` : ""}
     ${s.kaynakSiparisId ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Kaynak</div><div class="v">Sipariş'ten aktarıldı</div></div></div>` : ""}
     ${s.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${s.aciklama}</div></div></div>` : ""}
+    ${s.projeKodu ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Proje Kodu</div><div class="v">${s.projeKodu}</div></div></div>` : ""}
     <div class="btnrow">
       ${siparis && s.siparisDurumu !== "Muhasebelendi" ? `<button class="btn btn-primary" onclick="siparisFaturaModalAc('${s.id}')">🧾 Fatura Oluştur</button>` : ''}
       ${(s.belgeTipi==='Sipariş'||s.belgeTipi==='Teklif') ? `<button class="btn btn-primary" onclick="satisDuzenleAc('${s.id}')">✏️ Düzenle</button>` : ''}
@@ -3896,6 +3924,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
           </select>
         </div>
         <div class="fld" style="flex:2;min-width:220px"><label>Açıklama</label><input id="sm-aciklama" type="text" placeholder="İsteğe bağlı" value="${s ? (s.aciklama||'') : ''}"></div>
+        <div class="fld" style="flex:1;min-width:140px"><label>Proje Kodu</label><input id="sm-proje-kodu" type="text" placeholder="İsteğe bağlı" value="${s ? (s.projeKodu||'') : ''}"></div>
       </div>
       <div class="fld" id="sm-banka-fld" style="display:none">
         <label>Havale — Banka / Hesap</label>
@@ -4290,6 +4319,7 @@ function satisKaydet(){
     bankaHesapId: bankaHesapId,
     vade: odemeTipi === "Açık Hesap" ? document.getElementById("sm-vade").value : "",
     aciklama: document.getElementById("sm-aciklama").value,
+    projeKodu: document.getElementById("sm-proje-kodu").value,
     siparisDurumu: belgeTipi === "Sipariş" ? document.getElementById("sm-siparis-durumu").value : undefined,
     kalemler,
   };
@@ -4746,6 +4776,7 @@ function alisDetayCiz(res){
       </div>
     </div>
     ${a.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${a.aciklama}</div></div></div>` : ""}
+    ${a.projeKodu ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Proje Kodu</div><div class="v">${a.projeKodu}</div></div></div>` : ""}
     <div class="btnrow">
       <button class="btn btn-primary" onclick="alisDuzenleAc('${a.id}')">✏️ Düzenle</button>
       ${a.faturaNo ? `<button class="btn" onclick="faturaGorsalAc('${a.faturaNo}')">📄 Faturayı Gör</button>` : ``}
@@ -4831,6 +4862,7 @@ function alisModalAc(duzenle){
         </select>
       </div>
       <div class="fld"><label>Açıklama</label><input id="am-aciklama" type="text" placeholder="İsteğe bağlı" value="${a ? (a.aciklama||'') : ''}"></div>
+      <div class="fld"><label>Proje Kodu</label><input id="am-proje-kodu" type="text" placeholder="İsteğe bağlı" value="${a ? (a.projeKodu||'') : ''}"></div>
 
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
       <div id="am-kalemler" style="margin:8px 0"></div>
@@ -5007,6 +5039,7 @@ function alisKaydet(){
     tarih: document.getElementById("am-tarih").value,
     odemeTipi: document.getElementById("am-odeme").value,
     aciklama: document.getElementById("am-aciklama").value,
+    projeKodu: document.getElementById("am-proje-kodu").value,
     tutarIskontosu: tutarIskontosuEl ? (parseFloat(tutarIskontosuEl.value)||0) : 0,
     kalemler,
   };
@@ -6901,6 +6934,7 @@ function cekSenetAc(id){
         ${c.bankaAdi?`<div class="cari-info-item"><div class="k">Banka</div><div class="v">${c.bankaAdi}</div></div>`:""}
         <div class="cari-info-item"><div class="k">Durum</div><div class="v">${cekSenetDurumEtiket(c)}</div></div>
         ${c.aciklama?`<div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${c.aciklama}</div></div>`:""}
+        ${c.projeKodu?`<div class="cari-info-item"><div class="k">Proje Kodu</div><div class="v">${c.projeKodu}</div></div>`:""}
       </div>
       ${acik ? `
       <div class="btnrow">
@@ -7140,6 +7174,7 @@ function cekSenetModalAc(onCariId){
       <div class="fld"><label>Düzenlenme Tarihi</label><input id="csm-duzenlenme" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Vade</label><input id="csm-vade" type="date"></div>
       <div class="fld"><label>Açıklama</label><input id="csm-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+      <div class="fld"><label>Proje Kodu</label><input id="csm-proje-kodu" type="text" placeholder="İsteğe bağlı"></div>
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('ceksenet-modal-overlay').remove()">İptal</button>
         <button class="btn btn-primary" onclick="cekSenetKaydet()">Kaydet</button>
@@ -7199,6 +7234,7 @@ function cekSenetKaydet(){
     duzenlenmeTarihi: document.getElementById("csm-duzenlenme").value,
     vade,
     aciklama: document.getElementById("csm-aciklama").value,
+    projeKodu: document.getElementById("csm-proje-kodu").value,
   };
   cariApi("saveCekSenet", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
