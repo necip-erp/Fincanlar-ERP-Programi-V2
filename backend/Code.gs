@@ -678,6 +678,7 @@ function handleRequest(e) {
       case "getKritikStokListesi": result = getKritikStokListesi(); break;
       case "vadesiGecmisAlacaklar": result = vadesiGecmisAlacaklar(); break;
       case "getCekSenetListesi": result = getCekSenetListesi(); break;
+      case "getCariCekSenetListesi": result = getCariCekSenetListesi(body.cariId); break;
       case "getBekleyenAlisFaturalari": result = getBekleyenAlisFaturalari(); break;
       case "getSiparisDurumlari": result = getSiparisDurumlari(); break;
       case "saveSiparisDurumlari": result = saveSiparisDurumlari(body); break;
@@ -1659,16 +1660,24 @@ function saveSatis(body) {
     kSheet.appendRow([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, iskontoYuzde, kdvOrani, 0, String(k.stokKodu || "").trim()]);
   });
 
+  // Fatura ekranındaki "Stoğa işle" / "Cariye işle" tikleri — varsayılan olarak
+  // İŞARETLİ (true) gelir; kullanıcı bilinçli olarak tiki kaldırırsa (body.stokIsle
+  // / body.cariIsle === false) o faturanın stok hareketi / cari borç hareketi
+  // OLUŞTURULMAZ. Sipariş/Teklif için zaten geçerli değil (aşağıdaki blok sadece
+  // belgeTipi === "Fatura" iken çalışıyor), tikler sadece Fatura'da işe yarar.
+  const stokIsle = body.stokIsle !== false;
+  const cariIsle = body.cariIsle !== false;
+
   // Stok Hareket Raporu'na SADECE FATURA yansır (Teklif/Sipariş henüz stoktan mal
   // çıkışı anlamına gelmez — mal siparişin faturalandırılmasıyla fiilen çıkar).
-  if (belgeTipi === "Fatura") {
+  if (belgeTipi === "Fatura" && stokIsle) {
     stokHareketOtomatikYaz(ss, kalemler, tarih, "Çıkış", "Satış Faturası", id, "Satış Faturası — " + cariAd);
   }
 
   // Cari harekete/banka hareketine SADECE FATURA yansır — Teklif ve Sipariş henüz
   // gerçekleşmiş bir satış değildir, cariye borç yazılmaz. Sipariş faturalandığında
   // (siparistenFaturaOlustur ile) oluşturulan Fatura zaten kendi Borç hareketini yaratır.
-  if (belgeTipi === "Fatura") {
+  if (belgeTipi === "Fatura" && cariIsle) {
     // Cari seçildiyse, tutar kadar otomatik Borç hareketi ekle (müşteri bize borçlanır).
     // "SATIS:<id>" işaretini açıklamaya koyuyoruz ki satış silinince bu hareket bulunup geri alınabilsin.
     if (cariId) {
@@ -1864,7 +1873,44 @@ function getCariSiparisListesi(cariId) {
   const res = getSatisListesi();
   if (!res.ok) return res;
   const siparisler = res.satislar.filter(s => s.cariId === String(cariId) && s.belgeTipi === "Sipariş");
-  return { ok: true, siparisler: siparisler };
+  if (siparisler.length === 0) return { ok: true, siparisler: [] };
+
+  // Bu siparişlerden (siparistenFaturaOlustur ile, tam ya da kısmi) kesilmiş
+  // faturaları bulmak için Satislar sayfasını KAYNAK_SIPARIS_ID (12. sütun)
+  // üzerinden tarıyoruz — getSatisListesi bu alanı dışarı vermediği için
+  // doğrudan sayfadan okunuyor.
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  ensureSatisBelgeTipiColonu(sSheet);
+  const data = sSheet.getDataRange().getValues();
+  const siparisIdSeti = {};
+  siparisler.forEach(s => { siparisIdSeti[s.id] = true; });
+  const faturaHaritasi = {}; // siparisId -> [{id, siparisNo, tarih, toplamTutar}]
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const kaynakSiparisId = String(row[11] || "");
+    if (!kaynakSiparisId || !siparisIdSeti[kaynakSiparisId]) continue;
+    if (String(row[8] || "") !== "Fatura") continue;
+    if (!faturaHaritasi[kaynakSiparisId]) faturaHaritasi[kaynakSiparisId] = [];
+    faturaHaritasi[kaynakSiparisId].push({
+      id: String(row[0] || ""),
+      siparisNo: String(row[15] || ""),
+      tarih: hucreTarihStr(row[1]),
+      toplamTutar: parseFloat(row[4]) || 0,
+    });
+  }
+
+  const zenginlestirilmis = siparisler.map(s => {
+    const faturalar = faturaHaritasi[s.id] || [];
+    const faturalananToplam = faturalar.reduce((t, f) => t + f.toplamTutar, 0);
+    return Object.assign({}, s, {
+      faturalar: faturalar,
+      faturalananTutar: faturalananToplam,
+      kalanTutar: Math.max(0, s.toplamTutar - faturalananToplam),
+    });
+  });
+  return { ok: true, siparisler: zenginlestirilmis };
 }// body: { id }
 function silSatis(body) {
   const id = String(body.id || "").trim();
@@ -3447,6 +3493,7 @@ function getCekSenetListesi() {
       seriNo: String(row[6] || ""), bankaAdi: String(row[7] || ""),
       duzenlenmeTarihi: hucreTarihStr(row[8]), vade: vade, durum: durum,
       aciklama: String(row[11] || ""), kayitTarihi: hucreTarihStr(row[12]),
+      belgeTuru: String(row[15] || "") === "Senet" ? "Senet" : "Çek",
       gecikmis: durum === "Portföyde" && !!vade && vade < bugun,
     });
   }
@@ -3458,6 +3505,15 @@ function getCekSenetListesi() {
   });
   return { ok: true, cekSenetler: sonuc };
   });
+}
+
+// Bir carinin tüm çek/senet kayıtlarını döner — Cari detayındaki "🧾 Çek/Senet"
+// bölümünün "Kayıtlar" kutusu için (bkz. getCariSiparisListesi ile aynı desen).
+function getCariCekSenetListesi(cariId) {
+  if (!cariId) return { ok: false, hata: "cariId gerekli" };
+  const res = getCekSenetListesi();
+  if (!res.ok) return res;
+  return { ok: true, cekSenetler: res.cekSenetler.filter(c => c.cariId === String(cariId)) };
 }
 
 function getCekSenetDetay(id) {
@@ -3476,6 +3532,7 @@ function getCekSenetDetay(id) {
         duzenlenmeTarihi: hucreTarihStr(row[8]), vade: hucreTarihStr(row[9]), durum: String(row[10] || ""),
         aciklama: String(row[11] || ""), kayitTarihi: hucreTarihStr(row[12]),
         projeKodu: String(row[14] || ""),
+        belgeTuru: String(row[15] || "") === "Senet" ? "Senet" : "Çek",
       };
       break;
     }
@@ -3518,12 +3575,14 @@ function saveCekSenet(body) {
 
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
   ensureCekSenetProjeKoduColonu(sheet);
+  ensureCekSenetBelgeTuruColonu(sheet);
   const id = "cs_" + Date.now();
+  const belgeTuru = String(body.belgeTuru || "Çek") === "Senet" ? "Senet" : "Çek";
   const duzenlenmeTarihi = String(body.duzenlenmeTarihi || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const vade = String(body.vade || "");
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   sheet.appendRow([id, tip, cariId, cariAd, tutar, tutar, String(body.seriNo || ""), String(body.bankaAdi || ""),
-    duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi, "", String(body.projeKodu || "").trim()]);
+    duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi, "", String(body.projeKodu || "").trim(), belgeTuru]);
 
   // Alınan çek: müşteriden aldık → borcu kapanır (Alacak). Verilen çek: tedarikçiye borcumuzu kapattık (Borç).
   cariHareketEkle({
@@ -3551,6 +3610,17 @@ function ensureCekSenetProjeKoduColonu(sheet) {
   const mevcutBaslik = sheet.getRange(1, 15).getValue();
   if (String(mevcutBaslik || "") !== "PROJE_KODU") {
     sheet.getRange(1, 15).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
+// BELGE_TURU (16. kolon) — bu kaydın gerçekte bir "Çek" mi yoksa "Senet" mi olduğunu
+// tutar. Önceden modülün adı "Çek/Senet" olmasına rağmen bu ayrım hiç tutulmuyordu,
+// sadece Alınan/Verilen yönü (TIP) vardı. Eski kayıtlarda bu alan boş gelir — arayüz
+// boşu "Çek" gibi gösterir (varsayılan).
+function ensureCekSenetBelgeTuruColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 16).getValue();
+  if (String(mevcutBaslik || "") !== "BELGE_TURU") {
+    sheet.getRange(1, 16).setValue("BELGE_TURU").setFontWeight("bold").setBackground("#e8edf5");
   }
 }
 

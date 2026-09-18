@@ -1922,15 +1922,22 @@ document.addEventListener("keydown", function(e){
   // Sayfa'dayken veya herhangi bir ekranda, sadece bir stok/cari bilgisine -telefon
   // numarası gibi- BAKMAK isteniyorsa) rehber yine de açılır, ama hiçbir alana yazmadan
   // SADECE ARAMA/BAKMA amaçlı (callback yok, bir satıra tıklamak sadece rehberi kapatır).
-  if(e.key === "F1" || e.key === "F2"){
+  // Ctrl+1 → Cari Rehberi, Ctrl+2 → Stok Rehberi: F1/F2 ile TAMAMEN AYNI davranış
+  // (bkz. yukarıdaki not) — bazı klavye/tarayıcı kombinasyonlarında F1/F2 tarayıcı
+  // yardımı gibi başka kısayollarla çakışabildiği için ek/alternatif kısayol olarak
+  // eklendi. Zaten bir Cari/Stok Rehberi (seçim ekranı) AÇIKKEN de çalışır: aktif
+  // input üzerindeki 🔍 butonuna tıklamış gibi davranır, seçim yapılınca o input'a yazılır.
+  const ctrl1veya2 = e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === "1" || e.key === "2");
+  if(e.key === "F1" || e.key === "F2" || ctrl1veya2){
     e.preventDefault();
+    const tip = (e.key === "F1" || e.key === "1") ? "cari" : "stok";
     const aktif = document.activeElement;
     const buton = aktif && aktif.nextElementSibling;
-    const beklenenBaslik = e.key === "F1" ? "Cari Rehberi" : "Stok Rehberi";
+    const beklenenBaslik = tip === "cari" ? "Cari Rehberi" : "Stok Rehberi";
     if(buton && buton.classList && buton.classList.contains("rehber-ac-btn") && buton.title === beklenenBaslik){
       buton.click();
     } else {
-      rehberAc(e.key === "F1" ? "cari" : "stok", null);
+      rehberAc(tip, null);
     }
     return;
   }
@@ -2690,6 +2697,7 @@ function cariDetayCiz(res){
   const c = res.cari, hareketler = res.hareketler, bakiye = res.bakiye;
   const panel = document.getElementById("cari-detail-panel");
   _cariSiparislerAcik = false; // farklı bir cari açıldığında sipariş bölümü kapalı başlasın
+  _cariCekSenetAcik = false; _cariCekSenetKayitlarAcik = false;
   panel.innerHTML = `
     <button class="cari-back-btn" onclick="cariListeyeDon()">← Listeye dön</button>
     <div class="cari-detail-head">
@@ -2711,11 +2719,12 @@ function cariDetayCiz(res){
       <button class="islem-btn" onclick="satisModalAc('${c.id}','Fatura')">📤 Satış Faturası</button>
       <button class="islem-btn" onclick="tahsilatModalAcOnCari('${c.id}')">💰 Tahsilat</button>
       <button class="islem-btn" onclick="odemeModalAcOnCari('${c.id}')">💸 Ödeme</button>
-      <button class="islem-btn" onclick="cekSenetModalAcOnCari('${c.id}')">🧾 Çek/Senet</button>
+      <button class="islem-btn" onclick="cariCekSenetGosterGizle('${c.id}')" id="cari-ceksenet-toggle-btn">🧾 Çek/Senet</button>
       <button class="islem-btn" onclick="cariSiparisleriGosterGizle('${c.id}')" id="cari-siparis-toggle-btn">📦 Siparişler</button>
     </div>
 
     <div id="cari-siparisler-alani" style="display:none;margin:-4px 0 16px"></div>
+    <div id="cari-ceksenet-alani" style="display:none;margin:-4px 0 16px"></div>
 
     <div class="cari-info-grid">
       <div class="cari-info-item"><div class="k">Cari Kodu</div><div class="v">${c.cariKodu||"—"}</div></div>
@@ -2864,30 +2873,110 @@ function cariYeniSekmedeAc(cariId){
 
 // Cari detayındaki "📦 Siparişler" butonuyla açılıp kapanan, bu cariye ait
 // TÜM siparişleri (durumlarıyla birlikte) gösteren bölüm.
+// _cariSiparisCache: cariId -> son çekilen {siparisler} yanıtı. Aynı cari için bölüm
+// kapatılıp yeniden açıldığında (ör. Hareketler'e bakıp Siparişler'e dönünce) artık
+// "Yükleniyor..." flaşı YOK — önbellekteki tablo anında gösterilir, arka planda
+// sessizce tazelenir ve veri gerçekten değiştiyse tablo yeniden çizilir.
 let _cariSiparislerAcik = false;
+let _cariSiparisCache = {};
+function cariSiparisTabloHTML(siparisler){
+  if(siparisler.length===0) return '<div class="cari-empty">Bu müşteriye ait sipariş yok.</div>';
+  return `
+      <table class="hareket-tbl">
+        <thead><tr><th>Sipariş No</th><th>Tarih</th><th>Tutar</th><th>Durum</th><th>Fatura Bilgisi</th></tr></thead>
+        <tbody>
+          ${siparisler.map(s=>{
+            const faturalar = s.faturalar || [];
+            let faturaHucre = "—";
+            if(s.siparisDurumu === "Muhasebelendi" && faturalar.length){
+              faturaHucre = faturalar.map(f=>`#${f.siparisNo||f.id.slice(-6)} · ${tarihGoster(f.tarih)}`).join("<br>");
+            } else if(s.siparisDurumu === "Kısmen Faturalandı"){
+              const detay = faturalar.map(f=>`#${f.siparisNo||f.id.slice(-6)} · ${paraFormat(f.toplamTutar)}`).join("<br>");
+              faturaHucre = (detay || "—") + `<br><b>Kalan: ${paraFormat(s.kalanTutar)}</b>`;
+            }
+            return `
+            <tr class="hk-row" onclick="kayitSekmesindeAc('satis','📤','Satış #${s.id}','SATIS:${s.id}',()=>satisAc('${s.id}'))" title="Siparişi açmak için tıklayın">
+              <td>${s.siparisNo ? '#'+s.siparisNo : '—'}</td>
+              <td>${tarihGoster(s.tarih)}</td>
+              <td>${paraFormat(s.toplamTutar)}</td>
+              <td><span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span></td>
+              <td style="font-size:12px">${faturaHucre}</td>
+            </tr>`;}).join("")}
+        </tbody>
+      </table>`;
+}
 function cariSiparisleriGosterGizle(cariId){
   _cariSiparislerAcik = !_cariSiparislerAcik;
   const el = document.getElementById("cari-siparisler-alani");
   if(!el) return;
   if(!_cariSiparislerAcik){ el.style.display = "none"; return; }
   el.style.display = "block";
-  el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  const onbellek = _cariSiparisCache[cariId];
+  if(onbellek) el.innerHTML = cariSiparisTabloHTML(onbellek);
+  else el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getCariSiparisListesi", {cariId}).then(res=>{
-    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
-    if(res.siparisler.length===0){ el.innerHTML = '<div class="cari-empty">Bu müşteriye ait sipariş yok.</div>'; return; }
-    el.innerHTML = `
+    if(!res.ok){ if(!onbellek) el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _cariSiparisCache[cariId] = res.siparisler;
+    if(!_cariSiparislerAcik) return; // bu arada bölüm tekrar kapatıldıysa çizme
+    el.innerHTML = cariSiparisTabloHTML(res.siparisler);
+  }).catch(err=>{ if(!onbellek) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+
+// Cari detayındaki "🧾 Çek/Senet" butonu artık DOĞRUDAN yeni kayıt modalını açmıyor —
+// önce "📋 Kayıtlar" / "➕ Yeni Kayıt" seçenekli küçük bir kutu açılıyor. "Kayıtlar"
+// seçilirse bu cariye ait mevcut çek/senetler (Siparişler bölümündeki aynı desenle,
+// önbellekli — yeniden açılışta "Yükleniyor" flaşı olmadan) listelenir; satıra
+// tıklanınca ilgili çek/senet kaydı kendi sekmesinde açılır. "Yeni Kayıt" ise mevcut
+// modalı (cekSenetModalAc) aynen açar.
+let _cariCekSenetAcik = false;
+let _cariCekSenetKayitlarAcik = false;
+let _cariCekSenetCache = {};
+function cariCekSenetSeciciHTML(cariId){
+  return `
+    <div style="display:flex;gap:10px;margin-bottom:10px">
+      <button class="islem-btn" style="flex:1" onclick="cariCekSenetKayitlarGoster('${cariId}')">📋 Kayıtlar</button>
+      <button class="islem-btn" style="flex:1" onclick="cekSenetModalAcOnCari('${cariId}')">➕ Yeni Kayıt</button>
+    </div>`;
+}
+function cariCekSenetTabloHTML(kayitlar){
+  if(kayitlar.length===0) return '<div class="cari-empty">Bu cariye ait çek/senet kaydı yok.</div>';
+  return `
       <table class="hareket-tbl">
-        <thead><tr><th>Tarih</th><th>Tutar</th><th>Durum</th></tr></thead>
+        <thead><tr><th>Belge Türü</th><th>Tip</th><th>Vade</th><th>Tutar</th><th>Kalan</th><th>Durum</th></tr></thead>
         <tbody>
-          ${res.siparisler.map(s=>`
-            <tr class="hk-row" onclick="kayitSekmesindeAc('satis','📤','Satış #${s.id}','SATIS:${s.id}',()=>satisAc('${s.id}'))" title="Siparişi açmak için tıklayın">
-              <td>${tarihGoster(s.tarih)}</td>
-              <td>${paraFormat(s.toplamTutar)}</td>
-              <td><span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span></td>
+          ${kayitlar.map(c=>`
+            <tr class="hk-row" onclick="kayitSekmesindeAc('ceksenet','🧾','Çek/Senet #${c.id}','CEK:${c.id}',()=>cekSenetAc('${c.id}'))" title="Kaydı açmak için tıklayın">
+              <td>${c.belgeTuru||'Çek'}</td>
+              <td>${c.tip}</td>
+              <td>${tarihGoster(c.vade)}${c.gecikmis?' ⚠️':''}</td>
+              <td>${paraFormat(c.tutar)}</td>
+              <td>${paraFormat(c.kalanTutar)}</td>
+              <td>${c.durum}</td>
             </tr>`).join("")}
         </tbody>
       </table>`;
-  }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+function cariCekSenetGosterGizle(cariId){
+  _cariCekSenetAcik = !_cariCekSenetAcik;
+  const el = document.getElementById("cari-ceksenet-alani");
+  if(!el) return;
+  if(!_cariCekSenetAcik){ el.style.display = "none"; return; }
+  _cariCekSenetKayitlarAcik = false;
+  el.style.display = "block";
+  el.innerHTML = cariCekSenetSeciciHTML(cariId);
+}
+function cariCekSenetKayitlarGoster(cariId){
+  _cariCekSenetKayitlarAcik = true;
+  const el = document.getElementById("cari-ceksenet-alani");
+  if(!el) return;
+  const onbellek = _cariCekSenetCache[cariId];
+  el.innerHTML = cariCekSenetSeciciHTML(cariId) + (onbellek ? cariCekSenetTabloHTML(onbellek) : '<div class="cari-empty">Yükleniyor...</div>');
+  cariApi("getCariCekSenetListesi", {cariId}).then(res=>{
+    if(!res.ok){ if(!onbellek) el.innerHTML = cariCekSenetSeciciHTML(cariId) + '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _cariCekSenetCache[cariId] = res.cekSenetler;
+    if(!_cariCekSenetAcik || !_cariCekSenetKayitlarAcik) return;
+    el.innerHTML = cariCekSenetSeciciHTML(cariId) + cariCekSenetTabloHTML(res.cekSenetler);
+  }).catch(err=>{ if(!onbellek) el.innerHTML = cariCekSenetSeciciHTML(cariId) + '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
 }
 
 let _hkDragKol = null;
@@ -3898,7 +3987,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
     <div class="modal-box modal-box-xwide">
       <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <span>${duzenle ? belgeTipiBaslangic+"'i Düzenle" : "Yeni "+belgeTipiBaslangic}</span>
-        <span id="sm-siparis-no-badge" style="display:${belgeTipiBaslangic==='Sipariş'?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">
+        <span id="sm-siparis-no-badge" style="display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">
           # <span id="sm-siparis-no-metin">${s && s.siparisNo ? s.siparisNo : '—'}</span>
         </span>
         <input type="hidden" id="sm-siparis-no-deger" value="${s && s.siparisNo ? s.siparisNo : ''}">
@@ -3955,6 +4044,15 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         <select id="sm-banka-hesap"></select>
       </div>
 
+      <div id="sm-isleme-tikleri-fld" style="display:${belgeTipiBaslangic==='Fatura'?'flex':'none'};gap:18px;flex-wrap:wrap;margin:-4px 0 12px;padding:8px 10px;background:var(--bg3);border-radius:8px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
+          <input type="checkbox" id="sm-stok-isle" ${(!s || s.stokIsle !== false) ? 'checked' : ''}> Stoğa işle
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
+          <input type="checkbox" id="sm-cari-isle" ${(!s || s.cariIsle !== false) ? 'checked' : ''}> Cariye işle
+        </label>
+      </div>
+
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
       <div class="satis-kalem-basliklar">
         <span class="satis-kalem-stokkodu">Stok Kodu</span><span style="flex:1">Ürün</span>
@@ -3993,7 +4091,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   satisBankaSecenekleriYukle(s ? s.bankaHesapId : undefined);
   satisOdemeTipiDegisti();
   smKdvSonraKisitiUygula();
-  if(!duzenle && belgeTipiBaslangic === "Sipariş") siparisNumarasiOnizlemeYukle();
+  if(!duzenle && (belgeTipiBaslangic === "Sipariş" || belgeTipiBaslangic === "Fatura")) siparisNumarasiOnizlemeYukle();
 }
 
 // Cari E-Fatura veya E-Arşiv mükellefiyse (bkz. edmBaglantisiVarMi backend) KDV
@@ -4274,13 +4372,15 @@ function satisModalBelgeTipiDegisti(){
   document.getElementById("sm-siparis-durum-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
   document.getElementById("sm-tutar-iskonto-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
   document.getElementById("sm-fatura-tipi-fld").style.display = (tip === "Fatura") ? "flex" : "none";
+  const tikFld = document.getElementById("sm-isleme-tikleri-fld");
+  if(tikFld) tikFld.style.display = (tip === "Fatura") ? "flex" : "none";
   const rozet = document.getElementById("sm-siparis-no-badge");
-  if(rozet) rozet.style.display = (tip === "Sipariş") ? "inline-flex" : "none";
+  if(rozet) rozet.style.display = (tip === "Sipariş" || tip === "Fatura") ? "inline-flex" : "none";
   const paketBaslik = document.getElementById("sm-paket-baslik");
   if(paketBaslik) paketBaslik.style.display = (tip === "Sipariş") ? "block" : "none";
   const vadeInp = document.getElementById("sm-vade");
   if(vadeInp && tip === "Sipariş" && !vadeInp.value) vadeInp.value = simdiTarihSaat().slice(0,10);
-  if(tip === "Sipariş") siparisNumarasiOnizlemeYukle();
+  if(tip === "Sipariş" || tip === "Fatura") siparisNumarasiOnizlemeYukle();
   satisKalemlerCiz();
 }
 
@@ -4338,7 +4438,7 @@ function satisKaydet(){
     tarih: document.getElementById("sm-tarih").value,
     odemeTipi: odemeTipi,
     dipIskontoYuzde: parseFloat(document.getElementById("sm-dip-iskonto").value) || 0,
-    siparisNo: belgeTipi === "Sipariş" ? (document.getElementById("sm-siparis-no-deger")||{}).value || "" : undefined,
+    siparisNo: (belgeTipi === "Sipariş" || belgeTipi === "Fatura") ? (document.getElementById("sm-siparis-no-deger")||{}).value || "" : undefined,
     tutarIskontosu: tutarIskontosu,
     tutarIskontoKdvSonra: tutarIskontoKdvSonra,
     bankaHesapId: bankaHesapId,
@@ -4347,6 +4447,8 @@ function satisKaydet(){
     projeKodu: document.getElementById("sm-proje-kodu").value,
     faturaTipi: document.getElementById("sm-fatura-tipi").value,
     siparisDurumu: belgeTipi === "Sipariş" ? document.getElementById("sm-siparis-durumu").value : undefined,
+    stokIsle: belgeTipi === "Fatura" ? !!(document.getElementById("sm-stok-isle")||{}).checked : undefined,
+    cariIsle: belgeTipi === "Fatura" ? !!(document.getElementById("sm-cari-isle")||{}).checked : undefined,
     kalemler,
   };
   const duzenleId = _satisDuzenleId;
@@ -7179,11 +7281,18 @@ function cekSenetModalAc(onCariId){
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "ceksenet-modal-overlay";
+  overlay.dataset.escKapat = "cekSenetModalKapat";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   const bugun = simdiTarihSaat();
   overlay.innerHTML = `
     <div class="modal-box">
       <h3>Yeni Çek/Senet</h3>
+      <div class="fld"><label>Belge Türü</label>
+        <select id="csm-belgeturu">
+          <option value="Çek">Çek</option>
+          <option value="Senet">Senet</option>
+        </select>
+      </div>
       <div class="fld"><label>Tip</label>
         <select id="csm-tip">
           <option value="Alınan" ${_cekSenetAktifTip==='Alınan'?'selected':''}>Alınan (müşteriden)</option>
@@ -7208,11 +7317,20 @@ function cekSenetModalAc(onCariId){
       <div class="fld"><label>Açıklama</label><input id="csm-aciklama" type="text" placeholder="İsteğe bağlı"></div>
       <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('csm-proje-kodu', '')}</div>
       <div class="modal-actions">
-        <button class="btn" onclick="document.getElementById('ceksenet-modal-overlay').remove()">İptal</button>
+        <button class="btn" onclick="cekSenetModalKapat()">İptal</button>
         <button class="btn btn-primary" onclick="cekSenetKaydet()">Kaydet</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
+}
+
+// Bu modalın kendisi Esc ile kapanabilsin diye (global Esc yakalayıcı,
+// data-esc-kapat="cekSenetModalKapat" işaretini görünce bunu çağırır) — kullanıcı
+// isteği: önceden form/kaydetme içeren modallarda Esc bilinçli olarak devre dışıydı,
+// bu modal için özel olarak açıldı.
+function cekSenetModalKapat(){
+  const el = document.getElementById("ceksenet-modal-overlay");
+  if(el) el.remove();
 }
 
 function cekSenetModalAcOnCari(cariId){ cekSenetModalAc(cariId); }
@@ -7260,6 +7378,7 @@ function cekSenetKaydet(){
   if(!vade){ alert("Vade tarihi gerekli"); return; }
   const body = {
     cariId, tutar,
+    belgeTuru: document.getElementById("csm-belgeturu").value,
     tip: document.getElementById("csm-tip").value,
     seriNo: document.getElementById("csm-serino").value,
     bankaAdi: document.getElementById("csm-banka").value,
