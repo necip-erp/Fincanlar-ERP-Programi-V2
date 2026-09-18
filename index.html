@@ -1015,6 +1015,7 @@ setInterval(topbarSaatGuncelle, 10000);
           <input type="number" id="cvirman-tutar" step="0.01" min="0"></div>
         <div class="fld" style="flex:1;min-width:200px;margin-bottom:0"><label>Açıklama (opsiyonel)</label>
           <input type="text" id="cvirman-aciklama"></div>
+        <div class="fld" style="min-width:150px;margin-bottom:0"><label>Proje Kodu</label><select id="cvirman-proje-kodu" class="proje-kodu-secim"><option value="">— Proje Yok —</option></select></div>
         <button class="btn btn-primary" id="cvirman-kaydet-btn" onclick="cariVirmanKaydet()">🔁 Virman Yap</button>
         <button class="btn" id="cvirman-iptal-btn" style="display:none" onclick="cariVirmanDuzenlemeIptal()">İptal</button>
       </div>
@@ -1198,6 +1199,24 @@ setInterval(topbarSaatGuncelle, 10000);
       </p>
       <button class="btn btn-primary" onclick="alisKdvGecmisYukle()">🔍 Listeyi Yükle</button>
       <div id="alis-kdv-gecmis-liste" style="margin-top:14px"></div>
+    </div>
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Proje Kodu Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Alış/Satış faturaları, Cari Virman, Çek/Senet, POS tahsilat/ödeme ve EDM'den gelen faturalarda seçilebilen proje etiketleri.</p>
+      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="flex:1"><label>Yeni Proje Kodu</label><input id="tanim-projeKodu-yeni-ad" type="text" placeholder="Örn. PRJ-2026-01 Mutfak Projesi"></div>
+        <button class="btn btn-primary" onclick="tanimEkle('projeKodu')">+ Ekle</button>
+      </div>
+      <div id="tanimliste-projeKodu" style="margin-top:12px"></div>
+    </div>
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Fatura Tipi Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Kesilen Satış faturalarında seçilebilen fatura tipi etiketleri (örn. Perakende, Toptan, İhracat).</p>
+      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="flex:1"><label>Yeni Fatura Tipi</label><input id="tanim-faturaTipi-yeni-ad" type="text" placeholder="Örn. Perakende"></div>
+        <button class="btn btn-primary" onclick="tanimEkle('faturaTipi')">+ Ekle</button>
+      </div>
+      <div id="tanimliste-faturaTipi" style="margin-top:12px"></div>
     </div>
   </div>
 </div>
@@ -1860,6 +1879,9 @@ modulAc = function(id){
     if(id === "alis" && ilkAcilis){ alisAnaSecimeDon(); }
     if(id === "tahsilat" && !_tahsilatYuklendi){ tahsilatListesiYukle(); }
     if(id === "odeme" && !_odemeYuklendi){ odemeListesiYukle(); }
+    if(["cvirman","tahsilat","odeme"].includes(id)){
+      if(!_tanimListeYuklendi.projeKodu) tanimListesiYukle("projeKodu"); else projeKoduSelectleriTazele();
+    }
     if(id === "cvirman"){
       if(!_cariYuklendi) cariListesiYukle(); else cvirmanCariSelectDoldur();
       if(!_cvirmanYuklendi) cariVirmanListesiYukle();
@@ -3344,6 +3366,7 @@ function satisDetayCiz(res){
     ${s.kaynakSiparisId ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Kaynak</div><div class="v">Sipariş'ten aktarıldı</div></div></div>` : ""}
     ${s.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${s.aciklama}</div></div></div>` : ""}
     ${s.projeKodu ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Proje Kodu</div><div class="v">${s.projeKodu}</div></div></div>` : ""}
+    ${s.faturaTipi ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Fatura Tipi</div><div class="v">${s.faturaTipi}</div></div></div>` : ""}
     <div class="btnrow">
       ${siparis && s.siparisDurumu !== "Muhasebelendi" ? `<button class="btn btn-primary" onclick="siparisFaturaModalAc('${s.id}')">🧾 Fatura Oluştur</button>` : ''}
       ${(s.belgeTipi==='Sipariş'||s.belgeTipi==='Teklif') ? `<button class="btn btn-primary" onclick="satisDuzenleAc('${s.id}')">✏️ Düzenle</button>` : ''}
@@ -3924,7 +3947,8 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
           </select>
         </div>
         <div class="fld" style="flex:2;min-width:220px"><label>Açıklama</label><input id="sm-aciklama" type="text" placeholder="İsteğe bağlı" value="${s ? (s.aciklama||'') : ''}"></div>
-        <div class="fld" style="flex:1;min-width:140px"><label>Proje Kodu</label><input id="sm-proje-kodu" type="text" placeholder="İsteğe bağlı" value="${s ? (s.projeKodu||'') : ''}"></div>
+        <div class="fld" style="flex:1;min-width:140px"><label>Proje Kodu</label>${projeKoduSelectHTML('sm-proje-kodu', s?s.projeKodu:'')}</div>
+        <div class="fld" id="sm-fatura-tipi-fld" style="flex:1;min-width:140px;display:${belgeTipiBaslangic==='Fatura'?'flex':'none'}"><label>Fatura Tipi</label>${faturaTipiSelectHTML('sm-fatura-tipi', s?s.faturaTipi:'')}</div>
       </div>
       <div class="fld" id="sm-banka-fld" style="display:none">
         <label>Havale — Banka / Hesap</label>
@@ -4249,6 +4273,7 @@ function satisModalBelgeTipiDegisti(){
   const tip = document.getElementById("sm-belgetipi").value;
   document.getElementById("sm-siparis-durum-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
   document.getElementById("sm-tutar-iskonto-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
+  document.getElementById("sm-fatura-tipi-fld").style.display = (tip === "Fatura") ? "flex" : "none";
   const rozet = document.getElementById("sm-siparis-no-badge");
   if(rozet) rozet.style.display = (tip === "Sipariş") ? "inline-flex" : "none";
   const paketBaslik = document.getElementById("sm-paket-baslik");
@@ -4320,6 +4345,7 @@ function satisKaydet(){
     vade: odemeTipi === "Açık Hesap" ? document.getElementById("sm-vade").value : "",
     aciklama: document.getElementById("sm-aciklama").value,
     projeKodu: document.getElementById("sm-proje-kodu").value,
+    faturaTipi: document.getElementById("sm-fatura-tipi").value,
     siparisDurumu: belgeTipi === "Sipariş" ? document.getElementById("sm-siparis-durumu").value : undefined,
     kalemler,
   };
@@ -4862,7 +4888,7 @@ function alisModalAc(duzenle){
         </select>
       </div>
       <div class="fld"><label>Açıklama</label><input id="am-aciklama" type="text" placeholder="İsteğe bağlı" value="${a ? (a.aciklama||'') : ''}"></div>
-      <div class="fld"><label>Proje Kodu</label><input id="am-proje-kodu" type="text" placeholder="İsteğe bağlı" value="${a ? (a.projeKodu||'') : ''}"></div>
+      <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('am-proje-kodu', a?a.projeKodu:'')}</div>
 
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
       <div id="am-kalemler" style="margin:8px 0"></div>
@@ -5713,6 +5739,7 @@ function alisBekleyenOnayModalAc(faturaNo){
         </div>
         <div class="fld" style="margin:0"><label>Açıklama</label><input id="bfm-aciklama" type="text" value="Fatura No: ${f.faturaNo}"></div>
       </div>
+      <div class="fld" style="max-width:260px;margin-top:10px"><label>Proje Kodu</label>${projeKoduSelectHTML('bfm-proje-kodu','')}</div>
 
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase;display:block;margin-top:14px">Ürün Kalemleri</label>
       ${yeniStokSayisi>0 ? `<p style="font-size:12px;color:var(--red);margin:4px 0 8px">⚠️ ${yeniStokSayisi} üründe stok kartı bulunamadı — yanındaki kutuyu işaretli bırakırsan onaylayınca otomatik stok kartı oluşturulur.</p>` : ""}
@@ -6211,6 +6238,7 @@ function alisBekleyenOnayla(faturaNo){
     odemeTipi: document.getElementById("bfm-odeme").value,
     aciklama: document.getElementById("bfm-aciklama").value,
     tutarIskontosu: tutarIskontosuEl ? (parseFloat(tutarIskontosuEl.value)||0) : 0,
+    projeKodu: document.getElementById("bfm-proje-kodu").value,
     kalemler,
   };
   cariApi("onaylaAlisFaturasi", body).then(res=>{
@@ -6377,6 +6405,7 @@ function tahsilatModalAc(onCariId, editId){
         <select id="tm-banka-hesap"></select>
       </div>
       <div class="fld"><label>Açıklama</label><input id="tm-aciklama" type="text" placeholder="İsteğe bağlı" value="${t?(t.aciklama||''):''}"></div>
+      <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('tm-proje-kodu', t?t.projeKodu:'')}</div>
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('tahsilat-modal-overlay').remove()">İptal</button>
         <button class="btn btn-primary" onclick="tahsilatKaydet()">Kaydet</button>
@@ -6487,6 +6516,7 @@ function tahsilatKaydet(){
     aciklama: document.getElementById("tm-aciklama").value,
     posHesapId,
     bankaHesapId,
+    projeKodu: document.getElementById("tm-proje-kodu").value,
   };
   if(editId) body.id = editId;
   cariApi(editId ? "guncelleTahsilat" : "saveTahsilat", body).then(res=>{
@@ -6664,6 +6694,7 @@ function odemeModalAc(onCariId){
         <select id="om-banka-hesap"></select>
       </div>
       <div class="fld"><label>Açıklama</label><input id="om-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+      <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('om-proje-kodu', '')}</div>
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('odeme-modal-overlay').remove()">İptal</button>
         <button class="btn btn-primary" onclick="odemeKaydet()">Kaydet</button>
@@ -6824,6 +6855,7 @@ function odemeKaydet(){
     aciklama: document.getElementById("om-aciklama").value,
     posHesapId,
     bankaHesapId,
+    projeKodu: document.getElementById("om-proje-kodu").value,
   };
 
   if(hedefTipi === "Cari"){
@@ -7174,7 +7206,7 @@ function cekSenetModalAc(onCariId){
       <div class="fld"><label>Düzenlenme Tarihi</label><input id="csm-duzenlenme" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Vade</label><input id="csm-vade" type="date"></div>
       <div class="fld"><label>Açıklama</label><input id="csm-aciklama" type="text" placeholder="İsteğe bağlı"></div>
-      <div class="fld"><label>Proje Kodu</label><input id="csm-proje-kodu" type="text" placeholder="İsteğe bağlı"></div>
+      <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('csm-proje-kodu', '')}</div>
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('ceksenet-modal-overlay').remove()">İptal</button>
         <button class="btn btn-primary" onclick="cekSenetKaydet()">Kaydet</button>
@@ -7742,6 +7774,7 @@ function cariVirmanKaydet(){
     hedefCariId: hedefId, hedefCariAd: hedefAd,
     tarih: document.getElementById("cvirman-tarih").value,
     tutar: tutar, aciklama: document.getElementById("cvirman-aciklama").value,
+    projeKodu: document.getElementById("cvirman-proje-kodu").value,
   };
   cariApi(duzenleniyor ? "updateCariVirman" : "saveCariVirman", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
@@ -7763,6 +7796,7 @@ function cariVirmanDuzenle(id){
   document.getElementById("cvirman-tarih").value = String(v.tarih||"").slice(0,10);
   document.getElementById("cvirman-tutar").value = v.tutar;
   document.getElementById("cvirman-aciklama").value = v.aciklama || "";
+  document.getElementById("cvirman-proje-kodu").value = v.projeKodu || "";
   const btn = document.getElementById("cvirman-kaydet-btn");
   btn.textContent = "💾 Virman Güncelle";
   document.getElementById("cvirman-iptal-btn").style.display = "";
@@ -7775,6 +7809,7 @@ function cariVirmanDuzenlemeIptal(){
   document.getElementById("cvirman-iptal-btn").style.display = "none";
   document.getElementById("cvirman-tutar").value = "";
   document.getElementById("cvirman-aciklama").value = "";
+  document.getElementById("cvirman-proje-kodu").value = "";
 }
 
 function cariVirmanListesiYukle(){
@@ -8141,6 +8176,8 @@ function ayarlarYukle(){
   acilisSayfasiYukle();
   if(!_tanimListeYuklendi.giderUstGrup) tanimListesiYukle("giderUstGrup");
   if(!_tanimListeYuklendi.giderAltGrup) tanimListesiYukle("giderAltGrup");
+  if(!_tanimListeYuklendi.projeKodu) tanimListesiYukle("projeKodu");
+  if(!_tanimListeYuklendi.faturaTipi) tanimListesiYukle("faturaTipi");
   edmOnekEslesmeYukle();
   const sgKayitli = localStorage.getItem("fincanlar_sekme_genislik") || "140";
   const sgInput = document.getElementById("ayarlar-sekme-genislik");
@@ -8527,7 +8564,33 @@ function birimSilOnay(id){
 }
 
 // ── Ürün Grubu / Alt Ürün Grubu / Ebat / Renk Tanımlama (ortak, "tip" parametreli) ──
-let _tanimListeCache = { urunGrubu:[], altUrunGrubu:[], ebat:[], renk:[], ambalaj:[], giderUstGrup:[], giderAltGrup:[] };
+let _tanimListeCache = { urunGrubu:[], altUrunGrubu:[], ebat:[], renk:[], ambalaj:[], giderUstGrup:[], giderAltGrup:[], projeKodu:[], faturaTipi:[] };
+
+// Proje Kodu (Ayarlar'da tanımlanır) — Satış, Alış, Çek/Senet, Cari Virman, POS Tahsilat/
+// Ödeme ve BFM (EDM'den gelen Alış faturaları) onay ekranlarında ORTAK kullanılan select.
+// Kullanan ekran henüz _tanimListeCache.projeKodu'yu yüklemediyse (Ayarlar'a hiç
+// girilmediyse) burada TEMBEL olarak tetikleniyor; ilk açılışta boş gelip veri gelince
+// arkadan dolabilir, bu yüzden ilgili yerlerde de ayrıca tanimListesiYukle çağrılıyor.
+function projeKoduSelectHTML(id, seciliDeger){
+  if(!_tanimListeYuklendi.projeKodu) tanimListesiYukle("projeKodu");
+  const secenekler = (_tanimListeCache.projeKodu||[]).map(p=>`<option value="${p.ad}"${p.ad===seciliDeger?' selected':''}>${p.ad}</option>`).join("");
+  return `<select id="${id}" class="proje-kodu-secim"><option value="">— Proje Yok —</option>${secenekler}</select>`;
+}
+function faturaTipiSelectHTML(id, seciliDeger){
+  if(!_tanimListeYuklendi.faturaTipi) tanimListesiYukle("faturaTipi");
+  const secenekler = (_tanimListeCache.faturaTipi||[]).map(f=>`<option value="${f.ad}"${f.ad===seciliDeger?' selected':''}>${f.ad}</option>`).join("");
+  return `<select id="${id}"><option value="">— Belirtilmedi —</option>${secenekler}</select>`;
+}
+// Bir ekran ilk açıldığında proje kodu listesi henüz gelmemiş olabilir (tembel yükleme) —
+// veri gelince o ekrandaki select'i (varsa) mevcut seçili değeri koruyarak tazeler.
+function projeKoduSelectleriTazele(){
+  document.querySelectorAll("select.proje-kodu-secim").forEach(sel=>{
+    const mevcut = sel.value;
+    const secenekler = (_tanimListeCache.projeKodu||[]).map(p=>`<option value="${p.ad}">${p.ad}</option>`).join("");
+    sel.innerHTML = '<option value="">— Proje Yok —</option>' + secenekler;
+    sel.value = mevcut;
+  });
+}
 let _tanimListeYuklendi = { urunGrubu:false, altUrunGrubu:false, ebat:false, renk:false, ambalaj:false, giderUstGrup:false, giderAltGrup:false };
 
 // "Alt grup" tipindeki basit tanımların, hangi "üst grup" tipine bağlı olduğunu belirtir.
@@ -8543,6 +8606,7 @@ function tanimListesiYukle(tip){
     if(!res.ok){ if(el) el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _tanimListeCache[tip] = res.kalemler;
     _tanimListeYuklendi[tip] = true;
+    if(tip === "projeKodu") projeKoduSelectleriTazele();
     const ustTip = TANIM_ALT_UST_ESLESME[tip];
     if(ustTip){
       if(!_tanimListeYuklendi[ustTip]){ tanimListesiYukle(ustTip); }

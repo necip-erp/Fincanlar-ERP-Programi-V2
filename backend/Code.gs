@@ -50,6 +50,8 @@ const SHEETS = {
   siparisDurumlari: "SiparisDurumlari",
   plasiyerler: "Plasiyerler",
   cariVirmanlar: "CariVirmanlar",
+  projeKodlari: "ProjeKodlari",
+  faturaTipleri: "FaturaTipleri",
 };
 
 // ── YARDIMCI FONKSİYONLAR ──
@@ -1005,7 +1007,14 @@ function vadesiGecmisAlacaklar() {
 // ════════════════════════════════════════════════
 const CARI_VIRMAN_BASLIKLAR = ["ID","TARIH","KAYNAK_CARI_ID","KAYNAK_CARI_AD","HEDEF_CARI_ID","HEDEF_CARI_AD","TUTAR","ACIKLAMA","KAYIT_TARIHI","KAYNAK_HAREKET_ID","HEDEF_HAREKET_ID"];
 
-// body: { kaynakCariId, kaynakCariAd, hedefCariId, hedefCariAd, tarih, tutar, aciklama }
+function ensureCariVirmanProjeKoduColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 12).getValue();
+  if (String(mevcutBaslik || "") !== "PROJE_KODU") {
+    sheet.getRange(1, 12).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
+// body: { kaynakCariId, kaynakCariAd, hedefCariId, hedefCariAd, tarih, tutar, aciklama, projeKodu }
 function saveCariVirman(body) {
   const kaynakId = String(body.kaynakCariId || "").trim();
   const hedefId = String(body.hedefCariId || "").trim();
@@ -1026,12 +1035,14 @@ function saveCariVirman(body) {
   const kaynakHareket = cariHareketEkle({
     cariId: kaynakId, tarih: tarih, tip: "Alacak", tutar: tutar,
     aciklama: "VIRMAN:" + id + " | Cari Virman — " + hedefAd + " hesabına aktarıldı" + (notu ? " (" + notu + ")" : ""),
+    projeKodu: body.projeKodu,
   });
   if (!kaynakHareket.ok) return { ok: false, hata: "Kaynak cari hareketi eklenemedi" };
 
   const hedefHareket = cariHareketEkle({
     cariId: hedefId, tarih: tarih, tip: "Borç", tutar: tutar,
     aciklama: "VIRMAN:" + id + " | Cari Virman — " + kaynakAd + " hesabından aktarıldı" + (notu ? " (" + notu + ")" : ""),
+    projeKodu: body.projeKodu,
   });
   if (!hedefHareket.ok) {
     // Hedef tarafı başarısız olduysa, yarım kalmış kaynak hareketini geri al (tutarsız bakiye bırakmamak için).
@@ -1040,8 +1051,9 @@ function saveCariVirman(body) {
   }
 
   const sheet = getOrCreateSheet(ss, SHEETS.cariVirmanlar, CARI_VIRMAN_BASLIKLAR);
+  ensureCariVirmanProjeKoduColonu(sheet);
   sheet.appendRow([id, tarih, kaynakId, kaynakAd, hedefId, hedefAd, tutar, notu,
-    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), kaynakHareket.id, hedefHareket.id]);
+    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), kaynakHareket.id, hedefHareket.id, String(body.projeKodu || "").trim()]);
 
   cacheTemizle(["cariListesi_v3"]);
   return { ok: true, id: id };
@@ -1050,6 +1062,7 @@ function saveCariVirman(body) {
 function getCariVirmanListesi() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.cariVirmanlar, CARI_VIRMAN_BASLIKLAR);
+  ensureCariVirmanProjeKoduColonu(sheet);
   const data = sheet.getDataRange().getValues();
   const cariKoduMap = cariKoduHaritasiOlustur(ss);
   const sonuc = [];
@@ -1061,7 +1074,7 @@ function getCariVirmanListesi() {
       id: String(row[0]), tarih: hucreTarihStr(row[1]),
       kaynakCariId: kaynakCariId, kaynakCariAd: String(row[3] || ""), kaynakCariKodu: cariKoduMap[kaynakCariId] || "",
       hedefCariId: hedefCariId, hedefCariAd: String(row[5] || ""), hedefCariKodu: cariKoduMap[hedefCariId] || "",
-      tutar: parseFloat(row[6]) || 0, aciklama: String(row[7] || ""),
+      tutar: parseFloat(row[6]) || 0, aciklama: String(row[7] || ""), projeKodu: String(row[11] || ""),
     });
   }
   sonuc.reverse();
@@ -1295,6 +1308,12 @@ function ensureSatisBelgeTipiColonu(sheet) {
   if (String(h22 || "") !== "PROJE_KODU") {
     sheet.getRange(1, 22).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
   }
+  // Sadece kesilen Fatura'larda (Sipariş/Teklif'te anlamsız) anlamlı: Ayarlar'da
+  // tanımlanan Fatura Tipi listesinden (ör. Perakende/Toptan/İhracat) seçilen etiket.
+  const h23 = sheet.getRange(1, 23).getValue();
+  if (String(h23 || "") !== "FATURA_TIPI") {
+    sheet.getRange(1, 23).setValue("FATURA_TIPI").setFontWeight("bold").setBackground("#e8edf5");
+  }
 }
 
 // SatisKalemleri sayfası daha önce ISKONTO_YUZDE / KDV_ORANI sütunları olmadan
@@ -1453,6 +1472,7 @@ function getSatisDetay(satisId) {
         efaturaUuid: String(data[i][17] || ""),
         efaturaDurum: String(data[i][18] || ""),
         projeKodu: String(data[i][21] || ""),
+        faturaTipi: String(data[i][22] || ""),
       };
       break;
     }
@@ -1613,7 +1633,7 @@ function saveSatis(body) {
     const durumAdlari = getSiparisDurumlari().durumlar.map(d => d.ad);
     siparisDurumu = durumAdlari.includes(body.siparisDurumu) ? body.siparisDurumu : (durumAdlari[0] || "Beklemede");
   }
-  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || ""), "", "", "", "", "", String(body.projeKodu || "").trim()]);
+  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || ""), "", "", "", "", "", String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim()]);
 
   // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
   // otomatik, minimal bir stok kartı oluşturulur (Alış modülündeki mantığın aynısı).
@@ -2077,6 +2097,7 @@ function updateSatis(body) {
   yeniRow[13] = tutarIskontosu; yeniRow[14] = tutarIskontoKdvSonra ? 1 : 0;
   yeniRow[15] = String(body.siparisNo !== undefined ? body.siparisNo : (eskiRow[15] || ""));
   yeniRow[21] = String(body.projeKodu !== undefined ? body.projeKodu : (eskiRow[21] || ""));
+  yeniRow[22] = String(body.faturaTipi !== undefined ? body.faturaTipi : (eskiRow[22] || ""));
   sSheet.getRange(satirIdx, 1, 1, yeniRow.length).setValues([yeniRow]);
 
   kalemler.forEach((k, idx) => {
@@ -2983,6 +3004,10 @@ function ensureTahsilatPosColonu(sheet) {
   if (String(mevcutBaslik2 || "") !== "BANKA_HESAP_ID") {
     sheet.getRange(1, 10).setValue("BANKA_HESAP_ID").setFontWeight("bold").setBackground("#e8edf5");
   }
+  const mevcutBaslik3 = sheet.getRange(1, 11).getValue();
+  if (String(mevcutBaslik3 || "") !== "PROJE_KODU") {
+    sheet.getRange(1, 11).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
+  }
 }
 
 function getTahsilatListesi() {
@@ -3005,6 +3030,7 @@ function getTahsilatListesi() {
       cariKodu: cariKoduMap[cariId] || "",
       tutar: parseFloat(row[4]) || 0, yontem: String(row[5] || ""),
       aciklama: String(row[6] || ""), kayitTarihi: hucreTarihStr(row[7]), posHesapId: String(row[8] || ""),
+      projeKodu: String(row[10] || ""),
     });
   }
   sonuc.reverse();
@@ -3043,11 +3069,12 @@ function saveTahsilat(body) {
   const id = "th_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  tSheet.appendRow([id, tarih, cariId, cariAd, tutar, yontem, String(body.aciklama || ""), kayitTarihi, posHesapId, bankaHesapId]);
+  tSheet.appendRow([id, tarih, cariId, cariAd, tutar, yontem, String(body.aciklama || ""), kayitTarihi, posHesapId, bankaHesapId, String(body.projeKodu || "").trim()]);
 
   cariHareketEkle({
     cariId: cariId, tarih: tarih, tip: "Alacak", tutar: tutar,
     aciklama: cariHareketAciklamaOlustur("TAHSILAT", id, "tahsilat_" + yontem, body.aciklama),
+    projeKodu: body.projeKodu,
   });
 
   // Kredi Kartı ile tahsilat yapıldıysa ve bir POS hesabı seçildiyse,
@@ -3156,6 +3183,10 @@ function ensureOdemePosBankaColonlari(sheet) {
       sheet.getRange(1, kolon).setValue(baslik).setFontWeight("bold").setBackground("#e8edf5");
     }
   });
+  const projeKoduBaslik = sheet.getRange(1, 15).getValue();
+  if (String(projeKoduBaslik || "") !== "PROJE_KODU") {
+    sheet.getRange(1, 15).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
+  }
 }
 
 function getOdemeListesi() {
@@ -3182,6 +3213,7 @@ function getOdemeListesi() {
       tutar: parseFloat(row[4]) || 0, yontem: String(row[5] || ""),
       aciklama: String(row[6] || ""), kayitTarihi: hucreTarihStr(row[7]),
       hedefTipi: hedefTipi, hedefAltTipi: String(row[11] || ""), hedefId: String(row[12] || ""), hedefAd: hedefAd,
+      projeKodu: String(row[14] || ""),
     });
   }
   sonuc.reverse();
@@ -3283,7 +3315,7 @@ function saveOdeme(body) {
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   oSheet.appendRow([id, tarih, cariId, cariAd, tutar, yontem, String(body.aciklama || ""), kayitTarihi, posHesapId, bankaHesapId,
-    hedefTipi, hedefAltTipi, hedefId, hedefAd]);
+    hedefTipi, hedefAltTipi, hedefId, hedefAd, String(body.projeKodu || "").trim()]);
 
   // Cariye borç hareketi yalnızca hedef bir Cari ise düşülür (Banka/Gider hedefli
   // ödemelerin bağlı olduğu bir cari hesap yok).
@@ -3291,6 +3323,7 @@ function saveOdeme(body) {
     cariHareketEkle({
       cariId: cariId, tarih: tarih, tip: "Borç", tutar: tutar,
       aciklama: cariHareketAciklamaOlustur("ODEME", id, "odeme_" + yontem, body.aciklama),
+      projeKodu: body.projeKodu,
     });
   }
 
@@ -4080,6 +4113,7 @@ function onaylaAlisFaturasi(body) {
     cariId: body.cariId, cariAd: body.cariAd, tarih: body.tarih, odemeTipi: body.odemeTipi,
     aciklama: (String(body.aciklama || "").trim() || ("Fatura No: " + faturaNo)),
     tutarIskontosu: body.tutarIskontosu,
+    projeKodu: body.projeKodu,
     kalemler: body.kalemler,
   });
   if (!alisSonuc.ok) return alisSonuc;
@@ -6072,6 +6106,8 @@ const BASIT_TANIM_SHEET_ADI = {
   ambalaj: SHEETS.ambalajTanimlari,
   giderUstGrup: SHEETS.giderUstGruplari,
   giderAltGrup: SHEETS.giderAltGruplari,
+  projeKodu: SHEETS.projeKodlari,
+  faturaTipi: SHEETS.faturaTipleri,
 };
 const BASIT_TANIM_CACHE_ANAHTARI = {
   urunGrubu: "urunGrubuListesi",
@@ -6081,6 +6117,8 @@ const BASIT_TANIM_CACHE_ANAHTARI = {
   ambalaj: "ambalajListesi",
   giderUstGrup: "giderUstGrupListesi",
   giderAltGrup: "giderAltGrupListesi",
+  projeKodu: "projeKoduListesi",
+  faturaTipi: "faturaTipiListesi",
 };
 const BASIT_TANIM_BASLIKLAR = ["ID", "AD", "UST_ID", "SIRA", "KOD"];
 // Stok Kodu'nun otomatik üretimi için hangi basit tanım tiplerinin 2 haneli bir KOD'a
