@@ -2022,13 +2022,35 @@ function kisayolMetni(e){
   if(!["Control","Alt","Shift"].includes(e.key)) parcalar.push(e.key.length===1 ? e.key.toUpperCase() : e.key);
   return parcalar.join("+");
 }
+// ── F1/F2/Ctrl+1/Ctrl+2 için "son odaklanılan Cari/Stok alanı" hafızası ──
+// Kullanıcı bir cari/stok arama kutusuna tıklayıp sonra (örn. bir öneri kutusunu
+// kapatmak için başka yere tıklayarak, ya da Sırala menüsüne dokunarak) imleci
+// ORADAN AYIRIRSA, eskiden F1/F2 artık "hiçbir alana yazma" moduna düşüyordu —
+// kullanıcı hâlâ o alanı doldurmak istediği halde. Bu artık son odaklanılan
+// eşleşen alanı hatırlayıp, imleç tam üstünde değilse dahi ORAYA yazıyor — TEK
+// ŞARTLA: o alan hâlâ DOM'da bağlı (isConnected) olmalı. Sekme değişince mevcut
+// modül DOM'u tamamen yeniden çizildiği için (bkz. kayitSekmesindeAc notu),
+// başka bir sekmedeki eski bir alan asla yanlışlıkla hedeflenmez — sekme
+// değişiminde o eski input zaten DOM'dan tamamen kopmuş olur.
+let _sonRehberOdak = null;
+document.addEventListener("focusin", function(e){
+  const el = e.target;
+  const buton = el && el.nextElementSibling;
+  if(buton && buton.classList && buton.classList.contains("rehber-ac-btn") &&
+     (buton.title === "Cari Rehberi" || buton.title === "Stok Rehberi")){
+    _sonRehberOdak = { el, buton };
+  }
+});
+
 document.addEventListener("keydown", function(e){
   // F1 → Cari Rehberi, F2 → Stok Rehberi: imleç bir cari/ürün arama kutusunun İÇİNDEYKEN
   // basılırsa, o kutunun yanındaki 🔍 rehber butonuyla AYNI işlevi tetikler (rehberden
-  // seçilen kayıt doğrudan o hücreye yazılır). İlgili bir kutuda DEĞİLSEK (ör. Ana
-  // Sayfa'dayken veya herhangi bir ekranda, sadece bir stok/cari bilgisine -telefon
-  // numarası gibi- BAKMAK isteniyorsa) rehber yine de açılır, ama hiçbir alana yazmadan
-  // SADECE ARAMA/BAKMA amaçlı (callback yok, bir satıra tıklamak sadece rehberi kapatır).
+  // seçilen kayıt doğrudan o hücreye yazılır). İmleç TAM o kutuda değilse ama en son
+  // odaklanılan eşleşen kutu hâlâ ekrandaysa (bkz. _sonRehberOdak), yine ORAYA yazılır —
+  // böylece "kutuya tıklayıp sonra öneri kutusunu kapatmak için başka yere tıklama" gibi
+  // durumlarda seçim kaybolmaz (18 Eyl 2026 bug fix). Gerçekten hiçbir eşleşen kutuyla
+  // hiç etkileşime girilmemişse (ör. Ana Sayfa'dayken sadece bir bilgiye BAKMAK
+  // isteniyorsa) rehber yine açılır ama hiçbir alana yazmadan SADECE ARAMA/BAKMA amaçlı.
   // Ctrl+1 → Cari Rehberi, Ctrl+2 → Stok Rehberi: F1/F2 ile TAMAMEN AYNI davranış
   // (bkz. yukarıdaki not) — bazı klavye/tarayıcı kombinasyonlarında F1/F2 tarayıcı
   // yardımı gibi başka kısayollarla çakışabildiği için ek/alternatif kısayol olarak
@@ -2043,6 +2065,10 @@ document.addEventListener("keydown", function(e){
     const beklenenBaslik = tip === "cari" ? "Cari Rehberi" : "Stok Rehberi";
     if(buton && buton.classList && buton.classList.contains("rehber-ac-btn") && buton.title === beklenenBaslik){
       buton.click();
+    } else if(_sonRehberOdak && _sonRehberOdak.buton.title === beklenenBaslik && _sonRehberOdak.el.isConnected){
+      // İmleç tam o alanda değil ama az önce oradaydık ve alan hâlâ ekranda —
+      // seçimi yine de oraya yaz (bkz. yukarıdaki _sonRehberOdak notu).
+      _sonRehberOdak.buton.click();
     } else {
       rehberAc(tip, null);
     }
