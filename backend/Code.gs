@@ -52,6 +52,8 @@ const SHEETS = {
   cariVirmanlar: "CariVirmanlar",
   projeKodlari: "ProjeKodlari",
   faturaTipleri: "FaturaTipleri",
+  kullanicilar: "Kullanicilar",
+  oturumlar: "Oturumlar",
 };
 
 // ── YARDIMCI FONKSİYONLAR ──
@@ -559,6 +561,232 @@ function logError(err) {
   try { Logger.log("HATA: " + err.message + "\n" + err.stack); } catch(e) {}
 }
 
+// ════════════════════════════════════════════════
+// KULLANICI GİRİŞİ VE OTURUM YÖNETİMİ
+// Basit, sheet-tabanlı bir giriş sistemi: parolalar SHA-256 ile hashlenip
+// Kullanicilar sayfasında, oturumlar (token → kullanıcı) Oturumlar sayfasında
+// tutulur. Web app linki herkese açık kaldığı için (appsscript.json:
+// ANYONE_ANONYMOUS) bu, "linki bilen herkes girsin" yerine "sadece 3 tanımlı
+// kullanıcı, kendi parolasıyla girsin" seviyesinde bir koruma sağlar —
+// bankacılık düzeyinde güvenlik hedeflenmemiştir, amaç kimin ne yaptığını
+// ayırt edebilmek ve rastgele erişimi engellemektir.
+// ════════════════════════════════════════════════
+const KULLANICI_BASLIKLAR = ["ID","KULLANICI_ADI","PAROLA_HASH","ROL","AKTIF","KAYIT_TARIHI"];
+const OTURUM_BASLIKLAR = ["TOKEN","KULLANICI_ID","KULLANICI_ADI","ROL","OLUSTURMA_TARIHI"];
+const OTURUM_SURESI_SAAT = 12;
+const VARSAYILAN_KULLANICILAR = [
+  { ad: "Necip",  rol: "Admin" },
+  { ad: "Fatih",  rol: "Standart" },
+  { ad: "Furkan", rol: "Standart" },
+];
+
+function sha256Hex_(metin) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, metin, Utilities.Charset.UTF_8);
+  return bytes.map(b => (("0" + (b & 0xFF).toString(16)).slice(-2))).join("");
+}
+
+// Sayfa yoksa oluşturur VE ilk seferde 3 varsayılan kullanıcıyı (parola =
+// kullanıcı adının kendisi) otomatik ekler. Sonraki her çağrıda sadece mevcut
+// sayfayı döndürür — burada eklenen kullanıcılar tekrar tekrar eklenmez.
+function kullanicilarSheetHazirla_(ss) {
+  const sheet = getOrCreateSheet(ss, SHEETS.kullanicilar, KULLANICI_BASLIKLAR);
+  if (sheet.getLastRow() < 2) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      if (sheet.getLastRow() < 2) { // lock sonrası tekrar kontrol (yarış durumu)
+        const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+        VARSAYILAN_KULLANICILAR.forEach((k, i) => {
+          sheet.appendRow(["kul_" + (Date.now() + i), k.ad, sha256Hex_(k.ad), k.rol, "Evet", simdi]);
+        });
+      }
+    } finally { lock.releaseLock(); }
+  }
+  return sheet;
+}
+
+function kullaniciSatirlariniOku_(ss) {
+  const sheet = kullanicilarSheetHazirla_(ss);
+  const data = sheet.getDataRange().getValues();
+  const satirlar = [];
+  for (let i = 1; i < data.length; i++) {
+    satirlar.push({
+      rowIdx: i + 1,
+      id: String(data[i][0]),
+      kullaniciAdi: String(data[i][1]),
+      parolaHash: String(data[i][2]),
+      rol: String(data[i][3]),
+      aktif: String(data[i][4]) === "Evet",
+    });
+  }
+  return { sheet, satirlar };
+}
+
+function girisYap(body) {
+  const kullaniciAdi = String(body.kullaniciAdi || "").trim();
+  const parola = String(body.parola || "");
+  if (!kullaniciAdi || !parola) return { ok: false, hata: "Kullanıcı adı ve parola gerekli" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const { satirlar } = kullaniciSatirlariniOku_(ss);
+  const kullanici = satirlar.find(k => k.kullaniciAdi.toLowerCase() === kullaniciAdi.toLowerCase());
+
+  // Kullanıcı bulunamadı / pasif / parola yanlış — hangisi olduğunu belli etmeden
+  // aynı genel mesaj döndürülür (kullanıcı adı denemesini kolaylaştırmamak için).
+  if (!kullanici || !kullanici.aktif || kullanici.parolaHash !== sha256Hex_(parola)) {
+    return { ok: false, hata: "Kullanıcı adı veya parola hatalı" };
+  }
+
+  const token = Utilities.getUuid();
+  const oturumSheet = getOrCreateSheet(ss, SHEETS.oturumlar, OTURUM_BASLIKLAR);
+  oturumSheet.appendRow([token, kullanici.id, kullanici.kullaniciAdi, kullanici.rol, String(Date.now())]);
+  oturumlarTemizle_(oturumSheet);
+
+  return { ok: true, token: token, kullaniciAdi: kullanici.kullaniciAdi, rol: kullanici.rol };
+}
+
+// Süresi dolmuş oturum satırlarını sayfadan temizler (sayfa sınırsız büyümesin diye).
+// Az sayıda kullanıcı/oturum olduğu için basit bir tam-tarama yeterli.
+function oturumlarTemizle_(oturumSheet) {
+  try {
+    const data = oturumSheet.getDataRange().getValues();
+    const simdi = Date.now();
+    const sinirMs = OTURUM_SURESI_SAAT * 3600 * 1000;
+    for (let i = data.length - 1; i >= 1; i--) {
+      const olusturma = Number(data[i][4]) || 0;
+      if (simdi - olusturma > sinirMs) oturumSheet.deleteRow(i + 1);
+    }
+  } catch (e) { /* temizlik başarısız olsa da girişi engellemesin */ }
+}
+
+// token geçerliyse {kullaniciId, kullaniciAdi, rol} döner, değilse null.
+function oturumDogrula_(ss, token) {
+  if (!token) return null;
+  const oturumSheet = getOrCreateSheet(ss, SHEETS.oturumlar, OTURUM_BASLIKLAR);
+  const data = oturumSheet.getDataRange().getValues();
+  const simdi = Date.now();
+  const sinirMs = OTURUM_SURESI_SAAT * 3600 * 1000;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === token) {
+      const olusturma = Number(data[i][4]) || 0;
+      if (simdi - olusturma > sinirMs) {
+        oturumSheet.deleteRow(i + 1);
+        return null;
+      }
+      return { kullaniciId: String(data[i][1]), kullaniciAdi: String(data[i][2]), rol: String(data[i][3]) };
+    }
+  }
+  return null;
+}
+
+function cikisYap(body) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const oturumSheet = getOrCreateSheet(ss, SHEETS.oturumlar, OTURUM_BASLIKLAR);
+  const data = oturumSheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(body.token)) { oturumSheet.deleteRow(i + 1); break; }
+  }
+  return { ok: true };
+}
+
+function parolaDegistir(body, oturum) {
+  const eskiParola = String(body.eskiParola || "");
+  const yeniParola = String(body.yeniParola || "");
+  if (!yeniParola || yeniParola.length < 3) return { ok: false, hata: "Yeni parola en az 3 karakter olmalı" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
+  const kullanici = satirlar.find(k => k.id === oturum.kullaniciId);
+  if (!kullanici) return { ok: false, hata: "Kullanıcı bulunamadı" };
+  if (kullanici.parolaHash !== sha256Hex_(eskiParola)) return { ok: false, hata: "Mevcut parola yanlış" };
+
+  sheet.getRange(kullanici.rowIdx, 3).setValue(sha256Hex_(yeniParola));
+  return { ok: true };
+}
+
+// ── Aşağıdaki kullaniciXxx fonksiyonları SADECE Admin rolündeki kullanıcı
+// tarafından çağrılabilir; kontrol handleRequest içinde yapılır. ──
+function kullaniciListesiGetir() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const { satirlar } = kullaniciSatirlariniOku_(ss);
+  // PAROLA_HASH asla frontend'e gönderilmez.
+  return { ok: true, liste: satirlar.map(k => ({ id: k.id, kullaniciAdi: k.kullaniciAdi, rol: k.rol, aktif: k.aktif })) };
+}
+
+function kullaniciEkle(body) {
+  const kullaniciAdi = String(body.kullaniciAdi || "").trim();
+  const rol = String(body.rol) === "Admin" ? "Admin" : "Standart";
+  if (!kullaniciAdi) return { ok: false, hata: "Kullanıcı adı gerekli" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
+  if (satirlar.some(k => k.kullaniciAdi.toLowerCase() === kullaniciAdi.toLowerCase())) {
+    return { ok: false, hata: "Bu kullanıcı adı zaten kayıtlı" };
+  }
+  const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+  const id = "kul_" + Date.now();
+  sheet.appendRow([id, kullaniciAdi, sha256Hex_(kullaniciAdi), rol, "Evet", simdi]);
+  return { ok: true, id: id };
+}
+
+function kullaniciDurumGuncelle(body) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
+  const kullanici = satirlar.find(k => k.id === String(body.kullaniciId));
+  if (!kullanici) return { ok: false, hata: "Kullanıcı bulunamadı" };
+
+  const yeniAktif = body.aktif === true || body.aktif === "Evet";
+  if (!yeniAktif) {
+    const aktifAdminSayisi = satirlar.filter(k => k.rol === "Admin" && k.aktif).length;
+    if (kullanici.rol === "Admin" && aktifAdminSayisi <= 1) {
+      return { ok: false, hata: "Tek aktif Admin pasifleştirilemez — önce başka bir kullanıcıyı Admin yapın" };
+    }
+  }
+  sheet.getRange(kullanici.rowIdx, 5).setValue(yeniAktif ? "Evet" : "Hayır");
+  return { ok: true };
+}
+
+function kullaniciRolGuncelle(body) {
+  const yeniRol = String(body.rol) === "Admin" ? "Admin" : "Standart";
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
+  const kullanici = satirlar.find(k => k.id === String(body.kullaniciId));
+  if (!kullanici) return { ok: false, hata: "Kullanıcı bulunamadı" };
+
+  if (kullanici.rol === "Admin" && yeniRol !== "Admin") {
+    const aktifAdminSayisi = satirlar.filter(k => k.rol === "Admin" && k.aktif).length;
+    if (aktifAdminSayisi <= 1) return { ok: false, hata: "Tek Admin'in rolü düşürülemez — önce başka bir kullanıcıyı Admin yapın" };
+  }
+  sheet.getRange(kullanici.rowIdx, 4).setValue(yeniRol);
+  return { ok: true };
+}
+
+// Parolayı kullanıcı adına sıfırlar — kullanıcı parolasını unuttuğunda Admin bu
+// butonu kullanır, kullanıcı bir dahaki girişte "Parolamı Değiştir" ile kendine
+// yeni bir parola belirleyebilir.
+function kullaniciParolaSifirla(body) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
+  const kullanici = satirlar.find(k => k.id === String(body.kullaniciId));
+  if (!kullanici) return { ok: false, hata: "Kullanıcı bulunamadı" };
+  sheet.getRange(kullanici.rowIdx, 3).setValue(sha256Hex_(kullanici.kullaniciAdi));
+  return { ok: true };
+}
+
+function kullaniciSil(body) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
+  const kullanici = satirlar.find(k => k.id === String(body.kullaniciId));
+  if (!kullanici) return { ok: false, hata: "Kullanıcı bulunamadı" };
+
+  if (kullanici.rol === "Admin") {
+    const aktifAdminSayisi = satirlar.filter(k => k.rol === "Admin" && k.aktif).length;
+    if (aktifAdminSayisi <= 1) return { ok: false, hata: "Tek Admin silinemez — önce başka bir kullanıcıyı Admin yapın" };
+  }
+  sheet.deleteRow(kullanici.rowIdx);
+  return { ok: true };
+}
+
 // ── GİRİŞ NOKTALARI ──
 function doGet(e) {
   if (e.parameter && e.parameter.payload) {
@@ -574,12 +802,40 @@ function doPost(e) {
   return handleRequest(e);
 }
 
+// Bu action'lar oturum/token gerektirmeden çalışır (login ekranı henüz token
+// almadan bunlara ihtiyaç duyar).
+const OTURUMSUZ_ACTIONLAR = { girisYap: true };
+// Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
+const ADMIN_ACTIONLAR = {
+  kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
+  kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
+};
+
 function handleRequest(e) {
   try {
     const body = e.postData ? JSON.parse(e.postData.contents) : e.parameter;
     const action = body.action;
     let result;
+    let oturum = null;
+    if (!OTURUMSUZ_ACTIONLAR[action]) {
+      oturum = oturumDogrula_(SpreadsheetApp.openById(SHEET_ID), body.token);
+      if (!oturum) {
+        return jsonResponse({ ok: false, oturumGecersiz: true, hata: "Oturum bulunamadı veya süresi doldu, lütfen tekrar giriş yapın." });
+      }
+      if (ADMIN_ACTIONLAR[action] && oturum.rol !== "Admin") {
+        return jsonResponse({ ok: false, hata: "Bu işlem sadece Admin yetkisiyle yapılabilir." });
+      }
+    }
     switch (action) {
+      case "girisYap":        result = girisYap(body); break;
+      case "cikisYap":        result = cikisYap(body); break;
+      case "parolaDegistir":  result = parolaDegistir(body, oturum); break;
+      case "kullaniciListesiGetir": result = kullaniciListesiGetir(); break;
+      case "kullaniciEkle":         result = kullaniciEkle(body); break;
+      case "kullaniciDurumGuncelle":result = kullaniciDurumGuncelle(body); break;
+      case "kullaniciRolGuncelle":  result = kullaniciRolGuncelle(body); break;
+      case "kullaniciParolaSifirla":result = kullaniciParolaSifirla(body); break;
+      case "kullaniciSil":          result = kullaniciSil(body); break;
       case "getCariListesi": result = getCariListesi(); break;
       case "getCariDetay":   result = getCariDetay(body.cariId); break;
       case "saveCari":       result = saveCari(body); break;

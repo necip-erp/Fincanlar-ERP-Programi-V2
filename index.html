@@ -422,10 +422,38 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .islem-btn{padding:7px 12px;border:1px solid var(--border);background:var(--bg2);border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;color:var(--text);transition:background var(--t),border-color var(--t),transform var(--t)}
 .islem-btn:hover{background:var(--blue-l);border-color:var(--blue);color:var(--blue)}
 .islem-btn:active{transform:scale(.96)}
+
+/* ── Giriş ekranı ── */
+body:not(.giris-yapildi) .topbar,
+body:not(.giris-yapildi) .sekme-seridi,
+body:not(.giris-yapildi) .main{display:none !important}
+#login-ekran{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:10000}
+body.giris-yapildi #login-ekran{display:none}
+.login-kutu{width:100%;max-width:340px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:32px 28px;box-shadow:0 8px 30px rgba(0,0,0,.12)}
+.login-kutu img{height:36px;display:block;margin:0 auto 18px}
+.login-kutu h1{font-size:16px;font-weight:800;text-align:center;margin:0 0 22px;color:var(--text)}
+.login-kutu .fld{margin-bottom:14px}
+.login-kutu .fld label{display:block;font-size:12px;font-weight:700;color:var(--text2);margin-bottom:5px}
+.login-kutu .fld input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg3);font-size:14px;font-family:inherit;box-sizing:border-box}
+.login-kutu .fld input:focus{outline:none;border-color:var(--blue);background:var(--bg2);box-shadow:0 0 0 3px var(--blue-l)}
+.login-kutu button{width:100%;padding:11px;border:none;border-radius:9px;background:var(--blue);color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px}
+.login-kutu button:disabled{opacity:.6;cursor:default}
+.login-hata{color:#c0392b;font-size:13px;margin:-6px 0 12px;min-height:16px}
 </style>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
+
+<div id="login-ekran">
+  <div class="login-kutu">
+    <img src="./fincanlar-logo.png" alt="Fincanlar">
+    <h1>Fincanlar ERP — Giriş</h1>
+    <div class="fld"><label>Kullanıcı Adı</label><input id="login-kullanici" type="text" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('login-parola').focus()"></div>
+    <div class="fld"><label>Parola</label><input id="login-parola" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')girisDene()"></div>
+    <div class="login-hata" id="login-hata"></div>
+    <button id="login-btn" onclick="girisDene()">Giriş Yap</button>
+  </div>
+</div>
 
 <div class="topbar">
   <div class="brand" onclick="gitAnaSayfa()">
@@ -442,6 +470,13 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
     <div id="modul-switcher-liste" class="modul-switcher-liste" style="display:none"></div>
   </div>
   <span id="topbar-saat" class="topbar-saat"></span>
+  <div id="kullanici-menu-wrap" style="position:relative">
+    <button class="homebtn" style="display:inline-block" id="kullanici-menu-btn" onclick="kullaniciMenuAcKapat(event)">👤 <span id="kullanici-menu-ad"></span></button>
+    <div id="kullanici-menu-liste" class="modul-switcher-liste" style="display:none;min-width:170px">
+      <div class="modul-switcher-satir" onclick="kullaniciMenuKapat();parolaDegistirModalAc()">🔑 Parolamı Değiştir</div>
+      <div class="modul-switcher-satir" onclick="cikisYapButon()">🚪 Çıkış Yap</div>
+    </div>
+  </div>
 </div>
 <div class="sekme-seridi" id="sekme-seridi"></div>
 <script>
@@ -1218,6 +1253,16 @@ setInterval(topbarSaatGuncelle, 10000);
       </div>
       <div id="tanimliste-faturaTipi" style="margin-top:12px"></div>
     </div>
+    <div class="finans-panel" id="kullanici-yonetimi-panel" style="display:none">
+      <div class="rapor-baslik" style="margin-top:0">Kullanıcı Yönetimi</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Sadece Admin rolündeki kullanıcılar görebilir. Yeni kullanıcı eklenince ilk parola, kullanıcı adının kendisi olur.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+        <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Yeni Kullanıcı Adı</label><input id="kul-yeni-ad" type="text" placeholder="Örn. Ahmet"></div>
+        <div class="fld" style="width:140px;margin-bottom:0"><label>Rol</label><select id="kul-yeni-rol"><option value="Standart">Standart</option><option value="Admin">Admin</option></select></div>
+        <button class="btn btn-primary" onclick="kullaniciEkleGonder()">+ Kullanıcı Ekle</button>
+      </div>
+      <div id="kullanici-yonetimi-liste"><div class="cari-empty">Yükleniyor...</div></div>
+    </div>
   </div>
 </div>
 
@@ -1843,6 +1888,68 @@ document.addEventListener("click", (ev)=>{
   if(wrap && !wrap.contains(ev.target)) modulSwitcherKapat();
 });
 
+// ── Kullanıcı menüsü (topbar sağ üst): giriş yapan kullanıcının adı/rolü + Parolamı
+// Değiştir / Çıkış Yap. Aynı desen modulSwitcherAcKapat ile birebir aynı. ──
+function uygulamaKullanicisiUyGoster_(){
+  try{
+    const k = JSON.parse(localStorage.getItem("fincanlar_oturum_kullanici") || "null");
+    const el = document.getElementById("kullanici-menu-ad");
+    if(el) el.textContent = k ? k.ad + (k.rol==="Admin" ? " (Admin)" : "") : "";
+  }catch(e){}
+}
+function kullaniciMenuAcKapat(ev){
+  if(ev) ev.stopPropagation();
+  const el = document.getElementById("kullanici-menu-liste");
+  if(!el) return;
+  el.style.display = el.style.display === "block" ? "none" : "block";
+}
+function kullaniciMenuKapat(){
+  const el = document.getElementById("kullanici-menu-liste");
+  if(el) el.style.display = "none";
+}
+document.addEventListener("click", (ev)=>{
+  const wrap = document.getElementById("kullanici-menu-wrap");
+  if(wrap && !wrap.contains(ev.target)) kullaniciMenuKapat();
+});
+
+function parolaDegistirModalAc(){
+  const mevcut = document.getElementById("parola-degistir-overlay");
+  if(mevcut) mevcut.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "parola-degistir-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:340px">
+      <h3 style="margin-top:0">🔑 Parolamı Değiştir</h3>
+      <div class="fld"><label>Mevcut Parola</label><input id="pd-eski" type="password"></div>
+      <div class="fld"><label>Yeni Parola</label><input id="pd-yeni" type="password"></div>
+      <div class="fld"><label>Yeni Parola (Tekrar)</label><input id="pd-yeni2" type="password"></div>
+      <div class="login-hata" id="pd-hata"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('parola-degistir-overlay').remove()">Vazgeç</button>
+        <button class="btn btn-primary" id="pd-kaydet-btn" onclick="parolaDegistirGonder()">Kaydet</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function parolaDegistirGonder(){
+  const eski = document.getElementById("pd-eski").value;
+  const yeni = document.getElementById("pd-yeni").value;
+  const yeni2 = document.getElementById("pd-yeni2").value;
+  const hataEl = document.getElementById("pd-hata");
+  if(!eski || !yeni){ hataEl.textContent = "Tüm alanları doldurun"; return; }
+  if(yeni !== yeni2){ hataEl.textContent = "Yeni parolalar birbiriyle eşleşmiyor"; return; }
+  const btn = document.getElementById("pd-kaydet-btn");
+  btn.disabled = true;
+  cariApi("parolaDegistir", {eskiParola: eski, yeniParola: yeni}).then(res=>{
+    btn.disabled = false;
+    if(!res || !res.ok){ hataEl.textContent = (res && res.hata) || "Parola değiştirilemedi"; return; }
+    document.getElementById("parola-degistir-overlay").remove();
+    toastGoster("Parolanız güncellendi");
+  }).catch(()=>{ btn.disabled = false; hataEl.textContent = "Sunucuya ulaşılamadı"; });
+}
+
 // Arama kutusuna bir şey yazılınca doğrudan Stok > Tanımlar > Stok Tanımları listesine
 // geçilir VE yazılan terim otomatik olarak o listenin arama kutusuna uygulanıp filtrelenir
 // (önceden sadece Stok modülüne geçiyordu, gerçek bir arama yapmıyordu).
@@ -2042,6 +2149,12 @@ function cariApiIstekYap_(url){
 
 function cariApi(action, params){
   const body = Object.assign({action: action}, params || {});
+  // "girisYap" dışında her istek son alınan oturum token'ını taşır — backend
+  // bunu doğrular, yoksa/süresi dolmuşsa oturumGecersiz:true ile döner.
+  if(action !== "girisYap" && !body.token){
+    const token = localStorage.getItem("fincanlar_oturum_token");
+    if(token) body.token = token;
+  }
   const url = CARI_API + "?payload=" + encodeURIComponent(JSON.stringify(body));
   return cariApiIstekYap_(url).catch(err=>{
     if(!err.gecersizYanit) throw err; // ağ hatası (offline vb.) ise direkt fırlat, tekrar denemenin faydası yok
@@ -2049,6 +2162,9 @@ function cariApi(action, params){
   }).then(res=>{
     if(res && res.error && res.ok===undefined){
       return { ok:false, hata: res.error };
+    }
+    if(res && res.oturumGecersiz){
+      oturumuSonlandirVeGirisGoster_();
     }
     return res;
   });
@@ -8298,6 +8414,7 @@ function ayarlarYukle(){
   if(!_tanimListeYuklendi.projeKodu) tanimListesiYukle("projeKodu");
   if(!_tanimListeYuklendi.faturaTipi) tanimListesiYukle("faturaTipi");
   edmOnekEslesmeYukle();
+  kullaniciYonetimiKontrolEtVeYukle();
   const sgKayitli = localStorage.getItem("fincanlar_sekme_genislik") || "140";
   const sgInput = document.getElementById("ayarlar-sekme-genislik");
   if(sgInput) sgInput.value = sgKayitli;
@@ -8799,6 +8916,75 @@ function tanimUstAdiEtiket(tip, ustId){
   const ustTip = TANIM_ALT_UST_ESLESME[tip];
   const grup = (_tanimListeCache[ustTip]||[]).find(g=>g.id===ustId);
   return grup ? ` <span class="tip-badge">${grup.ad}</span>` : "";
+}
+
+// ── Ayarlar > Kullanıcı Yönetimi (SADECE Admin rolüne görünür) ──
+function kullaniciYonetimiKontrolEtVeYukle(){
+  let rol = "";
+  try{ rol = (JSON.parse(localStorage.getItem("fincanlar_oturum_kullanici")||"null")||{}).rol || ""; }catch(e){}
+  const panel = document.getElementById("kullanici-yonetimi-panel");
+  if(!panel) return;
+  if(rol !== "Admin"){ panel.style.display = "none"; return; }
+  panel.style.display = "";
+  kullaniciYonetimiCiz();
+}
+function kullaniciYonetimiCiz(){
+  const el = document.getElementById("kullanici-yonetimi-liste");
+  if(!el) return;
+  cariApi("kullaniciListesiGetir", {}).then(res=>{
+    if(!res || !res.ok){ el.innerHTML = `<div class="cari-empty">${(res&&res.hata)||"Yüklenemedi"}</div>`; return; }
+    el.innerHTML = res.liste.map(k=>`
+      <div class="hizli-erisim-satir" style="cursor:default">
+        <span class="lbl" style="flex:1">${k.kullaniciAdi}</span>
+        <select style="margin-right:8px" onchange="kullaniciRolDegistir('${k.id}', this.value)">
+          <option value="Standart" ${k.rol==="Standart"?"selected":""}>Standart</option>
+          <option value="Admin" ${k.rol==="Admin"?"selected":""}>Admin</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;margin-right:8px">
+          <input type="checkbox" ${k.aktif?"checked":""} onchange="kullaniciAktifTogle('${k.id}', this.checked)"> Aktif
+        </label>
+        <button class="islem-btn" onclick="kullaniciParolaSifirlaTikla('${k.id}','${k.kullaniciAdi}')">🔑 Parolayı Sıfırla</button>
+        <button class="islem-btn" onclick="kullaniciSilTikla('${k.id}','${k.kullaniciAdi}')">🗑️ Sil</button>
+      </div>`).join("");
+  });
+}
+function kullaniciEkleGonder(){
+  const adEl = document.getElementById("kul-yeni-ad");
+  const ad = adEl.value.trim();
+  const rol = document.getElementById("kul-yeni-rol").value;
+  if(!ad){ alert("Kullanıcı adı girin"); return; }
+  cariApi("kullaniciEkle", {kullaniciAdi: ad, rol}).then(res=>{
+    if(!res || !res.ok){ alert((res&&res.hata)||"Eklenemedi"); return; }
+    adEl.value = "";
+    toastGoster("Kullanıcı eklendi — ilk parolası kullanıcı adıyla aynı");
+    kullaniciYonetimiCiz();
+  });
+}
+function kullaniciRolDegistir(id, rol){
+  cariApi("kullaniciRolGuncelle", {kullaniciId: id, rol}).then(res=>{
+    if(!res || !res.ok){ alert((res&&res.hata)||"Güncellenemedi"); }
+    kullaniciYonetimiCiz();
+  });
+}
+function kullaniciAktifTogle(id, aktif){
+  cariApi("kullaniciDurumGuncelle", {kullaniciId: id, aktif}).then(res=>{
+    if(!res || !res.ok){ alert((res&&res.hata)||"Güncellenemedi"); }
+    kullaniciYonetimiCiz();
+  });
+}
+function kullaniciParolaSifirlaTikla(id, ad){
+  if(!confirm(`${ad} kullanıcısının parolasını "${ad}" olarak sıfırlamak istediğinize emin misiniz?`)) return;
+  cariApi("kullaniciParolaSifirla", {kullaniciId: id}).then(res=>{
+    if(!res || !res.ok){ alert((res&&res.hata)||"Sıfırlanamadı"); return; }
+    toastGoster("Parola sıfırlandı: " + ad);
+  });
+}
+function kullaniciSilTikla(id, ad){
+  if(!confirm(`${ad} kullanıcısını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) return;
+  cariApi("kullaniciSil", {kullaniciId: id}).then(res=>{
+    if(!res || !res.ok){ alert((res&&res.hata)||"Silinemedi"); return; }
+    kullaniciYonetimiCiz();
+  });
 }
 
 function tanimEkle(tip){
@@ -9998,44 +10184,52 @@ function stokHareketRaporuTemizle(){
      daha erken çalıştırılırsa "fonksiyon tanımlı değil" hatası verip modülün
      yüklenmesini sessizce bozardı. -->
 <script>
-(function(){
-  const params = new URLSearchParams(location.search);
-  const tab = params.get("tab");
-  const islem = params.get("islem");
-  const shrArama = params.get("shrArama");
-  const stanimAra = params.get("stanimAra");
-  if(islem){ cariHareketIslemeGit(islem); }
-  else if(tab && MODULLER.some(m=>m.id===tab)) modulAc(tab);
-  else acilisSayfasinaGit();
-  if(shrArama && tab === "stok"){
-    const el = document.getElementById("shr-arama");
-    if(el) el.value = shrArama;
-    stokAltModulAc("raporlar");
-    stokRaporAltAc("hareket");
-  }
-  if(stanimAra && tab === "stok"){
-    stokAltModulAc("tanimlar");
-    stokTanimAltAc("tanim");
-    const el = document.getElementById("stoktanim-ara");
-    if(el) el.value = stanimAra;
-    // Liste ilk yüklenirken (ağ isteği) henüz hazır olmayabilir — hazır olana kadar
-    // kısa aralıklarla filtreyi tekrar uygular (en fazla ~5 sn).
-    let deneme = 0;
-    const zamanlayici = setInterval(()=>{
-      deneme++;
-      if(_stokTanimListe && _stokTanimListe.length){
-        stokTanimAramaFiltrele(stanimAra);
-        clearInterval(zamanlayici);
-      } else if(deneme > 25) clearInterval(zamanlayici);
-    }, 200);
-  }
-})();
+// Bu fonksiyon EN SONDA duruyor, çünkü çağırdığı modül fonksiyonları (satisListesiYukle,
+// finansYukle, alisListesiYukle vb.) yukarıdaki script bloklarında tanımlanıyor —
+// daha erken çalıştırılırsa "fonksiyon tanımlı değil" hatası verip modülün
+// yüklenmesini sessizce bozardı. GİRİŞ EKRANI GATE'İ: bu rutin artık doğrudan
+// çalışmıyor, sadece geçerli bir oturum doğrulandıktan sonra girisAkisiBaslat()
+// tarafından bir kez çağrılıyor (bkz. aşağıdaki giriş ekranı script bloğu).
+function uygulamaAcilisRutini(){
+  (function(){
+    const params = new URLSearchParams(location.search);
+    const tab = params.get("tab");
+    const islem = params.get("islem");
+    const shrArama = params.get("shrArama");
+    const stanimAra = params.get("stanimAra");
+    if(islem){ cariHareketIslemeGit(islem); }
+    else if(tab && MODULLER.some(m=>m.id===tab)) modulAc(tab);
+    else acilisSayfasinaGit();
+    if(shrArama && tab === "stok"){
+      const el = document.getElementById("shr-arama");
+      if(el) el.value = shrArama;
+      stokAltModulAc("raporlar");
+      stokRaporAltAc("hareket");
+    }
+    if(stanimAra && tab === "stok"){
+      stokAltModulAc("tanimlar");
+      stokTanimAltAc("tanim");
+      const el = document.getElementById("stoktanim-ara");
+      if(el) el.value = stanimAra;
+      // Liste ilk yüklenirken (ağ isteği) henüz hazır olmayabilir — hazır olana kadar
+      // kısa aralıklarla filtreyi tekrar uygular (en fazla ~5 sn).
+      let deneme = 0;
+      const zamanlayici = setInterval(()=>{
+        deneme++;
+        if(_stokTanimListe && _stokTanimListe.length){
+          stokTanimAramaFiltrele(stanimAra);
+          clearInterval(zamanlayici);
+        } else if(deneme > 25) clearInterval(zamanlayici);
+      }, 200);
+    }
+  })();
 
-// Bugünkü Özet ve Son Yapılan İşlemler kartlarının ilk çekimi — burada CARI_API/cariApi
-// zaten tanımlı olduğu için güvenli (bkz. yukarıdaki not: bu çağrılar dosyanın başında
-// yapılırsa cariApi henüz tanımlanmadan çalışıp script'in geri kalanını bozuyordu).
-if(typeof bugunOzetCiz === "function") bugunOzetCiz();
-if(typeof sonIslemlerYukle === "function") sonIslemlerYukle();
+  // Bugünkü Özet ve Son Yapılan İşlemler kartlarının ilk çekimi — burada CARI_API/cariApi
+  // zaten tanımlı olduğu için güvenli (bkz. yukarıdaki not: bu çağrılar dosyanın başında
+  // yapılırsa cariApi henüz tanımlanmadan çalışıp script'in geri kalanını bozuyordu).
+  if(typeof bugunOzetCiz === "function") bugunOzetCiz();
+  if(typeof sonIslemlerYukle === "function") sonIslemlerYukle();
+}
 
 // F5/Ctrl+R gibi bir tarayıcı yenilemesi (veya sekmeyi/pencereyi kapatma) bu SPA'da TÜM
 // açık sekmeleri (satış/alış kayıtları, kayıt sekmeleri) sessizce siler — hiçbir uyarı
@@ -10050,6 +10244,70 @@ window.addEventListener("beforeunload", function(e){
     return "";
   }
 });
+</script>
+
+<!-- ── GİRİŞ EKRANI AKIŞI ──
+     localStorage'da geçerli bir token varsa uygulama İYİMSER olarak hemen gösterilir
+     (bu SPA'nın her yerdeki "önce önbellek göster, arkada tazele" felsefesiyle aynı) ve
+     arka planda hafif bir istek ile token doğrulanır; geçersizse (cariApi zaten
+     oturumGecersiz durumunda otomatik login ekranına döner) kullanıcı login'e düşer.
+     Token yoksa uygulamaAcilisRutini() HİÇ ÇAĞRILMAZ — sadece login formu görünür,
+     başarılı girişten sonra bir kez çağrılır. -->
+<script>
+function girisEkraniGoster_(hataMesaji){
+  document.body.classList.remove("giris-yapildi");
+  document.getElementById("login-hata").textContent = hataMesaji || "";
+  const kAlan = document.getElementById("login-kullanici");
+  if(kAlan && !kAlan.value) kAlan.focus();
+}
+
+function oturumuSonlandirVeGirisGoster_(){
+  localStorage.removeItem("fincanlar_oturum_token");
+  localStorage.removeItem("fincanlar_oturum_kullanici");
+  girisEkraniGoster_("Oturumunuzun süresi doldu, lütfen tekrar giriş yapın.");
+}
+
+function girisDene(){
+  const kullaniciAdi = document.getElementById("login-kullanici").value.trim();
+  const parola = document.getElementById("login-parola").value;
+  const hataEl = document.getElementById("login-hata");
+  const btn = document.getElementById("login-btn");
+  if(!kullaniciAdi || !parola){ hataEl.textContent = "Kullanıcı adı ve parola gerekli"; return; }
+  hataEl.textContent = "";
+  btn.disabled = true; btn.textContent = "Giriş yapılıyor...";
+  cariApi("girisYap", {kullaniciAdi, parola}).then(res=>{
+    btn.disabled = false; btn.textContent = "Giriş Yap";
+    if(!res || !res.ok){ hataEl.textContent = (res && res.hata) || "Giriş başarısız"; return; }
+    localStorage.setItem("fincanlar_oturum_token", res.token);
+    localStorage.setItem("fincanlar_oturum_kullanici", JSON.stringify({ad: res.kullaniciAdi, rol: res.rol}));
+    document.getElementById("login-parola").value = "";
+    document.body.classList.add("giris-yapildi");
+    uygulamaKullanicisiUyGoster_();
+    uygulamaAcilisRutini();
+  }).catch(()=>{
+    btn.disabled = false; btn.textContent = "Giriş Yap";
+    hataEl.textContent = "Sunucuya ulaşılamadı, tekrar deneyin.";
+  });
+}
+
+function cikisYapButon(){
+  const token = localStorage.getItem("fincanlar_oturum_token");
+  if(token) cariApi("cikisYap", {token}).catch(()=>{});
+  location.reload();
+}
+
+function girisAkisiBaslat(){
+  const token = localStorage.getItem("fincanlar_oturum_token");
+  if(!token){ girisEkraniGoster_(); return; }
+  // İyimser: token var, uygulamayı hemen göster ve açılış rutinini çalıştır.
+  // Token gerçekte geçersizse ilk cariApi çağrısı oturumGecersiz döndürüp
+  // oturumuSonlandirVeGirisGoster_() ile bizi otomatik login'e geri alacak.
+  document.body.classList.add("giris-yapildi");
+  uygulamaKullanicisiUyGoster_();
+  uygulamaAcilisRutini();
+}
+
+girisAkisiBaslat();
 </script>
 
 <script>
