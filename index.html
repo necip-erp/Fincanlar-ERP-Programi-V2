@@ -154,6 +154,9 @@ body.desen-acik{
 .son-islem-satir .alt{font-size:10.5px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .son-islem-satir .tarih{font-size:9.5px;color:var(--text3);margin-top:2px}
 @media (max-width:1180px){#home{flex-direction:column}.home-yan{width:100%;max-height:none}}
+.son-islem-tbl-wrap{max-height:440px;overflow:auto;border:1px solid var(--border);border-radius:9px;background:var(--bg2)}
+.son-islem-tbl-wrap thead th{position:sticky;top:0;background:var(--bg2);z-index:1}
+.modtile-no{position:absolute;top:6px;right:7px;font-size:9.5px;font-weight:800;letter-spacing:.02em;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:1px 5px;line-height:1.35;pointer-events:none}
 .modtile{background:var(--bg2);border:1px solid var(--border);border-top:3px solid var(--border);border-radius:var(--r);padding:var(--mod-pad);text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
 .modtile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--blue),var(--amber));transform:scaleX(0);transform-origin:left;transition:transform .22s var(--ease)}
 .modtile:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:transparent}
@@ -552,6 +555,7 @@ setInterval(topbarSaatGuncelle, 10000);
       <div class="home-yan-baslik">
         <span>🕘 Son Yapılan İşlemler</span>
         <span style="display:flex;gap:4px">
+          <button class="btn" style="padding:2px 8px;font-size:11px;white-space:nowrap" onclick="sonIslemlerTumuAc()" title="Tüm işlemleri Ayarlar'da göster">Tümü ›</button>
           <button class="btn" style="padding:2px 8px;font-size:11px" onclick="sonIslemlerYukle()" title="Yenile">↻</button>
           <button class="btn" style="padding:2px 8px;font-size:11px" id="son-islemler-katla-btn" onclick="sonIslemlerKatlaAc()" title="Aç/Kapat">▾</button>
         </span>
@@ -1149,9 +1153,20 @@ setInterval(topbarSaatGuncelle, 10000);
     </div>
   </div>
   <div class="modview" id="mod-ayarlar">
+    <div class="finans-panel" id="ayarlar-son-islemler-panel" data-bolum-anahtar="ayarlar_bolum_son_islemler" data-varsayilan-acik="1">
+      <div class="rapor-baslik" style="margin-top:0">Son Yapılan İşlemler</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Tüm modüllerdeki en son işlemler (Ana Sayfa'da sadece son 5 görünür). Bir satıra tıklayınca kaydı ayrı sekmede açılır.</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+        <button class="btn" onclick="ayarlarSonIslemlerYukle()">↻ Yenile</button>
+        <span id="ayarlar-son-islemler-ozet" style="font-size:12px;color:var(--text3)"></span>
+      </div>
+      <div id="ayarlar-son-islemler-liste"><div class="cari-empty">Yükleniyor...</div></div>
+      <div id="ayarlar-son-islemler-daha" style="display:none;margin-top:8px"><button class="btn" onclick="ayarlarSonIslemlerDahaFazla()">Daha fazla göster (+100)</button></div>
+    </div>
+
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Kısayol Tuşları</div>
-      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Bir modülün kutusuna tıkla, sonra klavyede istediğin tuş kombinasyonuna bas — otomatik algılanır. Bir yazı alanındayken (input içinde) kısayollar çalışmaz.</p>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Bir modülün kutusuna tıkla, sonra klavyede istediğin tuş kombinasyonuna bas — otomatik algılanır. Bir yazı alanındayken (input içinde) kısayollar çalışmaz.<br><b>Ctrl+1 … Ctrl+9</b> sabittir: Ana Sayfa'daki modül kutularının <i>sırasına</i> göre o sıradaki modülü açar (numara kutunun köşesinde yazar; kutuları sürükleyip sırayı değiştirince numaralar da değişir).</p>
       <div id="ayarlar-kisayol-liste"></div>
       <div class="modal-actions" style="justify-content:flex-start;margin-top:16px">
         <button class="btn btn-primary" onclick="kisayollariKaydet()">Kaydet</button>
@@ -1388,7 +1403,9 @@ function modulSirasiniKaydet(idListesi){
 let _surukleneId = null;
 function modgridCiz(){
   const sirali = modulSirasiniAl();
-  document.getElementById("modgrid").innerHTML = sirali.map(m=>{
+  document.getElementById("modgrid").innerHTML = sirali.map((m, sira)=>{
+    // ★ (21 Eyl 2026) Ctrl+1…Ctrl+9: Ana Sayfa'daki GÖRÜNEN sıraya göre modül kısayolu (sıra değişince numara da değişir).
+    const kisayolNo = sira < 9 ? `<span class="modtile-no" title="Kısayol: Ctrl+${sira+1}">Ctrl+${sira+1}</span>` : "";
     const renkli = m.renk && m.renk !== "neutral";
     const icStil = renkli ? `background:var(--${m.renk}-l);color:var(--${m.renk})` : "";
     const tileStil = renkli ? `border-top-color:var(--${m.renk})` : "";
@@ -1399,6 +1416,7 @@ function modgridCiz(){
          ondragend="this.classList.remove('surukleniyor')"
          ondragover="event.preventDefault()"
          ondrop="modulSiraDegistir('${m.id}')">
+      ${kisayolNo}
       <span class="ic" style="${icStil}">${m.ic}</span>
       <div class="lbl">${m.lbl}</div>
       <div class="desc">${m.desc}</div>
@@ -1659,7 +1677,7 @@ hizliErisimCiz();
 
 // ── Ana Sayfa SAĞ: Son Yapılan İşlemler ──────────────────────────────────────
 // Tüm modüllerden (Satış, Alış, Tahsilat, Ödeme, Çek/Senet, elle girilen Stok
-// Hareketi) en son 20 kaydı KAYIT_TARİHİ'ne göre karışık gösterir; her satır o
+// Hareketi) en son 5 kaydı (tam liste Ayarlar'da) KAYIT_TARİHİ'ne göre karışık gösterir; her satır o
 // kaydın ait olduğu ekranı sekme olarak açar.
 // Ana sayfadaki "Son Yapılan İşlemler" panelinin açık/kapalı durumu localStorage'da
 // tutulur, sayfa her açıldığında (bkz. aşağıdaki hemen-çalışan blok) geri yüklenir.
@@ -1692,6 +1710,56 @@ function sonIslemlerCiz_(el, islemler){
     </div>`;
   }).join("");
 }
+// ★ (21 Eyl 2026) Ana Sayfa'da sadece SON 5 işlem görünür; tam liste Ayarlar'ın en üstündeki
+// "Son Yapılan İşlemler" bölümünde (varsayılan 100, "Daha fazla" ile +100, en fazla 500).
+const SON_ISLEM_ANASAYFA_ADET = 5;
+function sonIslemlerTumuAc(){
+  modulAc("ayarlar");
+  const panel = document.getElementById("ayarlar-son-islemler-panel");
+  if(panel){
+    panel.classList.remove("ayarlar-bolum-kapali");
+    try{ localStorage.setItem("ayarlar_bolum_son_islemler", "acik"); }catch(_){}
+    panel.scrollIntoView({block:"start"});
+  }
+}
+let _ayarlarSonIslemLimit = 100;
+function ayarlarSonIslemlerYukle(sifirla){
+  const el = document.getElementById("ayarlar-son-islemler-liste");
+  if(!el) return;
+  if(sifirla === true) _ayarlarSonIslemLimit = 100;
+  const limit = _ayarlarSonIslemLimit;
+  if(!el.dataset.dolu) el.innerHTML = `<div class="cari-empty">Yükleniyor...</div>`;
+  cariApi("getSonIslemler", {limit}).then(res=>{
+    if(limit !== _ayarlarSonIslemLimit) return; // arada daha yeni bir istek atıldı
+    if(!res || !res.ok){
+      if(!el.dataset.dolu) el.innerHTML = `<div class="cari-empty">Yüklenemedi${res && res.hata ? ": "+res.hata : ""}</div>`;
+      return;
+    }
+    const liste = res.islemler || [];
+    el.dataset.dolu = "1";
+    const ozet = document.getElementById("ayarlar-son-islemler-ozet");
+    if(ozet) ozet.textContent = liste.length + " işlem gösteriliyor";
+    // Backend her modülden son N kaydı alıp birleştirir; limit kadar sonuç geldiyse muhtemelen daha fazlası var.
+    const daha = document.getElementById("ayarlar-son-islemler-daha");
+    if(daha) daha.style.display = (liste.length >= limit && limit < 500) ? "block" : "none";
+    if(liste.length === 0){ el.innerHTML = `<div class="cari-empty">Henüz işlem yok.</div>`; return; }
+    el.innerHTML = `<div class="son-islem-tbl-wrap"><table class="rapor-tbl" style="margin-top:0;margin-bottom:0">
+      <thead><tr><th>İşlem</th><th>Cari</th><th style="text-align:right">Tutar</th><th>Kayıt Tarihi</th></tr></thead>
+      <tbody>${liste.map(k=>`
+        <tr style="cursor:pointer" onclick="sonIslemAc('${k.tip}','${k.id}')">
+          <td>${k.ic||"📄"} ${k.baslik||""}</td>
+          <td>${k.cariAd||""}</td>
+          <td style="text-align:right">${k.tutar ? paraFormat(k.tutar) : ""}</td>
+          <td>${k.kayitTarihi||""}</td>
+        </tr>`).join("")}</tbody></table></div>`;
+  }).catch(err=>{
+    if(!el.dataset.dolu) el.innerHTML = `<div class="cari-empty">Bağlantı hatası: ${err.message}</div>`;
+  });
+}
+function ayarlarSonIslemlerDahaFazla(){
+  _ayarlarSonIslemLimit = Math.min(500, _ayarlarSonIslemLimit + 100);
+  ayarlarSonIslemlerYukle();
+}
 function sonIslemlerYukle(){
   const el = document.getElementById("son-islemler-liste");
   if(!el) return;
@@ -1704,21 +1772,21 @@ function sonIslemlerYukle(){
   // ★ İlk açılışta son bilinen liste önbellekten ANINDA çizilir (19 Eyl 2026); taze veri gelince güncellenir.
   const onb = ilkYukleme ? onbellekOku("sonIslemler", ONBELLEK_MAX_YAS) : null;
   const onbGosterildi = !!(onb && onb.length);
-  if(onbGosterildi) sonIslemlerCiz_(el, onb);
+  if(onbGosterildi) sonIslemlerCiz_(el, onb.slice(0, SON_ISLEM_ANASAYFA_ADET));
   else if(ilkYukleme) el.innerHTML = `<div class="son-islem-bos">Yükleniyor...</div>`;
   // Apps Script ilk (soğuk) istekte birkaç saniye gecikebilir — 15 sn içinde
   // cevap gelmezse kullanıcıyı sonsuza dek "Yükleniyor..." ekranında bırakmak
   // yerine "Tekrar Dene" seçeneği gösteriyoruz.
   const zamanAsimi = new Promise((_,reddet)=>setTimeout(()=>reddet(new Error("zaman aşımı")), 15000));
-  Promise.race([cariApi("getSonIslemler", {limit:20}), zamanAsimi]).then(res=>{
+  Promise.race([cariApi("getSonIslemler", {limit:SON_ISLEM_ANASAYFA_ADET}), zamanAsimi]).then(res=>{
     if(!res || !res.ok || !res.islemler || res.islemler.length===0){
       if(onbGosterildi && res && !res.ok) return; // hata: önbellekteki listeyi koru
       el.innerHTML = `<div class="son-islem-bos">Henüz işlem yok.</div>`;
       el.dataset.dolu = "1";
       return;
     }
-    onbellekYaz("sonIslemler", res.islemler);
-    sonIslemlerCiz_(el, res.islemler);
+    onbellekYaz("sonIslemler", res.islemler.slice(0, SON_ISLEM_ANASAYFA_ADET));
+    sonIslemlerCiz_(el, res.islemler.slice(0, SON_ISLEM_ANASAYFA_ADET));
     el.dataset.dolu = "1";
   }).catch(()=>{
     // Arka plandaki sessiz yenileme başarısız olduysa ve ekranda zaten (eski) bir
@@ -2316,10 +2384,10 @@ document.addEventListener("keydown", function(e){
   // yardımı gibi başka kısayollarla çakışabildiği için ek/alternatif kısayol olarak
   // eklendi. Zaten bir Cari/Stok Rehberi (seçim ekranı) AÇIKKEN de çalışır: aktif
   // input üzerindeki 🔍 butonuna tıklamış gibi davranır, seçim yapılınca o input'a yazılır.
-  const ctrl1veya2 = e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === "1" || e.key === "2");
-  if(e.key === "F1" || e.key === "F2" || ctrl1veya2){
+  // (21 Eyl 2026) Ctrl+1/Ctrl+2 artık Rehber değil, Ana Sayfa modül sırasındaki 1./2. modülü açar (aşağıya bkz.).
+  if(e.key === "F1" || e.key === "F2"){
     e.preventDefault();
-    const tip = (e.key === "F1" || e.key === "1") ? "cari" : "stok";
+    const tip = e.key === "F1" ? "cari" : "stok";
     const aktif = document.activeElement;
     const buton = aktif && aktif.nextElementSibling;
     const beklenenBaslik = tip === "cari" ? "Cari Rehberi" : "Stok Rehberi";
@@ -2366,6 +2434,17 @@ document.addEventListener("keydown", function(e){
       if(!onPlanPencereBul_()) sekmeGezin((ctrlTab ? !e.shiftKey : e.key === "ArrowRight") ? 1 : -1);
       return;
     }
+  }
+  // ★ Ctrl+1…Ctrl+9 = Ana Sayfa'daki modül kutularının SIRASINA göre modül açar (kutunun köşesinde numarası yazar;
+  // sürükleyip sırayı değiştirince numaralar da değişir — modulSirasiniAl() hem kutuları hem bu kısayolu besler).
+  // Yazı alanındayken de çalışır. Önde açık pencere (modal/Rehber/Stok Hareket Penceresi) varsa hiçbir şey
+  // yapmaz (arkadaki ekran değişmesin) ama tarayıcının kendi Ctrl+rakam sekme geçişi de engellenir.
+  if(document.body.classList.contains("giris-yapildi") && e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && /^[1-9]$/.test(e.key)){
+    e.preventDefault();
+    const onda = onPlanPencereBul_() || (typeof _shp !== "undefined" && _shp.acik);
+    const m = modulSirasiniAl()[Number(e.key) - 1];
+    if(m && !onda) modulAc(m.id);
+    return;
   }
   // ★ Sekme kapatma (21 Eyl 2026): varsayılan Ctrl+W (Ayarlar > Kısayol Tuşları'ndan değiştirilebilir) + sabit
   // yedek Alt+Shift+W. Yazı alanı içindeyken de çalışır. Esc ile aynı sıra: önde açık pencere (modal/Rehber/
@@ -9604,6 +9683,7 @@ let _ayarlarTaslak = null; // kaydedilmeden önceki geçici değişiklikler
 
 function ayarlarYukle(){
   _ayarlarTaslak = Object.assign({}, kisayollariAl());
+  ayarlarSonIslemlerYukle(true);
   ayarlarListesiCiz();
   aciklamaSablonlariYukle();
   siparisDurumlariYukle();
@@ -9640,7 +9720,9 @@ function ayarlarBolumleriKur(){
     panel.dataset.kuruldu = "1";
     const baslikEl = panel.querySelector(".rapor-baslik");
     if(!baslikEl) return;
-    const anahtar = "ayarlar_bolum_" + (_ayarlarBolumSayaci++) + "_" + baslikEl.textContent.trim();
+    // Özel anahtarlı bölüm (ör. en üste eklenen Son Yapılan İşlemler) sayaca girmez: diğer bölümlerin
+    // kayıtlı açık/kapalı durumu (sıra numarası anahtarda) bozulmasın.
+    const anahtar = panel.dataset.bolumAnahtar || ("ayarlar_bolum_" + (_ayarlarBolumSayaci++) + "_" + baslikEl.textContent.trim());
 
     // Başlıktan sonraki tüm kardeşleri bir gövde div'inde topla.
     const govde = document.createElement("div");
@@ -9656,7 +9738,8 @@ function ayarlarBolumleriKur(){
 
     // Varsayılan: KAPALI (sadece başlıklar görünür, menü kısa kalır). Kullanıcı
     // daha önce bir bölümü elle AÇMIŞSA (localStorage) o bölüm açık başlar.
-    if(localStorage.getItem(anahtar) !== "acik"){ panel.classList.add("ayarlar-bolum-kapali"); }
+    const kayitliDurum = localStorage.getItem(anahtar);
+    if(panel.dataset.varsayilanAcik === "1" ? kayitliDurum === "kapali" : kayitliDurum !== "acik"){ panel.classList.add("ayarlar-bolum-kapali"); }
 
     baslikEl.onclick = function(){
       panel.classList.toggle("ayarlar-bolum-kapali");
