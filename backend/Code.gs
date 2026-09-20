@@ -525,6 +525,40 @@ function metinKolonuGarantiEt_(sheet, kolon) {
   } catch (e) { /* biçim ayarlanamadıysa yazma/okuma yine de devam eder */ }
 }
 
+// Bir değer E-Tablo tarafından sayıya/tarihe çevrilebilecek kadar "sayı benzeri" mi?
+// ("00", "01", "1-2", "3/4", "1.5" ...) — sadece bu durumda özel metin yazımı gerekir.
+function sayiBenzeriMi_(deger) {
+  const m = String(deger === null || deger === undefined ? "" : deger).trim();
+  return m !== "" && /\d/.test(m) && /^[0-9eE.,\-\/:+\s]+$/.test(m);
+}
+
+// appendRow yerine: appendRow, sütun biçimini (@) her zaman dikkate ALMAYIP "00" → 0
+// çevirmesini engelleyemeyebilir. Bu yardımcı, metin sütunlarından biri sayı benzeri bir
+// değer taşıyorsa hedef hücrelerin biçimini yazmadan HEMEN önce METİN (@) yapıp değeri
+// öyle yazar (kesin sonuç); değilse eski hızlı yolla (appendRow) devam eder.
+// metinKolonlari: 1 tabanlı sütun numaraları. Yarış durumuna karşı kilit altında çalışır.
+function metinliSatirEkle_(sheet, degerler, metinKolonlari) {
+  const gerekli = (metinKolonlari || []).some(k => sayiBenzeriMi_(degerler[k - 1]));
+  if (!gerekli) { sheet.appendRow(degerler); return; }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const hedef = sheet.getLastRow() + 1;
+    if (hedef > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1);
+    metinliSatirYaz_(sheet, hedef, degerler, metinKolonlari);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Var olan bir satırı geri yazar; sayı benzeri metin sütunlarının biçimini önce @ yapar.
+function metinliSatirYaz_(sheet, satir, degerler, metinKolonlari) {
+  (metinKolonlari || []).forEach(k => {
+    if (k <= degerler.length && sayiBenzeriMi_(degerler[k - 1])) sheet.getRange(satir, k).setNumberFormat("@");
+  });
+  sheet.getRange(satir, 1, 1, degerler.length).setValues([degerler]);
+}
+
 // Hücre değerini METİN olarak okur. 0 sayısını "" yapmaz (`deger || ""` kalıbı yapıyordu).
 // Eski (biçim düzeltmesinden önce yazılmış) kayıtlarda baştaki sıfırlar zaten sayıya
 // çevrilip kaybolmuş olabilir — orijinali geri getirilemez, en azından boş görünmez.
@@ -1290,8 +1324,8 @@ function cariHareketEkle(body) {
   ensureCariHareketProjeKoduColonu(sheet);
   const id = "hk_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
-  sheet.appendRow([id, cariId, tarih, tip, tutar, String(body.aciklama || ""),
-    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), String(body.vade || ""), String(body.projeKodu || "").trim()]);
+  metinliSatirEkle_(sheet, [id, cariId, tarih, tip, tutar, String(body.aciklama || ""),
+    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), String(body.vade || ""), String(body.projeKodu || "").trim()], [9]);
 
   cacheTemizle(["cariListesi_v3"]); // bakiye değişti, liste önbelleği bayatladı
   return { ok: true, id: id };
@@ -1407,8 +1441,8 @@ function saveCariVirman(body) {
 
   const sheet = getOrCreateSheet(ss, SHEETS.cariVirmanlar, CARI_VIRMAN_BASLIKLAR);
   ensureCariVirmanProjeKoduColonu(sheet);
-  sheet.appendRow([id, tarih, kaynakId, kaynakAd, hedefId, hedefAd, tutar, notu,
-    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), kaynakHareket.id, hedefHareket.id, String(body.projeKodu || "").trim()]);
+  metinliSatirEkle_(sheet, [id, tarih, kaynakId, kaynakAd, hedefId, hedefAd, tutar, notu,
+    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), kaynakHareket.id, hedefHareket.id, String(body.projeKodu || "").trim()], [12]);
 
   cacheTemizle(["cariListesi_v3"]);
   return { ok: true, id: id };
@@ -1990,7 +2024,7 @@ function saveSatis(body) {
     const durumAdlari = getSiparisDurumlari().durumlar.map(d => d.ad);
     siparisDurumu = durumAdlari.includes(body.siparisDurumu) ? body.siparisDurumu : (durumAdlari[0] || "Beklemede");
   }
-  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || ""), "", "", "", "", "", String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim()]);
+  metinliSatirEkle_(sSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || ""), "", "", "", "", "", String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim()], [22, 23]);
 
   // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
   // otomatik, minimal bir stok kartı oluşturulur (Alış modülündeki mantığın aynısı).
@@ -2500,7 +2534,7 @@ function updateSatis(body) {
   yeniRow[15] = String(body.siparisNo !== undefined ? body.siparisNo : (eskiRow[15] || ""));
   yeniRow[21] = String(body.projeKodu !== undefined ? body.projeKodu : metinOku_(eskiRow[21]));
   yeniRow[22] = String(body.faturaTipi !== undefined ? body.faturaTipi : metinOku_(eskiRow[22]));
-  sSheet.getRange(satirIdx, 1, 1, yeniRow.length).setValues([yeniRow]);
+  metinliSatirYaz_(sSheet, satirIdx, yeniRow, [22, 23]);
 
   kalemler.forEach((k, idx) => {
     const kId = "sk_" + Date.now() + "_" + idx;
@@ -2709,7 +2743,7 @@ function saveAlis(body) {
   const id = "al_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  aSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim()]);
+  metinliSatirEkle_(aSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim()], [10]);
 
   kalemler.forEach((k, idx) => {
     const kId = "ak_" + Date.now() + "_" + idx;
@@ -2954,7 +2988,7 @@ function updateAlis(body) {
 
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = String(data[satirIdx - 1][7] || "");
-  aSheet.getRange(satirIdx, 1, 1, 10).setValues([[id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim()]]);
+  metinliSatirYaz_(aSheet, satirIdx, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim()], [10]);
 
   kalemler.forEach((k, idx) => {
     const kId = "ak_" + Date.now() + "_" + idx;
@@ -3473,7 +3507,7 @@ function saveTahsilat(body) {
   const id = "th_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  tSheet.appendRow([id, tarih, cariId, cariAd, tutar, yontem, String(body.aciklama || ""), kayitTarihi, posHesapId, bankaHesapId, String(body.projeKodu || "").trim()]);
+  metinliSatirEkle_(tSheet, [id, tarih, cariId, cariAd, tutar, yontem, String(body.aciklama || ""), kayitTarihi, posHesapId, bankaHesapId, String(body.projeKodu || "").trim()], [11]);
 
   cariHareketEkle({
     cariId: cariId, tarih: tarih, tip: "Alacak", tutar: tutar,
@@ -3719,8 +3753,8 @@ function saveOdeme(body) {
   const id = "od_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  oSheet.appendRow([id, tarih, cariId, cariAd, tutar, yontem, String(body.aciklama || ""), kayitTarihi, posHesapId, bankaHesapId,
-    hedefTipi, hedefAltTipi, hedefId, hedefAd, String(body.projeKodu || "").trim()]);
+  metinliSatirEkle_(oSheet, [id, tarih, cariId, cariAd, tutar, yontem, String(body.aciklama || ""), kayitTarihi, posHesapId, bankaHesapId,
+    hedefTipi, hedefAltTipi, hedefId, hedefAd, String(body.projeKodu || "").trim()], [15]);
 
   // Cariye borç hareketi yalnızca hedef bir Cari ise düşülür (Banka/Gider hedefli
   // ödemelerin bağlı olduğu bir cari hesap yok).
@@ -3940,8 +3974,8 @@ function saveCekSenet(body) {
   const duzenlenmeTarihi = String(body.duzenlenmeTarihi || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const vade = String(body.vade || "");
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  sheet.appendRow([id, tip, cariId, cariAd, tutar, tutar, String(body.seriNo || ""), String(body.bankaAdi || ""),
-    duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi, "", String(body.projeKodu || "").trim(), belgeTuru]);
+  metinliSatirEkle_(sheet, [id, tip, cariId, cariAd, tutar, tutar, String(body.seriNo || ""), String(body.bankaAdi || ""),
+    duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi, "", String(body.projeKodu || "").trim(), belgeTuru], [15]);
 
   // Alınan çek: müşteriden aldık → borcu kapanır (Alacak). Verilen çek: tedarikçiye borcumuzu kapattık (Borç).
   cariHareketEkle({
@@ -6691,7 +6725,7 @@ function saveBasitTanim(body) {
   if (id) {
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === id) {
-        sheet.getRange(i + 1, 1, 1, 5).setValues([[id, ad, ustId, data[i][3], kod]]);
+        metinliSatirYaz_(sheet, i + 1, [id, ad, ustId, data[i][3], kod], [2, 5]);
         cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]);
         return { ok: true, id: id };
       }
@@ -6699,7 +6733,7 @@ function saveBasitTanim(body) {
   }
   const maxSira = data.slice(1).reduce((m, r) => Math.max(m, parseFloat(r[3]) || 0), 0);
   id = tip.slice(0, 3) + "_" + Date.now();
-  sheet.appendRow([id, ad, ustId, maxSira + 1, kod]);
+  metinliSatirEkle_(sheet, [id, ad, ustId, maxSira + 1, kod], [2, 5]);
   cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]);
   return { ok: true, id: id };
 }
@@ -6784,7 +6818,7 @@ function saveMarka(body) {
   if (id) {
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === id) {
-        sheet.getRange(i + 1, 1, 1, 5).setValues([[id, kod, ad, data[i][3], renk]]);
+        metinliSatirYaz_(sheet, i + 1, [id, kod, ad, data[i][3], renk], [2]);
         cacheTemizle(["markaListesi"]);
         return { ok: true, id: id };
       }
@@ -6792,7 +6826,7 @@ function saveMarka(body) {
   }
   const maxSira = data.slice(1).reduce((m, r) => Math.max(m, parseFloat(r[3]) || 0), 0);
   id = "mrk_" + Date.now();
-  sheet.appendRow([id, kod, ad, maxSira + 1, renk]);
+  metinliSatirEkle_(sheet, [id, kod, ad, maxSira + 1, renk], [2]);
   cacheTemizle(["markaListesi"]);
   return { ok: true, id: id };
 }
