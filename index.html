@@ -2223,8 +2223,14 @@ document.addEventListener("keydown", function(e){
     const aktif = document.activeElement;
     const buton = aktif && aktif.nextElementSibling;
     const beklenenBaslik = tip === "cari" ? "Cari Rehberi" : "Stok Rehberi";
+    // İmleç bir kalem satırının (Stok Kodu, Miktar... gibi rehber butonu bitişik olmayan) başka bir
+    // alanındaysa, o SATIRIN kendi Stok Rehberi butonu kullanılır → seçim aynı satıra yazılır.
+    const satirEl = aktif && aktif.closest ? aktif.closest(".satis-kalem-satir") : null;
+    const satirBtn = (tip === "stok" && satirEl) ? Array.from(satirEl.querySelectorAll(".rehber-ac-btn")).find(b=>b.title === beklenenBaslik) : null;
     if(buton && buton.classList && buton.classList.contains("rehber-ac-btn") && buton.title === beklenenBaslik){
       buton.click();
+    } else if(satirBtn){
+      satirBtn.click();
     } else if(_sonRehberOdak && _sonRehberOdak.buton.title === beklenenBaslik && _sonRehberOdak.el.isConnected){
       // İmleç tam o alanda değil ama az önce oradaydık ve alan hâlâ ekranda —
       // seçimi yine de oraya yaz (bkz. yukarıdaki _sonRehberOdak notu).
@@ -2236,6 +2242,20 @@ document.addEventListener("keydown", function(e){
       else rehberAc(tip, null);
     }
     return;
+  }
+  // ★ Sekmeler arası gezinme: Ctrl+Tab → sonraki sekme, Ctrl+Shift+Tab → önceki sekme (yazı alanı
+  // içindeyken de çalışır). NOT: Chrome/Edge normal bir tarayıcı sekmesinde Ctrl+Tab'ı kendisi
+  // yakalar, sayfaya hiç iletmez — bu kısayol ERP "uygulama" (yüklü PWA / uygulama penceresi)
+  // olarak açıldığında çalışır. Normal tarayıcı sekmesi için Alt+Shift+→ / Alt+Shift+← de aynı işi yapar.
+  // Önde açık bir pencere (modal) varsa arkadaki sekme değiştirilmez.
+  if(document.body.classList.contains("giris-yapildi") && !e.metaKey){
+    const ctrlTab = e.ctrlKey && !e.altKey && e.key === "Tab";
+    const altShiftOk = e.altKey && e.shiftKey && !e.ctrlKey && (e.key === "ArrowRight" || e.key === "ArrowLeft");
+    if(ctrlTab || altShiftOk){
+      e.preventDefault();
+      if(!onPlanPencereBul_()) sekmeGezin((ctrlTab ? !e.shiftKey : e.key === "ArrowRight") ? 1 : -1);
+      return;
+    }
   }
   // Bir input/textarea/select içinde yazıyorsak kısayolları devre dışı bırak (Esc hariç)
   const hedefEtiket = (e.target.tagName||"").toLowerCase();
@@ -5437,10 +5457,18 @@ function alisSilOnay(id){
 // geçer, alanlar ön doldurulur ve Kaydet updateAlis çağırır (id korunur).
 function alisModalAc(duzenle){
   _alisDuzenleId = duzenle ? duzenle.alis.id : null;
+  // Satır modeli: birimFiyat = BRÜT (liste) fiyat, iskontoYuzde = kalem iskontosu. Kayıtta net fiyat
+  // (birimFiyat) + brutFiyat + iskontoYuzde olarak backend'e gider. netKilit: düzenlemede
+  // kullanıcı fiyat/iskonto alanlarına dokunmadıkça kayıtlı net fiyat AYNEN korunur.
   _yeniAlisKalemleri = duzenle
-    ? duzenle.kalemler.map(k=>({urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:k.birimFiyat, stokKodu:k.stokKodu||"", kdvOrani:k.kdvOrani||0, brutFiyat:k.brutFiyat, iskontoYuzde:k.iskontoYuzde}))
-    : [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, kdvOrani:20}];
+    ? duzenle.kalemler.map(k=>{
+        const isk = parseFloat(k.iskontoYuzde)||0;
+        const fiyat = (isk>0 && parseFloat(k.brutFiyat)>0) ? parseFloat(k.brutFiyat) : k.birimFiyat;
+        return {urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:fiyat, iskontoYuzde:isk, stokKodu:k.stokKodu||"", kdvOrani:k.kdvOrani||0, netKilit:k.birimFiyat};
+      })
+    : [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""}];
   if(!_cariYuklendi) cariListesiYukle();
+  if(!_stokTanimYuklendi) stokTanimListesiYukle();
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "alis-modal-overlay";
@@ -5450,38 +5478,58 @@ function alisModalAc(duzenle){
   // s.tarih ile aynı sebep: backend "yyyy-MM-dd"/"yyyy-MM-dd HH:mm" döner, datetime-local "T" ister.
   const bugun = (a && a.tarih) ? (/^\d{4}-\d{2}-\d{2}$/.test(a.tarih) ? a.tarih + "T00:00" : a.tarih.replace(" ", "T")) : simdiTarihSaat();
   overlay.innerHTML = `
-    <div class="modal-box modal-box-wide">
+    <div class="modal-box modal-box-xwide">
       <h3>${duzenle ? 'Alışı Düzenle' : 'Yeni Alış'}</h3>
-      <div class="fld" style="position:relative">
-        <label>Tedarikçi (Cari)</label>
-        <input id="am-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off" style="padding-right:34px" value="${a && a.cariId ? a.cariAd : ''}"
-               oninput="amCariAramaDegisti(this.value)"
-               onfocus="amCariOneriGoster()"
-               onblur="setTimeout(()=>amCariOneriKapat(),200)"
-               onkeydown="oneriKlavyeYonet(event,'am-cari-oneri')">
-        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('am-cari').value=c.id; document.getElementById('am-cari-arama').value=c.ad; alisCariSecimiDegisti(); })">🔍</button>
-        <input type="hidden" id="am-cari" value="${a && a.cariId ? a.cariId : ''}">
-        <div id="am-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <div class="fld" style="flex:2;min-width:220px;margin-bottom:0;position:relative">
+          <label>Tedarikçi (Cari)</label>
+          <input id="am-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off" style="padding-right:34px" value="${htmlKacis(a && a.cariId ? a.cariAd : '')}"
+                 oninput="amCariAramaDegisti(this.value)"
+                 onfocus="amCariOneriGoster()"
+                 onblur="setTimeout(()=>amCariOneriKapat(),200)"
+                 onkeydown="oneriKlavyeYonet(event,'am-cari-oneri')">
+          <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('am-cari').value=c.id; document.getElementById('am-cari-arama').value=c.ad; alisCariSecimiDegisti(); })">🔍</button>
+          <input type="hidden" id="am-cari" value="${a && a.cariId ? a.cariId : ''}">
+          <div id="am-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+        </div>
+        <div class="fld" id="am-serbest-ad-fld" style="flex:2;min-width:220px;margin-bottom:0;display:${a && a.cariId ? 'none' : 'flex'}"><label>Tedarikçi Adı (cari seçilmediyse)</label><input id="am-serbest-ad" type="text" placeholder="Peşin Tedarikçi" value="${htmlKacis(a && !a.cariId ? a.cariAd : '')}"></div>
+        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Tarih</label><input id="am-tarih" type="datetime-local" value="${bugun}"></div>
       </div>
-      <div class="fld" id="am-serbest-ad-fld" style="${a && a.cariId ? 'display:none' : ''}"><label>Tedarikçi Adı (cari seçilmediyse)</label><input id="am-serbest-ad" type="text" placeholder="Peşin Tedarikçi" value="${a && !a.cariId ? a.cariAd : ''}"></div>
-      <div class="fld"><label>Tarih</label><input id="am-tarih" type="datetime-local" value="${bugun}"></div>
-      <div class="fld"><label>Ödeme Tipi</label>
-        <select id="am-odeme">
-          <option value="Peşin" ${a && a.odemeTipi==='Peşin'?'selected':''}>Peşin</option>
-          <option value="Veresiye" ${a && a.odemeTipi==='Veresiye'?'selected':''}>Veresiye</option>
-        </select>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="fld" style="flex:1;min-width:160px"><label>Ödeme Tipi</label>
+          <select id="am-odeme">
+            <option value="Peşin" ${a && a.odemeTipi==='Peşin'?'selected':''}>Peşin</option>
+            <option value="Veresiye" ${a && a.odemeTipi==='Veresiye'?'selected':''}>Veresiye</option>
+          </select>
+        </div>
+        <div class="fld" style="flex:2;min-width:220px"><label>Açıklama</label><input id="am-aciklama" type="text" placeholder="İsteğe bağlı" value="${htmlKacis(a ? (a.aciklama||'') : '')}"></div>
+        <div class="fld" style="flex:1;min-width:140px"><label>Proje Kodu</label>${projeKoduSelectHTML('am-proje-kodu', a?a.projeKodu:'')}</div>
       </div>
-      <div class="fld"><label>Açıklama</label><input id="am-aciklama" type="text" placeholder="İsteğe bağlı" value="${a ? (a.aciklama||'') : ''}"></div>
-      <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('am-proje-kodu', a?a.projeKodu:'')}</div>
 
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
+      <div class="satis-kalem-basliklar">
+        <span class="satis-kalem-stokkodu">Stok Kodu</span><span style="flex:0 0 24px;padding:0"></span>
+        <span style="flex:1">Ürün</span><span style="flex:0 0 68px;padding:0"></span>
+        <span class="satis-kalem-miktar">Miktar</span><span class="satis-kalem-birim">Birim</span>
+        <span class="satis-kalem-fiyat">Birim Fiyat</span><span class="satis-kalem-yuzde">İsk.%</span><span class="satis-kalem-yuzde">Kdv%</span>
+        <span style="flex:0 0 22px;padding:0"></span>
+      </div>
       <div id="am-kalemler" style="margin:8px 0"></div>
       <button class="btn" onclick="alisKalemEkleUI()">+ Ürün Ekle</button>
 
-      <div style="display:flex;justify-content:flex-end;align-items:flex-end;gap:16px">
-        <div class="fld" style="max-width:170px;margin-bottom:0"><label>Tutar İskontosu (fatura altı, ops.)</label><input id="am-tutar-iskontosu" type="number" min="0" step="0.01" value="${a?a.tutarIskontosu||0:0}" oninput="alisToplamGuncelle()"></div>
-        <div class="satis-toplam">Toplam: <span id="am-toplam">0,00 ₺</span></div>
+      <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
+        <div class="fld" style="flex:1;min-width:220px;max-width:280px;margin-bottom:0">
+          <label>Tutar İskontosu (₺)</label>
+          <input id="am-tutar-iskontosu" type="number" min="0" step="0.01" value="${a?a.tutarIskontosu||0:0}" oninput="alisToplamGuncelle()">
+          <p style="font-size:11px;color:var(--text3);margin:4px 0 0">KDV dahil genel toplamdan düşülür.</p>
+        </div>
+        <div class="fld" style="flex:1;min-width:180px;max-width:220px;margin-bottom:0"><label>Dip İskonto (%)</label>
+          <input id="am-dip-iskonto" type="number" min="0" max="100" step="0.01" value="0" oninput="alisToplamGuncelle()">
+          <p style="font-size:11px;color:var(--text3);margin:4px 0 0">Tüm kalemlerin net fiyatına yansır (KDV matrahı da düşer).</p>
+        </div>
       </div>
+
+      <div id="am-toplam" class="satis-toplam-detay"></div>
 
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('alis-modal-overlay').remove()">İptal</button>
@@ -5543,7 +5591,7 @@ function amCariSec(i){
 }
 
 function alisKalemEkleUI(){
-  _yeniAlisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, kdvOrani:20});
+  _yeniAlisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""});
   alisKalemlerCiz();
 }
 
@@ -5553,32 +5601,59 @@ function alisKalemSilUI(idx){
 }
 
 function alisKalemAlanDegisti(idx, alan, deger){
-  _yeniAlisKalemleri[idx][alan] = (alan==='miktar'||alan==='birimFiyat'||alan==='kdvOrani') ? (parseFloat(deger)||0) : deger;
+  const k = _yeniAlisKalemleri[idx];
+  k[alan] = (alan==='miktar'||alan==='birimFiyat'||alan==='kdvOrani'||alan==='iskontoYuzde') ? (parseFloat(deger)||0) : deger;
+  if(alan==='birimFiyat' || alan==='iskontoYuzde') delete k.netKilit; // kullanıcı fiyatı/iskontoyu değiştirdi → net yeniden hesaplanır
   alisToplamGuncelle();
+}
+
+// Stok Rehberi / öneri kutusundan seçilen stok kartını satıra işler (Sipariş formuyla aynı davranış).
+function alisKalemStokSec_(idx, s){
+  const k = _yeniAlisKalemleri[idx];
+  if(!k || !s) return;
+  k.urunAdi = s.stokAdi;
+  k.stokKodu = s.stokKodu || "";
+  k.birim = s.birim1 || "adet";
+  if(s.alisFiyati){ k.birimFiyat = s.alisFiyati; delete k.netKilit; }
+  if(s.alisIskontosu){ k.iskontoYuzde = s.alisIskontosu; delete k.netKilit; }
+  alisKalemlerCiz();
+}
+
+// Kalem satırındaki 📇 butonu: satırın stok koduna karşılık gelen aktif stok kartını açar.
+function alisKalemStokKartiAc(idx){
+  const kod = String((_yeniAlisKalemleri[idx]||{}).stokKodu||"").trim();
+  if(!kod){ alert("Bu satırda önce bir Stok Kodu girmelisiniz."); return; }
+  const s = (_stokTanimListe||[]).find(x=>x.stokKodu===kod);
+  if(!s){ alert("'"+kod+"' kodlu aktif bir stok kartı bulunamadı."); return; }
+  stokTanimModalAc(s.id);
 }
 
 function alisKalemlerCiz(){
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
   const el = document.getElementById("am-kalemler");
+  if(!el) return;
   el.innerHTML = _yeniAlisKalemleri.map((k,idx)=>`
     <div class="satis-kalem-satir">
+      <input class="satis-kalem-stokkodu" type="text" placeholder="Stok Kodu" value="${htmlKacis(k.stokKodu||'')}" oninput="alisKalemAlanDegisti(${idx},'stokKodu',this.value)">
+      <button type="button" class="hk-sil" style="color:var(--accent);font-size:15px;flex:0 0 24px;padding:0" title="Aktif stok kartını aç" onclick="alisKalemStokKartiAc(${idx})">📇</button>
       <div style="flex:1;position:relative">
-        <input class="satis-kalem-urun" style="width:100%;padding-right:32px" type="text" placeholder="Ürün adı (aramak için yazın)" value="${k.urunAdi}"
+        <input class="satis-kalem-urun" style="width:100%;padding-right:32px" type="text" placeholder="Ürün adı (aramak için yazın)" value="${htmlKacis(k.urunAdi)}"
                oninput="alisKalemAlanDegisti(${idx},'urunAdi',this.value); alisUrunOneriGoster(${idx})"
                onblur="setTimeout(()=>alisUrunOneriKapat(${idx}),200)"
                onfocus="alisUrunOneriGoster(${idx})"
                onkeydown="oneriKlavyeYonet(event,'alis-urun-oneri-${idx}')">
-        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniAlisKalemleri[${idx}].urunAdi=s.stokAdi; _yeniAlisKalemleri[${idx}].stokKodu=s.stokKodu||''; _yeniAlisKalemleri[${idx}].birim=s.birim1||'adet'; if(s.alisFiyati) _yeniAlisKalemleri[${idx}].birimFiyat=s.alisFiyati; alisKalemlerCiz(); })">🔍</button>
+        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>alisKalemStokSec_(${idx}, s))">🔍</button>
         <div id="alis-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
-      <label style="display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text3);flex:0 0 auto;white-space:nowrap" title="Bu kalem bir stok kartına bağlı değil (hizmet/nakliye/masraf gibi) — stoktan düşülmez">
+      <label style="display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text3);flex:0 0 68px;white-space:nowrap" title="Bu kalem bir stok kartına bağlı değil (hizmet/nakliye/masraf gibi) — stoktan düşülmez">
         <input type="checkbox" style="width:auto" ${k.stoksuz?'checked':''} onchange="alisKalemAlanDegisti(${idx},'stoksuz',this.checked); alisKalemlerCiz()">Stoksuz
       </label>
-      <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="alisKalemAlanDegisti(${idx},'miktar',this.value)" onblur="kutuMiktarUyumKontrol('${k.stokKodu||''}', this.value)">
+      <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="alisKalemAlanDegisti(${idx},'miktar',this.value)" onblur="kutuMiktarUyumKontrol('${htmlKacis(k.stokKodu||'')}', this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `alisKalemAlanDegisti(${idx},'birim',this.value)`)}
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
-      <input class="satis-kalem-fiyat" style="max-width:80px" type="number" min="0" step="0.01" placeholder="Kdv %" title="KDV oranı (%)" value="${k.kdvOrani===undefined?20:k.kdvOrani}" oninput="alisKalemAlanDegisti(${idx},'kdvOrani',this.value)">
-      ${_yeniAlisKalemleri.length>1 ? `<span class="hk-sil" onclick="alisKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
+      <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="İskonto %" placeholder="İsk.%" value="${k.iskontoYuzde||0}" oninput="alisKalemAlanDegisti(${idx},'iskontoYuzde',this.value)">
+      <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="KDV %" placeholder="Kdv%" value="${k.kdvOrani===undefined?20:k.kdvOrani}" oninput="alisKalemAlanDegisti(${idx},'kdvOrani',this.value)">
+      <span class="hk-sil" style="flex:0 0 22px;text-align:center;visibility:${_yeniAlisKalemleri.length>1?'visible':'hidden'}" onclick="alisKalemSilUI(${idx})" title="Sil">🗑</span>
     </div>`).join("");
   alisToplamGuncelle();
 }
@@ -5614,34 +5689,66 @@ function alisUrunOneriSec(idx, oneriIdx){
   const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
   const s = eslesenler[oneriIdx];
   if(!s) return;
-  _yeniAlisKalemleri[idx].urunAdi = s.stokAdi;
-  _yeniAlisKalemleri[idx].stokKodu = s.stokKodu || "";
-  _yeniAlisKalemleri[idx].birim = s.birim1 || "adet";
-  if(s.alisFiyati) _yeniAlisKalemleri[idx].birimFiyat = s.alisFiyati;
-  alisKalemlerCiz();
+  alisKalemStokSec_(idx, s);
+}
+
+// Bir Alış kaleminin hesabı. Fiyat = BRÜT (liste) fiyat; kalem iskontosu ve dip iskonto net birim
+// fiyata yansır (backend'de birimFiyat = NET, brutFiyat = liste, iskontoYuzde = efektif iskonto).
+function alisKalemHesapla_(k, dip){
+  const miktar = parseFloat(k.miktar)||0;
+  const fiyat = parseFloat(k.birimFiyat)||0;
+  const isk = Math.min(100, Math.max(0, parseFloat(k.iskontoYuzde)||0));
+  const dipY = Math.min(100, Math.max(0, dip||0));
+  let net = (k.netKilit !== undefined && dipY === 0) ? (parseFloat(k.netKilit)||0) : fiyat*(1-isk/100)*(1-dipY/100);
+  net = Math.round(net*10000)/10000;
+  const kdvOrani = (k.kdvOrani===undefined) ? 20 : (parseFloat(k.kdvOrani)||0);
+  const brut = miktar*fiyat, ara = miktar*net;
+  const efektifIsk = (k.netKilit !== undefined && dipY === 0) ? isk : Math.round((1-(1-isk/100)*(1-dipY/100))*10000)/100;
+  return { miktar, fiyat, net, brut, ara, kdv: ara*kdvOrani/100, kdvOrani, efektifIsk };
+}
+
+function alisDipIskontoAl_(){
+  const el = document.getElementById("am-dip-iskonto");
+  return Math.min(100, Math.max(0, el ? (parseFloat(el.value)||0) : 0));
 }
 
 function alisToplamGuncelle(){
-  const kalemToplam = _yeniAlisKalemleri.reduce((t,k)=>t+(parseFloat(k.miktar)||0)*(parseFloat(k.birimFiyat)||0)*(1+(parseFloat(k.kdvOrani)||0)/100),0);
+  const dip = alisDipIskontoAl_();
+  let brutT=0, araT=0, kdvT=0;
+  _yeniAlisKalemleri.forEach(k=>{ const h=alisKalemHesapla_(k, dip); brutT+=h.brut; araT+=h.ara; kdvT+=h.kdv; });
   const tutarIskontosuEl = document.getElementById("am-tutar-iskontosu");
-  const tutarIskontosu = tutarIskontosuEl ? (parseFloat(tutarIskontosuEl.value)||0) : 0;
-  const toplam = Math.max(0, kalemToplam - tutarIskontosu);
+  const tutarIskontosu = tutarIskontosuEl ? Math.max(0, parseFloat(tutarIskontosuEl.value)||0) : 0;
+  const genel = Math.max(0, araT + kdvT - tutarIskontosu);
   const el = document.getElementById("am-toplam");
-  if(el) el.textContent = paraFormat(toplam) + " (KDV dahil)";
+  if(!el) return;
+  el.innerHTML = `
+    <div class="satis-toplam-satir"><span>Brüt Toplam</span><b>${paraFormat(brutT)}</b></div>
+    <div class="satis-toplam-satir"><span>İskonto (kalem + dip)</span><b>-${paraFormat(brutT-araT)}</b></div>
+    <div class="satis-toplam-satir"><span>Ara Toplam</span><b>${paraFormat(araT)}</b></div>
+    <div class="satis-toplam-satir"><span>Kdv Toplam</span><b>${paraFormat(kdvT)}</b></div>
+    ${tutarIskontosu>0 ? `<div class="satis-toplam-satir"><span>Tutar İskontosu (KDV sonrası)</span><b>-${paraFormat(tutarIskontosu)}</b></div>` : ''}
+    <div class="satis-toplam-satir genel"><span>Genel Toplam</span><b>${paraFormat(genel)}</b></div>`;
 }
 
 function alisKaydet(){
   const cariId = document.getElementById("am-cari").value;
   const serbestAd = document.getElementById("am-serbest-ad").value.trim();
-  const kalemler = _yeniAlisKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
-  if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
+  const secili = _yeniAlisKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
+  if(secili.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
   // ★ Stok kodu tüm modüller arası ana bağlantı — manuel Alış girişinde de zorunlu
   // (ya da bilerek "Stoksuz" işaretlenmiş bir hizmet/masraf kalemi olmalı).
-  const kodsuz = kalemler.find(k=>!k.stoksuz && !String(k.stokKodu||"").trim());
+  const kodsuz = secili.find(k=>!k.stoksuz && !String(k.stokKodu||"").trim());
   if(kodsuz){
     alert(`"${kodsuz.urunAdi}" için stok kodu seçilmemiş. Lütfen 🔍 Stok Rehberi'nden mevcut bir stok seçin, önce Stok > Tanımlar'dan yeni bir stok kartı açıp buradan seçin, ya da 'Stoksuz' işaretleyin.`);
     return;
   }
+  const dip = alisDipIskontoAl_();
+  const kalemler = secili.map(k=>{
+    const h = alisKalemHesapla_(k, dip);
+    const kalem = Object.assign({}, k, { birimFiyat: h.net, brutFiyat: h.fiyat, iskontoYuzde: h.efektifIsk });
+    delete kalem.netKilit;
+    return kalem;
+  });
   const tutarIskontosuEl = document.getElementById("am-tutar-iskontosu");
   const body = {
     cariId: cariId || undefined,
