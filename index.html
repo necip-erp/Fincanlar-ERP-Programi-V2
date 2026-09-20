@@ -2255,6 +2255,30 @@ function pencereyiKapatDene_(el){
 // o alana yazılır. Cari → ilk BOŞ cari kutusu (hepsi doluysa ilki); Stok → ilk BOŞ ürün satırı, boş satır
 // yoksa formdaki "+ Ürün Ekle" ile yeni satır açılıp o satır. Hedef bulunamazsa (örn. Ana Sayfa'da) null
 // döner ve eski davranış (seçilen kaydın kendi ekranını açma) sürer.
+// ★ (21 Eyl 2026) Kalem satırında (Satış/Alış/İade formları) stok bilgisi (Stok Kodu ya da Ürün adı) dolu mu?
+function kalemSatiriStokluMu_(satirEl){
+  const kod = satirEl.querySelector(".satis-kalem-stokkodu");
+  const urun = satirEl.querySelector(".satis-kalem-urun");
+  return !!((kod && String(kod.value||"").trim()) || (urun && String(urun.value||"").trim()));
+}
+// F2 ile eklenecek stok için satır bulur: aynı formda stok bilgisi BOŞ bir satır varsa o, yoksa "+ Ürün Ekle"
+// ile yeni satır açılır. Dönen değer o satırın Stok Rehberi (🔍) butonudur; seçim doğrudan o satıra yazılır.
+function kalemYeniSatirRehberButonu_(satirEl){
+  const kap = satirEl.parentElement;
+  if(!kap) return null;
+  const stokBtn = (s)=> Array.from(s.querySelectorAll(".rehber-ac-btn")).find(b=>b.title === "Stok Rehberi");
+  const satirlar = ()=> Array.from(kap.children).filter(x=>x.classList && x.classList.contains("satis-kalem-satir"));
+  let hedef = satirlar().find(s=>!kalemSatiriStokluMu_(s) && stokBtn(s));
+  if(!hedef){
+    const kapsam = satirEl.closest(".modal-overlay, .modview") || document;
+    const ekle = Array.from(kapsam.querySelectorAll("button")).find(x=>/KalemEkleUI\s*\(/.test(x.getAttribute("onclick")||""));
+    if(!ekle) return null;
+    ekle.click(); // satırlar yeniden çizilir; kap (konteyner) aynı kalır
+    const l = satirlar();
+    hedef = l[l.length-1];
+  }
+  return hedef ? stokBtn(hedef) : null;
+}
 function rehberHedefButonuBul_(tip){
   const baslik = tip === "cari" ? "Cari Rehberi" : "Stok Rehberi";
   const onPencere = onPlanPencereBul_(true);
@@ -2301,8 +2325,18 @@ document.addEventListener("keydown", function(e){
     // İmleç bir kalem satırının (Stok Kodu, Miktar... gibi rehber butonu bitişik olmayan) başka bir
     // alanındaysa, o SATIRIN kendi Stok Rehberi butonu kullanılır → seçim aynı satıra yazılır.
     const satirEl = aktif && aktif.closest ? aktif.closest(".satis-kalem-satir") : null;
-    const satirBtn = (tip === "stok" && satirEl) ? Array.from(satirEl.querySelectorAll(".rehber-ac-btn")).find(b=>b.title === beklenenBaslik) : null;
-    if(buton && buton.classList && buton.classList.contains("rehber-ac-btn") && buton.title === beklenenBaslik){
+    let satirBtn = (tip === "stok" && satirEl) ? Array.from(satirEl.querySelectorAll(".rehber-ac-btn")).find(b=>b.title === beklenenBaslik) : null;
+    const ilkDal = !!(buton && buton.classList && buton.classList.contains("rehber-ac-btn") && buton.title === beklenenBaslik);
+    // ★ (21 Eyl 2026) İmleç bir kalem satırının Miktar/Birim/Fiyat/İsk./Kdv gibi STOK DIŞI bir alanındaysa ve o
+    // satırda zaten bir stok VARSA, F2 o stoğun üstüne yazmaz: yeni (ya da mevcut ilk boş) satır açılır ve
+    // seçilen stok ORAYA eklenir. (Stok seçilince imleç Miktar'a gittiği için art arda F2 ile stok eklenebilir;
+    // eskiden 2. F2 hep aynı satırdaki stoğu değiştiriyor, imleç 1. satırın Miktar'ında kalıyordu.)
+    // İmleç Stok Kodu / Ürün alanındaysa ya da satır boşsa eski davranış: seçim o satıra yazılır.
+    if(!ilkDal && satirBtn && satirEl && !(aktif.classList && (aktif.classList.contains("satis-kalem-stokkodu") || aktif.classList.contains("satis-kalem-urun"))) && kalemSatiriStokluMu_(satirEl)){
+      const yeniBtn = kalemYeniSatirRehberButonu_(satirEl);
+      if(yeniBtn) satirBtn = yeniBtn;
+    }
+    if(ilkDal){
       buton.click();
     } else if(satirBtn){
       satirBtn.click();
@@ -5634,7 +5668,7 @@ function alisModalAc(duzenle){
                  onfocus="amCariOneriGoster()"
                  onblur="setTimeout(()=>amCariOneriKapat(),200)"
                  onkeydown="oneriKlavyeYonet(event,'am-cari-oneri')">
-          <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('am-cari').value=c.id; document.getElementById('am-cari-arama').value=c.ad; alisCariSecimiDegisti(); })">🔍</button>
+          <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('am-cari').value=c.id; document.getElementById('am-cari-arama').value=c.ad; amCariSecildi_(); })">🔍</button>
           <input type="hidden" id="am-cari" value="${a && a.cariId ? a.cariId : ''}">
           <div id="am-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
         </div>
@@ -5733,7 +5767,7 @@ function amCariSec(i){
   document.getElementById("am-cari").value = c.id;
   document.getElementById("am-cari-arama").value = c.ad;
   kutu.style.display = "none";
-  alisCariSecimiDegisti();
+  amCariSecildi_();
 }
 
 function alisKalemEkleUI(){
@@ -5764,6 +5798,27 @@ function alisKalemStokSec_(idx, s){
   if(s.alisIskontosu){ k.iskontoYuzde = s.alisIskontosu; delete k.netKilit; }
   if(s.ambalajMiktari > 0) k.miktar = s.ambalajMiktari; // stok kartında kutu miktarı varsa Miktar o değerle gelir
   alisKalemlerCiz();
+  alisMiktarOdakla_(idx); // Satış formuyla aynı: stok eklenince imleç o satırın Miktar kutusuna gider
+}
+// Verilen Alış satırının Miktar kutusuna imleci koyar ve içeriği seçer (yeniden çizimin bitmesi için kısa bekleme).
+function alisMiktarOdakla_(idx){
+  setTimeout(()=>{
+    const satir = document.querySelectorAll("#am-kalemler .satis-kalem-satir")[idx];
+    const el = satir ? satir.querySelector(".satis-kalem-miktar") : null;
+    if(el){ el.focus(); el.select(); }
+  }, 40);
+}
+// Tedarikçi seçilince (arama önerisi veya Rehber) imleç stok satırına taşınır: satırlarda stok varsa SON
+// EKLENEN stoğun Miktar'ına, yoksa ilk ürün alanına gider (Satış formundaki smSonrakiOdak_ ile aynı).
+function amSonrakiOdak_(){
+  const dolu = [];
+  _yeniAlisKalemleri.forEach((k,i)=>{ if(String(k.stokKodu||k.urunAdi||"").trim()) dolu.push(i); });
+  if(dolu.length){ alisMiktarOdakla_(dolu[dolu.length-1]); return; }
+  setTimeout(()=>{ const ilk = document.querySelector("#am-kalemler .satis-kalem-urun"); if(ilk) ilk.focus(); }, 60);
+}
+function amCariSecildi_(){
+  alisCariSecimiDegisti();
+  amSonrakiOdak_();
 }
 
 // Kalem satırındaki 📇 butonu: satırın stok koduna karşılık gelen aktif stok kartını açar.
