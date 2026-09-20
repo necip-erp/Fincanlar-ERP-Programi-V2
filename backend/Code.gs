@@ -101,23 +101,90 @@ function kalemlerStokKoduDogrula(ss, kalemler) {
   return null;
 }
 
+// ★ PARÇALI ÖNBELLEK (19 Eyl 2026): CacheService tek değer için ~100KB sınırı koyuyor; eskiden
+// 95KB'ı aşan sonuçlar (kayıt sayısı büyüyen Stok/Cari/Satış listeleri gibi) HİÇ önbelleğe
+// alınmıyor, her istekte tüm sayfalar yeniden okunuyordu. Artık büyük sonuçlar ~45K karakterlik
+// parçalara bölünüp "anahtar#0", "anahtar#1"... altında saklanıyor, ana anahtar sadece bir
+// işaretçi ("@@PARCALI@@:<parça sayısı>:<toplam uzunluk>") tutuyor. Okurken tüm parçalar eksiksiz
+// ve toplam uzunluk tutarlıysa birleştirilir; herhangi biri eksik/uyumsuzsa (süresi dolmuş,
+// eşzamanlı yazma vb.) sessizce "önbellekte yok" sayılıp yeniden hesaplanır.
+const CACHE_PARCA_BOYUT_ = 45000;
+const CACHE_PARCA_MAX_ = 60;
+const CACHE_PARCA_ISARET_ = "@@PARCALI@@:";
+// Bir anahtar temizlenince, ona BAĞLI türetilmiş sonuçların önbelleği de temizlenir.
+const CACHE_BAGIMLI_ = {
+  stokTanimListesi: ["bekleyenAlisFaturalari"],
+  cariListesi_v3: ["bekleyenAlisFaturalari"],
+  alisListesi: ["bekleyenAlisFaturalari"],
+};
+
+function cacheParcaliOku_(cache, mevcut) {
+  const bilgi = mevcut.substring(CACHE_PARCA_ISARET_.length).split(":");
+  const n = parseInt(bilgi[0], 10), toplam = parseInt(bilgi[1], 10);
+  if (!(n > 0) || n > CACHE_PARCA_MAX_ || !(toplam > 0)) return null;
+  return { n: n, toplam: toplam };
+}
+
 function cacheOkuVeyaHesapla(anahtar, saniyeTTL, hesaplaFn) {
   const cache = CacheService.getScriptCache();
   try {
     const mevcut = cache.get(anahtar);
-    if (mevcut) return JSON.parse(mevcut);
+    if (mevcut) {
+      if (mevcut.indexOf(CACHE_PARCA_ISARET_) === 0) {
+        const bilgi = cacheParcaliOku_(cache, mevcut);
+        if (bilgi) {
+          const anahtarlar = [];
+          for (let i = 0; i < bilgi.n; i++) anahtarlar.push(anahtar + "#" + i);
+          const parcalar = cache.getAll(anahtarlar);
+          let birlesik = "", tamam = true;
+          for (let i = 0; i < bilgi.n; i++) {
+            const p = parcalar[anahtar + "#" + i];
+            if (p === undefined || p === null) { tamam = false; break; }
+            birlesik += p;
+          }
+          if (tamam && birlesik.length === bilgi.toplam) return JSON.parse(birlesik);
+        }
+        // parçalar eksik/uyumsuz → önbellekte yok say, aşağıda yeniden hesapla
+      } else {
+        return JSON.parse(mevcut);
+      }
+    }
   } catch (e) { /* önbellek okunamadıysa normal hesaplamaya devam */ }
 
   const sonuc = hesaplaFn();
+  // Hata sonuçları (ok:false) asla önbelleğe yazılmaz — geçici bir hata kalıcı görünmesin.
+  if (sonuc && sonuc.ok === false) return sonuc;
   try {
     const json = JSON.stringify(sonuc);
-    if (json.length < 95000) cache.put(anahtar, json, saniyeTTL);
+    if (json.length < 95000) {
+      cache.put(anahtar, json, saniyeTTL);
+    } else if (json.length <= CACHE_PARCA_BOYUT_ * CACHE_PARCA_MAX_) {
+      const n = Math.ceil(json.length / CACHE_PARCA_BOYUT_);
+      const koyulacak = {};
+      for (let i = 0; i < n; i++) koyulacak[anahtar + "#" + i] = json.substr(i * CACHE_PARCA_BOYUT_, CACHE_PARCA_BOYUT_);
+      koyulacak[anahtar] = CACHE_PARCA_ISARET_ + n + ":" + json.length;
+      cache.putAll(koyulacak, saniyeTTL);
+    }
   } catch (e) { /* JSON'a çevrilemedi veya önbelleğe yazılamadı — sorun değil */ }
   return sonuc;
 }
 
 function cacheTemizle(anahtarlar) {
-  try { CacheService.getScriptCache().removeAll(anahtarlar); } catch (e) { /* yoksay */ }
+  try {
+    const tumu = [];
+    const ekle = function (k) {
+      tumu.push(k);
+      for (let i = 0; i < CACHE_PARCA_MAX_; i++) tumu.push(k + "#" + i); // olası parçalar
+    };
+    (anahtarlar || []).forEach(function (k) {
+      ekle(k);
+      (CACHE_BAGIMLI_[k] || []).forEach(ekle);
+    });
+    // removeAll tek çağrıda en fazla 1000 anahtar alır — bölerek gönder.
+    for (let i = 0; i < tumu.length; i += 900) {
+      CacheService.getScriptCache().removeAll(tumu.slice(i, i + 900));
+    }
+  } catch (e) { /* yoksay */ }
 }
 
 // ════════════════════════════════════════════════
@@ -4284,6 +4351,7 @@ function edmOnekEslesmeManuelKaydet(body) {
   if (!cariId) return { ok: false, hata: "Cari seçilmeli" };
   const ss = SpreadsheetApp.openById(SHEET_ID);
   edmOnekEslesmeKaydet(ss, onek, cariId, String(body.cariAd || ""));
+  cacheTemizle(["bekleyenAlisFaturalari"]);
   return { ok: true };
 }
 
@@ -4295,12 +4363,22 @@ function edmOnekEslesmeSil(body) {
   const sheet = getOrCreateSheet(ss, SHEETS.edmOnekEslesme, EDM_ONEK_ESLESME_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][0] || "").trim().toUpperCase() === onek) { sheet.deleteRow(i + 1); return { ok: true }; }
+    if (String(data[i][0] || "").trim().toUpperCase() === onek) { sheet.deleteRow(i + 1); cacheTemizle(["bekleyenAlisFaturalari"]); return { ok: true }; }
   }
   return { ok: false, hata: "Eşleştirme bulunamadı" };
 }
 
+// ★ Sunucu önbelleği (45 sn): FATURAFIYAT (dış e-tablo) + durum + alış + stok + cari sayfalarını her
+// açılışta baştan okuyan en yavaş liste buydu. Durum/eşleşme değiştiren işlemler (onayla/reddet/
+// sıfırla/önek eşleştirme) ve stok/cari/alış önbellekleri temizlenince (bkz. CACHE_BAGIMLI_) bu da
+// temizlenir; dış otomasyonun yeni yazdığı faturalar en geç 45 sn içinde görünür.
 function getBekleyenAlisFaturalari() {
+  return cacheOkuVeyaHesapla("bekleyenAlisFaturalari", 45, function () {
+    return getBekleyenAlisFaturalariHesapla_();
+  });
+}
+
+function getBekleyenAlisFaturalariHesapla_() {
   let disData;
   try {
     const disSs = SpreadsheetApp.openById(DIS_FIYAT_SHEET_ID);
@@ -4398,14 +4476,27 @@ function getBekleyenAlisFaturalari() {
     f.kalemSayisi = f.kalemler.length;
     f.durum = islenmis[f.faturaNo] ? islenmis[f.faturaNo].durum : "Bekliyor";
     f.islemTarihi = islenmis[f.faturaNo] ? islenmis[f.faturaNo].islemTarihi : "";
-    const eslesenCariId = eslesmeMap[String(f.tedarikci || "").trim().toLocaleLowerCase('tr')] || "";
-    f.eslesenCariId = eslesenCariId;
-    f.eslesenCariAd = eslesenCariId && cariByIdMap[eslesenCariId] ? cariByIdMap[eslesenCariId].ad : "";
-    // Tedarikçi adı eşleşmesi yoksa, fatura no önekinden bir ÖNERİ üret (otomatik uygulanmaz).
+    // ★ EŞLEŞTİRME ÖNCELİĞİ (19 Eyl 2026): fatura no ÖNEKİ (ör. "GEF" → Günaydın) ilk sırada.
+    // Önek faturayı KESEN firmanın seri harfidir ve Ayarlar'da elle tanımlanabilir/kontrol
+    // edilebilir; buna karşılık "gönderen" adı (TEDARIKCI, e-posta başlığından okunur) her zaman
+    // gerçek fatura sahibini yansıtmaz (ör. GEF önekli fatura, gönderen adı "CAN ALÜMİNYUM"
+    // olarak geldiği için eskiden yanlışlıkla Can Alüminyum cari'sine eşleniyordu).
+    // Sıra: (1) önek eşleşmesi (cari hâlâ varsa) → (2) gönderen adı eşleşmesi → (3) eşleşme yok.
     f.onek = faturaOnekiCikar(f.faturaNo);
-    if (!eslesenCariId && f.onek && onekMap[f.onek]) {
-      f.onekOnerisiCariId = onekMap[f.onek].cariId;
-      f.onekOnerisiCariAd = onekMap[f.onek].cariAd || (cariByIdMap[onekMap[f.onek].cariId] ? cariByIdMap[onekMap[f.onek].cariId].ad : "");
+    const adEslesenId = eslesmeMap[String(f.tedarikci || "").trim().toLocaleLowerCase('tr')] || "";
+    const onekKaydi = f.onek ? onekMap[f.onek] : null;
+    const onekCariGecerli = !!(onekKaydi && onekKaydi.cariId && (!cariListeSonuc.ok || cariByIdMap[onekKaydi.cariId]));
+    let eslesenCariId = "", eslesmeKaynagi = "";
+    if (onekCariGecerli) { eslesenCariId = onekKaydi.cariId; eslesmeKaynagi = "onek"; }
+    else if (adEslesenId) { eslesenCariId = adEslesenId; eslesmeKaynagi = "tedarikci"; }
+    f.eslesenCariId = eslesenCariId;
+    f.eslesmeKaynagi = eslesmeKaynagi;
+    f.eslesenCariAd = eslesenCariId
+      ? (cariByIdMap[eslesenCariId] ? cariByIdMap[eslesenCariId].ad : (eslesmeKaynagi === "onek" ? (onekKaydi.cariAd || "") : ""))
+      : "";
+    // Önek bir cariyi işaret ederken gönderen adı FARKLI bir cariye eşliyse, kullanıcıya bilgi ver.
+    if (eslesmeKaynagi === "onek" && adEslesenId && adEslesenId !== eslesenCariId) {
+      f.adEslesmesiCariAd = cariByIdMap[adEslesenId] ? cariByIdMap[adEslesenId].ad : "";
     }
     // Genel toplam = fatura tutarı (KDV dahil). Kaynak veride miktar olmadığından
     // birim fiyatlar üzerinden hesaplanıyor — gerçek fatura toplamı miktarla çarpılınca değişebilir.
@@ -4449,8 +4540,18 @@ function onaylaAlisFaturasi(body) {
 
   // Gerçek bir cari seçilerek onaylandıysa, aynı tedarikçiden gelecek sonraki faturalar
   // için bu eşleşmeyi hatırla (bir sonraki onay ekranında otomatik seçili gelsin).
+  // ÖNEKLİ faturada gönderen adı güvenilir olmayabilir (bkz. getBekleyenAlisFaturalari önceliği):
+  // bu ad ZATEN başka bir cariye eşliyse üzerine yazılmaz — aksi halde, örn. GEF (Günaydın)
+  // faturasının gönderen adı "CAN ALÜMİNYUM" ise, gerçek Can Alüminyum faturaları da yanlışlıkla
+  // Günaydın'a eşlenmeye başlardı. Ad daha önce hiç eşlenmediyse (veya fatura önek taşımıyorsa)
+  // eskisi gibi öğrenilir.
+  const onekOgren = faturaOnekiCikar(faturaNo);
   if (body.cariId && body.tedarikci) {
-    tedarikciCariEslesmeKaydet(ss, body.tedarikci, String(body.cariId).trim());
+    const adAnahtar = String(body.tedarikci || "").trim().toLocaleLowerCase('tr');
+    const mevcutAdEslesmeleri = tedarikciCariEslesmeOku(ss);
+    if (!onekOgren || !mevcutAdEslesmeleri[adAnahtar]) {
+      tedarikciCariEslesmeKaydet(ss, body.tedarikci, String(body.cariId).trim());
+    }
   }
   // Fatura no'da bir önek varsa (ör. "CNY"), bu önek → cari eşleştirmesini de
   // öğren/güncelle — sonraki aynı önekli faturalarda BFM'de öneri olarak çıkar
@@ -4460,6 +4561,7 @@ function onaylaAlisFaturasi(body) {
     edmOnekEslesmeKaydet(ss, onek, String(body.cariId).trim(), String(body.cariAd || ""));
   }
 
+  cacheTemizle(["bekleyenAlisFaturalari"]);
   return { ok: true, alisId: alisSonuc.id, toplamTutar: alisSonuc.toplamTutar };
 }
 
@@ -4478,6 +4580,7 @@ function reddetAlisFaturasi(body) {
   durumSheet.appendRow([faturaNo, "Reddedildi", "", String(body.aciklama || ""),
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
 
+  cacheTemizle(["bekleyenAlisFaturalari"]);
   return { ok: true };
 }
 
@@ -4493,7 +4596,7 @@ function sifirlaAlisFaturaDurum(body) {
   const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
   const durumData = durumSheet.getDataRange().getValues();
   for (let i = durumData.length - 1; i >= 1; i--) {
-    if (String(durumData[i][0]) === faturaNo) { durumSheet.deleteRow(i + 1); return { ok: true }; }
+    if (String(durumData[i][0]) === faturaNo) { durumSheet.deleteRow(i + 1); cacheTemizle(["bekleyenAlisFaturalari"]); return { ok: true }; }
   }
   return { ok: false, hata: "Bu fatura için işlenmiş bir kayıt bulunamadı" };
 }

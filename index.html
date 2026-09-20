@@ -1372,8 +1372,7 @@ function bugunOzetCiz(){
   if(!el) return;
   const secili = bugunOzetSeciliAl();
   if(secili.length === 0){ el.innerHTML = ""; return; }
-  cariApi("getBugunOzet", {}).then(res=>{
-    if(!res || !res.ok) return;
+  const ciz = (res)=>{
     el.innerHTML = secili.map(id=>{
       const k = BUGUN_OZET_KATALOG.find(x=>x.id===id);
       if(!k) return "";
@@ -1382,6 +1381,15 @@ function bugunOzetCiz(){
         <div class="metin"><div class="lbl">${k.lbl}</div><div class="deger">${paraFormat(res[id] || 0)}</div></div>
       </div>`;
     }).join("");
+  };
+  // Önbellekteki son değerleri ANINDA göster (sayfa ilk açılırken boş kalmasın), arkadan tazele.
+  const onb = el.dataset.dolu === "1" ? null : onbellekOku("bugunOzet", ONBELLEK_MAX_YAS);
+  if(onb) ciz(onb);
+  cariApi("getBugunOzet", {}).then(res=>{
+    if(!res || !res.ok) return;
+    onbellekYaz("bugunOzet", res);
+    ciz(res);
+    el.dataset.dolu = "1";
   }).catch(()=>{});
 }
 // NOT: İlk çağrı burada YAPILMIYOR — CARI_API bu noktada henüz tanımlı değil
@@ -1596,6 +1604,21 @@ function sonIslemlerKatlaAc(){
   const panel = document.getElementById("home-son-islemler-panel");
   if(panel && sonIslemlerKatliMi()) panel.classList.add("katli");
 })();
+function sonIslemlerCiz_(el, islemler){
+  el.innerHTML = islemler.map(k=>{
+    const tutarStr = k.tutar ? paraFormat(k.tutar) : "";
+    const alt = [k.cariAd, tutarStr].filter(Boolean).join(" · ");
+    return `
+    <div class="son-islem-satir" style="cursor:pointer" onclick="sonIslemAc('${k.tip}','${k.id}')">
+      <span class="ic">${k.ic||"📄"}</span>
+      <div class="govde">
+        <div class="baslik">${k.baslik||""}</div>
+        <div class="alt">${alt}</div>
+        <div class="tarih">${k.kayitTarihi||""}</div>
+      </div>
+    </div>`;
+  }).join("");
+}
 function sonIslemlerYukle(){
   const el = document.getElementById("son-islemler-liste");
   if(!el) return;
@@ -1605,36 +1628,30 @@ function sonIslemlerYukle(){
   // önceki deneme hiç başarılı olmadıysa) gösterilir; böylece her gidiş-gelişte
   // kullanıcının fark edeceği bir yanıp-sönme olmaz.
   const ilkYukleme = el.dataset.dolu !== "1";
-  if(ilkYukleme) el.innerHTML = `<div class="son-islem-bos">Yükleniyor...</div>`;
+  // ★ İlk açılışta son bilinen liste önbellekten ANINDA çizilir (19 Eyl 2026); taze veri gelince güncellenir.
+  const onb = ilkYukleme ? onbellekOku("sonIslemler", ONBELLEK_MAX_YAS) : null;
+  const onbGosterildi = !!(onb && onb.length);
+  if(onbGosterildi) sonIslemlerCiz_(el, onb);
+  else if(ilkYukleme) el.innerHTML = `<div class="son-islem-bos">Yükleniyor...</div>`;
   // Apps Script ilk (soğuk) istekte birkaç saniye gecikebilir — 15 sn içinde
   // cevap gelmezse kullanıcıyı sonsuza dek "Yükleniyor..." ekranında bırakmak
   // yerine "Tekrar Dene" seçeneği gösteriyoruz.
   const zamanAsimi = new Promise((_,reddet)=>setTimeout(()=>reddet(new Error("zaman aşımı")), 15000));
   Promise.race([cariApi("getSonIslemler", {limit:20}), zamanAsimi]).then(res=>{
     if(!res || !res.ok || !res.islemler || res.islemler.length===0){
+      if(onbGosterildi && res && !res.ok) return; // hata: önbellekteki listeyi koru
       el.innerHTML = `<div class="son-islem-bos">Henüz işlem yok.</div>`;
       el.dataset.dolu = "1";
       return;
     }
-    el.innerHTML = res.islemler.map(k=>{
-      const tutarStr = k.tutar ? paraFormat(k.tutar) : "";
-      const alt = [k.cariAd, tutarStr].filter(Boolean).join(" · ");
-      return `
-      <div class="son-islem-satir" style="cursor:pointer" onclick="sonIslemAc('${k.tip}','${k.id}')">
-        <span class="ic">${k.ic||"📄"}</span>
-        <div class="govde">
-          <div class="baslik">${k.baslik||""}</div>
-          <div class="alt">${alt}</div>
-          <div class="tarih">${k.kayitTarihi||""}</div>
-        </div>
-      </div>`;
-    }).join("");
+    onbellekYaz("sonIslemler", res.islemler);
+    sonIslemlerCiz_(el, res.islemler);
     el.dataset.dolu = "1";
   }).catch(()=>{
     // Arka plandaki sessiz yenileme başarısız olduysa ve ekranda zaten (eski) bir
     // liste görünüyorsa onu koru, kullanıcıyı rahatsız etmeden sessizce vazgeç —
     // hata ekranı sadece hiç veri gösterilemediyse (ilk yükleme) çıkar.
-    if(!ilkYukleme) return;
+    if(!ilkYukleme || onbGosterildi) return;
     el.innerHTML = `<div class="son-islem-bos">Yüklenemedi. <span style="color:var(--accent);cursor:pointer;font-weight:700" onclick="sonIslemlerYukle()">↻ Tekrar dene</span></div>`;
   });
 }
@@ -2007,7 +2024,14 @@ modulAc = function(id){
 function kisayollariAl(){
   try{
     const kayitli = JSON.parse(localStorage.getItem("fincanlar_kisayollar") || "null");
-    if(kayitli && typeof kayitli === "object") return kayitli;
+    if(kayitli && typeof kayitli === "object"){
+      // Eski/eksik kayıtlı ayarlarda (ör. _geri anahtarı hiç yazılmamışsa) Esc "geri" kısayolu
+      // sessizce ölüyordu — sistem kısayollarını varsayılanla tamamla (modül kısayollarına dokunma).
+      if(kayitli._geri === undefined) kayitli._geri = "Escape";
+      if(kayitli._sekmeIleri === undefined) kayitli._sekmeIleri = "Ctrl+PageDown";
+      if(kayitli._sekmeGeri === undefined) kayitli._sekmeGeri = "Ctrl+PageUp";
+      return kayitli;
+    }
   }catch(e){}
   // Varsayılanlar: Alt+Shift+1..8 modüller, Esc geri, Ctrl+PageUp/PageDown sekme gezinme
   const varsayilan = { _geri: "Escape", _sekmeIleri: "Ctrl+PageDown", _sekmeGeri: "Ctrl+PageUp" };
@@ -2041,6 +2065,114 @@ document.addEventListener("focusin", function(e){
     _sonRehberOdak = { el, buton };
   }
 });
+
+// ── Esc ile ÖNDEKİ PENCEREYİ kapatma yardımcıları (19 Eyl 2026) ──
+// "Pencere" = .modal-overlay (tüm modallar) ve #fatura-yan-panel. Öndeki, en yüksek z-index'e
+// sahip olandır; eşitlikte DOM'a en son eklenen (üstte çizilen) kazanır.
+function onPlanPencereBul_(){
+  const adaylar = document.querySelectorAll(".modal-overlay, .fatura-yan-panel");
+  let en = null, enZ = -Infinity;
+  adaylar.forEach(el=>{
+    const z = parseInt(getComputedStyle(el).zIndex, 10) || 0;
+    if(z >= enZ){ en = el; enZ = z; }
+  });
+  return en;
+}
+// Uyarısız kapanacak pencereler: sadece arama/seçim amaçlı olanlar (içine yazılan arama
+// terimi "yarım kalan iş" sayılmaz).
+const PENCERE_ESC_UYARISIZ_ = ["rehber-modal-overlay"];
+function pencereSnapshot_(el){
+  const parcalar = [];
+  el.querySelectorAll("input, select, textarea").forEach(x=>{
+    if(x.type === "button" || x.type === "submit") return;
+    const deger = (x.type === "checkbox" || x.type === "radio") ? (x.checked ? "1" : "0") : x.value;
+    parcalar.push((x.id || x.name || "") + "=" + deger);
+  });
+  parcalar.push("#satir=" + el.querySelectorAll("tbody tr").length);
+  return parcalar.join("\u0001");
+}
+// Kullanıcı bir pencerede GERÇEKTEN bir şey yazdı/seçtiyse (güvenilir input/change olayı)
+// pencere "kirli" işaretlenir. Kod tarafından yazılan değerler (Rehber'den cari/stok seçimi,
+// öneri kutusundan seçim, satır ekleme...) input olayı üretmediği için ayrıca şöyle yakalanır:
+// her tıklama/tuş basışından HEMEN ÖNCE pencerenin anlık görüntüsü alınır, kısa süre sonra
+// (300 ms) tekrar alınıp karşılaştırılır — değiştiyse o eylem bir giriş yapmıştır. (Açılışta
+// kendi kendine dolan alanlar — seri no, banka listesi vb. — kullanıcı eylemiyle
+// ilişkili olmadığı için yanlışlıkla "yarım iş" sayılmaz.)
+function pencereKirliIsaretle_(e){
+  if(!e.isTrusted) return;
+  const o = e.target && e.target.closest ? e.target.closest(".modal-overlay") : null;
+  if(o) o.dataset.kirli = "1";
+}
+function pencereEtkilesimIzle_(){
+  const pencereler = document.querySelectorAll(".modal-overlay");
+  if(!pencereler.length) return;
+  const onceki = [];
+  pencereler.forEach(o=>{
+    if(o.dataset.kirli === "1") return;
+    const snap = pencereSnapshot_(o);
+    o._etkilesim = { snap, t: Date.now() };
+    onceki.push([o, snap]);
+  });
+  if(!onceki.length) return;
+  setTimeout(()=>{
+    onceki.forEach(([o, snap])=>{
+      if(o.isConnected && o.dataset.kirli !== "1" && pencereSnapshot_(o) !== snap) o.dataset.kirli = "1";
+    });
+  }, 300);
+}
+document.addEventListener("input", pencereKirliIsaretle_, true);
+document.addEventListener("change", pencereKirliIsaretle_, true);
+document.addEventListener("click", pencereEtkilesimIzle_, true);
+document.addEventListener("keydown", function(e){ if(e.key !== "Escape") pencereEtkilesimIzle_(); }, true);
+function pencereKirliMi_(el){
+  if(!el.classList.contains("modal-overlay")) return false;
+  if(PENCERE_ESC_UYARISIZ_.includes(el.id) || el.dataset.escUyarisiz === "1") return false;
+  if(el.dataset.kirli === "1") return true;
+  // Son eylem henüz 300 ms'lik izleme süresini doldurmadan Esc'e basıldıysa şimdi karşılaştır.
+  const e = el._etkilesim;
+  return !!(e && Date.now() - e.t < 400 && pencereSnapshot_(el) !== e.snap);
+}
+function pencereyiKapat_(el){
+  const ozel = el.dataset ? el.dataset.escKapat : "";
+  if(ozel && typeof window[ozel] === "function"){ window[ozel](); return; }
+  if(el.id === "rehber-modal-overlay"){ rehberKapat(); return; }
+  if(el.id === "fatura-yan-panel"){ bfmYanPanelKapat(); return; }
+  if(el.id === "edm-onay-overlay"){ edmOnayEkraniKapat(); return; }
+  el.remove();
+}
+// ── Sayfa (sekme) düzeyinde yarım kalan iş: modal DIŞINDA, sayfa içindeki form alanlarına
+// (.fld) kullanıcı gerçekten bir şey yazdıysa o modül görünümü "kirli" işaretlenir; başarılı
+// bir kaydetme/silme sonrası işaret temizlenir (bkz. cariApi). Arama kutuları .fld dışındadır,
+// dolayısıyla arama yazmak "yarım iş" sayılmaz.
+function sekmeKirliIsaretle_(e){
+  if(!e.isTrusted || !e.target || !e.target.closest) return;
+  if(e.target.closest(".modal-overlay") || !e.target.closest(".fld")) return;
+  const v = e.target.closest(".modview");
+  if(v) v.dataset.kirli = "1";
+}
+document.addEventListener("input", sekmeKirliIsaretle_, true);
+document.addEventListener("change", sekmeKirliIsaretle_, true);
+function onPlanSekmeyiKapatDene_(){
+  const sekmeId = _aktifSekme;
+  if(!sekmeId) return false;
+  const veri = _kayitSekmeVeri[sekmeId];
+  const modId = veri ? veri.modulId : sekmeId;
+  const gorunum = document.getElementById("mod-" + modId);
+  if(gorunum && gorunum.dataset.kirli === "1"){
+    if(!confirm("Yarım kalan işlem var — girdiğin bilgiler henüz kaydedilmedi.\n\nSekme yine de kapatılsın mı?")) return false;
+    delete gorunum.dataset.kirli;
+  }
+  sekmeKapat(sekmeId);
+  return true;
+}
+function pencereyiKapatDene_(el){
+  if(pencereKirliMi_(el) &&
+     !confirm("Yarım kalan işlem var — girdiğin bilgiler henüz kaydedilmedi.\n\nPencere yine de kapatılsın mı?")){
+    return false;
+  }
+  pencereyiKapat_(el);
+  return true;
+}
 
 document.addEventListener("keydown", function(e){
   // F1 → Cari Rehberi, F2 → Stok Rehberi: imleç bir cari/ürün arama kutusunun İÇİNDEYKEN
@@ -2079,23 +2211,35 @@ document.addEventListener("keydown", function(e){
   const yaziAlaniIcinde = ["input","textarea","select"].includes(hedefEtiket);
   if(yaziAlaniIcinde && e.key !== "Escape") return;
 
+  // ★ Esc = ÖNDEKİ PENCEREYİ KAPAT (19 Eyl 2026). Ekranın önünde açık bir pencere (modal:
+  // Satış/Alış/Tahsilat/Ödeme/Çek-Senet/Cari formu, Rehber, EDM ekranları vb. ya da BFM'deki
+  // fatura yan paneli) varsa Esc önce ONU kapatır; arkadaki ekran Ana Sayfa'ya geçmez.
+  // Pencerede yarım kalmış (kaydedilmemiş) bir giriş varsa kapatmadan önce uyarır. Bu davranış
+  // özelleştirilebilir "geri" kısayolundan BAĞIMSIZDIR — Esc'in pencere kapatması her zaman çalışır.
+  if(e.key === "Escape" && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey &&
+     document.body.classList.contains("giris-yapildi")){
+    const onPencere = onPlanPencereBul_();
+    if(onPencere){
+      e.preventDefault();
+      pencereyiKapatDene_(onPencere);
+      return;
+    }
+    // Açık pencere yoksa Esc, ÖNDEKİ SEKMEYİ kapatır (Ana Sayfa'ya atmaz): kalan son sekme öne
+    // gelir, hiç sekme kalmadıysa Ana Sayfa görünür. Ana Sayfa'dayken Esc bir şey yapmaz.
+    e.preventDefault();
+    if(_aktifSekme) onPlanSekmeyiKapatDene_();
+    return;
+  }
+
   const kisayollar = kisayollariAl();
   const basilan = kisayolMetni(e);
   if(basilan === kisayollar._geri){
-    // Ekranın önünde açık bir (salt-görüntüleme amaçlı, kaydetme içermeyen) modal
-    // varsa Esc önce ONU kapatsın — aksi halde arkadaki ekran Ana Sayfa'ya geçerken
-    // modal görsel olarak açık kalıyordu (ör. "🖼️ Resmi Görüntüle"). Modal, kendi
-    // oluşturulduğu yerde data-esc-kapat="fonksiyonAdi" ile bunu işaretler; işaretli
-    // değilse (form/kaydetme içeren modallar) eski davranış (Ana Sayfa'ya git) sürer.
-    const acikModaller = document.querySelectorAll(".modal-overlay[data-esc-kapat]");
-    if(acikModaller.length){
-      const sonModal = acikModaller[acikModaller.length-1];
-      const kapatFn = window[sonModal.dataset.escKapat];
-      if(typeof kapatFn === "function"){
-        e.preventDefault();
-        kapatFn();
-        return;
-      }
+    // "Geri" kısayolu Esc'ten farklı bir tuşa atanmışsa da, önde açık pencere varsa önce onu kapat.
+    const onPencere = onPlanPencereBul_();
+    if(onPencere){
+      e.preventDefault();
+      pencereyiKapatDene_(onPencere);
+      return;
     }
     e.preventDefault();
     gitAnaSayfa();
@@ -2192,9 +2336,20 @@ function cariApi(action, params){
     if(res && res.oturumGecersiz){
       oturumuSonlandirVeGirisGoster_();
     }
+    // Başarılı bir KAYDETME/SİLME/GÜNCELLEME sonrası liste önbellekleri bayatlar — temizle ki bir
+    // sonraki açılış eski (kaydetme öncesi) veriyi göstermesin. Okuma/no-op işlemleri hariç.
+    if(res && res.ok && !CARI_API_YAZMA_DEGIL_.test(action)){
+      onbellekTemizleHepsi_();
+      document.querySelectorAll(".modview[data-kirli]").forEach(v=>{ delete v.dataset.kirli; });
+      if(CARI_API_YAPI_ISLEMI_.test(action)) yapiOnbellekTemizle_();
+    }
     return res;
   });
 }
+// Veriyi DEĞİŞTİRMEYEN (ya da önbelleği ilgilendirmeyen) işlemler: bunlardan sonra önbellek temizlenmez.
+const CARI_API_YAZMA_DEGIL_ = /^(get|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
+// Yapı/tanım verisini değiştiren işlemler (banka, hesap, pos, kart, seri, tanım, marka, plasiyer, birim...).
+const CARI_API_YAPI_ISLEMI_ = /(Banka|Hesap|Pos|KrediKart|Seri|BasitTanim|Marka|Plasiyer|Birim|AciklamaSablon|SiparisDurum|SiraGuncelle)/;
 
 function paraFormat(n){
   const sign = n < 0 ? "-" : "";
@@ -2454,19 +2609,49 @@ function rehberAc(tip, callback){
   document.body.appendChild(overlay);
   setTimeout(()=>{ const el = document.getElementById("rehber-ara"); if(el) el.focus(); }, 50);
 
+  // ★ Bellekte liste yoksa önce tarayıcı önbelleğindeki son liste ANINDA gösterilir (19 Eyl 2026),
+  // arkadan taze liste çekilip tablo (aramayı koruyarak) sessizce güncellenir.
+  const durum = _rehberState;
   if(tip==='cari'){
     if(_cariYuklendi && _cariListe.length){ rehberVeriGeldi(_cariListe); }
-    else cariApi("getCariListesi").then(res=>{
-      if(res.ok){ _cariListe=res.cariler; _cariYuklendi=true; rehberVeriGeldi(res.cariler); }
-      else rehberHataGoster(res.hata || "Cari listesi alınamadı");
-    }).catch(err=>rehberHataGoster(err.message));
+    else {
+      const onb = onbellekOku("cariListesi", ONBELLEK_MAX_YAS);
+      const onbVar = !!(onb && onb.length);
+      if(onbVar) rehberVeriGeldi(onb.slice().sort((a,b)=>(a.ad||"").localeCompare(b.ad||"",'tr')));
+      cariApi("getCariListesi").then(res=>{
+        if(res.ok){
+          _cariListe=res.cariler; _cariYuklendi=true; onbellekYaz("cariListesi", res.cariler);
+          if(onbVar) rehberVeriGuncelle_(durum, res.cariler); else rehberVeriGeldi(res.cariler);
+        }
+        else if(!onbVar) rehberHataGoster(res.hata || "Cari listesi alınamadı");
+      }).catch(err=>{ if(!onbVar) rehberHataGoster(err.message); });
+    }
   } else {
     if(_stokTanimYuklendi && _stokTanimListe.length){ rehberVeriGeldi(_stokTanimListe); }
-    else cariApi("getStokTanimListesi").then(res=>{
-      if(res.ok){ _stokTanimListe=res.kalemler; _stokTanimYuklendi=true; rehberVeriGeldi(res.kalemler); }
-      else rehberHataGoster(res.hata || "Stok listesi alınamadı");
-    }).catch(err=>rehberHataGoster(err.message));
+    else {
+      const onb = onbellekOku("stokTanimListesi", ONBELLEK_MAX_YAS);
+      const onbVar = !!(onb && onb.length);
+      if(onbVar) rehberVeriGeldi(onb);
+      cariApi("getStokTanimListesi").then(res=>{
+        if(res.ok){
+          _stokTanimListe=res.kalemler; _stokTanimYuklendi=true; onbellekYaz("stokTanimListesi", res.kalemler);
+          if(onbVar) rehberVeriGuncelle_(durum, res.kalemler); else rehberVeriGeldi(res.kalemler);
+        }
+        else if(!onbVar) rehberHataGoster(res.hata || "Stok listesi alınamadı");
+      }).catch(err=>{ if(!onbVar) rehberHataGoster(err.message); });
+    }
   }
+}
+
+// Rehber açıkken arkadan gelen taze listeyi, kullanıcının yazdığı arama/sıralamayı bozmadan uygular.
+function rehberVeriGuncelle_(durum, satirlar){
+  if(!durum || _rehberState !== durum || !document.getElementById("rehber-modal-overlay")) return;
+  durum.satirlar = satirlar;
+  const araEl = document.getElementById("rehber-ara");
+  if(araEl && araEl.value.trim()){ rehberFiltrele(araEl.value); return; }
+  durum.filtreli = satirlar;
+  if(durum.siraAlan) rehberSiralamayiUygula();
+  rehberTabloCiz();
 }
 
 // Rehber verisi yüklenemezse "Yükleniyor..." ekranında sonsuza kadar takılı kalmasın diye
@@ -2597,8 +2782,26 @@ function rehberSecReal(idx){
   const item = _rehberState.filtreli[idx];
   if(!item) return;
   const cb = _rehberState.callback;
+  const tip = _rehberState.tip;
+  const satirlar = _rehberState.satirlar;
   rehberKapat();
-  if(cb) cb(item);
+  if(cb){ cb(item); return; }
+  // ★ (19 Eyl 2026) Rehber hiçbir alana bağlı OLMADAN açıldıysa (F1/F2 veya Ctrl+1/2, imleç bir
+  // cari/ürün kutusunda değilken) seçilen kaydın kendi ekranı açılır — eskiden hiçbir şey olmuyordu.
+  // Cari → Cari sekmesinde o cari; Stok → Stok > Ürün Tanımları'nda o ürünün kartı.
+  // Satıra ÇİFT tıklanınca ikinci tıklama, az önce açılan ekrana/pencerenin arka planına denk gelip
+  // onu kapatmasın diye açılış kısa süre (350 ms) ertelenir.
+  setTimeout(()=>{
+    if(tip === "cari"){
+      cariHareketIslemeGit("CARI:" + item.id);
+    } else {
+      if(!_stokTanimListe.length && Array.isArray(satirlar)) _stokTanimListe = satirlar;
+      modulAc("stok");
+      stokAltModulAc("tanimlar");
+      stokTanimAltAc("tanim");
+      stokTanimModalAc(item.id);
+    }
+  }, 350);
 }
 
 function rehberKlavye(e){
@@ -2606,7 +2809,7 @@ function rehberKlavye(e){
   if(e.key === "ArrowDown"){ e.preventDefault(); _rehberState.aktifIdx = Math.min(_rehberState.aktifIdx+1, liste.length-1); rehberTabloCiz(); rehberAktifSatiriGoster(); }
   else if(e.key === "ArrowUp"){ e.preventDefault(); _rehberState.aktifIdx = Math.max(_rehberState.aktifIdx-1, 0); rehberTabloCiz(); rehberAktifSatiriGoster(); }
   else if(e.key === "Enter"){ e.preventDefault(); if(_rehberState.aktifIdx>=0) rehberSecReal(_rehberState.aktifIdx); }
-  else if(e.key === "Escape"){ rehberKapat(); }
+  else if(e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); rehberKapat(); }
 }
 function rehberAktifSatiriGoster(){
   const el = document.querySelector(".rehber-aktif");
@@ -2627,7 +2830,7 @@ function oneriKlavyeYonet(e, kutuId){
   else if(e.key === "Enter"){
     if(aktif>=0){ e.preventDefault(); satirlar[aktif].click(); }
     return;
-  } else if(e.key === "Escape"){ kutu.style.display = "none"; return; }
+  } else if(e.key === "Escape"){ kutu.style.display = "none"; e.stopPropagation(); return; }
   else return;
   satirlar.forEach(s=>s.classList.remove("oneri-aktif"));
   if(aktif>=0){ satirlar[aktif].classList.add("oneri-aktif"); satirlar[aktif].scrollIntoView({block:"nearest"}); }
@@ -2697,7 +2900,7 @@ function aramaBosSonucHTML(sorgu, girisId, bosMesaj){
 function listeKlavyeYonet(e, girisId, kapsayiciId){
   if(e.key === "Escape"){
     const giris = document.getElementById(girisId);
-    if(giris && giris.value){ giris.value = ""; giris.dispatchEvent(new Event("input")); }
+    if(giris && giris.value){ giris.value = ""; giris.dispatchEvent(new Event("input")); e.stopPropagation(); }
     else if(giris) giris.blur();
     return;
   }
@@ -2735,6 +2938,52 @@ function onbellekOku(anahtar, maxYasMs){
 function onbellekYaz(anahtar, veri){
   try{ localStorage.setItem("fincanlar_onbellek_" + anahtar, JSON.stringify({t: Date.now(), veri: veri})); }catch(e){}
 }
+// ★ ÖNBELLEK GÜNCELLEMESİ (19 Eyl 2026): Liste önbelleği artık 60 sn yerine saatlerce geçerli —
+// "önce eski veriyi ANINDA göster, arkada tazele" yaklaşımında yaşın önemi yok, çünkü her açılışta
+// zaten arka planda tazeleniyor; eskiden 60 sn'yi geçen her açılış boş "Yükleniyor..." ekranıyla
+// başlıyordu. Bayat veri riski, kaydetme/silme sonrası TÜM liste önbelleğinin temizlenmesiyle
+// (bkz. cariApi) ve giriş/çıkışta temizlenmesiyle kapatıldı.
+const ONBELLEK_MAX_YAS = 6 * 60 * 60 * 1000;
+function onbellekYasi_(anahtar){
+  try{
+    const ham = localStorage.getItem("fincanlar_onbellek_" + anahtar);
+    if(!ham) return Infinity;
+    return Date.now() - JSON.parse(ham).t;
+  }catch(e){ return Infinity; }
+}
+function onbellekTemizleOnek_(onek){
+  try{
+    Object.keys(localStorage).filter(k=>k.indexOf(onek) === 0).forEach(k=>localStorage.removeItem(k));
+  }catch(e){}
+}
+// Liste önbelleği (fincanlar_onbellek_*) — herhangi bir kaydetme/silme sonrası, giriş/çıkışta temizlenir.
+function onbellekTemizleHepsi_(){ onbellekTemizleOnek_("fincanlar_onbellek_"); }
+// Yapı/tanım önbelleği (fincanlar_yapi_*: banka yapısı, seri, gider grupları...) — sadece ilgili
+// TANIM işlemleri (banka/seri/tanım/marka... kaydet-sil) ve giriş/çıkışta temizlenir; günlük
+// satış/alış kaydetmeleri bunu bozmaz, böylece bu veriler formlar açılırken beklenmez.
+function yapiOnbellekTemizle_(){ onbellekTemizleOnek_("fincanlar_yapi_"); }
+function cariApiYapi(action, params){
+  const anahtar = "fincanlar_yapi_" + action + (params ? "_" + JSON.stringify(params) : "");
+  let kayit = null;
+  try{
+    const ham = localStorage.getItem(anahtar);
+    if(ham){ const k = JSON.parse(ham); if(Date.now() - k.t < 24*60*60*1000) kayit = k.veri; }
+  }catch(e){}
+  const taze = ()=> cariApi(action, params).then(res=>{
+    if(res && res.ok){ try{ localStorage.setItem(anahtar, JSON.stringify({t: Date.now(), veri: res})); }catch(e){} }
+    return res;
+  });
+  if(kayit){
+    // Önbellekten HEMEN dön; arka planda (aynı anahtar için tek istek) sessizce tazele.
+    if(!cariApiYapi._bekleyen) cariApiYapi._bekleyen = {};
+    if(!cariApiYapi._bekleyen[anahtar]){
+      cariApiYapi._bekleyen[anahtar] = true;
+      taze().catch(()=>{}).then(()=>{ delete cariApiYapi._bekleyen[anahtar]; });
+    }
+    return Promise.resolve(kayit);
+  }
+  return taze();
+}
 
 function bakiyeSinifi(n){
   if(n > 0) return "bakiye-pos";
@@ -2744,7 +2993,7 @@ function bakiyeSinifi(n){
 
 function cariListesiYukle(){
   _cariYuklendi = true;
-  const onbellek = onbellekOku("cariListesi", 60000);
+  const onbellek = onbellekOku("cariListesi", ONBELLEK_MAX_YAS);
   if(onbellek){
     _cariListe = onbellek.sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
     cariListesiCiz(_cariListe);
@@ -3249,7 +3498,7 @@ function cariSonrakiNoKullan(tipParam){
   if(tip === "Bağımsız") return;
   const tur = tip === "Tedarikçi" ? "cari_satici" : "cari_alici";
   const seriAdi = tip === "Tedarikçi" ? "Cari No (Satıcı)" : "Cari No (Alıcı)";
-  cariApi("getSeriTanimlari").then(res=>{
+  cariApiYapi("getSeriTanimlari").then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     // Önce sabit "tür" alanına göre eşleştir (Ad değiştirilse bile bozulmaz);
     // tür henüz atanmamışsa geriye dönük uyumluluk için Ad metnine göre dene.
@@ -3366,7 +3615,7 @@ function satisEdmFiltreSecimden(deger){
 
 function satisListesiYukle(){
   _satisYuklendi = true;
-  const onbellek = onbellekOku("satisListesi", 60000);
+  const onbellek = onbellekOku("satisListesi", ONBELLEK_MAX_YAS);
   if(onbellek){ _satisListe = onbellek; satisListesiCiz(_satisListe); satisSonFaturalarGoster(); }
   else document.getElementById("satis-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getSatisListesi").then(res=>{
@@ -4269,7 +4518,7 @@ function satisDuzenleAc(id){
 function siparisNumarasiOnizlemeYukle(){
   const deger = document.getElementById("sm-siparis-no-deger");
   if(deger && deger.value) return; // zaten çekildi
-  cariApi("getSeriTanimlari").then(res=>{
+  cariApiYapi("getSeriTanimlari").then(res=>{
     if(!res.ok) return;
     const seri = res.seriler.find(s=>s.tur==="siparis") || res.seriler.find(s=>s.ad==="Sipariş No");
     if(!seri) return;
@@ -4290,7 +4539,7 @@ function satisOdemeTipiDegisti(){
 }
 
 function satisBankaSecenekleriYukle(onSecili){
-  cariApi("getBankaYapisi").then(res=>{
+  cariApiYapi("getBankaYapisi").then(res=>{
     if(!res.ok) return;
     const sel = document.getElementById("sm-banka-hesap");
     if(!sel) return;
@@ -4617,7 +4866,7 @@ let _yeniSatisIadeKalemleri = [];
 
 function satisIadeListesiYukle(){
   _satisIadeYuklendi = true;
-  const onbellek = onbellekOku("satisIadeListesi", 60000);
+  const onbellek = onbellekOku("satisIadeListesi", ONBELLEK_MAX_YAS);
   if(onbellek){ _satisIadeListe = onbellek; satisIadeListesiCiz(_satisIadeListe); }
   else document.getElementById("satisiade-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getSatisIadeListesi").then(res=>{
@@ -4950,7 +5199,7 @@ function alisAltModulAc(hangisi){
 
 function alisListesiYukle(){
   _alisYuklendi = true;
-  const onbellek = onbellekOku("alisListesi", 60000);
+  const onbellek = onbellekOku("alisListesi", ONBELLEK_MAX_YAS);
   if(onbellek){ _alisListe = onbellek; alisListesiCiz(_alisListe); }
   else document.getElementById("alis-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getAlisListesi").then(res=>{
@@ -5335,7 +5584,7 @@ let _yeniAlisIadeKalemleri = [];
 
 function alisIadeListesiYukle(){
   _alisIadeYuklendi = true;
-  const onbellek = onbellekOku("alisIadeListesi", 60000);
+  const onbellek = onbellekOku("alisIadeListesi", ONBELLEK_MAX_YAS);
   if(onbellek){ _alisIadeListe = onbellek; alisIadeListesiCiz(_alisIadeListe); }
   else document.getElementById("alisiade-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getAlisIadeListesi").then(res=>{
@@ -5699,26 +5948,46 @@ function bfmYanPanelKapat(){
 
 function alisBekleyenListesiYukle(){
   bfmFaturaYandaTikSenkronize();
-  document.getElementById("alis-bekleyen-list").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  const listEl = document.getElementById("alis-bekleyen-list");
+  // ★ Önbellekteki son liste ANINDA gösterilir, arkadan tazelenir (19 Eyl 2026) — bu ekran dış
+  // e-tablo + birkaç sayfa okuduğu için en yavaş açılan ekrandı.
+  const onb = onbellekOku("bekleyenAlisFaturalari", ONBELLEK_MAX_YAS);
+  if(onb){
+    _alisBekleyenListe = onb;
+    alisBekleyenFirmaFiltreDoldur();
+    alisBekleyenListesiCiz();
+  } else {
+    listEl.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  }
   cariApi("getBekleyenAlisFaturalari").then(res=>{
-    if(!res.ok){ document.getElementById("alis-bekleyen-list").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||"bilinmiyor")+'</div>'; return; }
+    if(!res.ok){ if(!onb) listEl.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||"bilinmiyor")+'</div>'; return; }
+    onbellekYaz("bekleyenAlisFaturalari", res.faturalar);
+    // Veri değişmediyse yeniden çizme (kullanıcının açtığı "Ürünleri göster" bölümleri kapanmasın).
+    if(onb && JSON.stringify(onb) === JSON.stringify(res.faturalar)) return;
     _alisBekleyenListe = res.faturalar;
     alisBekleyenFirmaFiltreDoldur();
     alisBekleyenListesiCiz();
-  }).catch(err=>{ document.getElementById("alis-bekleyen-list").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+  }).catch(err=>{ if(!onb) listEl.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
 }
 
 // Listedeki faturalardan benzersiz tedarikçi adlarını çıkarıp dropdown'ı dolduruyor.
 // Önceden seçili bir firma varsa (liste yenilense de) seçim korunuyor.
+// Bekleyen fatura satırında gösterilen/filtrelenen firma adı. Fatura no ÖNEKİ Ayarlar'daki bir
+// cariye eşliyse (ör. GEF → Günaydın) o cari adı esas alınır; e-posta "gönderen" adı
+// (f.tedarikci) her zaman fatura sahibini yansıtmaz. Aksi halde eskisi gibi gönderen adı.
+function bfmFirmaAdi_(f){
+  if(f.eslesmeKaynagi === "onek" && f.eslesenCariAd) return f.eslesenCariAd;
+  return f.tedarikci || "(Tedarikçi belirtilmemiş)";
+}
 function alisBekleyenFirmaFiltreDoldur(){
   const sel = document.getElementById("alis-bekleyen-firma-filtre");
   if(!sel) return;
   const oncekiSecim = sel.value;
-  const firmalar = [...new Set(_alisBekleyenListe.map(f => f.tedarikci || "(Tedarikçi belirtilmemiş)"))]
+  const firmalar = [...new Set(_alisBekleyenListe.map(f => bfmFirmaAdi_(f)))]
     .sort((a,b)=>a.localeCompare(b,'tr'));
   sel.innerHTML = '<option value="">Tüm firmalar (' + _alisBekleyenListe.length + ')</option>' +
     firmalar.map(ad => {
-      const adet = _alisBekleyenListe.filter(f => (f.tedarikci || "(Tedarikçi belirtilmemiş)") === ad).length;
+      const adet = _alisBekleyenListe.filter(f => bfmFirmaAdi_(f) === ad).length;
       return `<option value="${ad.replace(/"/g,'&quot;')}">${ad} (${adet})</option>`;
     }).join("");
   if(firmalar.includes(oncekiSecim)) sel.value = oncekiSecim;
@@ -5734,7 +6003,7 @@ function alisBekleyenListesiCiz(){
   const durumSecili = durumEl ? durumEl.value : "";
   let liste = _alisBekleyenListe;
   if(firmaSecili){
-    liste = liste.filter(f => (f.tedarikci || "(Tedarikçi belirtilmemiş)") === firmaSecili);
+    liste = liste.filter(f => bfmFirmaAdi_(f) === firmaSecili);
   }
   if(durumSecili){
     liste = liste.filter(f => (f.durum || "Bekliyor") === durumSecili);
@@ -5742,6 +6011,7 @@ function alisBekleyenListesiCiz(){
   if(q){
     liste = liste.filter(f =>
       (f.tedarikci||"").toLocaleLowerCase('tr').includes(q) ||
+      (f.eslesenCariAd||"").toLocaleLowerCase('tr').includes(q) ||
       (f.faturaNo||"").toLocaleLowerCase('tr').includes(q) ||
       f.kalemler.some(k => (k.urunAdi||"").toLocaleLowerCase('tr').includes(q) || (k.stokKodu||"").toLocaleLowerCase('tr').includes(q))
     );
@@ -5754,7 +6024,7 @@ function alisBekleyenListesiCiz(){
     return `
     <div class="cari-item" style="cursor:default;${islendi?'opacity:.75':''}">
       <div class="cari-item-top">
-        <span class="cari-item-ad">${f.tedarikci || "(Tedarikçi belirtilmemiş)"}</span>
+        <span class="cari-item-ad">${bfmFirmaAdi_(f)}</span>
         <span class="cari-item-bakiye">${paraFormat(f.genelToplam)}</span>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:4px">
@@ -5762,7 +6032,8 @@ function alisBekleyenListesiCiz(){
         <span style="font-size:14px;font-weight:700">${tarihGoster(f.tarih)}</span>
         <span style="font-size:12px;color:var(--text3)">Toplam ${f.kalemSayisi} Kalem</span>
         <span style="font-size:11.5px;font-weight:700;color:${durumRenk};background:${islendi?(f.durum==='Onaylandı'?'var(--green-l)':'#fde8e8'):'var(--bg3)'};padding:2px 9px;border-radius:20px">${islendi ? (f.durum==='Onaylandı'?'✓ İşlendi':'✖ Reddedildi') : 'Bekliyor'}</span>
-        ${f.eslesenCariAd ? `<span style="font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-l,#eef2ff);padding:2px 9px;border-radius:20px">Cari: ${f.eslesenCariAd}</span>` : ``}
+        ${f.eslesenCariAd ? `<span style="font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-l,#eef2ff);padding:2px 9px;border-radius:20px">Cari: ${f.eslesenCariAd}${f.eslesmeKaynagi==='onek' && f.onek ? ` · önek ${f.onek}` : ''}</span>` : ``}
+        ${(f.eslesmeKaynagi==='onek' && f.tedarikci && f.tedarikci.trim().toLocaleLowerCase('tr') !== (f.eslesenCariAd||'').trim().toLocaleLowerCase('tr')) ? `<span style="font-size:11px;color:var(--text3)" title="E-postadaki gönderen adı">Gönderen: ${f.tedarikci}</span>` : ``}
       </div>
       <div style="margin-top:6px">
         <span style="font-size:12px;color:var(--accent);cursor:pointer;font-weight:600" onclick="alisBekleyenKalemGosterGizle(${fi})" id="bfk-toggle-${fi}">▾ Ürünleri göster</span>
@@ -5971,8 +6242,9 @@ function alisBekleyenOnayModalAc(faturaNo){
                  onkeydown="oneriKlavyeYonet(event,'bfm-cari-oneri')">
           <input type="hidden" id="bfm-cari" value="${f.eslesenCariId||''}">
           <div id="bfm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
-          ${f.eslesenCariAd ? `<div style="font-size:11px;color:var(--green);margin-top:3px">✓ Daha önce "${f.tedarikci}" bu cariye işlenmiş, otomatik seçildi.</div>` : ``}
-          ${(!f.eslesenCariAd && f.onekOnerisiCariAd) ? `<div style="font-size:11px;color:var(--accent);margin-top:3px">🔖 Önek eşleşmesi: "${f.onek}" → ${f.onekOnerisiCariAd}. <span style="text-decoration:underline;cursor:pointer;font-weight:600" onclick="bfmOnekOnerisiKullan('${(f.onekOnerisiCariId||'').replace(/'/g,"\\\\'")}','${(f.onekOnerisiCariAd||'').replace(/'/g,"\\\\'")}')">Bu cariyi kullan</span></div>` : ``}
+          ${f.eslesenCariAd ? (f.eslesmeKaynagi === "onek"
+            ? `<div style="font-size:11px;color:var(--green);margin-top:3px">✓ Önek "${f.onek}" → ${f.eslesenCariAd} eşleşmesine göre otomatik seçildi.${f.adEslesmesiCariAd ? ` <span style="color:var(--text3)">(Gönderen adı "${f.tedarikci}" ${f.adEslesmesiCariAd} cari'sine eşli — önek eşleşmesi önceliklidir.)</span>` : ``}</div>`
+            : `<div style="font-size:11px;color:var(--green);margin-top:3px">✓ Daha önce "${f.tedarikci}" bu cariye işlenmiş, otomatik seçildi.</div>`) : ``}
         </div>
         <div class="fld" style="margin:0"><label>Tarih</label><input id="bfm-tarih" type="datetime-local" value="${tarihISO}T00:00"></div>
         <div class="fld" style="margin:0"><label>Ödeme Tipi</label>
@@ -6509,7 +6781,7 @@ let _tahsilatSecili = null;
 
 function tahsilatListesiYukle(){
   _tahsilatYuklendi = true;
-  const onbellek = onbellekOku("tahsilatListesi", 60000);
+  const onbellek = onbellekOku("tahsilatListesi", ONBELLEK_MAX_YAS);
   if(onbellek){ _tahsilatListe = onbellek; tahsilatListesiCiz(_tahsilatListe); }
   else document.getElementById("tahsilat-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getTahsilatListesi").then(res=>{
@@ -6671,7 +6943,7 @@ function tahsilatModalAc(onCariId, editId){
 // yüklenmemiş olabiliyordu — POS listesi boş görünüyordu), Banka bölümündeki gibi
 // kendi taze isteğini yapar.
 function tahsilatPosSecenekleriYukle(){
-  cariApi("getBankaYapisi").then(res=>{
+  cariApiYapi("getBankaYapisi").then(res=>{
     if(!res.ok) return;
     const sel = document.getElementById("tm-pos");
     if(!sel) return;
@@ -6722,7 +6994,7 @@ function tahsilatModalAcOnCari(cariId){
 }
 
 function tahsilatBankaSecenekleriYukle(){
-  cariApi("getBankaYapisi").then(res=>{
+  cariApiYapi("getBankaYapisi").then(res=>{
     if(!res.ok) return;
     const sel = document.getElementById("tm-banka-hesap");
     if(!sel) return;
@@ -6783,7 +7055,7 @@ let _odemeSecili = null;
 
 function odemeListesiYukle(){
   _odemeYuklendi = true;
-  const onbellek = onbellekOku("odemeListesi", 60000);
+  const onbellek = onbellekOku("odemeListesi", ONBELLEK_MAX_YAS);
   if(onbellek){ _odemeListe = onbellek; odemeListesiCiz(_odemeListe); }
   else document.getElementById("odeme-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getOdemeListesi").then(res=>{
@@ -6966,7 +7238,7 @@ function odemeHedefTipDegisti(){
 // Banka Hesabı / Kredi Kartı seçimini, Banka Yapısı'ndaki tüm hesap ve kartları
 // birleştirip (optgroup ile ayırarak) doldurur. Seçilen değer "hesap:<id>" veya "kart:<id>" biçiminde.
 function odemeHedefBankaSecenekleriYukle(){
-  cariApi("getBankaYapisi").then(res=>{
+  cariApiYapi("getBankaYapisi").then(res=>{
     if(!res.ok) return;
     const sel = document.getElementById("om-hedef-banka");
     if(!sel) return;
@@ -6985,8 +7257,8 @@ function odemeHedefBankaSecenekleriYukle(){
 function odemeGiderUstDoldur(){
   if(!_tanimListeYuklendi.giderUstGrup || !_tanimListeYuklendi.giderAltGrup){
     Promise.all([
-      cariApi("getBasitTanimListesi", {tip:"giderUstGrup"}),
-      cariApi("getBasitTanimListesi", {tip:"giderAltGrup"})
+      cariApiYapi("getBasitTanimListesi", {tip:"giderUstGrup"}),
+      cariApiYapi("getBasitTanimListesi", {tip:"giderAltGrup"})
     ]).then(([ustRes, altRes])=>{
       if(ustRes.ok){ _tanimListeCache.giderUstGrup = ustRes.kalemler; _tanimListeYuklendi.giderUstGrup = true; }
       if(altRes.ok){ _tanimListeCache.giderAltGrup = altRes.kalemler; _tanimListeYuklendi.giderAltGrup = true; }
@@ -7018,7 +7290,7 @@ function odemeModalAcOnCari(cariId){
 }
 
 function odemeBankaSecenekleriYukle(){
-  cariApi("getBankaYapisi").then(res=>{
+  cariApiYapi("getBankaYapisi").then(res=>{
     if(!res.ok) return;
     const sel = document.getElementById("om-banka-hesap");
     if(!sel) return;
@@ -7030,7 +7302,7 @@ function odemeBankaSecenekleriYukle(){
 }
 
 function odemePosSecenekleriYukle(){
-  cariApi("getBankaYapisi").then(res=>{
+  cariApiYapi("getBankaYapisi").then(res=>{
     if(!res.ok) return;
     const sel = document.getElementById("om-pos");
     if(!sel) return;
@@ -7141,7 +7413,7 @@ let _cekSenetAktifTip = "Alınan";
 
 function cekSenetListesiYukle(){
   _cekSenetYuklendi = true;
-  const onbellek = onbellekOku("cekSenetListesi", 60000);
+  const onbellek = onbellekOku("cekSenetListesi", ONBELLEK_MAX_YAS);
   if(onbellek){ _cekSenetListe = onbellek; cekSenetListesiCiz(); }
   else document.getElementById("ceksenet-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getCekSenetListesi").then(res=>{
@@ -7568,7 +7840,7 @@ function finansYukle(){
 
 // ── Banka Hesap Hareketleri (Havale ile yapılan Satış/Tahsilat kayıtlarının döküldüğü defter) ──
 function bankaHesapSecimDoldur(){
-  cariApi("getBankaYapisi").then(res=>{
+  cariApiYapi("getBankaYapisi").then(res=>{
     if(!res.ok) return;
     const sel = document.getElementById("bhh-hesap-secim");
     if(!sel) return;
@@ -7670,7 +7942,7 @@ function posBankaAktarModalAc(){
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  cariApi("getBankaYapisi").then(res=>{
+  cariApiYapi("getBankaYapisi").then(res=>{
     if(!res.ok) return;
     const sel = document.getElementById("pba-banka");
     if(!sel) return;
@@ -9476,7 +9748,7 @@ function _stokTanimGuncelAramaTerimiIleCiz(){
 }
 function stokTanimListesiYukle(){
   _stokTanimYuklendi = true;
-  const onbellek = onbellekOku("stokTanimListesi", 60000);
+  const onbellek = onbellekOku("stokTanimListesi", ONBELLEK_MAX_YAS);
   if(onbellek){ _stokTanimListe = onbellek; _stokTanimGuncelAramaTerimiIleCiz(); bfmOnerileriGuncelle(); }
   else document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getStokTanimListesi").then(res=>{
@@ -9980,7 +10252,7 @@ function stokHareketSonrakiNoKullan(mod){
   const seriAdi = STOK_HAREKET_BELGE_SERI_ESLEME[belgeTipi];
   const tur = STOK_HAREKET_BELGE_SERI_TUR_ESLEME[belgeTipi];
   if(!seriAdi){ alert("Önce Belge Tipi seçin (Sipariş/Teklif/Satış Faturası/Alış Faturası)."); return; }
-  cariApi("getSeriTanimlari").then(res=>{
+  cariApiYapi("getSeriTanimlari").then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     const seri = res.seriler.find(s=>s.tur===tur) || res.seriler.find(s=>s.ad===seriAdi);
     if(!seri){ alert("'"+seriAdi+"' serisi Ayarlar > Seri Tanımlama'da bulunamadı. Ayarlar > Seri Tanımlama'da ilgili satırın \"Tür\" alanını seçtiğinden emin ol."); return; }
@@ -10255,6 +10527,42 @@ function uygulamaAcilisRutini(){
   // yapılırsa cariApi henüz tanımlanmadan çalışıp script'in geri kalanını bozuyordu).
   if(typeof bugunOzetCiz === "function") bugunOzetCiz();
   if(typeof sonIslemlerYukle === "function") sonIslemlerYukle();
+  // Ana Sayfa yüklendikten kısa süre sonra, sık kullanılan listeleri arka planda ısıt.
+  setTimeout(onbellekIsitma_, 2500);
+}
+
+// ★ ÖNBELLEK ISITMA (19 Eyl 2026): Uygulama açıldıktan sonra sık kullanılan listeler SIRAYLA
+// (paralel değil — Apps Script eşzamanlı istekte yavaşlar) arka planda çekilip tarayıcı
+// önbelleğine yazılır; böylece Cari/Satış/Stok/Rehber ilk açılışta bile "Yükleniyor..." beklemez.
+// Önbellekte 90 sn'den taze veri varsa o liste atlanır. Hata olursa sessizce vazgeçilir.
+function onbellekIsitma_(){
+  if(!document.body.classList.contains("giris-yapildi")) return;
+  const isler = [
+    {a:"getStokTanimListesi", k:"stokTanimListesi", al:r=>r.kalemler,
+      bellek:l=>{ if(typeof _stokTanimListe !== "undefined" && !_stokTanimListe.length) _stokTanimListe = l; }},
+    {a:"getCariListesi", k:"cariListesi", al:r=>r.cariler,
+      bellek:l=>{ if(typeof _cariListe !== "undefined" && !_cariListe.length) _cariListe = l.slice().sort((a,b)=>(a.ad||"").localeCompare(b.ad||"",'tr')); }},
+    {a:"getSatisListesi", k:"satisListesi", al:r=>r.satislar},
+    {a:"getAlisListesi", k:"alisListesi", al:r=>r.alislar},
+    {a:"getTahsilatListesi", k:"tahsilatListesi", al:r=>r.tahsilatlar},
+    {a:"getOdemeListesi", k:"odemeListesi", al:r=>r.odemeler},
+    {a:"getBekleyenAlisFaturalari", k:"bekleyenAlisFaturalari", al:r=>r.faturalar},
+  ];
+  let i = 0;
+  const sonraki = ()=>{
+    if(i >= isler.length) return;
+    const is = isler[i++];
+    if(onbellekYasi_(is.k) < 90*1000){ setTimeout(sonraki, 50); return; }
+    cariApi(is.a).then(res=>{
+      if(res && res.ok){
+        const liste = is.al(res);
+        if(!Array.isArray(liste)) return;
+        onbellekYaz(is.k, liste);
+        if(is.bellek) is.bellek(liste);
+      }
+    }).catch(()=>{}).then(()=>setTimeout(sonraki, 400));
+  };
+  sonraki();
 }
 
 // F5/Ctrl+R gibi bir tarayıcı yenilemesi (veya sekmeyi/pencereyi kapatma) bu SPA'da TÜM
@@ -10288,6 +10596,7 @@ function girisEkraniGoster_(hataMesaji){
 }
 
 function oturumuSonlandirVeGirisGoster_(){
+  onbellekTemizleHepsi_(); yapiOnbellekTemizle_(); // başka kullanıcı/rol önceki oturumun verisini görmesin
   localStorage.removeItem("fincanlar_oturum_token");
   localStorage.removeItem("fincanlar_oturum_kullanici");
   girisEkraniGoster_("Oturumunuzun süresi doldu, lütfen tekrar giriş yapın.");
@@ -10304,6 +10613,7 @@ function girisDene(){
   cariApi("girisYap", {kullaniciAdi, parola}).then(res=>{
     btn.disabled = false; btn.textContent = "Giriş Yap";
     if(!res || !res.ok){ hataEl.textContent = (res && res.hata) || "Giriş başarısız"; return; }
+    onbellekTemizleHepsi_(); yapiOnbellekTemizle_(); // yeni oturum: önceki kullanıcının önbelleği kalmasın
     localStorage.setItem("fincanlar_oturum_token", res.token);
     localStorage.setItem("fincanlar_oturum_kullanici", JSON.stringify({ad: res.kullaniciAdi, rol: res.rol}));
     document.getElementById("login-parola").value = "";
@@ -10317,6 +10627,7 @@ function girisDene(){
 }
 
 function cikisYapButon(){
+  onbellekTemizleHepsi_(); yapiOnbellekTemizle_();
   const token = localStorage.getItem("fincanlar_oturum_token");
   if(token) cariApi("cikisYap", {token}).catch(()=>{});
   location.reload();
