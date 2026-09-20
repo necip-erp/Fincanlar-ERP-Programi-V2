@@ -2069,8 +2069,8 @@ document.addEventListener("focusin", function(e){
 // ── Esc ile ÖNDEKİ PENCEREYİ kapatma yardımcıları (19 Eyl 2026) ──
 // "Pencere" = .modal-overlay (tüm modallar) ve #fatura-yan-panel. Öndeki, en yüksek z-index'e
 // sahip olandır; eşitlikte DOM'a en son eklenen (üstte çizilen) kazanır.
-function onPlanPencereBul_(){
-  const adaylar = document.querySelectorAll(".modal-overlay, .fatura-yan-panel");
+function onPlanPencereBul_(rehberHaric){
+  const adaylar = document.querySelectorAll(rehberHaric ? ".modal-overlay:not(#rehber-modal-overlay), .fatura-yan-panel" : ".modal-overlay, .fatura-yan-panel");
   let en = null, enZ = -Infinity;
   adaylar.forEach(el=>{
     const z = parseInt(getComputedStyle(el).zIndex, 10) || 0;
@@ -2174,6 +2174,34 @@ function pencereyiKapatDene_(el){
   return true;
 }
 
+// ★ (20 Eyl 2026) F1/F2 basıldığında imleç hiçbir cari/stok kutusunda DEĞİLSE (ve hafızadaki son
+// kutu da yoksa/yenilenmişse), ekranda açık olan formda (Yeni Sipariş/Fatura/Alış/Tahsilat... modalı ya da
+// açık sekmenin sayfası) doldurulacak uygun 🔍 butonunu kendisi bulur; Rehber'den yapılan seçim böylece
+// o alana yazılır. Cari → ilk BOŞ cari kutusu (hepsi doluysa ilki); Stok → ilk BOŞ ürün satırı, boş satır
+// yoksa formdaki "+ Ürün Ekle" ile yeni satır açılıp o satır. Hedef bulunamazsa (örn. Ana Sayfa'da) null
+// döner ve eski davranış (seçilen kaydın kendi ekranını açma) sürer.
+function rehberHedefButonuBul_(tip){
+  const baslik = tip === "cari" ? "Cari Rehberi" : "Stok Rehberi";
+  const onPencere = onPlanPencereBul_(true);
+  const kapsam = onPencere || document.querySelector(".modview.active");
+  if(!kapsam) return null;
+  const butonlariAl = ()=> Array.from(kapsam.querySelectorAll(".rehber-ac-btn")).filter(b=>
+    b.title === baslik && !b.disabled && b.offsetParent !== null && !b.closest("#rehber-modal-overlay"));
+  const bosMu = (b)=>{ const g = b.previousElementSibling; return !(g && typeof g.value === "string" && g.value.trim()); };
+  let butonlar = butonlariAl();
+  let hedef = butonlar.find(bosMu);
+  if(!hedef && tip === "stok"){
+    const ekle = Array.from(kapsam.querySelectorAll("button")).find(x=>/KalemEkleUI\s*\(/.test(x.getAttribute("onclick")||""));
+    if(ekle && ekle.offsetParent !== null){
+      ekle.click();
+      butonlar = butonlariAl();
+      hedef = butonlar.find(bosMu);
+    }
+  }
+  if(!hedef) hedef = tip === "stok" ? butonlar[butonlar.length-1] : butonlar[0];
+  return hedef || null;
+}
+
 document.addEventListener("keydown", function(e){
   // F1 → Cari Rehberi, F2 → Stok Rehberi: imleç bir cari/ürün arama kutusunun İÇİNDEYKEN
   // basılırsa, o kutunun yanındaki 🔍 rehber butonuyla AYNI işlevi tetikler (rehberden
@@ -2202,7 +2230,10 @@ document.addEventListener("keydown", function(e){
       // seçimi yine de oraya yaz (bkz. yukarıdaki _sonRehberOdak notu).
       _sonRehberOdak.buton.click();
     } else {
-      rehberAc(tip, null);
+      // İmleç hiçbir yerde değil: açık formdaki uygun cari/stok alanını bul, seçim ORAYA yazılsın.
+      const hedefBtn = rehberHedefButonuBul_(tip);
+      if(hedefBtn) hedefBtn.click();
+      else rehberAc(tip, null);
     }
     return;
   }
