@@ -1081,6 +1081,32 @@ setInterval(topbarSaatGuncelle, 10000);
       </div>
     </div>
   </div>
+  <div class="modview" id="mod-kayitdefteri">
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">📒 Kayıt Defteri</div>
+      <p style="font-size:13px;color:var(--text2);margin-top:-8px">
+        Her işlem ve karşı kaydı (cari borç/alacak, stok giriş/çıkış, banka/POS) sıralı numarayla burada tutulur.
+        Silinen kayıt satırı kalır, "Silindi" olarak işaretlenir; numaralar bir daha kullanılmaz. Sipariş ve Teklif hariç
+        her işlemin karşı kaydı olmalıdır — eksik olan <b style="color:#b7791f">⚠ Eksik</b> olarak görünür.
+      </p>
+      <div id="kd-ozet" style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <input id="kd-arama" type="text" placeholder="Numara, belge no, cari, işlem ara..." style="flex:1;min-width:220px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)" oninput="kayitDefteriAramaDegisti()">
+        <select id="kd-modul" onchange="kayitDefteriYukle(true)" style="padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><option value="">Tüm modüller</option></select>
+        <select id="kd-rol" onchange="kayitDefteriYukle(true)" style="padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><option value="">Ana + Karşı</option><option value="Ana">Sadece Ana</option><option value="Karşı">Sadece Karşı</option></select>
+        <select id="kd-durum" onchange="kayitDefteriYukle(true)" style="padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><option value="">Tüm durumlar</option><option value="Aktif">Aktif</option><option value="Silindi">Silindi</option></select>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;margin:0"><input type="checkbox" id="kd-sorunlu" style="width:auto" onchange="kayitDefteriYukle(true)"> Sadece sorunlu / silinen</label>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn" onclick="kayitDefteriYukle(true)">↻ Yenile</button>
+        <button class="btn btn-primary" onclick="kayitDefteriKontrolEt()">🔍 Kontrol Et</button>
+        <button class="btn" onclick="kayitDefteriNumarala()" title="Defterde olmayan mevcut kayıtları tarih sırasıyla numaralar (tekrar çalıştırmak güvenlidir)">🔢 Mevcut kayıtları numarala</button>
+      </div>
+      <div id="kd-kontrol"></div>
+      <div id="kd-liste"><div class="cari-empty">Yükleniyor...</div></div>
+      <div id="kd-daha" style="text-align:center;margin:12px 0"></div>
+    </div>
+  </div>
   <div class="modview" id="mod-ayarlar">
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Kısayol Tuşları</div>
@@ -1279,6 +1305,7 @@ const MODULLER = [
   {id:"finans",   ic:"📊", lbl:"Finans",    desc:"Genel finans durumu",     renk:"blue"},
   {id:"rapor",    ic:"📈", lbl:"Rapor",     desc:"Raporlar",                renk:"blue"},
   {id:"silinenler", ic:"🗑️", lbl:"Silinenler", desc:"Silinen kayıtlar, geri al", renk:"neutral"},
+  {id:"kayitdefteri", ic:"📒", lbl:"Kayıt Defteri", desc:"Numaralı işlem defteri, veri kaybı kontrolü", renk:"neutral", admin:true},
   {id:"ayarlar",  ic:"⚙️", lbl:"Ayarlar",   desc:"Kısayollar ve düzen",     renk:"neutral"},
 ];
 
@@ -1296,6 +1323,11 @@ const MODULLER = [
 })();
 
 // ── Modül sırası (sürükle-bırak ile değiştirilebilir, localStorage'da saklanır) ──
+// Sadece Admin'in göreceği modüller (ör. Kayıt Defteri). Sunucu tarafı da ayrıca Admin ister.
+function modulGorunurMu_(m){
+  if(!m || !m.admin) return true;
+  try{ return (JSON.parse(localStorage.getItem("fincanlar_oturum_kullanici")||"null")||{}).rol === "Admin"; }catch(e){ return false; }
+}
 function modulSirasiniAl(){
   try{
     const kayitli = JSON.parse(localStorage.getItem("fincanlar_modul_sira") || "null");
@@ -1303,10 +1335,10 @@ function modulSirasiniAl(){
       const gecerliIdler = MODULLER.map(m=>m.id);
       const sirali = kayitli.filter(id=>gecerliIdler.includes(id));
       gecerliIdler.forEach(id=>{ if(!sirali.includes(id)) sirali.push(id); }); // yeni eklenen modülü sona ekle
-      return sirali.map(id=>MODULLER.find(m=>m.id===id));
+      return sirali.map(id=>MODULLER.find(m=>m.id===id)).filter(modulGorunurMu_);
     }
   }catch(e){}
-  return MODULLER.slice();
+  return MODULLER.filter(modulGorunurMu_);
 }
 function modulSirasiniKaydet(idListesi){
   localStorage.setItem("fincanlar_modul_sira", JSON.stringify(idListesi));
@@ -1843,6 +1875,7 @@ function modulAc(id){
   sekmeSeridiCiz();
   // Silinenler listesi her açılışta taze olmalı (stale cache burada yanıltıcı olur).
   if(id === "silinenler") silinenlerYukle();
+  if(id === "kayitdefteri") kayitDefteriYukle(true);
   // Cari/Tahsilat/Ödeme modülleri doğrudan liste ekranıyla açılır — sol arama kutusuna
   // odaklan ki kullanıcı hiçbir şeye tıklamadan yazmaya başlayabilsin. (Satış/Satış İadesi
   // önce Fatura/Teklif/Sipariş seçim ekranı gösterdiği için odaklanma satisAltModulAc'te.)
@@ -1890,7 +1923,7 @@ function modulSwitcherAcKapat(ev){
   if(!el) return;
   const aciliyor = el.style.display !== "block";
   if(aciliyor){
-    el.innerHTML = MODULLER.map(m=>`<div class="modul-switcher-satir" onclick="modulAcYeniSekme('${m.id}')">${m.ic} ${m.lbl}</div>`).join("");
+    el.innerHTML = MODULLER.filter(modulGorunurMu_).map(m=>`<div class="modul-switcher-satir" onclick="modulAcYeniSekme('${m.id}')">${m.ic} ${m.lbl}</div>`).join("");
     el.style.display = "block";
   } else {
     el.style.display = "none";
@@ -8600,6 +8633,135 @@ function cariVirmanSilOnay(id){
      aynı veriyle tekrar çağrılıyor — kayıt (yeni bir ID ile) cari/stok hareketleri
      dahil eksiksiz yeniden oluşuyor. -->
 <script>
+// ══════════════ KAYIT DEFTERİ ══════════════
+let _kdSayfa = 0, _kdToplam = 0, _kdSatirlar = [], _kdAramaZamanlayici = null, _kdIstek = 0;
+const KD_SAYFA_BOYUT = 200;
+
+function kayitDefteriAramaDegisti(){
+  clearTimeout(_kdAramaZamanlayici);
+  _kdAramaZamanlayici = setTimeout(()=>kayitDefteriYukle(true), 350);
+}
+
+function kayitDefteriFiltreleri_(){
+  return {
+    arama: (document.getElementById("kd-arama")||{}).value || "",
+    modul: (document.getElementById("kd-modul")||{}).value || "",
+    rol: (document.getElementById("kd-rol")||{}).value || "",
+    durum: (document.getElementById("kd-durum")||{}).value || "",
+    sorunlu: !!(document.getElementById("kd-sorunlu")||{}).checked,
+  };
+}
+
+function kayitDefteriYukle(sifirla){
+  const liste = document.getElementById("kd-liste");
+  if(!liste) return;
+  if(sifirla){ _kdSayfa = 0; _kdSatirlar = []; liste.innerHTML = '<div class="cari-empty">Yükleniyor...</div>'; }
+  const istekNo = ++_kdIstek;
+  cariApi("getKayitDefteri", Object.assign({sayfa:_kdSayfa, adet:KD_SAYFA_BOYUT}, kayitDefteriFiltreleri_())).then(res=>{
+    if(istekNo !== _kdIstek) return; // daha yeni bir istek başlamış
+    if(!res.ok){ liste.innerHTML = '<div class="cari-empty">Hata: '+htmlKacis(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _kdToplam = res.toplam;
+    _kdSatirlar = _kdSatirlar.concat(res.satirlar);
+    // modül seçeneklerini doldur (seçimi koruyarak)
+    const sel = document.getElementById("kd-modul");
+    if(sel){
+      const mevcut = sel.value;
+      sel.innerHTML = '<option value="">Tüm modüller</option>' + (res.moduller||[]).map(m=>`<option value="${htmlKacis(m)}">${htmlKacis(m)}</option>`).join("");
+      sel.value = mevcut;
+    }
+    const o = res.ozet || {};
+    const chip = (etiket, deger, renk)=>`<div style="padding:8px 14px;border-radius:10px;background:var(--bg3);min-width:110px"><div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;font-weight:700">${etiket}</div><div style="font-size:18px;font-weight:800;${renk?'color:'+renk:''}">${deger}</div></div>`;
+    document.getElementById("kd-ozet").innerHTML =
+      chip("Toplam satır", (o.toplamKayit||0).toLocaleString("tr-TR")) + chip("Ana kayıt", (o.anaKayit||0).toLocaleString("tr-TR")) +
+      chip("Silinen", o.silinen||0, o.silinen?"#c0392b":"") + chip("⚠ Uyarılı", o.uyarili||0, o.uyarili?"#b7791f":"") +
+      chip("Son numara", o.sonNo||"—");
+    kayitDefteriCiz_();
+  }).catch(err=>{ if(istekNo===_kdIstek) liste.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+htmlKacis(err.message)+'</div>'; });
+}
+
+function kayitDefteriCiz_(){
+  const liste = document.getElementById("kd-liste");
+  if(!liste) return;
+  if(_kdSatirlar.length === 0){
+    liste.innerHTML = '<div class="cari-empty">Kayıt yok. "🔢 Mevcut kayıtları numarala" ile mevcut işlemleri deftere alabilirsiniz.</div>';
+    document.getElementById("kd-daha").innerHTML = "";
+    return;
+  }
+  const karsiHtml = (t)=> String(t||"").indexOf("⚠") >= 0
+    ? htmlKacis(t).replace(/⚠ Eksik: ([^·]*)/, '<b style="color:#b7791f">⚠ Eksik: $1</b>').replace(/⚠ (Ana kayıt[^<]*)/, '<b style="color:#b7791f">⚠ $1</b>')
+    : htmlKacis(t);
+  liste.innerHTML = `
+    <div style="overflow-x:auto"><table class="hareket-tbl">
+      <thead><tr><th>Kayıt No</th><th>Modül</th><th>Karşı Kayıt</th><th>İşlem</th><th>Belge No</th><th>Tarih</th><th>Cari</th><th style="text-align:right">Tutar</th><th>Durum</th></tr></thead>
+      <tbody>
+        ${_kdSatirlar.map(r=>{
+          const silindi = r.durum === "Silindi";
+          const karsi = r.rol === "Karşı";
+          const stil = (silindi ? "opacity:.6;" : "") + (karsi ? "background:var(--bg3);" : "");
+          return `<tr style="${stil}">
+            <td style="white-space:nowrap;font-weight:${karsi?500:800};${karsi?'padding-left:22px;':''}${silindi?'text-decoration:line-through;':''}">${karsi?'↳ ':''}${r.no}</td>
+            <td>${htmlKacis(r.modul)}</td>
+            <td style="font-size:12.5px">${karsiHtml(r.karsi)}</td>
+            <td>${htmlKacis(r.islem)}${r.yon && karsi ? '' : ''}</td>
+            <td>${htmlKacis(r.belgeNo)||"—"}</td>
+            <td style="white-space:nowrap">${r.tarih ? htmlKacis(tarihGoster(r.tarih)) : "—"}</td>
+            <td>${htmlKacis(r.cari)||"—"}</td>
+            <td style="text-align:right;white-space:nowrap">${r.tutar ? paraFormat(r.tutar) : "—"}</td>
+            <td style="white-space:nowrap">${silindi ? '<b style="color:#c0392b">Silindi</b><div style="font-size:10.5px;color:var(--text3)">'+htmlKacis(r.silinmeZamani)+'</div>' : 'Aktif'}</td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table></div>`;
+  const kalan = _kdToplam - _kdSatirlar.length;
+  document.getElementById("kd-daha").innerHTML = kalan > 0
+    ? `<button class="btn" onclick="_kdSayfa++; kayitDefteriYukle(false)">Daha fazla göster (${kalan.toLocaleString("tr-TR")} satır daha)</button>`
+    : `<span style="font-size:12px;color:var(--text3)">${_kdToplam.toLocaleString("tr-TR")} satır gösteriliyor</span>`;
+}
+
+function kayitDefteriNumarala(){
+  if(!confirm("Defterde numarası olmayan MEVCUT tüm kayıtlar (satış, alış, tahsilat, ödeme, çek/senet, virman, iade, manuel cari hareketleri ve karşı kayıtları) oluşturulma sırasına göre numaralanacak.\n\nTekrar çalıştırmak güvenlidir (zaten numaralı kayıtlar atlanır). Devam edilsin mi?")) return;
+  const liste = document.getElementById("kd-liste");
+  liste.innerHTML = '<div class="cari-empty">Numaralanıyor... (kayıt sayısına göre birkaç dakika sürebilir)</div>';
+  cariApi("kayitDefteriBaslat", {}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||res.error||"bilinmiyor")); kayitDefteriYukle(true); return; }
+    alert("Tamamlandı.\n\nYeni numaralanan ana kayıt: "+res.yeniAnaKayit+"\nYeni numaralanan karşı kayıt: "+res.yeniKarsiKayit);
+    kayitDefteriYukle(true);
+  }).catch(err=>{ alert("Bağlantı hatası: "+err.message+"\n\nİşlem yarım kalmış olabilir; tekrar çalıştırmak güvenlidir."); kayitDefteriYukle(true); });
+}
+
+const KD_BULGU_BASLIK = {
+  kaynakYok:   ["🚨", "Defterde var, kaynak sayfada YOK (uygulama dışından silinmiş olabilir)", true],
+  karsiEksik:  ["⚠️", "Karşı kaydı eksik işlemler", true],
+  karsiKalmis: ["⚠️", "Deftere göre silinmiş ama karşı kaydı hâlâ duruyor", true],
+  sahipsiz:    ["⚠️", "Ana kaydı olmayan (sahipsiz) hareketler", true],
+  tutarFarki:  ["💲", "Ana tutar ile cari karşı kaydı tutmayanlar", true],
+  numarasiz:   ["🔢", "Numarası olmayan kayıtlar (\"Mevcut kayıtları numarala\" ile tamamlanır)", true],
+  silinenler:  ["🗑️", "Uygulamadan silinen işlemler (bilgi)", false],
+};
+function kayitDefteriKontrolEt(){
+  const el = document.getElementById("kd-kontrol");
+  el.innerHTML = '<div class="cari-empty">Kontrol ediliyor...</div>';
+  cariApi("getKayitDefteriKontrol", {}).then(res=>{
+    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+htmlKacis(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    const sorun = res.ozet.sorunSayisi;
+    const baslik = sorun === 0
+      ? '<div style="padding:12px 14px;border-radius:10px;background:#e8f6ee;color:#1e7e4a;font-weight:700;margin-bottom:10px">✅ Sorun bulunamadı — tüm kayıtların kaynağı ve karşı kayıtları yerinde. <span style="font-weight:400;font-size:12px">('+htmlKacis(res.kontrolZamani)+')</span></div>'
+      : '<div style="padding:12px 14px;border-radius:10px;background:#fdecea;color:#b03a2e;font-weight:700;margin-bottom:10px">🚨 '+sorun+' bulgu var — aşağıda ayrıntılı. <span style="font-weight:400;font-size:12px">('+htmlKacis(res.kontrolZamani)+')</span></div>';
+    const bolumler = Object.keys(KD_BULGU_BASLIK).map(k=>{
+      const liste = res.bulgular[k] || [], toplam = res.ozet.sayac[k] || 0;
+      if(!toplam) return "";
+      const [ikon, ad, acik] = KD_BULGU_BASLIK[k];
+      return `<details ${acik?"open":""} style="margin-bottom:10px;border:1px solid var(--border);border-radius:10px;padding:8px 12px">
+        <summary style="cursor:pointer;font-weight:700">${ikon} ${ad} — ${toplam}${toplam>liste.length?` (ilk ${liste.length} gösteriliyor)`:''}</summary>
+        <div style="overflow-x:auto;margin-top:8px"><table class="hareket-tbl">
+          <thead><tr><th>Kayıt No</th><th>Modül</th><th>İşlem</th><th>Belge No</th><th>Tarih</th><th>Cari</th><th style="text-align:right">Tutar</th><th>Not</th></tr></thead>
+          <tbody>${liste.map(x=>`<tr><td style="font-weight:700">${x.no||"—"}</td><td>${htmlKacis(x.modul)}</td><td>${htmlKacis(x.islem)}</td><td>${htmlKacis(x.belgeNo)||"—"}</td><td>${x.tarih?htmlKacis(tarihGoster(x.tarih)):"—"}</td><td>${htmlKacis(x.cari)||"—"}</td><td style="text-align:right">${x.tutar?paraFormat(x.tutar):"—"}</td><td style="font-size:12.5px">${htmlKacis(x.not)}</td></tr>`).join("")}</tbody>
+        </table></div></details>`;
+    }).join("");
+    el.innerHTML = baslik + bolumler;
+  }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+htmlKacis(err.message)+'</div>'; });
+}
+
 let _silinenlerListe = [];
 const SILINEN_TIP_ETIKET = {
   TAHSILAT:"Tahsilat", ODEME:"Ödeme", SATIS:"Satış", ALIS:"Alış",

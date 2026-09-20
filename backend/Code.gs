@@ -939,6 +939,7 @@ const OTURUMSUZ_ACTIONLAR = { girisYap: true };
 const ADMIN_ACTIONLAR = {
   kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
+  getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, // Kayıt Defteri: sadece Admin
 };
 
 function handleRequest(e) {
@@ -956,6 +957,7 @@ function handleRequest(e) {
         return jsonResponse({ ok: false, hata: "Bu işlem sadece Admin yetkisiyle yapılabilir." });
       }
     }
+    if (KD_ACTIONLAR[action]) kdToplayiciBaslat_(); // Kayıt Defteri: bu işlemde oluşan karşı kayıtları topla
     switch (action) {
       case "girisYap":        result = girisYap(body); break;
       case "cikisYap":        result = cikisYap(body); break;
@@ -1091,10 +1093,20 @@ function handleRequest(e) {
       case "getEdmOnekEslesmeListesi": result = getEdmOnekEslesmeListesi(); break;
       case "edmOnekEslesmeManuelKaydet": result = edmOnekEslesmeManuelKaydet(body); break;
       case "edmOnekEslesmeSil":    result = edmOnekEslesmeSil(body); break;
+      case "getKayitDefteri":        result = getKayitDefteri(body); break;
+      case "getKayitDefteriKontrol": result = getKayitDefteriKontrol(); break;
+      case "kayitDefteriBaslat":     result = kayitDefteriBaslat(body); break;
       default: result = { error: "Bilinmeyen işlem: " + action };
+    }
+    // Kayıt Defteri: işlem başarılıysa Ana kayıt + karşı kayıtlar deftere yazılır. Hata verirse
+    // asıl işlem ETKİLENMEZ (yalnızca loglanır).
+    if (KD_ACTIONLAR[action]) {
+      const kdBacaklar = KD_TOPLAYICI_; KD_TOPLAYICI_ = null;
+      try { kdIsle_(action, body, result, kdBacaklar); } catch (kdHata) { logError(kdHata); }
     }
     return jsonResponse(result);
   } catch (err) {
+    KD_TOPLAYICI_ = null;
     logError(err);
     return jsonResponse({ error: err.message });
   }
@@ -1327,6 +1339,7 @@ function cariHareketEkle(body) {
   metinliSatirEkle_(sheet, [id, cariId, tarih, tip, tutar, String(body.aciklama || ""),
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), String(body.vade || ""), String(body.projeKodu || "").trim()], [9]);
 
+  kdBacakNotu_({ k: "cari", tip: tip, kaynak: SHEETS.cariHareketler, kid: id, tutar: tutar, tarih: tarih, ek: cariId });
   cacheTemizle(["cariListesi_v3"]); // bakiye değişti, liste önbelleği bayatladı
   return { ok: true, id: id };
 }
@@ -5856,6 +5869,7 @@ function stokHareketOtomatikYaz(ss, kalemler, tarih, hareketTipi, belgeTipi, bel
   });
   if (satirlar.length) {
     shSheet.getRange(shSheet.getLastRow() + 1, 1, satirlar.length, STOK_HAREKET_BASLIKLAR.length).setValues(satirlar);
+    kdBacakNotu_({ k: "stok", tip: hareketTipi, kaynak: SHEETS.stokHareketleri, kid: String(belgeNo), tutar: satirlar.reduce((t, x) => t + (parseFloat(x[7]) || 0) * (parseFloat(x[12]) || 0), 0), tarih: tarih, ek: "" });
     cacheTemizle(["stokHareketListesi"]);
   }
 }
@@ -7728,6 +7742,7 @@ function posHareketEkle(posHesapId, tarih, tip, tutar, aciklama) {
   const id = "ph_" + Date.now();
   sheet.appendRow([id, posHesapId, tarih, tip, tutar, aciklama,
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+  kdBacakNotu_({ k: "pos", tip: tip, kaynak: SHEETS.posHareketleri, kid: id, tutar: tutar, tarih: tarih, ek: posHesapId });
   return id;
 }
 
@@ -7779,6 +7794,7 @@ function bankaHesapHareketEkle(bankaHesapId, tarih, tip, tutar, aciklama) {
   const id = "bh_" + Date.now();
   sheet.appendRow([id, bankaHesapId, tarih, tip, tutar, aciklama,
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+  kdBacakNotu_({ k: "banka", tip: tip, kaynak: SHEETS.bankaHesapHareketleri, kid: id, tutar: tutar, tarih: tarih, ek: bankaHesapId });
   return id;
 }
 
@@ -7832,6 +7848,7 @@ function krediKartHareketEkle(krediKartId, tarih, tip, tutar, aciklama) {
   const id = "kh_" + Date.now();
   sheet.appendRow([id, krediKartId, tarih, tip, tutar, aciklama,
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+  kdBacakNotu_({ k: "kart", tip: tip, kaynak: SHEETS.krediKartHareketleri, kid: id, tutar: tutar, tarih: tarih, ek: krediKartId });
   return id;
 }
 
