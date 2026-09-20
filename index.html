@@ -2545,6 +2545,9 @@ const REHBER_SIRALAMA_SECENEKLERI = {
     {etiket:"Ada göre (A→Z)", alan:"stokAdi", yon:1},
     {etiket:"Güncel stoğa göre (çoktan aza)", alan:"guncelStok", yon:-1},
     {etiket:"Satış fiyatına göre (yüksekten düşüğe)", alan:"satisFiyati", yon:-1},
+    {etiket:"Panel stoğuna göre (çoktan aza)", alan:"panelStok", yon:-1},
+    {etiket:"Satılabilire göre (çoktan aza)", alan:"panelSatilabilir", yon:-1},
+    {etiket:"Ayrılmışa göre (çoktan aza)", alan:"panelAyrilmis", yon:-1},
   ],
 };
 
@@ -2593,7 +2596,7 @@ function rehberAc(tip, callback){
   overlay.onclick = (e)=>{ if(e.target===overlay) rehberKapat(); };
   const baslik = tip==='cari' ? 'Cari Rehberi' : 'Stok Rehberi';
   overlay.innerHTML = `
-    <div class="rehber-box" onclick="event.stopPropagation()">
+    <div class="rehber-box" ${tip==='stok' ? 'style="max-width:1100px"' : ''} onclick="event.stopPropagation()">
       <div class="rehber-head">
         <h3>${baslik}</h3>
         <input id="rehber-ara" type="text" placeholder="Ara..." autocomplete="off" oninput="rehberFiltrele(this.value)" onkeydown="rehberKlavye(event)">
@@ -2612,6 +2615,7 @@ function rehberAc(tip, callback){
   // ★ Bellekte liste yoksa önce tarayıcı önbelleğindeki son liste ANINDA gösterilir (19 Eyl 2026),
   // arkadan taze liste çekilip tablo (aramayı koruyarak) sessizce güncellenir.
   const durum = _rehberState;
+  if(tip==='stok') rehberPanelStokYukle_(durum);
   if(tip==='cari'){
     if(_cariYuklendi && _cariListe.length){ rehberVeriGeldi(_cariListe); }
     else {
@@ -2646,6 +2650,10 @@ function rehberAc(tip, callback){
 // Rehber açıkken arkadan gelen taze listeyi, kullanıcının yazdığı arama/sıralamayı bozmadan uygular.
 function rehberVeriGuncelle_(durum, satirlar){
   if(!durum || _rehberState !== durum || !document.getElementById("rehber-modal-overlay")) return;
+  if(durum.tip === "stok"){
+    durum.hamSatirlar = satirlar;
+    satirlar = rehberStokZenginlestir_(satirlar);
+  }
   durum.satirlar = satirlar;
   const araEl = document.getElementById("rehber-ara");
   if(araEl && araEl.value.trim()){ rehberFiltrele(araEl.value); return; }
@@ -2670,10 +2678,53 @@ function rehberYenidenDene(){
   rehberAc(tip, callback);
 }
 
+// ★ Stok Rehberi: eski Stok Paneli programının (Wolvox'tan yüklenen) stok / ayrılmış / satılabilir
+// miktarları ve stok tarihi, stok koduna göre ayrı kolonlarda gösterilir (19 Eyl 2026).
+// _stokPanelSnap: { tarih:"YYYY-MM-DD", kodlar:{ stokKodu:[stok, ayrilmis, satilabilir] } }
+// Stok tarihi hücresi: Stok Paneli'ndeki gibi 7 günden eskiyse kırmızı, değilse yeşil.
+function rehberPanelTarihHTML_(tarih){
+  if(!tarih) return "—";
+  const m = String(tarih).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return tarih;
+  const gun = Math.floor((Date.now() - new Date(+m[1], +m[2]-1, +m[3]).getTime()) / 864e5);
+  const eski = gun >= 7;
+  return `<span style="color:${eski?'var(--red,#dc2626)':'var(--green,#16a34a)'};font-weight:600;white-space:nowrap" title="${gun} gün önce">${tarihGoster(tarih)}</span>`;
+}
+let _stokPanelSnap = null;
+function rehberStokZenginlestir_(liste){
+  const snap = _stokPanelSnap;
+  const kodlar = snap && snap.kodlar ? snap.kodlar : null;
+  return liste.map(s=>{
+    const v = kodlar ? kodlar[String(s.stokKodu||"").trim()] : null;
+    return Object.assign({}, s, {
+      panelStok: v ? v[0] : null,
+      panelAyrilmis: v ? v[1] : null,
+      panelSatilabilir: v ? v[2] : null,
+      panelTarih: v ? snap.tarih : ""
+    });
+  });
+}
 function rehberVeriGeldi(satirlar){
+  if(_rehberState.tip === "stok"){
+    _rehberState.hamSatirlar = satirlar;
+    satirlar = rehberStokZenginlestir_(satirlar);
+  }
   _rehberState.satirlar = satirlar;
   _rehberState.filtreli = satirlar;
   rehberTabloCiz();
+}
+// Panel stok verisi: önce tarayıcı önbelleğinden anında, sonra arkadan taze; gelince tablo güncellenir.
+function rehberPanelStokYukle_(durum){
+  if(!_stokPanelSnap){
+    const onb = onbellekOku("stokPanelSnapshot", ONBELLEK_MAX_YAS);
+    if(onb && onb.kodlar) _stokPanelSnap = onb;
+  }
+  cariApi("getStokPanelSnapshot").then(res=>{
+    if(!res || !res.ok) return;
+    _stokPanelSnap = { tarih: res.tarih || "", kodlar: res.kodlar || {} };
+    onbellekYaz("stokPanelSnapshot", _stokPanelSnap);
+    if(durum && durum.hamSatirlar) rehberVeriGuncelle_(durum, durum.hamSatirlar);
+  }).catch(()=>{});
 }
 
 function rehberKapat(){
@@ -2765,13 +2816,22 @@ function rehberTabloCiz(){
           <th onclick="rehberSirala('stokAdi')">Ad${okIsareti('stokAdi')}</th>
           <th onclick="rehberSirala('birim1')">Birim${okIsareti('birim1')}</th>
           <th onclick="rehberSirala('guncelStok')">Güncel Stok${okIsareti('guncelStok')}</th>
+          <th onclick="rehberSirala('panelStok')" title="Stok Paneli programındaki stok (merkez depo)">Panel Stok${okIsareti('panelStok')}</th>
+          <th onclick="rehberSirala('panelAyrilmis')" title="Stok Paneli programındaki ayrılmış miktar">Ayrılmış${okIsareti('panelAyrilmis')}</th>
+          <th onclick="rehberSirala('panelSatilabilir')" title="Stok Paneli programındaki satılabilir miktar">Satılabilir${okIsareti('panelSatilabilir')}</th>
+          <th onclick="rehberSirala('panelTarih')" title="Stok Paneli stok yükleme tarihi">Stok Tarihi${okIsareti('panelTarih')}</th>
           <th onclick="rehberSirala('satisFiyati')">Satış Fiyatı${okIsareti('satisFiyati')}</th>
         </tr></thead>
         <tbody>
-          ${liste.length===0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
+          ${liste.length===0 ? '<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
           liste.map((s,i)=>`<tr class="${i===_rehberState.aktifIdx?'rehber-aktif':''}" onclick="rehberSecReal(${i})" ondblclick="rehberSecReal(${i})">
             <td>${s.markaKodu?`<span class="tip-badge">${s.markaKodu}</span>`:'—'}</td><td>${s.stokKodu||'—'}</td><td>${olcuBasaAlGoster(s.stokAdi, s.markaKodu)}</td><td>${s.birim1||'—'}</td>
-            <td>${s.minStok>0 && s.guncelStok<=s.minStok?`<span class="hk-borc">${miktarFormat(s.guncelStok)}</span>`:miktarFormat(s.guncelStok||0)}</td><td>${fiyatFormat(s.satisFiyati)}</td>
+            <td>${s.minStok>0 && s.guncelStok<=s.minStok?`<span class="hk-borc">${miktarFormat(s.guncelStok)}</span>`:miktarFormat(s.guncelStok||0)}</td>
+            <td>${s.panelStok===null||s.panelStok===undefined?'—':miktarFormat(s.panelStok)}</td>
+            <td>${s.panelAyrilmis===null||s.panelAyrilmis===undefined?'—':miktarFormat(s.panelAyrilmis)}</td>
+            <td>${s.panelSatilabilir===null||s.panelSatilabilir===undefined?'—':(s.panelSatilabilir<=0?`<span class="hk-borc">${miktarFormat(s.panelSatilabilir)}</span>`:`<b>${miktarFormat(s.panelSatilabilir)}</b>`)}</td>
+            <td>${rehberPanelTarihHTML_(s.panelTarih)}</td>
+            <td>${fiyatFormat(s.satisFiyati)}</td>
           </tr>`).join("")}
         </tbody>
       </table>`;
@@ -2783,7 +2843,7 @@ function rehberSecReal(idx){
   if(!item) return;
   const cb = _rehberState.callback;
   const tip = _rehberState.tip;
-  const satirlar = _rehberState.satirlar;
+  const satirlar = _rehberState.hamSatirlar || _rehberState.satirlar;
   rehberKapat();
   if(cb){ cb(item); return; }
   // ★ (19 Eyl 2026) Rehber hiçbir alana bağlı OLMADAN açıldıysa (F1/F2 veya Ctrl+1/2, imleç bir

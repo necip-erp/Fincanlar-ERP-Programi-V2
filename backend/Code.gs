@@ -951,6 +951,7 @@ function handleRequest(e) {
       case "saveKrediKarti":  result = saveKrediKarti(body); break;
       case "silKrediKarti":   result = silKrediKarti(body); break;
       case "getStokTanimListesi": result = getStokTanimListesi(); break;
+      case "getStokPanelSnapshot": result = getStokPanelSnapshot(); break;
       case "saveStokTanim":       result = saveStokTanim(body); break;
       case "stokKoduOner":        result = stokKoduOner(body); break;
       case "stokKoduDegistir":    result = stokKoduDegistir(body); break;
@@ -5405,6 +5406,57 @@ function stokGuncelMiktarHaritasi() {
       harita[stokTanimId] += (hareketTipi === "Giriş") ? miktar : -miktar;
     }
     return harita;
+  });
+}
+
+// ★ ESKİ "STOK PANELİ" PROGRAMININ STOK ANLIK GÖRÜNTÜSÜ (19 Eyl 2026): Wolvox'tan yüklenen stok
+// (MERKEZ_DEPO), ayrılmış (AYRILMIS) ve satılabilir (SATILABILIR) miktarları ile yükleme tarihi
+// (TARIH), aynı Google Sheet'teki "Stoklar" sayfasında tutuluyor (son 7 yüklemeyi saklar). ERP'nin
+// Stok Rehberi (F2) bu bilgileri stok koduna göre ayrı kolonlarda gösterir. Sadece EN SON tarihli
+// yüklemenin satırları döner; sayfa yoksa/boşsa boş harita döner (kolonlar "—" görünür).
+// Sonuç: { ok, tarih:"YYYY-MM-DD", kodlar:{ "<stokKodu>": [stok, ayrilmis, satilabilir], ... } }
+function getStokPanelSnapshot() {
+  return cacheOkuVeyaHesapla("stokPanelSnapshot", 120, function () {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName("Stoklar");
+    if (!sheet) return { ok: true, tarih: "", kodlar: {} };
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 2) return { ok: true, tarih: "", kodlar: {} };
+    const basliklar = data[0].map(function (h) { return String(h).toUpperCase().trim(); });
+    const iKod = basliklar.indexOf("STOK_KODU"), iStok = basliklar.indexOf("MERKEZ_DEPO");
+    const iAyr = basliklar.indexOf("AYRILMIS"), iSat = basliklar.indexOf("SATILABILIR");
+    const iTar = basliklar.indexOf("TARIH");
+    if (iKod < 0 || iTar < 0) return { ok: true, tarih: "", kodlar: {} };
+    const tarihMetni = function (v) {
+      if (v instanceof Date) return Utilities.formatDate(v, "Europe/Istanbul", "yyyy-MM-dd");
+      return String(v || "").split("T")[0].trim();
+    };
+    const sayi = function (v) {
+      if (typeof v === "number") return v;
+      const n = parseFloat(String(v === undefined || v === null ? "" : v).replace(",", "."));
+      return isNaN(n) ? 0 : n;
+    };
+    // 1) En son (en büyük) tarihi bul — "pasif" işaretli satırlar atlanır. ISO tarih olduğu için metin karşılaştırması yeterli.
+    let sonTarih = "";
+    for (let i = 1; i < data.length; i++) {
+      const t = tarihMetni(data[i][iTar]);
+      if (!t || t.indexOf("pasif") !== -1) continue;
+      if (t > sonTarih) sonTarih = t;
+    }
+    if (!sonTarih) return { ok: true, tarih: "", kodlar: {} };
+    // 2) Sadece o tarihin satırlarını stok koduna göre topla.
+    const kodlar = {};
+    for (let i = 1; i < data.length; i++) {
+      if (tarihMetni(data[i][iTar]) !== sonTarih) continue;
+      const kod = String(data[i][iKod] === undefined || data[i][iKod] === null ? "" : data[i][iKod]).trim();
+      if (!kod) continue;
+      kodlar[kod] = [
+        iStok >= 0 ? sayi(data[i][iStok]) : 0,
+        iAyr >= 0 ? sayi(data[i][iAyr]) : 0,
+        iSat >= 0 ? sayi(data[i][iSat]) : 0,
+      ];
+    }
+    return { ok: true, tarih: sonTarih, kodlar: kodlar };
   });
 }
 
