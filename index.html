@@ -2105,11 +2105,12 @@ function kisayollariAl(){
       if(kayitli._sekmeIleri === undefined) kayitli._sekmeIleri = "Ctrl+PageDown";
       if(kayitli._sekmeGeri === undefined) kayitli._sekmeGeri = "Ctrl+PageUp";
       if(kayitli._stokHareket === undefined) kayitli._stokHareket = "Ctrl+A";
+      if(kayitli._sekmeKapat === undefined) kayitli._sekmeKapat = "Ctrl+W";
       return kayitli;
     }
   }catch(e){}
   // Varsayılanlar: Alt+Shift+1..8 modüller, Esc geri, Ctrl+PageUp/PageDown sekme gezinme
-  const varsayilan = { _geri: "Escape", _sekmeIleri: "Ctrl+PageDown", _sekmeGeri: "Ctrl+PageUp", _stokHareket: "Ctrl+A" };
+  const varsayilan = { _geri: "Escape", _sekmeIleri: "Ctrl+PageDown", _sekmeGeri: "Ctrl+PageUp", _stokHareket: "Ctrl+A", _sekmeKapat: "Ctrl+W" };
   MODULLER.filter(m=>m.id!=="ayarlar").forEach((m,i)=>{ varsayilan[m.id] = "Alt+Shift+"+(i+1); });
   return varsayilan;
 }
@@ -2366,6 +2367,23 @@ document.addEventListener("keydown", function(e){
       return;
     }
   }
+  // ★ Sekme kapatma (21 Eyl 2026): varsayılan Ctrl+W (Ayarlar > Kısayol Tuşları'ndan değiştirilebilir) + sabit
+  // yedek Alt+Shift+W. Yazı alanı içindeyken de çalışır. Esc ile aynı sıra: önde açık pencere (modal/Rehber/
+  // Stok Hareket Penceresi) varsa ÖNCE o kapanır (yarım kalan iş varsa uyarır), yoksa öndeki SEKME kapanır
+  // (yarım iş varsa yine uyarır). NOT: Chrome/Edge normal bir tarayıcı sekmesinde Ctrl+W'yi kendisi yakalar,
+  // sayfaya iletmez (Ctrl+Tab gibi) — o durumda yedek kısayol Alt+Shift+W kullanılır.
+  if(document.body.classList.contains("giris-yapildi") && !e.metaKey){
+    const kapatKisayolu = kisayollariAl()._sekmeKapat || "Ctrl+W";
+    const yedekKapat = e.altKey && e.shiftKey && !e.ctrlKey && e.code === "KeyW";
+    if(kisayolMetni(e) === kapatKisayolu || yedekKapat){
+      e.preventDefault();
+      if(typeof _shp !== "undefined" && _shp.acik){ shpKapat(); return; }
+      const onPencere = onPlanPencereBul_();
+      if(onPencere) pencereyiKapatDene_(onPencere);
+      else if(_aktifSekme) onPlanSekmeyiKapatDene_();
+      return;
+    }
+  }
   // ★ Stok Hareket Penceresi (varsayılan Ctrl+A; Ayarlar'dan değiştirilebilir): yazı alanı içindeyken de
   // çalışır (asıl kullanım yeri Satış/Alış formundaki stok kutusu). Pencerenin KENDİ arama kutusundayken
   // ise normal "tümünü seç" davranışı korunur. Pencere açıkken Esc önce onu kapatır.
@@ -2440,7 +2458,7 @@ document.addEventListener("keydown", function(e){
     return;
   }
   for(const modId in kisayollar){
-    if(modId.charAt(0) === "_") continue; // sistem kısayolları (_geri, _sekmeIleri, _sekmeGeri, _stokHareket)
+    if(modId.charAt(0) === "_") continue; // sistem kısayolları (_geri, _sekmeIleri, _sekmeGeri, _stokHareket, _sekmeKapat)
     if(kisayollar[modId] === basilan){
       e.preventDefault();
       modulAc(modId);
@@ -10501,6 +10519,10 @@ function ayarlarListesiCiz(){
        <input readonly class="ayarlar-kisayol-input" data-modid="_sekmeGeri" value="${_ayarlarTaslak._sekmeGeri || ''}" onclick="kisayolYakala(this,'_sekmeGeri')" style="width:160px;text-align:center;cursor:pointer">
      </div>`,
     `<div class="satis-kalem-satir" style="justify-content:space-between">
+       <span style="flex:1" title="Ayrıca sabit yedek kısayol: Alt+Shift+W">✖ Sekmeyi kapat (tarayıcı sekmesinde Ctrl+W'yi tarayıcı yakalar; yedek: Alt+Shift+W)</span>
+       <input readonly class="ayarlar-kisayol-input" data-modid="_sekmeKapat" value="${_ayarlarTaslak._sekmeKapat || ''}" onclick="kisayolYakala(this,'_sekmeKapat')" style="width:160px;text-align:center;cursor:pointer">
+     </div>`,
+    `<div class="satis-kalem-satir" style="justify-content:space-between">
        <span style="flex:1">📊 Stok hareket penceresi (Alış/Satış)</span>
        <input readonly class="ayarlar-kisayol-input" data-modid="_stokHareket" value="${_ayarlarTaslak._stokHareket || ''}" onclick="kisayolYakala(this,'_stokHareket')" style="width:160px;text-align:center;cursor:pointer">
      </div>`,
@@ -11565,5 +11587,128 @@ if("serviceWorker" in navigator){
   });
 }
 </script>
+<!-- ══════════════ TUTAR ALANLARI: 50000 → 50.000,00 ₺ (21 Eyl 2026) ══════════════
+     Ödeme/Tahsilat/Çek-Senet/Cari Virman/Banka-POS tutarları, iskonto tutarları, kredi limiti, stok alış/satış
+     fiyatı ve tüm kalem "Birim Fiyat" kutuları bu mekanizmayı kullanır. Alan bırakılınca (Tab / Enter / başka
+     yere tıklama) yazılan sayı "50.000,00 ₺" biçimine düzeltilir; Enter ayrıca bir sonraki alana geçer. İmleç
+     alana girince düzenlemek için sade sayı (50000) görünür ve içerik seçilir.
+     ÖNEMLİ: Alan type="number" idi; biçimli metin gösterebilmesi için type="text" yapılır ve elemanın `value`
+     özelliği (sadece bu elemanlarda) her zaman SAYISAL bir metin döndürecek şekilde ("50000", "1234.5") sarılır —
+     böylece koddaki tüm parseFloat(el.value) / this.value okumaları hiç değişmeden çalışır. Kod tarafından
+     `el.value = 1500` yazılırsa (alan odakta değilse) ekranda biçimli görünür. Alanlar innerHTML ile sonradan
+     (modal/satır yeniden çizimi) oluşturulduğu için MutationObserver ile otomatik kurulur. -->
+<script>
+(function(){
+  const SECICI = [
+    "#cvirman-tutar","#cm-kredilimiti","#sm-tutar-iskontosu","#am-tutar-iskontosu","#bfm-tutar-iskontosu",
+    "#tm-tutar","#om-tutar","#ci-tutar","#csm-tutar","#pba-tutar","#st-alisfiyat","#st-satisfiyat",
+    "input.satis-kalem-fiyat","input[id^='bfm-fiyat-']"
+  ].join(",");
+  const yerel = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+  const ham = el => yerel.get.call(el);
+  const yaz = (el, v) => yerel.set.call(el, v);
+
+  // Türkçe girişi (50.000,25 / 50000,25 / 1234.5 / 50.000) sayısal metne çevirir: nokta=ondalık ("1234.5"),
+  // yalnız binlik kalıbındaki ("50.000") noktalar binlik ayracı sayılır, virgül her zaman ondalıktır.
+  function normalize(txt){
+    let t = String(txt == null ? "" : txt).replace(/[^0-9.,\-]/g, "");
+    if(!t) return "";
+    const eksi = t.charAt(0) === "-";
+    t = t.replace(/-/g, "");
+    const v = t.indexOf(",");
+    if(v >= 0){
+      const tam = t.slice(0, v).replace(/\./g, "");
+      const kesir = t.slice(v + 1).replace(/[.,]/g, "");
+      t = tam + (kesir ? "." + kesir : "");
+    } else if(/^\d{1,3}(\.\d{3})+$/.test(t)){
+      t = t.replace(/\./g, "");
+    } else {
+      const p = t.split(".");
+      if(p.length > 2) t = p.slice(0, -1).join("") + "." + p[p.length - 1];
+      if(t.endsWith(".")) t = t.slice(0, -1);
+    }
+    if(t === "" || t === ".") return "";
+    if(t.indexOf(".") >= 0) t = t.replace(/0+$/, "").replace(/\.$/, ""); // "50000.00" -> "50000"
+    if(t === "") t = "0";
+    return (eksi ? "-" : "") + t;
+  }
+  function bicimle(n){
+    return Number(n).toLocaleString("tr-TR", {minimumFractionDigits:2, maximumFractionDigits:4}) + "\u00A0₺";
+  }
+  function goster(el){
+    const n = normalize(ham(el));
+    if(n === ""){ yaz(el, ""); return; }
+    if(!isFinite(Number(n))) return;
+    yaz(el, bicimle(n));
+  }
+  function kur(el){
+    if(!el || el._paraKurulu || el.tagName !== "INPUT") return;
+    el._paraKurulu = true;
+    const ilk = ham(el);
+    el.type = "text";
+    el.setAttribute("inputmode", "decimal");
+    el.setAttribute("autocomplete", "off");
+    el.removeAttribute("min"); el.removeAttribute("max"); el.removeAttribute("step");
+    el.dataset.para = "1";
+    Object.defineProperty(el, "value", {
+      configurable: true, enumerable: true,
+      get(){ return normalize(ham(el)); },
+      set(v){ yaz(el, (v === null || v === undefined) ? "" : String(v)); if(document.activeElement !== el) goster(el); }
+    });
+    yaz(el, ilk);
+    goster(el);
+  }
+  function tara(kok){
+    if(!kok || kok.nodeType !== 1) return;
+    if(kok.matches && kok.matches(SECICI)) kur(kok);
+    if(kok.querySelectorAll) kok.querySelectorAll(SECICI).forEach(kur);
+  }
+  const paraAlani = el => !!(el && el.dataset && el.dataset.para === "1");
+
+  // İmleç girince düzenlemek için sade sayı + tümünü seç.
+  document.addEventListener("focusin", function(e){
+    const el = e.target;
+    if(!paraAlani(el)) return;
+    const n = normalize(ham(el));
+    yaz(el, n === "" ? "" : n.replace(".", ","));
+    try{ el.select(); }catch(_){}
+    // Fare tıklamasıyla odaklanınca mouseup imleci geri koyup seçimi bozmasın.
+    el.addEventListener("mouseup", ev=>ev.preventDefault(), {once:true});
+  });
+  // Alandan çıkınca (Tab/Enter/tıklama) bicimle.
+  document.addEventListener("focusout", function(e){
+    if(paraAlani(e.target)) goster(e.target);
+  });
+  // Yazarken sayı dışı karakterleri at (inline oninput'lardan ÖNCE çalışsın diye capture).
+  document.addEventListener("input", function(e){
+    const el = e.target;
+    if(!paraAlani(el)) return;
+    const h = ham(el), temiz = h.replace(/[^0-9.,\-]/g, "");
+    if(temiz !== h){
+      const p = Math.max(0, (el.selectionStart || 0) - (h.length - temiz.length));
+      yaz(el, temiz);
+      try{ el.setSelectionRange(p, p); }catch(_){}
+    }
+  }, true);
+  // Enter: bicimle (odaktan çıkarak) ve aynı pencere/sayfadaki sonraki yazılabilir alana geç.
+  document.addEventListener("keydown", function(e){
+    if(e.key !== "Enter" || e.ctrlKey || e.altKey || e.shiftKey || e.metaKey || e.isComposing) return;
+    const el = e.target;
+    if(!paraAlani(el)) return;
+    e.preventDefault();
+    const kap = el.closest(".modal-overlay") || el.closest(".modview") || document.body;
+    const adaylar = Array.from(kap.querySelectorAll("input, select, textarea")).filter(x=>
+      !x.disabled && !x.readOnly && x.type !== "hidden" && x.type !== "checkbox" && x.type !== "radio" && x.offsetParent !== null);
+    const sonraki = adaylar[adaylar.indexOf(el) + 1];
+    if(sonraki) sonraki.focus(); else el.blur();
+  }, true);
+
+  new MutationObserver(function(liste){
+    liste.forEach(m=>m.addedNodes.forEach(tara));
+  }).observe(document.body, {childList:true, subtree:true});
+  tara(document.body);
+})();
+</script>
+
 </body>
 </html>
