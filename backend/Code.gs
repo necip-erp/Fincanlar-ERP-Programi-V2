@@ -1034,6 +1034,7 @@ function handleRequest(e) {
       case "silPosBankaAktarim": result = silPosBankaAktarim(body); break;
       case "getMuhasebeRaporu": result = getMuhasebeRaporu(body); break;
       case "getStokHareketListesi": result = getStokHareketListesi(body); break;
+      case "getStokHareketPenceresi": result = getStokHareketPenceresi(body); break;
       case "getAlisKdvGecmisListesi": result = getAlisKdvGecmisListesi(); break;
       case "getEdmPortalGirisLinki": result = getEdmPortalGirisLinki(); break;
       case "getSonIslemler": result = getSonIslemler(body); break;

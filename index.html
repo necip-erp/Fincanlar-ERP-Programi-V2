@@ -414,6 +414,45 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .belge-tab{flex:1;padding:7px 4px;border:1px solid var(--border);background:var(--bg3);border-radius:7px;font-size:12px;font-weight:700;color:var(--text3);cursor:pointer}
 .belge-tab.active{background:var(--blue);border-color:var(--blue);color:#fff}
 .fiyat-gecmis-kutu{position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-top:2px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+
+/* ── Stok Hareket Penceresi (Ctrl+A) ── */
+.shp{position:fixed;top:64px;right:16px;width:640px;height:min(580px,calc(100vh - 90px));min-width:440px;min-height:340px;max-width:calc(100vw - 24px);display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 44px rgba(0,0,0,.30);z-index:60;resize:both;overflow:hidden}
+.shp-baslik{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg3);cursor:move;font-weight:800;font-size:13px;user-select:none;flex:0 0 auto}
+.shp-baslik .shp-ipucu{margin-left:auto;font-weight:500;font-size:11px;color:var(--text3)}
+.shp-x{border:none;background:transparent;cursor:pointer;font-size:15px;color:var(--text2);padding:2px 6px;border-radius:6px}
+.shp-x:hover{background:var(--border)}
+.shp-ust{padding:10px 12px 0;flex:0 0 auto}
+.shp-ara-kutu{position:relative;display:flex;gap:6px}
+.shp-ara-kutu input{flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);font-size:13px}
+.shp-mini-btn{border:1px solid var(--border);background:var(--bg3);border-radius:8px;cursor:pointer;padding:0 10px;font-size:14px}
+.shp-mini-btn:hover{background:var(--border)}
+.shp-stok-bilgi{margin:8px 0 0;font-size:12.5px;color:var(--text2);min-height:18px}
+.shp-stok-bilgi b{color:var(--text)}
+.shp-sekmeler{display:flex;gap:0;margin-top:8px;border-bottom:2px solid var(--border)}
+.shp-sekme{flex:1;padding:9px 10px;border:none;background:transparent;cursor:pointer;font-weight:800;font-size:13.5px;color:var(--text3);border-bottom:3px solid transparent;margin-bottom:-2px}
+.shp-sekme small{font-weight:500;font-size:11px}
+.shp-sekme.aktif{color:var(--blue);border-bottom-color:var(--blue)}
+.shp-govde{flex:1 1 auto;overflow:auto;padding:8px 12px}
+.shp-ozet{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.shp-chip{padding:6px 10px;border-radius:9px;background:var(--bg3);min-width:92px}
+.shp-chip span{display:block;font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:700}
+.shp-chip b{font-size:14px}
+.shp-chip small{display:block;font-size:10.5px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.shp-tablo{width:100%;border-collapse:collapse;font-size:12.5px}
+.shp-tablo th{position:sticky;top:0;background:var(--bg2);text-align:left;font-size:10.5px;color:var(--text3);text-transform:uppercase;padding:5px 6px;border-bottom:1px solid var(--border)}
+.shp-tablo td{padding:6px;border-bottom:1px solid var(--border);vertical-align:middle}
+.shp-tablo .sag{text-align:right;white-space:nowrap}
+.shp-giris{color:#15803d;font-weight:700}
+.shp-cikis{color:#b91c1c;font-weight:700}
+.shp-iade{background:rgba(220,60,60,.07)}
+.shp-iade-etiket{display:inline-block;font-size:9.5px;font-weight:800;color:#b91c1c;background:#fde2e2;border-radius:4px;padding:0 5px;margin-left:5px}
+.shp-alt{flex:0 0 auto;padding:8px 12px;border-top:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;gap:10px}
+.shp-alt .shp-etiket{font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700}
+.shp-segment{display:flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;flex:1}
+.shp-segment button{flex:1;padding:8px 10px;border:none;background:var(--bg2);cursor:pointer;font-size:13px;font-weight:700;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shp-segment button.aktif{background:var(--blue);color:#fff}
+.shp-segment button:disabled{opacity:.45;cursor:not-allowed}
+@media (max-width:700px){.shp{left:12px;right:12px;width:auto;min-width:0}}
 .fiyat-gecmis-satir{display:flex;justify-content:space-between;padding:7px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)}
 .fiyat-gecmis-satir:last-child{border-bottom:none}
 .fiyat-gecmis-satir:hover{background:var(--bg3)}
@@ -2065,11 +2104,12 @@ function kisayollariAl(){
       if(kayitli._geri === undefined) kayitli._geri = "Escape";
       if(kayitli._sekmeIleri === undefined) kayitli._sekmeIleri = "Ctrl+PageDown";
       if(kayitli._sekmeGeri === undefined) kayitli._sekmeGeri = "Ctrl+PageUp";
+      if(kayitli._stokHareket === undefined) kayitli._stokHareket = "Ctrl+A";
       return kayitli;
     }
   }catch(e){}
   // Varsayılanlar: Alt+Shift+1..8 modüller, Esc geri, Ctrl+PageUp/PageDown sekme gezinme
-  const varsayilan = { _geri: "Escape", _sekmeIleri: "Ctrl+PageDown", _sekmeGeri: "Ctrl+PageUp" };
+  const varsayilan = { _geri: "Escape", _sekmeIleri: "Ctrl+PageDown", _sekmeGeri: "Ctrl+PageUp", _stokHareket: "Ctrl+A" };
   MODULLER.filter(m=>m.id!=="ayarlar").forEach((m,i)=>{ varsayilan[m.id] = "Alt+Shift+"+(i+1); });
   return varsayilan;
 }
@@ -2292,6 +2332,24 @@ document.addEventListener("keydown", function(e){
       return;
     }
   }
+  // ★ Stok Hareket Penceresi (varsayılan Ctrl+A; Ayarlar'dan değiştirilebilir): yazı alanı içindeyken de
+  // çalışır (asıl kullanım yeri Satış/Alış formundaki stok kutusu). Pencerenin KENDİ arama kutusundayken
+  // ise normal "tümünü seç" davranışı korunur. Pencere açıkken Esc önce onu kapatır.
+  if(document.body.classList.contains("giris-yapildi") && !e.metaKey){
+    const stokKisayolu = kisayollariAl()._stokHareket || "Ctrl+A";
+    const kendiIci = !!(e.target.closest && e.target.closest("#stok-hareket-penceresi"));
+    const yaziEt = ["input","textarea"].includes((e.target.tagName||"").toLowerCase());
+    if(kisayolMetni(e) === stokKisayolu && !(kendiIci && yaziEt)){
+      e.preventDefault();
+      shpAcKapat();
+      return;
+    }
+    if(e.key === "Escape" && !e.ctrlKey && !e.altKey && !e.shiftKey && _shp.acik){
+      e.preventDefault();
+      shpKapat();
+      return;
+    }
+  }
   // Bir input/textarea/select içinde yazıyorsak kısayolları devre dışı bırak (Esc hariç)
   const hedefEtiket = (e.target.tagName||"").toLowerCase();
   const yaziAlaniIcinde = ["input","textarea","select"].includes(hedefEtiket);
@@ -2341,16 +2399,14 @@ document.addEventListener("keydown", function(e){
     sekmeGezin(-1);
     return;
   }
-  // Sabit kısayol: Ctrl+A → Ana Sayfa (yazı alanı dışındayken; input/textarea/select
-  // içindeyken normal "tümünü seç" davranışı bozulmasın diye yukarıdaki erken çıkış zaten
-  // bu durumda fonksiyonu çalıştırmıyor).
-  if(basilan === "Ctrl+A"){
+  // Sabit kısayol: Alt+Shift+0 → Ana Sayfa (eskiden Ctrl+A idi; Ctrl+A artık Stok Hareket Penceresi'ni açar).
+  if(e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && (e.code === "Digit0" || e.code === "Numpad0")){
     e.preventDefault();
     gitAnaSayfa();
     return;
   }
   for(const modId in kisayollar){
-    if(modId === "_geri" || modId === "_sekmeIleri" || modId === "_sekmeGeri") continue;
+    if(modId.charAt(0) === "_") continue; // sistem kısayolları (_geri, _sekmeIleri, _sekmeGeri, _stokHareket)
     if(kisayollar[modId] === basilan){
       e.preventDefault();
       modulAc(modId);
@@ -4524,6 +4580,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
     <div class="modal-box modal-box-xwide">
       <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <span>${duzenle ? belgeTipiBaslangic+"'i Düzenle" : "Yeni "+belgeTipiBaslangic}</span>
+        <span id="sm-efatura-rozet" title="Seçili carinin E-Fatura mükellefiyeti" style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;padding:4px 14px;border-radius:20px;white-space:nowrap;background:var(--bg3);color:var(--text3)">E-Fatura: —</span>
         <span id="sm-siparis-no-badge" style="display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">
           # <span id="sm-siparis-no-metin">${s && s.siparisNo ? s.siparisNo : '—'}</span>
         </span>
@@ -4552,7 +4609,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
                  onfocus="smCariOneriGoster()"
                  onblur="setTimeout(()=>smCariOneriKapat(),200)"
                  onkeydown="oneriKlavyeYonet(event,'sm-cari-oneri')">
-          <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('sm-cari').value=c.id; document.getElementById('sm-cari-arama').value=c.ad; smKdvSonraKisitiUygula(); if(c.iskontoOrani>0){ _yeniSatisKalemleri.forEach(k=>{ if(!k.iskontoYuzde) k.iskontoYuzde=c.iskontoOrani; }); satisKalemlerCiz(); satisToplamGuncelle(); } })">🔍</button>
+          <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('sm-cari').value=c.id; document.getElementById('sm-cari-arama').value=c.ad; smCariSecildi_(c); })">🔍</button>
           <input type="hidden" id="sm-cari" value="${s ? (s.cariId||'') : (onCariId||'')}">
           <div id="sm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
         </div>
@@ -4574,7 +4631,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         </div>
         <div class="fld" style="flex:2;min-width:220px"><label>Açıklama</label><input id="sm-aciklama" type="text" placeholder="İsteğe bağlı" value="${s ? (s.aciklama||'') : ''}"></div>
         <div class="fld" style="flex:1;min-width:140px"><label>Proje Kodu</label>${projeKoduSelectHTML('sm-proje-kodu', s?s.projeKodu:'')}</div>
-        <div class="fld" id="sm-fatura-tipi-fld" style="flex:1;min-width:140px;display:${belgeTipiBaslangic==='Fatura'?'flex':'none'}"><label>Fatura Tipi</label>${faturaTipiSelectHTML('sm-fatura-tipi', s?s.faturaTipi:'')}</div>
+        <div class="fld" id="sm-fatura-tipi-fld" style="flex:1;min-width:140px;display:${belgeTipiBaslangic==='Fatura'?'flex':'none'}"><label>Fatura Tipi</label>${faturaTipiSelectHTML('sm-fatura-tipi', s?s.faturaTipi:'', s?'':'00')}</div>
       </div>
       <div class="fld" id="sm-banka-fld" style="display:none">
         <label>Havale — Banka / Hesap</label>
@@ -4601,7 +4658,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
 
       <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
-        <div class="fld" id="sm-tutar-iskonto-fld" style="flex:1;min-width:220px;max-width:280px;margin-bottom:0;display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
+        <div class="fld" id="sm-tutar-iskonto-fld" style="flex:1;min-width:220px;max-width:280px;margin-bottom:0;display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'flex':'none'}">
           <label>Tutar İskontosu (₺)</label>
           <input id="sm-tutar-iskontosu" type="number" min="0" step="0.01" value="${s ? (s.tutarIskontosu||0) : 0}" oninput="satisToplamGuncelle()">
           <label style="flex-direction:row;align-items:center;gap:6px;text-transform:none;font-size:12px;color:var(--text2);margin-top:6px">
@@ -4613,6 +4670,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
 
         <div class="fld" style="flex:1;min-width:180px;max-width:220px;margin-bottom:0"><label>Dip İskonto (%)</label>
           <input id="sm-dip-iskonto" type="number" min="0" max="100" step="0.01" value="${s ? (s.dipIskontoYuzde||0) : 0}" oninput="satisToplamGuncelle()">
+          <p id="sm-efatura-dip-not" style="display:none;color:var(--warn,#c77);font-size:11px;margin:4px 0 0">🔒 E-Fatura mükellefi cari: dip iskonto ve tutar iskontosu kapalı — iskontoyu kalem satırındaki İsk.% ile girin.</p>
         </div>
       </div>
 
@@ -4629,6 +4687,8 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   satisOdemeTipiDegisti();
   smKdvSonraKisitiUygula();
   if(!duzenle && (belgeTipiBaslangic === "Sipariş" || belgeTipiBaslangic === "Fatura")) siparisNumarasiOnizlemeYukle();
+  if(!duzenle && onCariId) smSonrakiOdak_(); // Cari sayfasından cari seçili açıldıysa imleç doğrudan stok alanında
+  if(!duzenle) faturaTipiVarsayilanUygula_(); // Fatura Tipi standart "00"
 }
 
 // Cari E-Fatura veya E-Arşiv mükellefiyse (bkz. edmBaglantisiVarMi backend) KDV
@@ -4645,6 +4705,23 @@ function smKdvSonraKisitiUygula(){
   chk.disabled = edmVar;
   if(edmVar) chk.checked = false;
   if(not) not.style.display = edmVar ? 'block' : 'none';
+
+  // ★ E-Fatura mükellefi cari: (1) formun en üstünde "E-Fatura: Evet/Hayır" rozeti (yeşil/kırmızı),
+  // (2) dip iskonto (%) ve tutar iskontosu KAPALI (sıfırlanır, düzenlenemez).
+  const eFaturaMi = !!(c && c.eFatura==='Evet');
+  const rozet = document.getElementById("sm-efatura-rozet");
+  if(rozet){
+    if(!c){ rozet.textContent = "E-Fatura: —"; rozet.style.background = "var(--bg3)"; rozet.style.color = "var(--text3)"; }
+    else if(eFaturaMi){ rozet.textContent = "E-Fatura: Evet"; rozet.style.background = "#dcf5e4"; rozet.style.color = "#15803d"; }
+    else { rozet.textContent = "E-Fatura: Hayır"; rozet.style.background = "#fde2e2"; rozet.style.color = "#b91c1c"; }
+  }
+  const dip = document.getElementById("sm-dip-iskonto"), tutarIsk = document.getElementById("sm-tutar-iskontosu");
+  [dip, tutarIsk].forEach(inp=>{
+    if(!inp) return;
+    if(eFaturaMi){ inp.value = 0; inp.disabled = true; } else { inp.disabled = false; }
+  });
+  const dipNot = document.getElementById("sm-efatura-dip-not");
+  if(dipNot) dipNot.style.display = eFaturaMi ? "block" : "none";
   satisToplamGuncelle();
 }
 
@@ -4699,6 +4776,7 @@ function satisBankaSecenekleriYukle(onSecili){
 
 function smCariAramaDegisti(){
   document.getElementById("sm-cari").value = "";
+  smKdvSonraKisitiUygula();
   smCariOneriGoster();
 }
 function smCariOneriGoster(){
@@ -4729,13 +4807,35 @@ function smCariSec(i){
   document.getElementById("sm-cari").value = c.id;
   document.getElementById("sm-cari-arama").value = c.ad;
   kutu.style.display = "none";
+  smCariSecildi_(c);
+}
+
+// Cari seçilince (arama önerisi veya Rehber): e-fatura rozeti/iskonto kilidi, carinin genel iskonto
+// oranı ve imleci stok satırına taşıma. İmleç: satırlarda stok varsa SON EKLENEN stoğun miktarına,
+// yoksa ilk boş ürün/stok alanına gider.
+function smCariSecildi_(c){
   smKdvSonraKisitiUygula();
   // Carinin genel iskonto oranı varsa, henüz elle değiştirilmemiş kalemlere otomatik uygula.
-  if(c.iskontoOrani > 0){
+  if(c && c.iskontoOrani > 0){
     _yeniSatisKalemleri.forEach(k=>{ if(!k.iskontoYuzde) k.iskontoYuzde = c.iskontoOrani; });
     satisKalemlerCiz();
     satisToplamGuncelle();
   }
+  smSonrakiOdak_();
+}
+function smSonrakiOdak_(){
+  const dolu = [];
+  _yeniSatisKalemleri.forEach((k,i)=>{ if(String(k.stokKodu||k.urunAdi||"").trim()) dolu.push(i); });
+  if(dolu.length){ satisMiktarOdakla_(dolu[dolu.length-1]); return; }
+  setTimeout(()=>{ const ilk = document.querySelector("#sm-kalemler .satis-kalem-urun"); if(ilk) ilk.focus(); }, 60);
+}
+// Verilen satırın Miktar kutusuna imleci koyar ve içeriği seçer (yeniden çizimin bitmesi için kısa bekleme).
+function satisMiktarOdakla_(idx){
+  setTimeout(()=>{
+    const satir = document.querySelectorAll("#sm-kalemler .satis-kalem-satir")[idx];
+    const el = satir ? satir.querySelector(".satis-kalem-miktar") : null;
+    if(el){ el.focus(); el.select(); }
+  }, 40);
 }
 
 function satisKalemEkleUI(){
@@ -4809,7 +4909,7 @@ function satisKalemlerCiz(){
                onblur="setTimeout(()=>urunOneriKapat(${idx}),200)"
                onfocus="urunOneriGoster(${idx})"
                onkeydown="oneriKlavyeYonet(event,'urun-oneri-${idx}')">
-        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniSatisKalemleri[${idx}].urunAdi=s.stokAdi; _yeniSatisKalemleri[${idx}].stokKodu=s.stokKodu||''; _yeniSatisKalemleri[${idx}].birim=s.birim1||'adet'; if(s.satisFiyati) _yeniSatisKalemleri[${idx}].birimFiyat=s.satisFiyati; if(s.satisIskontosu) _yeniSatisKalemleri[${idx}].iskontoYuzde=s.satisIskontosu; satisKalemlerCiz(); })">🔍</button>
+        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>satisKalemStokSec_(${idx}, s))">🔍</button>
         <div id="urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <label style="display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text3);flex:0 0 auto;white-space:nowrap" title="Bu kalem bir stok kartına bağlı değil (hizmet/nakliye/masraf gibi) — stoktan düşülmez">
@@ -4858,12 +4958,23 @@ function urunOneriSec(idx, oneriIdx){
   const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
   const s = eslesenler[oneriIdx];
   if(!s) return;
-  _yeniSatisKalemleri[idx].urunAdi = s.stokAdi;
-  _yeniSatisKalemleri[idx].stokKodu = s.stokKodu || "";
-  _yeniSatisKalemleri[idx].birim = s.birim1 || "adet";
-  if(s.satisFiyati) _yeniSatisKalemleri[idx].birimFiyat = s.satisFiyati;
-  if(s.satisIskontosu) _yeniSatisKalemleri[idx].iskontoYuzde = s.satisIskontosu;
+  satisKalemStokSec_(idx, s);
+}
+
+// Stok seçimi (öneri kutusu veya Stok Rehberi) — satıra ürün/kod/birim/fiyat/iskonto gelir.
+// Stok kartında KUTU (ambalaj) miktarı yazılıysa Miktar ilk başta o değerle dolar; ardından imleç
+// bu satırın Miktar kutusuna gider.
+function satisKalemStokSec_(idx, s){
+  const k = _yeniSatisKalemleri[idx];
+  if(!k || !s) return;
+  k.urunAdi = s.stokAdi;
+  k.stokKodu = s.stokKodu || "";
+  k.birim = s.birim1 || "adet";
+  if(s.satisFiyati) k.birimFiyat = s.satisFiyati;
+  if(s.satisIskontosu) k.iskontoYuzde = s.satisIskontosu;
+  if(s.ambalajMiktari > 0) k.miktar = s.ambalajMiktari;
   satisKalemlerCiz();
+  satisMiktarOdakla_(idx);
 }
 
 // Brüt Toplam - İskonto - Ara Toplam - Kdv Toplam - Genel Toplam kırılımını hesaplar.
@@ -4907,7 +5018,7 @@ function satisToplamGuncelle(){
 function satisModalBelgeTipiDegisti(){
   const tip = document.getElementById("sm-belgetipi").value;
   document.getElementById("sm-siparis-durum-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
-  document.getElementById("sm-tutar-iskonto-fld").style.display = (tip === "Sipariş") ? "flex" : "none";
+  document.getElementById("sm-tutar-iskonto-fld").style.display = (tip === "Sipariş" || tip === "Fatura") ? "flex" : "none";
   document.getElementById("sm-fatura-tipi-fld").style.display = (tip === "Fatura") ? "flex" : "none";
   const tikFld = document.getElementById("sm-isleme-tikleri-fld");
   if(tikFld) tikFld.style.display = (tip === "Fatura") ? "flex" : "none";
@@ -4923,7 +5034,7 @@ function satisModalBelgeTipiDegisti(){
 
 function smTutarIskontosuAl(){
   const tip = (document.getElementById("sm-belgetipi")||{}).value;
-  if(tip !== "Sipariş") return { tutar: 0, kdvSonra: true };
+  if(tip !== "Sipariş" && tip !== "Fatura") return { tutar: 0, kdvSonra: true };
   const tutar = Math.max(0, parseFloat((document.getElementById("sm-tutar-iskontosu")||{}).value) || 0);
   const kdvSonra = !!(document.getElementById("sm-tutar-iskonto-kdv-sonra")||{}).checked;
   return { tutar, kdvSonra };
@@ -5651,6 +5762,7 @@ function alisKalemStokSec_(idx, s){
   k.birim = s.birim1 || "adet";
   if(s.alisFiyati){ k.birimFiyat = s.alisFiyati; delete k.netKilit; }
   if(s.alisIskontosu){ k.iskontoYuzde = s.alisIskontosu; delete k.netKilit; }
+  if(s.ambalajMiktari > 0) k.miktar = s.ambalajMiktari; // stok kartında kutu miktarı varsa Miktar o değerle gelir
   alisKalemlerCiz();
 }
 
@@ -8635,6 +8747,235 @@ function cariVirmanSilOnay(id){
      aynı veriyle tekrar çağrılıyor — kayıt (yeni bir ID ile) cari/stok hareketleri
      dahil eksiksiz yeniden oluşuyor. -->
 <script>
+// ══════════════ STOK HAREKET PENCERESİ (Ctrl+A) ══════════════
+// Küçük, taşınabilir, engellemeyen bir pencere: ÜSTTE Alış / Satış sekmeleri, ALTTA "Aktif Cari" /
+// "Genel" kapsam seçimi. Seçili stoğun Alış (giriş) veya Satış (çıkış) hareketlerini, cari ve fiyatlarıyla
+// listeler. Açık Satış/Alış formu varsa imlecin olduğu satırdaki stok, formdaki cari ve form türüne göre
+// sekme otomatik gelir. Ctrl+A tekrar basınca / Esc ile kapanır. Kısayol Ayarlar'dan değiştirilebilir.
+const _shp = { acik:false, stok:null, tab:"satis", kapsam:"genel", cari:null, istek:0, oneriZamanlayici:null, konum:null };
+
+function shpAcKapat(){ if(_shp.acik) shpKapat(); else shpAc(); }
+
+function shpKapat(){
+  _shp.acik = false;
+  const el = document.getElementById("stok-hareket-penceresi");
+  if(el) el.remove();
+}
+
+// Açık Satış/Alış formundan bağlam: sekme, aktif cari, imlecin olduğu (yoksa son dolu) satırın stoğu.
+function shpBaglamAl_(){
+  const sm = document.getElementById("satis-modal-overlay"), am = document.getElementById("alis-modal-overlay");
+  let kaynak = "";
+  if(sm && am) kaynak = (sm.compareDocumentPosition(am) & Node.DOCUMENT_POSITION_FOLLOWING) ? "alis" : "satis";
+  else if(sm) kaynak = "satis";
+  else if(am) kaynak = "alis";
+  if(!kaynak) return { tab:null, cari:null, stok:null };
+  const satis = kaynak === "satis";
+  const kalemler = (satis ? _yeniSatisKalemleri : _yeniAlisKalemleri) || [];
+  const kap = document.getElementById(satis ? "sm-kalemler" : "am-kalemler");
+  const cariId = (document.getElementById(satis ? "sm-cari" : "am-cari")||{}).value || "";
+  let cariAd = (document.getElementById(satis ? "sm-cari-arama" : "am-cari-arama")||{}).value || "";
+  if(cariId && !cariAd){ const c = (_cariListe||[]).find(x=>x.id===cariId); if(c) cariAd = c.ad; }
+  const satirlar = kap ? Array.from(kap.querySelectorAll(".satis-kalem-satir")) : [];
+  const stokBul = (k)=>{
+    if(!k) return null;
+    const kod = String(k.stokKodu||"").trim();
+    if(kod) return (_stokTanimListe||[]).find(x=>x.stokKodu===kod) || null;
+    const ad = String(k.urunAdi||"").trim().toLocaleLowerCase("tr");
+    return ad ? ((_stokTanimListe||[]).find(x=>(x.stokAdi||"").toLocaleLowerCase("tr")===ad) || null) : null;
+  };
+  const idx = satirlar.findIndex(x=>x.contains(document.activeElement));
+  let stok = idx >= 0 ? stokBul(kalemler[idx]) : null;
+  if(!stok){ for(let i=kalemler.length-1;i>=0;i--){ const st = stokBul(kalemler[i]); if(st){ stok = st; break; } } }
+  return { tab: kaynak, cari: cariId ? {id:cariId, ad:cariAd||"Seçili cari"} : null, stok: stok };
+}
+
+function shpAc(){
+  if(!_stokTanimYuklendi) stokTanimListesiYukle();
+  const b = shpBaglamAl_();
+  _shp.acik = true;
+  if(b.tab) _shp.tab = b.tab;
+  _shp.cari = b.cari;
+  _shp.kapsam = b.cari ? "cari" : "genel";
+  if(b.stok) _shp.stok = b.stok; // formdan stok gelmediyse önceki seçili stok korunur
+  shpCiz_();
+  if(_shp.stok) shpYukle_();
+  else { const ara = document.getElementById("shp-ara"); if(ara) ara.focus(); }
+}
+
+// Pencere açıkken formda başka bir satıra geçildiyse, o satırın stoğunu/carisini yeniden al.
+function shpFormdanAl(){
+  const b = shpBaglamAl_();
+  if(!b.tab){ toastGoster("Açık bir Satış/Alış formu yok"); return; }
+  _shp.tab = b.tab; _shp.cari = b.cari; _shp.kapsam = b.cari ? "cari" : "genel";
+  if(b.stok) _shp.stok = b.stok;
+  shpCiz_(); if(_shp.stok) shpYukle_();
+}
+
+function shpCiz_(){
+  let el = document.getElementById("stok-hareket-penceresi");
+  const yeni = !el;
+  if(!el){
+    el = document.createElement("div");
+    el.id = "stok-hareket-penceresi";
+    el.className = "shp";
+    if(_shp.konum){ el.style.left = _shp.konum.left+"px"; el.style.top = _shp.konum.top+"px"; el.style.right = "auto"; }
+    document.body.appendChild(el);
+  }
+  const cari = _shp.cari;
+  el.innerHTML = `
+    <div class="shp-baslik" onmousedown="shpSurukleBasla(event)">
+      <span>📊 Stok Hareketleri</span>
+      <span class="shp-ipucu">← → sekme · Esc kapat</span>
+      <button class="shp-x" onclick="shpKapat()" title="Kapat">✕</button>
+    </div>
+    <div class="shp-ust">
+      <div class="shp-ara-kutu">
+        <input id="shp-ara" type="text" placeholder="Stok kodu / adı / barkod ara..." autocomplete="off" oninput="shpAraDegisti()" onkeydown="oneriKlavyeYonet(event,'shp-oneri')">
+        <button class="shp-mini-btn" onclick="shpFormdanAl()" title="Formda imlecin olduğu satırdaki stoğu (ve cariyi) al">🎯</button>
+        <div id="shp-oneri" class="fiyat-gecmis-kutu" style="display:none;right:44px"></div>
+      </div>
+      <div class="shp-stok-bilgi" id="shp-stok-bilgi"></div>
+      <div class="shp-sekmeler">
+        <button class="shp-sekme ${_shp.tab==='alis'?'aktif':''}" onclick="shpSekme('alis')">📥 Alış <small>(giriş)</small></button>
+        <button class="shp-sekme ${_shp.tab==='satis'?'aktif':''}" onclick="shpSekme('satis')">📤 Satış <small>(çıkış)</small></button>
+      </div>
+    </div>
+    <div class="shp-govde"><div class="shp-ozet" id="shp-ozet"></div><div id="shp-liste"></div></div>
+    <div class="shp-alt">
+      <span class="shp-etiket">Kapsam</span>
+      <div class="shp-segment">
+        <button id="shp-kap-cari" class="${_shp.kapsam==='cari'?'aktif':''}" ${cari?'':'disabled'} onclick="shpKapsam('cari')" title="${cari?'Formda seçili cariye ait hareketler':'Açık formda seçili cari yok'}">👤 Aktif Cari${cari?': '+htmlKacis(cari.ad):''}</button>
+        <button id="shp-kap-genel" class="${_shp.kapsam==='genel'?'aktif':''}" onclick="shpKapsam('genel')" title="Tüm carilerin hareketleri">🌐 Genel</button>
+      </div>
+    </div>`;
+  el.onkeydown = (e)=>{
+    const tag = (e.target.tagName||"").toLowerCase();
+    if(tag === "input" || tag === "textarea") return;
+    if(e.key === "ArrowLeft" || e.key === "ArrowRight"){ e.preventDefault(); shpSekme(_shp.tab === "alis" ? "satis" : "alis"); }
+  };
+  shpStokBilgiCiz_();
+  if(!_shp.stok) shpListeMesaj_("Yukarıdan bir stok arayın (kod, ad veya barkod).");
+}
+
+function shpStokBilgiCiz_(){
+  const el = document.getElementById("shp-stok-bilgi");
+  if(!el) return;
+  const s = _shp.stok;
+  el.innerHTML = s ? `<b>${htmlKacis(s.stokKodu||"")}</b> · ${htmlKacis(s.stokAdi||"")} <span style="color:var(--text3)">(${htmlKacis(s.birim1||"adet")})</span>` : "";
+}
+
+function shpListeMesaj_(m){
+  const l = document.getElementById("shp-liste"), o = document.getElementById("shp-ozet");
+  if(o) o.innerHTML = "";
+  if(l) l.innerHTML = `<div class="cari-empty" style="padding:24px 8px">${m}</div>`;
+}
+
+function shpSekme(t){
+  if(_shp.tab === t) return;
+  _shp.tab = t;
+  document.querySelectorAll("#stok-hareket-penceresi .shp-sekme").forEach((b,i)=>b.classList.toggle("aktif", (i===0) === (t==="alis")));
+  if(_shp.stok) shpYukle_();
+}
+function shpKapsam(k){
+  if(k === "cari" && !_shp.cari) return;
+  _shp.kapsam = k;
+  const c = document.getElementById("shp-kap-cari"), g = document.getElementById("shp-kap-genel");
+  if(c) c.classList.toggle("aktif", k === "cari");
+  if(g) g.classList.toggle("aktif", k === "genel");
+  if(_shp.stok) shpYukle_();
+}
+
+function shpAraDegisti(){
+  clearTimeout(_shp.oneriZamanlayici);
+  _shp.oneriZamanlayici = setTimeout(()=>{
+    const kutu = document.getElementById("shp-oneri"), inp = document.getElementById("shp-ara");
+    if(!kutu || !inp) return;
+    const q = esnekNormalize_(inp.value);
+    if(!q){ kutu.style.display = "none"; return; }
+    if(!_stokTanimYuklendi) stokTanimListesiYukle();
+    const eslesen = (_stokTanimListe||[]).filter(s=>esnekNormalize_((s.stokKodu||"")+" "+(s.stokAdi||"")+" "+(s.barkod||"")+" "+(s.markaKodu||"")).includes(q)).slice(0,8);
+    if(!eslesen.length){ kutu.style.display = "none"; return; }
+    kutu.innerHTML = eslesen.map((s,i)=>`<div class="fiyat-gecmis-satir" data-oneri-idx="${i}" onclick="shpStokSec(${i})"><span>${htmlKacis(s.stokKodu?s.stokKodu+' · ':'')}${htmlKacis(s.stokAdi||'')}</span><b>${htmlKacis(s.birim1||'adet')}</b></div>`).join("");
+    kutu.dataset.eslesenler = JSON.stringify(eslesen);
+    kutu.style.display = "block";
+  }, 150);
+}
+function shpStokSec(i){
+  const kutu = document.getElementById("shp-oneri");
+  const liste = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const s = liste[i];
+  if(!s) return;
+  _shp.stok = s;
+  kutu.style.display = "none";
+  const inp = document.getElementById("shp-ara"); if(inp) inp.value = "";
+  shpStokBilgiCiz_();
+  shpYukle_();
+}
+
+function shpYukle_(){
+  const s = _shp.stok;
+  if(!s || !s.stokKodu){ shpListeMesaj_("Bu stok kartında Stok Kodu yok — hareketler stok koduyla eşleştirilir."); return; }
+  shpStokBilgiCiz_();
+  const istekNo = ++_shp.istek;
+  shpListeMesaj_("Yükleniyor...");
+  const cariId = (_shp.kapsam === "cari" && _shp.cari) ? _shp.cari.id : "";
+  cariApi("getStokHareketPenceresi", { stokKodu: s.stokKodu, yon: _shp.tab, cariId: cariId }).then(res=>{
+    if(istekNo !== _shp.istek || !_shp.acik) return;
+    if(!res.ok){ shpListeMesaj_("Hata: "+htmlKacis(res.hata||res.error||"bilinmiyor")); return; }
+    shpListeCiz_(res);
+  }).catch(err=>{ if(istekNo === _shp.istek) shpListeMesaj_("Bağlantı hatası: "+htmlKacis(err.message)); });
+}
+
+function shpListeCiz_(res){
+  const o = res.ozet || {};
+  const alis = _shp.tab === "alis";
+  const birim = (_shp.stok && _shp.stok.birim1) || "";
+  const chip = (e, d, alt)=>`<div class="shp-chip"><span>${e}</span><b>${d}</b>${alt?`<small>${alt}</small>`:''}</div>`;
+  document.getElementById("shp-ozet").innerHTML =
+    chip("Son "+(alis?"alış":"satış")+" fiyatı", o.sonFiyat!==null&&o.sonFiyat!==undefined ? paraFormat(o.sonFiyat) : "—", o.sonTarih ? htmlKacis(tarihGoster(o.sonTarih))+" · "+htmlKacis(o.sonCari||"") : "") +
+    chip("Ağırlıklı ort.", o.ortFiyat!==null&&o.ortFiyat!==undefined ? paraFormat(o.ortFiyat) : "—") +
+    chip("En düşük – yüksek", o.enDusuk!==null&&o.enDusuk!==undefined ? paraFormat(o.enDusuk)+" – "+paraFormat(o.enYuksek) : "—") +
+    chip("Toplam "+(alis?"giriş":"çıkış"), miktarFormat(o.toplamMiktar||0)+" "+htmlKacis(birim), (o.sayi||0)+" fatura"+(o.iadeSayisi?" · "+o.iadeSayisi+" iade":""));
+  const kapsamNot = (_shp.kapsam === "cari" && _shp.cari) ? " ("+htmlKacis(_shp.cari.ad)+" için)" : "";
+  if(!res.satirlar.length){
+    document.getElementById("shp-liste").innerHTML = `<div class="cari-empty" style="padding:24px 8px">Bu stok için ${alis?"alış":"satış"} hareketi yok${kapsamNot}.${(_shp.kapsam==="cari")?'<br><small>Tüm carilere bakmak için alttan <b>Genel</b>\'i seçin.</small>':''}</div>`;
+    return;
+  }
+  document.getElementById("shp-liste").innerHTML = `
+    <table class="shp-tablo">
+      <thead><tr><th>Tarih</th><th>Cari</th><th class="sag">Miktar</th><th class="sag">Net Fiyat</th><th class="sag">İsk.%</th><th class="sag">Tutar</th></tr></thead>
+      <tbody>${res.satirlar.map(r=>`
+        <tr class="${r.iade?'shp-iade':''}">
+          <td style="white-space:nowrap">${htmlKacis(tarihGoster(r.tarih))}</td>
+          <td>${htmlKacis(r.cariAd||"—")}${r.iade?'<span class="shp-iade-etiket">İADE</span>':''}</td>
+          <td class="sag ${r.yon==='giris'?'shp-giris':'shp-cikis'}">${r.yon==='giris'?'+':'−'}${miktarFormat(r.miktar)} ${htmlKacis(r.birim||'')}</td>
+          <td class="sag">${paraFormat(r.netFiyat)}</td>
+          <td class="sag">${r.iskontoYuzde?('%'+miktarFormat(r.iskontoYuzde)):'—'}</td>
+          <td class="sag">${paraFormat(r.tutar)}</td>
+        </tr>`).join("")}</tbody>
+    </table>
+    ${res.toplam>res.satirlar.length?`<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:6px">Son ${res.satirlar.length} hareket gösteriliyor (toplam ${res.toplam})</div>`:''}`;
+}
+
+// Başlıktan sürükleyerek taşıma
+function shpSurukleBasla(e){
+  if(e.target.closest("button")) return;
+  const el = document.getElementById("stok-hareket-penceresi");
+  if(!el) return;
+  const r = el.getBoundingClientRect();
+  const dx = e.clientX - r.left, dy = e.clientY - r.top;
+  const tasi = (ev)=>{
+    const left = Math.max(0, Math.min(window.innerWidth - 80, ev.clientX - dx));
+    const top = Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - dy));
+    el.style.left = left + "px"; el.style.top = top + "px"; el.style.right = "auto";
+    _shp.konum = { left, top };
+  };
+  const birak = ()=>{ document.removeEventListener("mousemove", tasi); document.removeEventListener("mouseup", birak); };
+  document.addEventListener("mousemove", tasi); document.addEventListener("mouseup", birak);
+  e.preventDefault();
+}
+
 // ══════════════ KAYIT DEFTERİ ══════════════
 let _kdSayfa = 0, _kdToplam = 0, _kdSatirlar = [], _kdAramaZamanlayici = null, _kdIstek = 0;
 const KD_SAYFA_BOYUT = 200;
@@ -9603,10 +9944,27 @@ function projeKoduSelectHTML(id, seciliDeger){
   const secenekler = (_tanimListeCache.projeKodu||[]).map(p=>`<option value="${p.ad}"${p.ad===seciliDeger?' selected':''}>${p.ad}</option>`).join("");
   return `<select id="${id}" class="proje-kodu-secim"><option value="">— Proje Yok —</option>${secenekler}</select>`;
 }
-function faturaTipiSelectHTML(id, seciliDeger){
+// varsayilan: yeni kayıtta (seciliDeger boşken) otomatik seçilecek Fatura Tipi (örn. "00"). Liste henüz
+// gelmemişse, geldiğinde faturaTipiSelectleriTazele() aynı varsayılanı uygular.
+function faturaTipiSelectHTML(id, seciliDeger, varsayilan){
   if(!_tanimListeYuklendi.faturaTipi) tanimListesiYukle("faturaTipi");
-  const secenekler = (_tanimListeCache.faturaTipi||[]).map(f=>`<option value="${f.ad}"${f.ad===seciliDeger?' selected':''}>${f.ad}</option>`).join("");
-  return `<select id="${id}"><option value="">— Belirtilmedi —</option>${secenekler}</select>`;
+  const liste = _tanimListeCache.faturaTipi || [];
+  const secili = seciliDeger || (varsayilan && liste.some(f=>f.ad===varsayilan) ? varsayilan : "");
+  const secenekler = liste.map(f=>`<option value="${f.ad}"${f.ad===secili?' selected':''}>${f.ad}</option>`).join("");
+  return `<select id="${id}" class="fatura-tipi-secim" data-varsayilan="${varsayilan||''}"><option value="">— Belirtilmedi —</option>${secenekler}</select>`;
+}
+// Fatura Tipi listesi geç geldiyse açık select'leri tazeler; kullanıcı henüz seçim yapmadıysa varsayılanı seçer.
+function faturaTipiSelectleriTazele(){
+  document.querySelectorAll("select.fatura-tipi-secim").forEach(sel=>{
+    const mevcut = sel.value;
+    sel.innerHTML = '<option value="">— Belirtilmedi —</option>' + (_tanimListeCache.faturaTipi||[]).map(f=>`<option value="${f.ad}">${f.ad}</option>`).join("");
+    sel.value = mevcut;
+    if(!sel.value && sel.dataset.varsayilan) sel.value = sel.dataset.varsayilan;
+  });
+}
+function faturaTipiVarsayilanUygula_(){
+  const sel = document.getElementById("sm-fatura-tipi");
+  if(sel && !sel.value && sel.dataset.varsayilan) sel.value = sel.dataset.varsayilan;
 }
 // Bir ekran ilk açıldığında proje kodu listesi henüz gelmemiş olabilir (tembel yükleme) —
 // veri gelince o ekrandaki select'i (varsa) mevcut seçili değeri koruyarak tazeler.
@@ -9634,6 +9992,7 @@ function tanimListesiYukle(tip){
     _tanimListeCache[tip] = res.kalemler;
     _tanimListeYuklendi[tip] = true;
     if(tip === "projeKodu") projeKoduSelectleriTazele();
+    if(tip === "faturaTipi") faturaTipiSelectleriTazele();
     const ustTip = TANIM_ALT_UST_ESLESME[tip];
     if(ustTip){
       if(!_tanimListeYuklendi[ustTip]){ tanimListesiYukle(ustTip); }
@@ -10085,6 +10444,10 @@ function ayarlarListesiCiz(){
     `<div class="satis-kalem-satir" style="justify-content:space-between">
        <span style="flex:1">← Önceki sekme</span>
        <input readonly class="ayarlar-kisayol-input" data-modid="_sekmeGeri" value="${_ayarlarTaslak._sekmeGeri || ''}" onclick="kisayolYakala(this,'_sekmeGeri')" style="width:160px;text-align:center;cursor:pointer">
+     </div>`,
+    `<div class="satis-kalem-satir" style="justify-content:space-between">
+       <span style="flex:1">📊 Stok hareket penceresi (Alış/Satış)</span>
+       <input readonly class="ayarlar-kisayol-input" data-modid="_stokHareket" value="${_ayarlarTaslak._stokHareket || ''}" onclick="kisayolYakala(this,'_stokHareket')" style="width:160px;text-align:center;cursor:pointer">
      </div>`,
     ...MODULLER.filter(m=>m.id!=="ayarlar").map(m=>`
        <div class="satis-kalem-satir" style="justify-content:space-between">
