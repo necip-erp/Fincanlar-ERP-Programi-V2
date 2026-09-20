@@ -484,6 +484,7 @@ function ensureCariHareketProjeKoduColonu(sheet) {
   if (String(mevcutBaslik || "") !== "PROJE_KODU") {
     sheet.getRange(1, 9).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
   }
+  metinKolonuGarantiEt_(sheet, 9);
 }
 
 // Google E-Tablo, "2026-08-18" veya "18/08/2026 10:30" gibi tarih benzeri
@@ -506,6 +507,34 @@ function hucreTarihStr(deger) {
       : Utilities.formatDate(deger, "Europe/Istanbul", "yyyy-MM-dd HH:mm");
   }
   return String(deger || "");
+}
+
+// Google E-Tablo, hücreye yazılan "00", "01", "1-2" gibi sayı/tarih benzeri METİNLERİ
+// kendiliğinden sayıya/tarihe çevirir ("00" → 0, "01" → 1). Sonra `String(deger || "")`
+// ile okunduğunda 0 değeri "boş" sayılıp kaybolur. Proje Kodu / Fatura Tipi / tanım
+// adı-kodu gibi KOD niteliğindeki sütunlar bu yüzden METİN biçimine (@) alınır; böylece
+// hem appendRow hem satır-geri-yazan setValues çağrıları yazılanı AYNEN saklar.
+// Sütun başına 6 saatte bir uygulanır (önbellek bayrağı) — her okuma/yazmada API çağrısı yapmaz.
+function metinKolonuGarantiEt_(sheet, kolon) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const anahtar = "metinKol_" + sheet.getSheetId() + "_" + kolon;
+    if (cache.get(anahtar)) return;
+    sheet.getRange(2, kolon, Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("@");
+    cache.put(anahtar, "1", 21600);
+  } catch (e) { /* biçim ayarlanamadıysa yazma/okuma yine de devam eder */ }
+}
+
+// Hücre değerini METİN olarak okur. 0 sayısını "" yapmaz (`deger || ""` kalıbı yapıyordu).
+// Eski (biçim düzeltmesinden önce yazılmış) kayıtlarda baştaki sıfırlar zaten sayıya
+// çevrilip kaybolmuş olabilir — orijinali geri getirilemez, en azından boş görünmez.
+// haneSayisi verilirse (örn. 2 haneli KOD) sayısal eski değerler soldan sıfırla tamamlanır.
+function metinOku_(deger, haneSayisi) {
+  if (deger === null || deger === undefined || deger === "") return "";
+  if (deger instanceof Date) return hucreTarihStr(deger);
+  const m = String(deger);
+  if (haneSayisi && typeof deger === "number") return m.padStart(haneSayisi, "0");
+  return m;
 }
 
 // ════════════════════════════════════════════════
@@ -1140,7 +1169,7 @@ function getCariDetay(cariId) {
       id: String(row[0]), cariId: String(row[1]), tarih: hucreTarihStr(row[2]),
       tip: String(row[3] || ""), tutar: parseFloat(row[4]) || 0,
       aciklama: String(row[5] || ""), kayitTarihi: hucreTarihStr(row[6]),
-      vade: hucreTarihStr(row[7]), projeKodu: String(row[8] || ""),
+      vade: hucreTarihStr(row[7]), projeKodu: metinOku_(row[8]),
     });
   }
   // Tarihe göre sırala (eskiden yeniye). Aynı güne ait birden fazla hareket varsa (TARİH
@@ -1337,6 +1366,7 @@ function ensureCariVirmanProjeKoduColonu(sheet) {
   if (String(mevcutBaslik || "") !== "PROJE_KODU") {
     sheet.getRange(1, 12).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
   }
+  metinKolonuGarantiEt_(sheet, 12);
 }
 
 // body: { kaynakCariId, kaynakCariAd, hedefCariId, hedefCariAd, tarih, tutar, aciklama, projeKodu }
@@ -1399,7 +1429,7 @@ function getCariVirmanListesi() {
       id: String(row[0]), tarih: hucreTarihStr(row[1]),
       kaynakCariId: kaynakCariId, kaynakCariAd: String(row[3] || ""), kaynakCariKodu: cariKoduMap[kaynakCariId] || "",
       hedefCariId: hedefCariId, hedefCariAd: String(row[5] || ""), hedefCariKodu: cariKoduMap[hedefCariId] || "",
-      tutar: parseFloat(row[6]) || 0, aciklama: String(row[7] || ""), projeKodu: String(row[11] || ""),
+      tutar: parseFloat(row[6]) || 0, aciklama: String(row[7] || ""), projeKodu: metinOku_(row[11]),
     });
   }
   sonuc.reverse();
@@ -1639,6 +1669,8 @@ function ensureSatisBelgeTipiColonu(sheet) {
   if (String(h23 || "") !== "FATURA_TIPI") {
     sheet.getRange(1, 23).setValue("FATURA_TIPI").setFontWeight("bold").setBackground("#e8edf5");
   }
+  metinKolonuGarantiEt_(sheet, 22); // PROJE_KODU
+  metinKolonuGarantiEt_(sheet, 23); // FATURA_TIPI
 }
 
 // SatisKalemleri sayfası daha önce ISKONTO_YUZDE / KDV_ORANI sütunları olmadan
@@ -1796,8 +1828,8 @@ function getSatisDetay(satisId) {
         efaturaNo: String(data[i][16] || ""),
         efaturaUuid: String(data[i][17] || ""),
         efaturaDurum: String(data[i][18] || ""),
-        projeKodu: String(data[i][21] || ""),
-        faturaTipi: String(data[i][22] || ""),
+        projeKodu: metinOku_(data[i][21]),
+        faturaTipi: metinOku_(data[i][22]),
       };
       break;
     }
@@ -2466,8 +2498,8 @@ function updateSatis(body) {
   yeniRow[9] = dipIskontoYuzde; yeniRow[10] = bankaHesapId;
   yeniRow[13] = tutarIskontosu; yeniRow[14] = tutarIskontoKdvSonra ? 1 : 0;
   yeniRow[15] = String(body.siparisNo !== undefined ? body.siparisNo : (eskiRow[15] || ""));
-  yeniRow[21] = String(body.projeKodu !== undefined ? body.projeKodu : (eskiRow[21] || ""));
-  yeniRow[22] = String(body.faturaTipi !== undefined ? body.faturaTipi : (eskiRow[22] || ""));
+  yeniRow[21] = String(body.projeKodu !== undefined ? body.projeKodu : metinOku_(eskiRow[21]));
+  yeniRow[22] = String(body.faturaTipi !== undefined ? body.faturaTipi : metinOku_(eskiRow[22]));
   sSheet.getRange(satirIdx, 1, 1, yeniRow.length).setValues([yeniRow]);
 
   kalemler.forEach((k, idx) => {
@@ -2558,7 +2590,7 @@ function getAlisDetay(alisId) {
         id: String(data[i][0]), tarih: hucreTarihStr(data[i][1]), cariId: String(data[i][2] || ""),
         cariAd: String(data[i][3] || ""), toplamTutar: parseFloat(data[i][4]) || 0,
         odemeTipi: String(data[i][5] || ""), aciklama: String(data[i][6] || ""), kayitTarihi: hucreTarihStr(data[i][7]),
-        tutarIskontosu: parseFloat(data[i][8]) || 0, projeKodu: String(data[i][9] || ""),
+        tutarIskontosu: parseFloat(data[i][8]) || 0, projeKodu: metinOku_(data[i][9]),
       };
       break;
     }
@@ -2608,6 +2640,7 @@ function ensureAlisProjeKoduColonu(sheet) {
   if (String(h10 || "") !== "PROJE_KODU") {
     sheet.getRange(1, 10).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
   }
+  metinKolonuGarantiEt_(sheet, 10);
 }
 
 function saveAlis(body) {
@@ -3378,6 +3411,7 @@ function ensureTahsilatPosColonu(sheet) {
   if (String(mevcutBaslik3 || "") !== "PROJE_KODU") {
     sheet.getRange(1, 11).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
   }
+  metinKolonuGarantiEt_(sheet, 11);
 }
 
 function getTahsilatListesi() {
@@ -3400,7 +3434,7 @@ function getTahsilatListesi() {
       cariKodu: cariKoduMap[cariId] || "",
       tutar: parseFloat(row[4]) || 0, yontem: String(row[5] || ""),
       aciklama: String(row[6] || ""), kayitTarihi: hucreTarihStr(row[7]), posHesapId: String(row[8] || ""),
-      projeKodu: String(row[10] || ""),
+      projeKodu: metinOku_(row[10]),
     });
   }
   sonuc.reverse();
@@ -3557,6 +3591,7 @@ function ensureOdemePosBankaColonlari(sheet) {
   if (String(projeKoduBaslik || "") !== "PROJE_KODU") {
     sheet.getRange(1, 15).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
   }
+  metinKolonuGarantiEt_(sheet, 15);
 }
 
 function getOdemeListesi() {
@@ -3583,7 +3618,7 @@ function getOdemeListesi() {
       tutar: parseFloat(row[4]) || 0, yontem: String(row[5] || ""),
       aciklama: String(row[6] || ""), kayitTarihi: hucreTarihStr(row[7]),
       hedefTipi: hedefTipi, hedefAltTipi: String(row[11] || ""), hedefId: String(row[12] || ""), hedefAd: hedefAd,
-      projeKodu: String(row[14] || ""),
+      projeKodu: metinOku_(row[14]),
     });
   }
   sonuc.reverse();
@@ -3855,7 +3890,7 @@ function getCekSenetDetay(id) {
         seriNo: String(row[6] || ""), bankaAdi: String(row[7] || ""),
         duzenlenmeTarihi: hucreTarihStr(row[8]), vade: hucreTarihStr(row[9]), durum: String(row[10] || ""),
         aciklama: String(row[11] || ""), kayitTarihi: hucreTarihStr(row[12]),
-        projeKodu: String(row[14] || ""),
+        projeKodu: metinOku_(row[14]),
         belgeTuru: String(row[15] || "") === "Senet" ? "Senet" : "Çek",
       };
       break;
@@ -3935,6 +3970,7 @@ function ensureCekSenetProjeKoduColonu(sheet) {
   if (String(mevcutBaslik || "") !== "PROJE_KODU") {
     sheet.getRange(1, 15).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
   }
+  metinKolonuGarantiEt_(sheet, 15);
 }
 
 // BELGE_TURU (16. kolon) — bu kaydın gerçekte bir "Çek" mi yoksa "Senet" mi olduğunu
@@ -6624,7 +6660,7 @@ function getBasitTanimListesi(tip) {
     const sonuc = [];
     for (let i = 1; i < data.length; i++) {
       if (!data[i][0]) continue;
-      sonuc.push({ id: String(data[i][0]), ad: String(data[i][1] || ""), ustId: String(data[i][2] || ""), sira: parseFloat(data[i][3]) || 0, kod: String(data[i][4] || "") });
+      sonuc.push({ id: String(data[i][0]), ad: metinOku_(data[i][1]), ustId: String(data[i][2] || ""), sira: parseFloat(data[i][3]) || 0, kod: metinOku_(data[i][4], 2) });
     }
     return { ok: true, kalemler: siraliDizile(sonuc) };
   });
@@ -6648,6 +6684,8 @@ function saveBasitTanim(body) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, sheetAdi, BASIT_TANIM_BASLIKLAR);
   ensureBasitTanimKodKolonu(sheet);
+  metinKolonuGarantiEt_(sheet, 2); // AD  — "00", "01" gibi adlar sayıya dönüşmesin
+  metinKolonuGarantiEt_(sheet, 5); // KOD — "01" gibi 2 haneli kodlar sayıya dönüşmesin
   const data = sheet.getDataRange().getValues();
   let id = String(body.id || "").trim();
   if (id) {
@@ -6718,7 +6756,7 @@ function getMarkaListesi() {
     const sonuc = [];
     for (let i = 1; i < data.length; i++) {
       if (!data[i][0]) continue;
-      sonuc.push({ id: String(data[i][0]), kod: String(data[i][1] || ""), ad: String(data[i][2] || ""), sira: parseFloat(data[i][3]) || 0, renk: String(data[i][4] || "") });
+      sonuc.push({ id: String(data[i][0]), kod: metinOku_(data[i][1], 2), ad: String(data[i][2] || ""), sira: parseFloat(data[i][3]) || 0, renk: String(data[i][4] || "") });
     }
     return { ok: true, markalar: siraliDizile(sonuc) };
   });
@@ -6740,6 +6778,7 @@ function saveMarka(body) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.markalar, MARKA_BASLIKLAR);
   ensureMarkaRenkKolonu(sheet);
+  metinKolonuGarantiEt_(sheet, 2); // KOD — "01" gibi 2 haneli kodlar sayıya dönüşmesin
   const data = sheet.getDataRange().getValues();
   let id = String(body.id || "").trim();
   if (id) {
