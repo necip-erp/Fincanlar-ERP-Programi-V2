@@ -1,30 +1,35 @@
 // ════════════════════════════════════════════════════════════════════════════
 // KAYIT DEFTERİ — veri kaybı kontrolü için tüm işlemlere sıralı KAYIT NO (2026000001...)
 //
-// Her işlem (Satış/Sipariş/Teklif, Alış, İadeler, Tahsilat, Ödeme, Cari Virman, Çek/Senet,
-// manuel Cari hareketi) "Ana" satır olarak, kendi KARŞI KAYITLARI (Cari borç/alacak, Stok
-// giriş/çıkış, Banka/POS/Kredi Kartı hareketi) ise "Karşı" satır olarak — HER BİRİ kendi
-// numarasıyla — KayitDefteri sayfasına yazılır ve birbirine bağlanır (ANA_KAYIT_NO).
+// HER İŞLEM TEK SATIR ve İKİ TARAFLI: sol tarafta BORÇ hesabı + tutarı, sağ tarafta ALACAK hesabı +
+// tutarı. Sipariş ve Teklif hariç her işlemin iki tarafı da olmalıdır:
+//   Satış Faturası : Borç Cari            / Alacak Stok Çıkış
+//   Alış Faturası  : Borç Stok Giriş      / Alacak Cari
+//   Tahsilat       : Borç Kasa|Banka|POS  / Alacak Cari
+//   Ödeme          : Borç Cari|Banka|Gider/ Alacak Kasa|Banka|POS
+//   Cari Virman    : Borç Cari (hedef)    / Alacak Cari (kaynak)   ... vb.
+// Kasa/Gider/Çek portföyü gibi ayrı kaydı olmayan taraflar "sanal" taraftır (ana kayıttan doğar).
+// Faturanın Havale ile tahsilatı ayrı bir satır olarak yazılır (Borç Banka / Alacak Cari).
 //
-// • Numaralar tek sayaçtan (yıl + 6 hane) verilir, ASLA yeniden kullanılmaz. Uygulamadan
-//   silinen kaydın satırı defterden kalkmaz, DURUM=Silindi olur (silinme zamanıyla).
-// • Sipariş ve Teklif dışındaki her işlemde BEKLENEN karşı kayıtlar işlem anında hesaplanıp
-//   saklanır; eksik olan ana satırda "⚠ Eksik: ..." görünür. Sheet'ten elle silinen kayıtlar
-//   Kontrol ekranıyla yakalanır (defterde var, kaynakta yok).
+// • Numaralar tek sayaçtan (yıl + 6 hane) verilir, ASLA yeniden kullanılmaz. Uygulamadan silinen
+//   kaydın satırı defterden kalkmaz, DURUM=Silindi olur (silinme zamanıyla).
+// • Bir tarafın karşılığı olan gerçek kayıt (CariHareketler/StokHareketleri/Banka/POS/...) eksikse
+//   satırda "⚠ Eksik: ..." yazar. Sheet'ten elle silinen kayıtlar Kontrol ile yakalanır.
 // • Defter yazımı asıl işlemi ASLA engellemez (her yer try/catch).
 //
 // Canlı akış: handleRequest → kdToplayiciBaslat_() (karşı kayıt toplayıcısı açılır) → işlem →
-// kdIsle_() (Ana satır + toplanan karşı kayıtlar deftere yazılır). Toplayıcıya kayıt notunu
-// cariHareketEkle / stokHareketOtomatikYaz / banka-pos-kredi kartı hareketi fonksiyonları düşer.
+// kdIsle_() (satır(lar) deftere yazılır). Toplayıcıya kayıt notunu cariHareketEkle /
+// stokHareketOtomatikYaz / banka-pos-kredi kartı hareketi fonksiyonları düşer.
 // ════════════════════════════════════════════════════════════════════════════
 
-const KD_SHEET_ADI = "KayitDefteri";
-const KD_BASLIKLAR = ["KAYIT_NO","MODUL","KARSI_KAYIT","ISLEM","ROL","KAYNAK","KAYNAK_ID","ANA_KAYIT_NO","BELGE_NO","TARIH","CARI","TUTAR","YON","BEKLENEN","DURUM","KAYIT_ZAMANI","DEGISIKLIK_ZAMANI","SILINME_ZAMANI"];
-const KD_NO = 0, KD_MODUL = 1, KD_KARSI = 2, KD_ISLEM = 3, KD_ROL = 4, KD_KAYNAK = 5, KD_KID = 6, KD_ANA = 7,
-      KD_BELGE = 8, KD_TARIH = 9, KD_CARI = 10, KD_TUTAR = 11, KD_YON = 12, KD_BEKLENEN = 13, KD_DURUM = 14,
-      KD_KAYIT = 15, KD_DEGISIM = 16, KD_SILINME = 17;
-// Sütun biçimleri: numaralar sayı, tutar para, gerisi METİN (E-Tablo "00", tarih vb. metinleri bozmasın).
-const KD_FORMATLAR = ["0","@","@","@","@","@","@","0","@","@","@","#,##0.00","@","@","@","@","@","@"];
+const KD_SHEET_ADI = "KayitDefteriV2";
+const KD_BASLIKLAR = ["KAYIT_NO","MODUL","ISLEM","TARIH","BELGE_NO","CARI","BELGE_TUTARI","BORC_HESAP","BORC_TUTAR","ALACAK_HESAP","ALACAK_TUTAR",
+  "KONTROL","DURUM","KAYNAK","KAYNAK_ID","ALT","GRUP","BORC_KAYNAK","ALACAK_KAYNAK","BORC_BEKLENEN","ALACAK_BEKLENEN","KAYIT_ZAMANI","DEGISIKLIK_ZAMANI","SILINME_ZAMANI"];
+const KD_NO = 0, KD_MODUL = 1, KD_ISLEM = 2, KD_TARIH = 3, KD_BELGE = 4, KD_CARI = 5, KD_BTUTAR = 6, KD_BHESAP = 7, KD_BTL = 8, KD_AHESAP = 9, KD_ATL = 10,
+      KD_KONTROL = 11, KD_DURUM = 12, KD_KAYNAK = 13, KD_KID = 14, KD_ALT = 15, KD_GRUP = 16, KD_BKAYNAK = 17, KD_AKAYNAK = 18,
+      KD_BBEKLENEN = 19, KD_ABEKLENEN = 20, KD_KAYIT = 21, KD_DEGISIM = 22, KD_SILINME = 23;
+// Sütun biçimleri: numaralar sayı, tutarlar para, gerisi METİN (E-Tablo "00", tarih vb. metinleri bozmasın).
+const KD_FORMATLAR = ["0","@","@","@","@","@","#,##0.00","@","#,##0.00","@","#,##0.00","@","@","@","@","@","@","@","@","@","@","@","@","@"];
 
 // Ana kayıt kaynakları. sheet = SHEETS anahtarı, prefix = CariHareketler/Banka/POS açıklamasındaki "PREFIX:id |" işareti.
 const KD_KAYNAKLAR = {
@@ -45,7 +50,7 @@ const KD_STOK_BELGE_TIPLERI = ["Satış Faturası", "Alış Faturası", "Alış 
 // Uygulama aksiyonları → deftere nasıl işleneceği.
 //   tur "olustur": id sonuçtan/istekten alınır, karşı kayıtlar toplayıcıdan gelir
 //   tur "guncelle": karşı kayıtlar kaynak sayfalardan yeniden taranır
-//   tur "sil": ana kayıt + karşı kayıtları DURUM=Silindi yapılır
+//   tur "sil": kaydın satır(lar)ı DURUM=Silindi yapılır
 const KD_ACTIONLAR = {
   saveSatis:              { k: "satis", tur: "olustur",  id: (b, r) => r.id },
   siparistenFaturaOlustur:{ k: "satis", tur: "olustur",  id: (b, r) => r.faturaId },
@@ -103,10 +108,7 @@ function kdZamanSayisi_(v) {
   return 0;
 }
 
-function kdSheet_(ss) {
-  const sheet = getOrCreateSheet(ss, KD_SHEET_ADI, KD_BASLIKLAR);
-  return sheet;
-}
+function kdSheet_(ss) { return getOrCreateSheet(ss, KD_SHEET_ADI, KD_BASLIKLAR); }
 
 function kdTumSatirlar_(sheet) {
   const son = sheet.getLastRow();
@@ -135,9 +137,9 @@ function kdKilitli_(fn) {
 function kdNoAl_(sheet, adet) {
   const yil = kdYil_();
   const props = PropertiesService.getScriptProperties();
-  const anahtar = "KD_SAYAC_" + yil;
+  const anahtar = "KD2_SAYAC_" + yil;
   let son = parseInt(props.getProperty(anahtar) || "0", 10) || 0;
-  // Özellik kaybolsa/eskise bile numaralar geri düşmesin: sayfadaki son numarayla karşılaştır.
+  // Özellik kaybolsa/eskise bile numaralar geri düşmesin: sayfadaki en büyük numarayla karşılaştır.
   const sonSatir = sheet.getLastRow();
   if (sonSatir >= 2) {
     const sonNo = parseInt(sheet.getRange(sonSatir, 1).getValue(), 10) || 0;
@@ -147,57 +149,41 @@ function kdNoAl_(sheet, adet) {
   return yil * 1000000 + son + 1;
 }
 
-// ── Ana kayıt tanımı ──
-function kdBeklenenTurleri_(key, row, opts) {
-  opts = opts || {};
-  const b = [];
-  const ekle = (k, tip) => b.push(kdBacakTuru_(k, tip));
-  const cariId = String(row[2] || "").trim();
-  if (key === "satis") {
-    if (String(row[8] || "Fatura") === "Fatura") {
-      if (opts.cariIsle !== false && cariId) ekle("cari", "Borç");
-      if (opts.stokIsle !== false) ekle("stok", "Çıkış");
-      if (String(row[5] || "") === "Havale" && String(row[10] || "")) ekle("banka", "Giriş");
+// ── Bağlam: cari / banka / POS / kart adları (yalnız gerektiğinde okunur) ──
+function kdBaglam_(ss) {
+  const onbellek = {};
+  const yukle = (ad, sheetKey) => {
+    if (!onbellek[ad]) {
+      const m = {};
+      kdSayfaOku_(ss, SHEETS[sheetKey]).forEach(r => { m[String(r[0])] = String(r[2] || ""); });
+      onbellek[ad] = m;
     }
-  } else if (key === "alis") {
-    if (cariId) ekle("cari", "Alacak");
-    ekle("stok", "Giriş");
-  } else if (key === "alisiade") {
-    if (cariId) ekle("cari", "Borç");
-    ekle("stok", "Çıkış");
-  } else if (key === "satisiade") {
-    if (cariId) ekle("cari", "Alacak");
-    ekle("stok", "Giriş");
-  } else if (key === "tahsilat") {
-    ekle("cari", "Alacak");
-    const yontem = String(row[5] || "");
-    if (yontem === "Kredi Kartı" && String(row[8] || "")) ekle("pos", "Borç");
-    if (yontem === "Havale/EFT" && String(row[9] || "")) ekle("banka", "Giriş");
-  } else if (key === "odeme") {
-    const hedefTipi = String(row[10] || "") || (cariId ? "Cari" : "");
-    if (hedefTipi === "Cari") ekle("cari", "Borç");
-    const yontem = String(row[5] || "");
-    if (yontem === "Kredi Kartı" && String(row[8] || "")) ekle("pos", "Alacak");
-    if (yontem === "Havale/EFT" && String(row[9] || "")) ekle("banka", "Çıkış");
-    if (hedefTipi === "Banka" && String(row[12] || "")) {
-      if (String(row[11] || "") === "hesap") ekle("banka", "Giriş");
-      else if (String(row[11] || "") === "kart") ekle("kart", "Ödeme");
-    }
-  } else if (key === "virman") {
-    ekle("cari", "Borç"); ekle("cari", "Alacak");
-  } else if (key === "cek") {
-    ekle("cari", String(row[1] || "") === "Alınan" ? "Alacak" : "Borç");
-  } else if (key === "posaktarim") {
-    ekle("pos", "Alacak"); ekle("banka", "Giriş");
-  }
-  return b;
+    return onbellek[ad];
+  };
+  return {
+    cari: () => yukle("cari", "cariHesaplar"), banka: () => yukle("banka", "bankaHesaplari"),
+    pos: () => yukle("pos", "posCihazlari"), kart: () => yukle("kart", "krediKartlari"),
+  };
 }
 
-// Kaynak sayfa satırından deftere yazılacak ana kayıt tanımı.
-function kdAnaTanimla_(key, row, opts) {
+function kdSayfaOku_(ss, ad) {
+  const s = ss.getSheetByName(ad);
+  if (!s || s.getLastRow() < 2) return [];
+  const veri = s.getDataRange().getValues();
+  veri.shift();
+  return veri.filter(r => r[0]);
+}
+
+function kdIsaretAyir_(aciklama) {
+  const m = String(aciklama || "").match(/^([A-Z]+):(\S+) \|/);
+  return m ? { prefix: m[1], id: m[2] } : null;
+}
+
+// ── Ana kayıt tanımı ──
+function kdAnaTanimla_(key, row) {
   const kk = KD_KAYNAKLAR[key];
   const id = String(row[0]);
-  const t = { key: key, id: id, kaynak: SHEETS[kk.sheet], modul: kk.modul, belge: "", yon: "" };
+  const t = { key: key, id: id, kaynak: SHEETS[kk.sheet], modul: kk.modul, belge: "", cariTek: true, grup: "" };
   if (key === "satis") {
     const bt = String(row[8] || "Fatura");
     t.islem = "Satış " + (bt === "Fatura" ? "Faturası" : bt === "Sipariş" ? "Siparişi" : "Teklifi");
@@ -212,7 +198,7 @@ function kdAnaTanimla_(key, row, opts) {
     t.islem = (key === "tahsilat" ? "Tahsilat" : "Ödeme") + " (" + (kdMetin_(row[5]) || "—") + ")";
     t.tarih = kdMetin_(row[1]); t.cari = kdMetin_(row[3]) || (key === "odeme" ? kdMetin_(row[13]) : ""); t.tutar = kdSayi_(row[4]); t.kayit = row[7];
   } else if (key === "virman") {
-    t.islem = "Cari Virman"; t.tarih = kdMetin_(row[1]);
+    t.islem = "Cari Virman"; t.tarih = kdMetin_(row[1]); t.cariTek = false;
     t.cari = kdMetin_(row[3]) + " → " + kdMetin_(row[5]); t.tutar = kdSayi_(row[6]); t.kayit = row[8];
   } else if (key === "cek") {
     t.islem = kdMetin_(row[1]) + " " + (kdMetin_(row[15]) === "Senet" ? "Senet" : "Çek");
@@ -221,41 +207,28 @@ function kdAnaTanimla_(key, row, opts) {
   } else if (key === "posaktarim") {
     t.islem = "POS → Banka Aktarımı"; t.tarih = kdMetin_(row[3]); t.cari = ""; t.tutar = kdSayi_(row[4]); t.kayit = row[6];
   }
-  t.beklenen = kdBeklenenTurleri_(key, row, opts);
   return t;
 }
 
 // ── Karşı kayıt indeksleri (kaynak sayfalardan) ──
-function kdSayfaOku_(ss, ad) {
-  const s = ss.getSheetByName(ad);
-  if (!s || s.getLastRow() < 2) return [];
-  const veri = s.getDataRange().getValues();
-  veri.shift();
-  return veri.filter(r => r[0]);
-}
-
-function kdIsaretAyir_(aciklama) {
-  const m = String(aciklama || "").match(/^([A-Z]+):(\S+) \|/);
-  return m ? { prefix: m[1], id: m[2] } : null;
-}
-
-// gerekli: {cari, stok, banka, pos, kart}. Dönen indeks: her tür için {isaretli: {"PREFIX:id":[bacak]}, hepsi:[{bacak, isaret}]}
+// gerekli: {cari, stok, banka, pos, kart}. Dönen indeks: her tür için {isaretli: {"PREFIX:id":[bacak]}, hepsi:[{b, is}]}
 function kdBacakIndeksi_(ss, gerekli) {
   const idx = { cari: null, stok: null, banka: null, pos: null, kart: null };
-  const hareketOku = (k, sheetAdi, kolonlar) => {
+  const hareketOku = (k, sheetAdi) => {
     const isaretli = {}, hepsi = [];
     kdSayfaOku_(ss, sheetAdi).forEach(r => {
-      const b = { k: k, tip: kdMetin_(r[kolonlar.tip]), kaynak: sheetAdi, kid: String(r[0]), tutar: kdSayi_(r[kolonlar.tutar]), tarih: kdMetin_(r[kolonlar.tarih]), ek: kolonlar.ek === undefined ? "" : kdMetin_(r[kolonlar.ek]), aciklama: kdMetin_(r[kolonlar.aciklama]), kayit: kdMetin_(r[6]) };
-      const is = kdIsaretAyir_(b.aciklama);
+      const is = kdIsaretAyir_(r[5]);
+      const b = { k: k, tip: kdMetin_(r[3]), kaynak: sheetAdi, kid: String(r[0]), tutar: kdSayi_(r[4]), tarih: kdMetin_(r[2]), ek: kdMetin_(r[1]),
+                  aciklama: kdMetin_(r[5]), kayit: kdMetin_(r[6]), prefix: is ? is.prefix : "" };
       hepsi.push({ b: b, is: is });
       if (is) { const a = is.prefix + ":" + is.id; (isaretli[a] = isaretli[a] || []).push(b); }
     });
     return { isaretli: isaretli, hepsi: hepsi };
   };
-  if (gerekli.cari) idx.cari = hareketOku("cari", SHEETS.cariHareketler, { tip: 3, tutar: 4, tarih: 2, ek: 1, aciklama: 5 });
-  if (gerekli.banka) idx.banka = hareketOku("banka", SHEETS.bankaHesapHareketleri, { tip: 3, tutar: 4, tarih: 2, ek: 1, aciklama: 5 });
-  if (gerekli.pos) idx.pos = hareketOku("pos", SHEETS.posHareketleri, { tip: 3, tutar: 4, tarih: 2, ek: 1, aciklama: 5 });
-  if (gerekli.kart) idx.kart = hareketOku("kart", SHEETS.krediKartHareketleri, { tip: 3, tutar: 4, tarih: 2, ek: 1, aciklama: 5 });
+  if (gerekli.cari) idx.cari = hareketOku("cari", SHEETS.cariHareketler);
+  if (gerekli.banka) idx.banka = hareketOku("banka", SHEETS.bankaHesapHareketleri);
+  if (gerekli.pos) idx.pos = hareketOku("pos", SHEETS.posHareketleri);
+  if (gerekli.kart) idx.kart = hareketOku("kart", SHEETS.krediKartHareketleri);
   if (gerekli.stok) {
     const gruplu = {}, hepsi = [];
     kdSayfaOku_(ss, SHEETS.stokHareketleri).forEach(r => {
@@ -265,7 +238,7 @@ function kdBacakIndeksi_(ss, gerekli) {
       const anahtar = belgeNo + "|" + tip;
       let g = gruplu[anahtar];
       if (!g) {
-        g = { k: "stok", tip: tip, kaynak: SHEETS.stokHareketleri, kid: belgeNo, tutar: 0, tarih: kdMetin_(r[1]), ek: "", adet: 0, belgeTipi: kdMetin_(r[10]), kayit: kdMetin_(r[9]) };
+        g = { k: "stok", tip: tip, kaynak: SHEETS.stokHareketleri, kid: belgeNo, tutar: 0, tarih: kdMetin_(r[1]), ek: "", adet: 0, belgeTipi: kdMetin_(r[10]), kayit: kdMetin_(r[9]), prefix: "" };
         gruplu[anahtar] = g; hepsi.push(g);
       }
       g.tutar += kdSayi_(r[7]) * kdSayi_(r[12]); g.adet++;
@@ -295,43 +268,139 @@ function kdBacaklariBul_(idx, key, id) {
   return sonuc;
 }
 
-// ── Satır kurucular ──
-function kdKarsiMetni_(bacaklar, beklenen) {
-  const parcalar = bacaklar.map(b => b.tur + " (" + b.no + ")");
-  const eksik = beklenen.filter(t => !bacaklar.some(b => b.tur === t));
-  if (!bacaklar.length && !beklenen.length) return "— (karşı kayıt gerekmez)";
-  let metin = parcalar.join(" · ");
-  if (eksik.length) metin += (metin ? " · " : "") + "⚠ Eksik: " + eksik.join(", ");
-  return metin;
+// ── Taraf (Borç/Alacak) kuralları ──
+// Bir karşı kayıt hangi tarafa yazılır? (kasa/banka/POS/stok girişi = BORÇ, çıkışı = ALACAK)
+function kdBacakTarafi_(b) {
+  if (b.k === "stok" || b.k === "banka") return b.tip === "Giriş" ? "borc" : "alacak";
+  if (b.k === "kart") return b.tip === "Ödeme" ? "borc" : "alacak";
+  return b.tip === "Borç" ? "borc" : "alacak"; // cari, pos
 }
 
-function kdAnaSatiri_(no, t, karsiMetni, kayitZamani) {
-  const satir = new Array(KD_BASLIKLAR.length).fill("");
-  satir[KD_NO] = no; satir[KD_MODUL] = t.modul; satir[KD_KARSI] = karsiMetni; satir[KD_ISLEM] = t.islem;
-  satir[KD_ROL] = "Ana"; satir[KD_KAYNAK] = t.kaynak; satir[KD_KID] = t.id; satir[KD_ANA] = "";
-  satir[KD_BELGE] = t.belge || ""; satir[KD_TARIH] = t.tarih || ""; satir[KD_CARI] = t.cari || ""; satir[KD_TUTAR] = t.tutar || 0;
-  satir[KD_YON] = t.yon || ""; satir[KD_BEKLENEN] = (t.beklenen || []).join("|"); satir[KD_DURUM] = "Aktif";
-  satir[KD_KAYIT] = kayitZamani; satir[KD_DEGISIM] = ""; satir[KD_SILINME] = "";
-  return satir;
+// Bir işlem türünün satır(lar)ının taraf şartnamesi. Dönen: [{alt, grup?, islemEk?, borc?, alacak?}]
+// taraf şartnamesi: {k, tip} = gerçek kayıt ŞART, {sanal: "Kasa"} = ayrı kaydı olmayan taraf, {bacak} = hazır kayıt
+function kdSpecler_(key, row, opts, legs) {
+  const cariId = String(row[2] || "").trim();
+  const S = (k, tip) => ({ k: k, tip: tip });
+  const V = (ad) => ({ sanal: ad });
+  const e = [];
+  if (key === "satis") {
+    const bt = String(row[8] || "Fatura");
+    if (bt !== "Fatura") return [{ alt: "", grup: bt === "Sipariş" ? "Sipariş" : "Teklif" }];
+    e.push({ alt: "", borc: (opts.cariIsle !== false && cariId) ? S("cari", "Borç") : null, alacak: opts.stokIsle !== false ? S("stok", "Çıkış") : null });
+    if (String(row[5] || "") === "Havale" && String(row[10] || "")) {
+      e.push({ alt: "odeme", islemEk: " — Havale ile tahsilat", borc: S("banka", "Giriş"), alacak: cariId ? S("cari", "Alacak") : V("Peşin Müşteri") });
+    }
+  } else if (key === "alis") {
+    e.push({ alt: "", borc: S("stok", "Giriş"), alacak: cariId ? S("cari", "Alacak") : null });
+  } else if (key === "alisiade") {
+    e.push({ alt: "", borc: cariId ? S("cari", "Borç") : null, alacak: S("stok", "Çıkış") });
+  } else if (key === "satisiade") {
+    e.push({ alt: "", borc: S("stok", "Giriş"), alacak: cariId ? S("cari", "Alacak") : null });
+  } else if (key === "tahsilat") {
+    const yontem = String(row[5] || "");
+    const borc = yontem === "Kredi Kartı" ? (String(row[8] || "") ? S("pos", "Borç") : V("POS"))
+               : yontem === "Havale/EFT" ? (String(row[9] || "") ? S("banka", "Giriş") : V("Banka")) : V("Kasa");
+    e.push({ alt: "", borc: borc, alacak: S("cari", "Alacak") });
+  } else if (key === "odeme") {
+    const yontem = String(row[5] || "");
+    const alacak = yontem === "Kredi Kartı" ? (String(row[8] || "") ? S("pos", "Alacak") : V("POS"))
+                 : yontem === "Havale/EFT" ? (String(row[9] || "") ? S("banka", "Çıkış") : V("Banka")) : V("Kasa");
+    const hedefTipi = String(row[10] || "") || (cariId ? "Cari" : "");
+    let borc;
+    if (hedefTipi === "Cari") borc = S("cari", "Borç");
+    else if (hedefTipi === "Banka") {
+      const alt = String(row[11] || "");
+      borc = (alt === "hesap" && String(row[12] || "")) ? S("banka", "Giriş") : (alt === "kart" && String(row[12] || "")) ? S("kart", "Ödeme") : V("Banka");
+    } else if (hedefTipi === "Gider") borc = V("Gider: " + kdMetin_(row[13]));
+    else borc = cariId ? S("cari", "Borç") : V(hedefTipi || "Hedef");
+    e.push({ alt: "", borc: borc, alacak: alacak });
+  } else if (key === "virman") {
+    e.push({ alt: "", borc: S("cari", "Borç"), alacak: S("cari", "Alacak") });
+  } else if (key === "cek") {
+    if (String(row[1] || "") === "Alınan") e.push({ alt: "", borc: V("Çek/Senet Portföyü"), alacak: S("cari", "Alacak") });
+    else e.push({ alt: "", borc: S("cari", "Borç"), alacak: V("Çek/Senet (Verilen)") });
+    // Ciro edilen çek: her ciro cari hareketi ayrı satır
+    (legs || []).filter(b => b.k === "cari" && b.prefix === "CEKCIRO").forEach(b => {
+      const borcTaraf = kdBacakTarafi_(b) === "borc";
+      e.push({ alt: "ciro:" + b.kid, islemEk: " — Ciro", borc: borcTaraf ? { bacak: b } : V("Çek/Senet Portföyü"), alacak: borcTaraf ? V("Çek/Senet Portföyü") : { bacak: b } });
+    });
+  } else if (key === "posaktarim") {
+    e.push({ alt: "", borc: S("banka", "Giriş"), alacak: S("pos", "Alacak") });
+  }
+  return e;
 }
 
-function kdBacakSatiri_(no, anaNo, t, b, kayitZamani) {
-  const satir = new Array(KD_BASLIKLAR.length).fill("");
-  const tur = kdBacakTuru_(b.k, b.tip);
-  satir[KD_NO] = no; satir[KD_MODUL] = KD_BACAK_MODUL[b.k];
-  satir[KD_KARSI] = "Ana: " + t.islem + " (" + anaNo + ")";
-  satir[KD_ISLEM] = tur; satir[KD_ROL] = "Karşı"; satir[KD_KAYNAK] = b.kaynak; satir[KD_KID] = b.kid; satir[KD_ANA] = anaNo;
-  satir[KD_BELGE] = t.belge || ""; satir[KD_TARIH] = b.tarih || t.tarih || ""; satir[KD_CARI] = t.cari || "";
-  satir[KD_TUTAR] = b.tutar || 0; satir[KD_YON] = b.tip; satir[KD_BEKLENEN] = ""; satir[KD_DURUM] = "Aktif";
-  satir[KD_KAYIT] = kayitZamani; satir[KD_DEGISIM] = ""; satir[KD_SILINME] = "";
-  return satir;
+function kdHesapAdi_(b, t, ctx) {
+  if (b.k === "cari") return "Cari: " + (t.cariTek && t.cari ? t.cari : (ctx.cari()[b.ek] || t.cari || ""));
+  if (b.k === "stok") return "Stok " + b.tip;
+  if (b.k === "banka") return "Banka: " + (ctx.banka()[b.ek] || "Hesap");
+  if (b.k === "pos") return "POS: " + (ctx.pos()[b.ek] || "POS");
+  return "Kredi Kartı: " + (ctx.kart()[b.ek] || "Kart");
 }
 
-// Bir ana kayıt + karşı kayıtları için ardışık satırlar (no0'dan başlar).
-function kdGrupSatirlari_(no0, t, bacaklar, kayitZamani) {
-  const bac = bacaklar.map((b, i) => ({ b: b, no: no0 + 1 + i, tur: kdBacakTuru_(b.k, b.tip) }));
-  const ana = kdAnaSatiri_(no0, t, kdKarsiMetni_(bac, t.beklenen), kayitZamani);
-  return [ana].concat(bac.map(x => kdBacakSatiri_(x.no, no0, t, x.b, kayitZamani)));
+// Bir tarafı kurar: {ad, tutar, kaynak, tur, eksik?, sanal?}
+function kdTarafKur_(spec, legs, kul, t, ctx) {
+  if (!spec) return null;
+  if (spec.sanal) return { ad: spec.sanal, tutar: t.tutar, kaynak: "-", tur: "", sanal: true };
+  let b = spec.bacak || null;
+  if (!b) {
+    const i = legs.findIndex((x, j) => !kul.has(j) && x.k === spec.k && x.tip === spec.tip);
+    if (i >= 0) { kul.add(i); b = legs[i]; }
+  }
+  const tur = spec.bacak ? "" : kdBacakTuru_(spec.k, spec.tip);
+  if (!b) return { ad: "", tutar: 0, kaynak: "", tur: tur, eksik: true };
+  return { ad: kdHesapAdi_(b, t, ctx), tutar: b.tutar, kaynak: b.kaynak + "|" + b.kid, tur: spec.bacak ? "" : tur };
+}
+
+function kdKontrolMetni_(g) {
+  if (g.grup === "Sipariş" || g.grup === "Teklif") return "—";
+  if (g.grup === "Manuel") return "— (manuel giriş, tek taraflı)";
+  if (g.grup === "Yetim") return "⚠ Ana kayıt bulunamadı";
+  const eksik = [];
+  [g.borc, g.alacak].forEach(x => { if (x && x.eksik) eksik.push(x.tur); });
+  if (eksik.length) return "⚠ Eksik: " + eksik.join(", ");
+  if (!g.borc && !g.alacak) return "— (cari/stok işlenmedi)";
+  if (!g.borc || !g.alacak) return "⚠ Tek taraflı (" + (g.borc ? "alacak" : "borç") + " tarafı işlenmedi)";
+  if (g.borc && g.alacak && !/^Stok/.test(g.borc.ad) && !/^Stok/.test(g.alacak.ad) && Math.abs(g.borc.tutar - g.alacak.tutar) > 0.05) return "⚠ Tutar farkı";
+  return "✓";
+}
+
+// Ana kayıt + karşı kayıtlar + kurallardan defter girişleri (satırları) üretir.
+function kdGirisleriKur_(key, row, legs, opts, t, ctx) {
+  const kul = new Set();
+  return kdSpecler_(key, row, opts || {}, legs).map(spec => {
+    const g = { alt: spec.alt, grup: spec.grup || t.grup || "", modul: t.modul, islem: t.islem + (spec.islemEk || ""), tarih: t.tarih, belge: t.belge, cari: t.cari, belgeTutari: t.tutar,
+                kaynak: t.kaynak, kid: t.id, kayit: t.kayit };
+    g.borc = kdTarafKur_(spec.borc, legs, kul, t, ctx);
+    g.alacak = kdTarafKur_(spec.alacak, legs, kul, t, ctx);
+    g.kontrol = kdKontrolMetni_(g);
+    return g;
+  });
+}
+
+// Manuel cari hareketi (işaretsiz) veya sahipsiz (ana kaydı olmayan) hareket → tek taraflı giriş.
+function kdTekBacakGirisi_(b, modulAdi, islem, grup, cariAd, ctx) {
+  const t = { modul: modulAdi, cari: cariAd, cariTek: true, tutar: b.tutar };
+  const g = { alt: "", grup: grup, modul: modulAdi, islem: islem, tarih: b.tarih, belge: "", cari: cariAd, belgeTutari: b.tutar, kaynak: b.kaynak, kid: b.kid, kayit: b.kayit, borc: null, alacak: null };
+  const taraf = { ad: kdHesapAdi_(b, t, ctx), tutar: b.tutar, kaynak: b.kaynak + "|" + b.kid, tur: "" };
+  if (kdBacakTarafi_(b) === "borc") g.borc = taraf; else g.alacak = taraf;
+  g.kontrol = kdKontrolMetni_(g);
+  return g;
+}
+
+// ── Satır kurucu ──
+function kdSatiri_(no, g, kayitZamani) {
+  const s = new Array(KD_BASLIKLAR.length).fill("");
+  s[KD_NO] = no; s[KD_MODUL] = g.modul; s[KD_ISLEM] = g.islem; s[KD_TARIH] = g.tarih || ""; s[KD_BELGE] = g.belge || ""; s[KD_CARI] = g.cari || "";
+  s[KD_BTUTAR] = g.belgeTutari || 0;
+  const taraf = (x) => x ? (x.eksik ? "⚠ " + x.tur + " YOK" : x.ad) : "";
+  s[KD_BHESAP] = taraf(g.borc); s[KD_BTL] = g.borc && !g.borc.eksik ? g.borc.tutar : "";
+  s[KD_AHESAP] = taraf(g.alacak); s[KD_ATL] = g.alacak && !g.alacak.eksik ? g.alacak.tutar : "";
+  s[KD_KONTROL] = g.kontrol; s[KD_DURUM] = "Aktif"; s[KD_KAYNAK] = g.kaynak; s[KD_KID] = g.kid; s[KD_ALT] = g.alt || ""; s[KD_GRUP] = g.grup || "";
+  s[KD_BKAYNAK] = g.borc ? g.borc.kaynak : ""; s[KD_AKAYNAK] = g.alacak ? g.alacak.kaynak : "";
+  s[KD_BBEKLENEN] = g.borc && g.borc.tur ? g.borc.tur : ""; s[KD_ABEKLENEN] = g.alacak && g.alacak.tur ? g.alacak.tur : "";
+  s[KD_KAYIT] = kayitZamani; s[KD_DEGISIM] = ""; s[KD_SILINME] = "";
+  return s;
 }
 
 // ── CANLI AKIŞ ──
@@ -345,127 +414,99 @@ function kdKaynakSatiriBul_(ss, key, id) {
   return null;
 }
 
-// Ledger'da (Ana, kaynak, id) satırının dizini; yoksa -1.
-function kdAnaIndeksi_(satirlar, kaynakAdi, id) {
-  for (let i = 0; i < satirlar.length; i++) {
-    const r = satirlar[i];
-    if (r[KD_ROL] === "Ana" && String(r[KD_KAYNAK]) === String(kaynakAdi) && String(r[KD_KID]) === String(id)) return i;
-  }
-  return -1;
+function kdGirisAnahtari_(kaynak, kid, alt) { return String(kaynak) + "|" + String(kid) + "|" + String(alt || ""); }
+
+// Bir ana kaydın defter satırlarını (giriş listesi) deftere işler: yoksa oluşturur, varsa yerinde günceller,
+// artık üretilmeyen girişleri Silindi yapar.
+function kdGirisleriYaz_(ss, sheet, kaynak, kid, girisler) {
+  kdKilitli_(() => {
+    const satirlar = kdTumSatirlar_(sheet);
+    const simdi = kdSimdi_();
+    const mevcut = {};
+    satirlar.forEach((r, i) => { if (String(r[KD_KAYNAK]) === String(kaynak) && String(r[KD_KID]) === String(kid) && r[KD_DURUM] === "Aktif") mevcut[String(r[KD_ALT] || "")] = i; });
+    const yeniler = girisler.filter(g => mevcut[g.alt || ""] === undefined);
+    const no0 = yeniler.length ? kdNoAl_(sheet, yeniler.length) : 0;
+    const uretilen = {};
+    girisler.forEach(g => {
+      uretilen[g.alt || ""] = true;
+      const i = mevcut[g.alt || ""];
+      if (i !== undefined) {
+        const s = kdSatiri_(Number(satirlar[i][KD_NO]), g, satirlar[i][KD_KAYIT]);
+        s[KD_DEGISIM] = simdi;
+        kdSatirlariYaz_(sheet, i + 2, [s]);
+      }
+    });
+    Object.keys(mevcut).forEach(alt => {
+      if (uretilen[alt]) return;
+      const i = mevcut[alt];
+      const s = satirlar[i].slice(); s[KD_DURUM] = "Silindi"; s[KD_SILINME] = simdi; s[KD_DEGISIM] = simdi;
+      kdSatirlariYaz_(sheet, i + 2, [s]);
+    });
+    if (yeniler.length) kdSatirlariYaz_(sheet, sheet.getLastRow() + 1, yeniler.map((g, j) => kdSatiri_(no0 + j, g, simdi)));
+  });
 }
 
-// Ana kayıt + karşı kayıtlarını deftere işler (yoksa oluşturur, varsa karşı kayıtları eşleştirir).
 function kdGrupSenkronla_(ss, key, id, bacaklar, opts) {
   const row = kdKaynakSatiriBul_(ss, key, id);
   if (!row) return { atlandi: "kaynak bulunamadı" };
-  const t = kdAnaTanimla_(key, row, opts);
-  const sheet = kdSheet_(ss);
-  kdKilitli_(() => {
-    const satirlar = kdTumSatirlar_(sheet);
-    const anaIdx = kdAnaIndeksi_(satirlar, t.kaynak, id);
-    const simdi = kdSimdi_();
-    if (anaIdx < 0) {
-      const no0 = kdNoAl_(sheet, 1 + bacaklar.length);
-      kdSatirlariYaz_(sheet, sheet.getLastRow() + 1, kdGrupSatirlari_(no0, t, bacaklar, simdi));
-      return;
-    }
-    // Var olan ana kayıt: karşı kayıtları eşleştir
-    const anaNo = Number(satirlar[anaIdx][KD_NO]);
-    const mevcut = [];
-    satirlar.forEach((r, i) => { if (Number(r[KD_ANA]) === anaNo && r[KD_DURUM] === "Aktif") mevcut.push({ r: r, i: i, eslesti: false }); });
-    const yeniler = bacaklar.slice();
-    const eslesenler = [];
-    mevcut.forEach(e => {
-      const j = yeniler.findIndex(b => b.kaynak === String(e.r[KD_KAYNAK]) && String(b.kid) === String(e.r[KD_KID]));
-      if (j >= 0) { e.eslesti = true; eslesenler.push({ e: e, b: yeniler[j] }); yeniler.splice(j, 1); }
-    });
-    mevcut.filter(e => !e.eslesti).forEach(e => {
-      const j = yeniler.findIndex(b => kdBacakTuru_(b.k, b.tip) === String(e.r[KD_ISLEM]));
-      if (j >= 0) { e.eslesti = true; eslesenler.push({ e: e, b: yeniler[j] }); yeniler.splice(j, 1); }
-    });
-    const silinecek = mevcut.filter(e => !e.eslesti);
-    // yeni karşı kayıtlar için numara ayır ve ekle
-    const bacakNolari = []; // {tur,no}
-    eslesenler.forEach(x => bacakNolari.push({ tur: String(x.e.r[KD_ISLEM]), no: Number(x.e.r[KD_NO]) }));
-    let yeniNo0 = 0;
-    if (yeniler.length) yeniNo0 = kdNoAl_(sheet, yeniler.length);
-    yeniler.forEach((b, i) => bacakNolari.push({ tur: kdBacakTuru_(b.k, b.tip), no: yeniNo0 + i }));
-    // eşleşen karşı kayıtları yerinde güncelle
-    eslesenler.forEach(x => {
-      const s = kdBacakSatiri_(Number(x.e.r[KD_NO]), anaNo, t, x.b, x.e.r[KD_KAYIT]);
-      s[KD_DEGISIM] = simdi;
-      kdSatirlariYaz_(sheet, x.e.i + 2, [s]);
-    });
-    // silinen karşı kayıtlar
-    silinecek.forEach(e => {
-      const s = e.r.slice(); s[KD_DURUM] = "Silindi"; s[KD_SILINME] = simdi; s[KD_DEGISIM] = simdi;
-      kdSatirlariYaz_(sheet, e.i + 2, [s]);
-    });
-    // ana satırı güncelle
-    const ana = kdAnaSatiri_(anaNo, t, kdKarsiMetni_(bacakNolari, t.beklenen), satirlar[anaIdx][KD_KAYIT]);
-    ana[KD_DEGISIM] = simdi;
-    kdSatirlariYaz_(sheet, anaIdx + 2, [ana]);
-    if (yeniler.length) {
-      kdSatirlariYaz_(sheet, sheet.getLastRow() + 1, yeniler.map((b, i) => kdBacakSatiri_(yeniNo0 + i, anaNo, t, b, simdi)));
-    }
-  });
+  const t = kdAnaTanimla_(key, row);
+  const girisler = kdGirisleriKur_(key, row, bacaklar, opts, t, kdBaglam_(ss));
+  kdGirisleriYaz_(ss, kdSheet_(ss), t.kaynak, t.id, girisler);
   return { ok: true };
 }
 
-// Kaynak kaydı (ve varsa karşı kayıtlarını) DURUM=Silindi yapar. anaSilinirseKarsilarDa: ana silinince bağlı satırlar da.
+// Kaynak kaydın tüm satırlarını DURUM=Silindi yapar.
 function kdSilindiIsaretle_(ss, kaynakAdi, id) {
   const sheet = kdSheet_(ss);
   kdKilitli_(() => {
     const satirlar = kdTumSatirlar_(sheet);
     const simdi = kdSimdi_();
-    const hedefler = new Set();
     satirlar.forEach((r, i) => {
       if (String(r[KD_KAYNAK]) === String(kaynakAdi) && String(r[KD_KID]) === String(id) && r[KD_DURUM] === "Aktif") {
-        hedefler.add(i);
-        if (r[KD_ROL] === "Ana") {
-          const anaNo = Number(r[KD_NO]);
-          satirlar.forEach((r2, j) => { if (Number(r2[KD_ANA]) === anaNo && r2[KD_DURUM] === "Aktif") hedefler.add(j); });
-        }
+        const s = r.slice(); s[KD_DURUM] = "Silindi"; s[KD_SILINME] = simdi; s[KD_DEGISIM] = simdi;
+        kdSatirlariYaz_(sheet, i + 2, [s]);
       }
     });
-    hedefler.forEach(i => {
-      const s = satirlar[i].slice(); s[KD_DURUM] = "Silindi"; s[KD_SILINME] = simdi; s[KD_DEGISIM] = simdi;
+  });
+}
+
+// Uygulamadan bir Cari hareketi silinince: kendisi ana satırsa Silindi olur; başka bir işlemin tarafıysa o satır
+// "⚠ Eksik" olarak işaretlenir (taraf kaynağı artık yok).
+function kdCariHareketiSilindi_(ss, id) {
+  kdSilindiIsaretle_(ss, SHEETS.cariHareketler, id);
+  const sheet = kdSheet_(ss);
+  const anahtar = SHEETS.cariHareketler + "|" + id;
+  kdKilitli_(() => {
+    const satirlar = kdTumSatirlar_(sheet);
+    const simdi = kdSimdi_();
+    satirlar.forEach((r, i) => {
+      if (r[KD_DURUM] !== "Aktif") return;
+      const borcta = String(r[KD_BKAYNAK]) === anahtar, alacakta = String(r[KD_AKAYNAK]) === anahtar;
+      if (!borcta && !alacakta) return;
+      const s = r.slice();
+      const tur = borcta ? (s[KD_BBEKLENEN] || "Cari Borç") : (s[KD_ABEKLENEN] || "Cari Alacak");
+      if (borcta) { s[KD_BHESAP] = "⚠ " + tur + " YOK"; s[KD_BTL] = ""; s[KD_BKAYNAK] = ""; s[KD_BBEKLENEN] = tur; }
+      else { s[KD_AHESAP] = "⚠ " + tur + " YOK"; s[KD_ATL] = ""; s[KD_AKAYNAK] = ""; s[KD_ABEKLENEN] = tur; }
+      s[KD_KONTROL] = "⚠ Eksik: " + tur; s[KD_DEGISIM] = simdi;
       kdSatirlariYaz_(sheet, i + 2, [s]);
     });
   });
 }
 
-// Manuel Cari hareketi (işaretsiz) — tek satırlık ana kayıt.
 function kdManuelCariHareketi_(ss, id) {
   const sheet = ss.getSheetByName(SHEETS.cariHareketler);
   if (!sheet || sheet.getLastRow() < 2) return;
   const veri = sheet.getDataRange().getValues();
   let r = null;
   for (let i = 1; i < veri.length; i++) if (String(veri[i][0]) === String(id)) { r = veri[i]; break; }
-  if (!r) return;
-  if (kdIsaretAyir_(r[5])) return; // işaretliyse başka bir ana kaydın karşı kaydı
-  const t = kdManuelCariTanimi_(r, cariAdiBul_(ss, String(r[1])));
+  if (!r || kdIsaretAyir_(r[5])) return; // işaretliyse başka bir işlemin karşı kaydı
+  const ctx = kdBaglam_(ss);
+  const b = { k: "cari", tip: kdMetin_(r[3]), kaynak: SHEETS.cariHareketler, kid: String(r[0]), tutar: kdSayi_(r[4]), tarih: kdMetin_(r[2]), ek: kdMetin_(r[1]), kayit: r[6], prefix: "" };
+  const g = kdTekBacakGirisi_(b, "Cari", "Cari Hareket (Manuel) — " + b.tip, "Manuel", ctx.cari()[b.ek] || "", ctx);
   const defter = kdSheet_(ss);
-  kdKilitli_(() => {
-    const satirlar = kdTumSatirlar_(defter);
-    if (kdAnaIndeksi_(satirlar, t.kaynak, t.id) >= 0) return;
-    const no0 = kdNoAl_(defter, 1);
-    kdSatirlariYaz_(defter, defter.getLastRow() + 1, kdGrupSatirlari_(no0, t, [], kdSimdi_()));
-  });
-}
-
-function cariAdiBul_(ss, cariId) {
-  const s = ss.getSheetByName(SHEETS.cariHesaplar);
-  if (!s || s.getLastRow() < 2) return "";
-  const v = s.getRange(2, 1, s.getLastRow() - 1, 3).getValues();
-  for (let i = 0; i < v.length; i++) if (String(v[i][0]) === String(cariId)) return String(v[i][2] || "");
-  return "";
-}
-
-function kdManuelCariTanimi_(r, cariAd) {
-  return { key: "cariHareket", id: String(r[0]), kaynak: SHEETS.cariHareketler, modul: "Cari",
-    islem: "Cari Hareket (Manuel) — " + kdMetin_(r[3]), tarih: kdMetin_(r[2]), cari: cariAd, tutar: kdSayi_(r[4]),
-    belge: "", yon: kdMetin_(r[3]), beklenen: [], kayit: r[6] };
+  const satirlar = kdTumSatirlar_(defter);
+  if (satirlar.some(x => String(x[KD_KAYNAK]) === b.kaynak && String(x[KD_KID]) === b.kid && x[KD_DURUM] === "Aktif")) return;
+  kdGirisleriYaz_(ss, defter, b.kaynak, b.kid, [g]);
 }
 
 // silinenGeriAl: geri yüklenen kaydın türünü SilinenIslemler'den öğren.
@@ -488,7 +529,7 @@ function kdIsle_(action, body, result, bacaklar) {
   let key = meta.k;
   if (key === "geriAl") { key = kdGeriAlAnahtari_(ss, body); if (!key) return; }
   if (key === "cariHareket") {
-    if (meta.tur === "sil") kdSilindiIsaretle_(ss, SHEETS.cariHareketler, id);
+    if (meta.tur === "sil") kdCariHareketiSilindi_(ss, id);
     else kdManuelCariHareketi_(ss, id);
     return;
   }
@@ -500,22 +541,20 @@ function kdIsle_(action, body, result, bacaklar) {
   if (meta.tur === "guncelle") {
     legs = kdBacaklariBul_(kdBacakIndeksi_(ss, kdGerekliIndeksler_(key)), key, id);
   } else {
-    // toplayıcıdan gelen karşı kayıtlar: aynı (tür,kaynak,kid) tekrarlarını ele
     const gorulen = {};
     legs = legs.filter(b => { const a = b.k + "|" + b.tip + "|" + b.kaynak + "|" + b.kid; if (gorulen[a]) return false; gorulen[a] = 1; return true; });
   }
   kdGrupSenkronla_(ss, key, id, legs, opts);
 }
 
-// Toplu "tumAlislariSilVeSifirla" gibi işlemlerden sonra: kaynağı artık olmayan Aktif ana kayıtları Silindi yap.
+// Toplu "tumAlislariSilVeSifirla" gibi işlemlerden sonra: kaynağı artık olmayan Aktif ana satırları Silindi yap.
 function kdKaynagiOlmayanlariSilindiYap_(ss, key) {
-  const kk = KD_KAYNAKLAR[key];
-  const kaynakAdi = SHEETS[kk.sheet];
+  const kaynakAdi = SHEETS[KD_KAYNAKLAR[key].sheet];
   const mevcutId = new Set(kdSayfaOku_(ss, kaynakAdi).map(r => String(r[0])));
   const sheet = kdSheet_(ss);
-  const silinecekler = [];
-  kdTumSatirlar_(sheet).forEach(r => { if (r[KD_ROL] === "Ana" && r[KD_DURUM] === "Aktif" && String(r[KD_KAYNAK]) === kaynakAdi && !mevcutId.has(String(r[KD_KID]))) silinecekler.push(String(r[KD_KID])); });
-  silinecekler.forEach(id => kdSilindiIsaretle_(ss, kaynakAdi, id));
+  const silinecekler = {};
+  kdTumSatirlar_(sheet).forEach(r => { if (r[KD_DURUM] === "Aktif" && String(r[KD_KAYNAK]) === kaynakAdi && !mevcutId.has(String(r[KD_KID]))) silinecekler[String(r[KD_KID])] = true; });
+  Object.keys(silinecekler).forEach(id => kdSilindiIsaretle_(ss, kaynakAdi, id));
 }
 
 // ── DÜNYA: tüm kaynakların anlık görüntüsü (Numarala + Kontrol için) ──
@@ -529,108 +568,34 @@ function kdDunyaOku_(ss) {
   return d;
 }
 
-// Ana kaydı olmayan (sahipsiz) veya işaretsiz (manuel) hareketleri ana kayıt tanımı olarak üretir.
-function kdYetimTanimlari_(dunya, ss) {
+// Ana kaydı olmayan (sahipsiz) veya işaretsiz (manuel) hareketleri tek taraflı giriş olarak üretir.
+function kdYetimGirisleri_(dunya, ctx) {
   const sonuc = [];
-  const cariAdlari = {};
-  const cariSayfa = kdSayfaOku_(ss, SHEETS.cariHesaplar);
-  cariSayfa.forEach(r => { cariAdlari[String(r[0])] = String(r[2] || ""); });
-  const hareketTurleri = [["cari", "Cari"], ["banka", "Banka"], ["pos", "POS"], ["kart", "Kredi Kartı"]];
-  hareketTurleri.forEach(([k, modulAdi]) => {
+  [["cari", "Cari"], ["banka", "Banka"], ["pos", "POS"], ["kart", "Kredi Kartı"]].forEach(([k, modulAdi]) => {
     if (!dunya.idx[k]) return;
     dunya.idx[k].hepsi.forEach(x => {
       const b = x.b, is = x.is;
+      const cariAd = k === "cari" ? (ctx.cari()[b.ek] || "") : "";
       if (!is) {
         if (k !== "cari") return; // işaretsiz banka/pos/kart hareketleri (manuel) ilk sürümde kapsam dışı
-        sonuc.push({ tanim: kdManuelCariTanimi_([b.kid, b.ek, b.tarih, b.tip, b.tutar, "", b.kayit], cariAdlari[b.ek] || ""), zaman: kdZamanSayisi_(b.kayit) || kdZamanSayisi_(b.tarih) });
+        sonuc.push({ g: kdTekBacakGirisi_(b, "Cari", "Cari Hareket (Manuel) — " + b.tip, "Manuel", cariAd, ctx), zaman: kdZamanSayisi_(b.kayit) || kdZamanSayisi_(b.tarih) });
         return;
       }
       const key = KD_PREFIX_ANAHTAR[is.prefix];
       if (key && dunya.anaIdSeti[key] && dunya.anaIdSeti[key].has(is.id)) return; // sahibi var
-      sonuc.push({ tanim: { key: "yetim", id: b.kid, kaynak: b.kaynak, modul: modulAdi, islem: "Sahipsiz " + kdBacakTuru_(k, b.tip) + " (ana kayıt yok: " + is.prefix + ":" + is.id + ")",
-        tarih: b.tarih, cari: cariAdlari[b.ek] || "", tutar: b.tutar, belge: "", yon: b.tip, beklenen: [], yetimUyari: true, kayit: b.kayit }, zaman: kdZamanSayisi_(b.kayit) || kdZamanSayisi_(b.tarih) });
+      sonuc.push({ g: kdTekBacakGirisi_(b, modulAdi, "Sahipsiz " + kdBacakTuru_(k, b.tip) + " (ana kayıt yok: " + is.prefix + ":" + is.id + ")", "Yetim", cariAd, ctx), zaman: kdZamanSayisi_(b.kayit) || kdZamanSayisi_(b.tarih) });
     });
   });
-  // Sahipsiz stok hareketleri (otomatik belge tipli ama ana kaydı olmayan)
   if (dunya.idx.stok) {
     const tumIdler = new Set();
     Object.keys(dunya.anaIdSeti).forEach(k => dunya.anaIdSeti[k].forEach(i => tumIdler.add(i)));
     dunya.idx.stok.hepsi.forEach(x => {
       const b = x.b;
       if (KD_STOK_BELGE_TIPLERI.indexOf(b.belgeTipi) < 0 || tumIdler.has(b.kid)) return;
-      sonuc.push({ tanim: { key: "yetim", id: b.kid, kaynak: b.kaynak, modul: "Stok", islem: "Sahipsiz " + kdBacakTuru_("stok", b.tip) + " (" + b.belgeTipi + ", ana kayıt yok)",
-        tarih: b.tarih, cari: "", tutar: b.tutar, belge: "", yon: b.tip, beklenen: [], yetimUyari: true, kayit: b.kayit }, zaman: kdZamanSayisi_(b.kayit) || kdZamanSayisi_(b.tarih) });
+      sonuc.push({ g: kdTekBacakGirisi_(b, "Stok", "Sahipsiz " + kdBacakTuru_("stok", b.tip) + " (" + b.belgeTipi + ", ana kayıt yok)", "Yetim", "", ctx), zaman: kdZamanSayisi_(b.kayit) || kdZamanSayisi_(b.tarih) });
     });
   }
   return sonuc;
-}
-
-// ── MEVCUT KAYITLARI NUMARALA (geriye dönük / eksik tamamlama) ──
-function kayitDefteriBaslat(body) {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = kdSheet_(ss);
-  const dunya = kdDunyaOku_(ss);
-  const aday = []; // {t, bacaklar, zaman}
-  Object.keys(KD_KAYNAKLAR).forEach(key => {
-    dunya.anaSatirlar[key].forEach(r => {
-      const t = kdAnaTanimla_(key, r);
-      aday.push({ t: t, bacaklar: kdBacaklariBul_(dunya.idx, key, t.id), zaman: kdZamanSayisi_(t.kayit) || kdZamanSayisi_(t.tarih) });
-    });
-  });
-  kdYetimTanimlari_(dunya, ss).forEach(y => aday.push({ t: y.tanim, bacaklar: [], zaman: y.zaman }));
-  const idSirasi = (t) => parseInt((String(t.id).match(/\d{10,}/) || ["0"])[0], 10) || 0;
-  aday.sort((a, b) => (a.zaman - b.zaman) || (idSirasi(a.t) - idSirasi(b.t)));
-
-  let yeniAna = 0, yeniBacak = 0, eklenenBacak = 0;
-  const PARCA = 200;
-  for (let baslangic = 0; baslangic < aday.length; baslangic += PARCA) {
-    const parca = aday.slice(baslangic, baslangic + PARCA);
-    kdKilitli_(() => {
-      const satirlar = kdTumSatirlar_(sheet);
-      const varOlan = {};
-      const herhangiRol = {};
-      satirlar.forEach((r, i) => {
-        herhangiRol[String(r[KD_KAYNAK]) + "|" + String(r[KD_KID])] = true;
-        if (r[KD_ROL] === "Ana") varOlan[String(r[KD_KAYNAK]) + "|" + String(r[KD_KID])] = i;
-      });
-      const simdi = kdSimdi_();
-      const eklenecekler = [];
-      let toplamNo = 0;
-      const yeniGruplar = [];
-      parca.forEach(a => {
-        const anahtar = a.t.kaynak + "|" + a.t.id;
-        if (varOlan[anahtar] !== undefined) return;
-        if (a.t.yetimUyari && herhangiRol[anahtar]) return; // sahipsiz görünen hareket zaten bir ana kaydın karşı satırı olarak defterde
-        yeniGruplar.push(a); toplamNo += 1 + a.bacaklar.length;
-      });
-      if (yeniGruplar.length) {
-        let no = kdNoAl_(sheet, toplamNo);
-        yeniGruplar.forEach(a => {
-          const kayit = kdZamanMetniDuzenle_(a.t.kayit) || simdi;
-          kdGrupSatirlari_(no, a.t, a.bacaklar, kayit).forEach(s => eklenecekler.push(s));
-          if (a.t.yetimUyari) eklenecekler[eklenecekler.length - 1][KD_KARSI] = "⚠ Ana kayıt bulunamadı — bu hareketin sahibi silinmiş olabilir";
-          no += 1 + a.bacaklar.length; yeniAna++; yeniBacak += a.bacaklar.length;
-        });
-        kdSatirlariYaz_(sheet, sheet.getLastRow() + 1, eklenecekler);
-      }
-      // Ana kaydı zaten defterde olan ama karşı kaydı defterde OLMAYANLAR: karşı kayıtları ekle
-      parca.forEach(a => {
-        const ai = varOlan[a.t.kaynak + "|" + a.t.id];
-        if (ai === undefined || !a.bacaklar.length) return;
-        const anaNo = Number(satirlar[ai][KD_NO]);
-        const eksikBacak = a.bacaklar.filter(b => !satirlar.some(r => Number(r[KD_ANA]) === anaNo && String(r[KD_KAYNAK]) === b.kaynak && String(r[KD_KID]) === String(b.kid)));
-        if (!eksikBacak.length) return;
-        const no0 = kdNoAl_(sheet, eksikBacak.length);
-        kdSatirlariYaz_(sheet, sheet.getLastRow() + 1, eksikBacak.map((b, i) => kdBacakSatiri_(no0 + i, anaNo, a.t, b, simdi)));
-        eklenenBacak += eksikBacak.length;
-        // ana satırın karşı kayıt metnini tazele
-        const tumBac = kdTumSatirlar_(sheet).filter(r => Number(r[KD_ANA]) === anaNo && r[KD_DURUM] === "Aktif").map(r => ({ tur: String(r[KD_ISLEM]), no: Number(r[KD_NO]) }));
-        const ana = satirlar[ai].slice(); ana[KD_KARSI] = kdKarsiMetni_(tumBac, a.t.beklenen); ana[KD_DEGISIM] = simdi;
-        kdSatirlariYaz_(sheet, ai + 2, [ana]);
-      });
-    });
-  }
-  return { ok: true, yeniAnaKayit: yeniAna, yeniKarsiKayit: yeniBacak + eklenenBacak, toplamAday: aday.length };
 }
 
 // "dd/MM/yyyy HH:mm" biçimini korur; Date ise biçimler; değilse "".
@@ -640,27 +605,61 @@ function kdZamanMetniDuzenle_(v) {
   return /^\d{2}\/\d{2}\/\d{4}/.test(s) ? s : "";
 }
 
+// ── MEVCUT KAYITLARI NUMARALA (geriye dönük / eksik tamamlama) ──
+function kayitDefteriBaslat(body) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = kdSheet_(ss);
+  const dunya = kdDunyaOku_(ss);
+  const ctx = kdBaglam_(ss);
+  const aday = []; // {g, zaman}
+  Object.keys(KD_KAYNAKLAR).forEach(key => {
+    dunya.anaSatirlar[key].forEach(r => {
+      const t = kdAnaTanimla_(key, r);
+      const zaman = kdZamanSayisi_(t.kayit) || kdZamanSayisi_(t.tarih);
+      kdGirisleriKur_(key, r, kdBacaklariBul_(dunya.idx, key, t.id), {}, t, ctx).forEach(g => aday.push({ g: g, zaman: zaman }));
+    });
+  });
+  kdYetimGirisleri_(dunya, ctx).forEach(y => aday.push(y));
+  const idSirasi = (g) => parseInt((String(g.kid).match(/\d{10,}/) || ["0"])[0], 10) || 0;
+  aday.sort((a, b) => (a.zaman - b.zaman) || (idSirasi(a.g) - idSirasi(b.g)));
+
+  let yeni = 0;
+  const PARCA = 200;
+  for (let bas = 0; bas < aday.length; bas += PARCA) {
+    const parca = aday.slice(bas, bas + PARCA);
+    kdKilitli_(() => {
+      const varOlan = {};
+      kdTumSatirlar_(sheet).forEach(r => { varOlan[kdGirisAnahtari_(r[KD_KAYNAK], r[KD_KID], r[KD_ALT])] = true; });
+      const eklenecek = parca.filter(a => !varOlan[kdGirisAnahtari_(a.g.kaynak, a.g.kid, a.g.alt)]);
+      if (!eklenecek.length) return;
+      const no0 = kdNoAl_(sheet, eklenecek.length);
+      const simdi = kdSimdi_();
+      kdSatirlariYaz_(sheet, sheet.getLastRow() + 1, eklenecek.map((a, j) => kdSatiri_(no0 + j, a.g, kdZamanMetniDuzenle_(a.g.kayit) || simdi)));
+      yeni += eklenecek.length;
+    });
+  }
+  return { ok: true, yeniKayit: yeni, toplamAday: aday.length };
+}
+
 // ── KONTROL ──
 function getKayitDefteriKontrol() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = kdSheet_(ss);
   const satirlar = kdTumSatirlar_(sheet);
   const dunya = kdDunyaOku_(ss);
+  const ctx = kdBaglam_(ss);
   const LIMIT = 300;
-  const s = { silinenler: [], kaynakYok: [], karsiEksik: [], sahipsiz: [], numarasiz: [], tutarFarki: [], karsiKalmis: [] };
-  const sayac = { silinenler: 0, kaynakYok: 0, karsiEksik: 0, sahipsiz: 0, numarasiz: 0, tutarFarki: 0, karsiKalmis: 0 };
+  const kategoriler = ["silinenler", "kaynakYok", "karsiEksik", "tekTaraf", "sahipsiz", "numarasiz", "tutarFarki", "karsiKalmis"];
+  const s = {}, sayac = {};
+  kategoriler.forEach(k => { s[k] = []; sayac[k] = 0; });
   const ekle = (ad, o) => { sayac[ad]++; if (s[ad].length < LIMIT) s[ad].push(o); };
-  const ozetle = (r, not) => ({ no: Number(r[KD_NO]), modul: r[KD_MODUL], islem: r[KD_ISLEM], belgeNo: kdMetin_(r[KD_BELGE]), tarih: kdMetin_(r[KD_TARIH]), cari: kdMetin_(r[KD_CARI]), tutar: kdSayi_(r[KD_TUTAR]), not: not });
+  const ozetle = (r, not) => ({ no: Number(r[KD_NO]), modul: r[KD_MODUL], islem: r[KD_ISLEM], belgeNo: kdMetin_(r[KD_BELGE]), tarih: kdMetin_(r[KD_TARIH]), cari: kdMetin_(r[KD_CARI]), tutar: kdSayi_(r[KD_BTUTAR]), not: not });
 
-  // kaynak varlık kümeleri
-  const cariHareketIdleri = new Set((dunya.idx.cari ? dunya.idx.cari.hepsi : []).map(x => x.b.kid));
-  const bankaIdleri = new Set((dunya.idx.banka ? dunya.idx.banka.hepsi : []).map(x => x.b.kid));
-  const posIdleri = new Set((dunya.idx.pos ? dunya.idx.pos.hepsi : []).map(x => x.b.kid));
-  const kartIdleri = new Set((dunya.idx.kart ? dunya.idx.kart.hepsi : []).map(x => x.b.kid));
-  const stokBelgeler = new Set((dunya.idx.stok ? dunya.idx.stok.hepsi : []).map(x => x.b.kid));
-  const kaynakVarMi = (r) => {
-    const k = String(r[KD_KAYNAK]), id = String(r[KD_KID]);
-    if (k === SHEETS.cariHareketler) return cariHareketIdleri.has(id);
+  const idKumesi = (k) => new Set((dunya.idx[k] ? dunya.idx[k].hepsi : []).map(x => x.b.kid));
+  const cariIdleri = idKumesi("cari"), bankaIdleri = idKumesi("banka"), posIdleri = idKumesi("pos"), kartIdleri = idKumesi("kart"), stokBelgeler = idKumesi("stok");
+  const kaynakVarMi = (kaynak, kid) => {
+    const k = String(kaynak), id = String(kid);
+    if (k === SHEETS.cariHareketler) return cariIdleri.has(id);
     if (k === SHEETS.bankaHesapHareketleri) return bankaIdleri.has(id);
     if (k === SHEETS.posHareketleri) return posIdleri.has(id);
     if (k === SHEETS.krediKartHareketleri) return kartIdleri.has(id);
@@ -668,62 +667,78 @@ function getKayitDefteriKontrol() {
     const key = Object.keys(KD_KAYNAKLAR).find(x => SHEETS[KD_KAYNAKLAR[x].sheet] === k);
     return key ? dunya.anaIdSeti[key].has(id) : true;
   };
+  const tarafVarMi = (tarafKaynak) => {
+    if (!tarafKaynak || tarafKaynak === "-") return true; // sanal / tanımsız
+    const i = String(tarafKaynak).indexOf("|");
+    return kaynakVarMi(String(tarafKaynak).slice(0, i), String(tarafKaynak).slice(i + 1));
+  };
 
-  const anaNoHaritasi = {};
-  satirlar.forEach(r => { if (r[KD_ROL] === "Ana") anaNoHaritasi[Number(r[KD_NO])] = r; });
-  const bacaklarByAna = {};
-  satirlar.forEach(r => { if (r[KD_ROL] === "Karşı") (bacaklarByAna[Number(r[KD_ANA])] = bacaklarByAna[Number(r[KD_ANA])] || []).push(r); });
+  const basvurulan = new Set();
+  satirlar.forEach(r => {
+    basvurulan.add(String(r[KD_KAYNAK]) + "|" + String(r[KD_KID]));
+    [r[KD_BKAYNAK], r[KD_AKAYNAK]].forEach(x => { if (x && x !== "-") basvurulan.add(String(x)); });
+  });
 
   satirlar.forEach(r => {
     const durum = r[KD_DURUM];
-    if (r[KD_ROL] === "Ana" && durum === "Silindi") ekle("silinenler", ozetle(r, "Silindi: " + kdMetin_(r[KD_SILINME])));
-    if (durum === "Aktif" && !kaynakVarMi(r)) ekle("kaynakYok", ozetle(r, r[KD_ROL] === "Ana" ? "Defterde var ama kaynak sayfada kayıt YOK (uygulama dışından silinmiş olabilir)" : "Karşı kaydın kaynağı bulunamadı"));
-    if (r[KD_ROL] === "Ana" && durum === "Aktif") {
-      const beklenen = String(r[KD_BEKLENEN] || "").split("|").filter(x => x);
-      const aktifBac = (bacaklarByAna[Number(r[KD_NO])] || []).filter(b => b[KD_DURUM] === "Aktif" && kaynakVarMi(b));
-      const eksik = beklenen.filter(t => !aktifBac.some(b => String(b[KD_ISLEM]) === t));
-      if (eksik.length) ekle("karsiEksik", ozetle(r, "Eksik karşı kayıt: " + eksik.join(", ")));
-      // tutar kontrolü: cari karşı kaydı ile ana tutar
-      const cariBac = aktifBac.filter(b => String(b[KD_MODUL]) === "Cari");
-      if (String(r[KD_MODUL]) !== "Cari Virman" && cariBac.length === 1 && Math.abs(kdSayi_(cariBac[0][KD_TUTAR]) - kdSayi_(r[KD_TUTAR])) > 0.05) {
-        ekle("tutarFarki", ozetle(r, "Ana tutar " + kdSayi_(r[KD_TUTAR]).toFixed(2) + " ≠ Cari karşı kayıt " + kdSayi_(cariBac[0][KD_TUTAR]).toFixed(2)));
-      }
+    const grup = String(r[KD_GRUP]);
+    const anaAnahtar = String(r[KD_KAYNAK]) + "|" + String(r[KD_KID]);
+    if (durum === "Silindi") {
+      if (String(r[KD_ALT] || "") === "") ekle("silinenler", ozetle(r, "Silindi: " + kdMetin_(r[KD_SILINME])));
+      // silinmiş satırın karşı kaydı hâlâ duruyor mu?
+      [[r[KD_BKAYNAK], r[KD_BHESAP]], [r[KD_AKAYNAK], r[KD_AHESAP]]].forEach(([k, ad]) => {
+        if (k && k !== "-" && String(k) !== anaAnahtar && tarafVarMi(k)) {
+          ekle("karsiKalmis", ozetle(r, "Deftere göre silinmiş ama karşı kayıt (" + ad + ") kaynak sayfada HÂLÂ duruyor"));
+        }
+      });
+      return;
     }
-    if (r[KD_ROL] === "Ana" && String(r[KD_ISLEM]).indexOf("Sahipsiz") === 0 && durum === "Aktif") ekle("sahipsiz", ozetle(r, "Ana kaydı olmayan hareket"));
-    // Silinmiş ana kaydın karşı kaydı hâlâ duruyor mu?
-    if (r[KD_ROL] === "Karşı" && durum === "Silindi" && kaynakVarMi(r)) {
-      const ana = anaNoHaritasi[Number(r[KD_ANA])];
-      ekle("karsiKalmis", ozetle(r, "Deftere göre silinmiş ama kaynak sayfada HÂLÂ duruyor" + (ana ? " (ana: " + ana[KD_ISLEM] + " #" + ana[KD_NO] + ")" : "")));
+    if (!kaynakVarMi(r[KD_KAYNAK], r[KD_KID])) {
+      ekle("kaynakYok", ozetle(r, "Defterde var ama kaynak sayfada kayıt YOK (uygulama dışından silinmiş olabilir)"));
+      return;
+    }
+    if (grup === "Yetim") ekle("sahipsiz", ozetle(r, "Ana kaydı olmayan hareket"));
+    if (grup === "Sipariş" || grup === "Teklif" || grup === "Manuel") return;
+    if (String(r[KD_KONTROL]).indexOf("⚠ Tek taraflı") === 0) ekle("tekTaraf", ozetle(r, String(r[KD_KONTROL])));
+    // Beklenen ama hiç bulunamayan taraflar
+    [[r[KD_BBEKLENEN], r[KD_BKAYNAK]], [r[KD_ABEKLENEN], r[KD_AKAYNAK]]].forEach(([tur, kaynak]) => {
+      if (tur && !kaynak) ekle("karsiEksik", ozetle(r, "Eksik karşı kayıt: " + tur));
+      else if (kaynak && !tarafVarMi(kaynak)) ekle("karsiEksik", ozetle(r, "Karşı kayıt kaynak sayfada bulunamadı (elle silinmiş olabilir): " + kaynak));
+    });
+    // Tutar kontrolü (stok tarafı KDV/iskonto nedeniyle farklı olabilir → hariç)
+    const bt = kdSayi_(r[KD_BTL]), at = kdSayi_(r[KD_ATL]);
+    if (r[KD_BKAYNAK] && r[KD_AKAYNAK] && !/^Stok/.test(String(r[KD_BHESAP])) && !/^Stok/.test(String(r[KD_AHESAP])) && Math.abs(bt - at) > 0.05) {
+      ekle("tutarFarki", ozetle(r, "Borç " + bt.toFixed(2) + " ≠ Alacak " + at.toFixed(2)));
     }
   });
 
-  // Numarasız: kaynakta olup defterde hiç olmayanlar
-  const defterdekiler = new Set(satirlar.map(r => String(r[KD_KAYNAK]) + "|" + String(r[KD_KID])));
-  const defterAnalari = new Set(satirlar.filter(r => r[KD_ROL] === "Ana").map(r => String(r[KD_KAYNAK]) + "|" + String(r[KD_KID])));
-  const yetimler = kdYetimTanimlari_(dunya, ss);
+  // Numarasız: kaynakta olup defterde hiç olmayan ana kayıtlar / hareketler
+  const defterdeAna = new Set(satirlar.map(r => String(r[KD_KAYNAK]) + "|" + String(r[KD_KID])));
   Object.keys(KD_KAYNAKLAR).forEach(key => {
     dunya.anaSatirlar[key].forEach(row => {
       const t = kdAnaTanimla_(key, row);
-      if (!defterAnalari.has(t.kaynak + "|" + t.id)) ekle("numarasiz", { no: "", modul: t.modul, islem: t.islem, belgeNo: t.belge, tarih: t.tarih, cari: t.cari, tutar: t.tutar, not: "Kaynakta var, defterde numarası yok" });
+      if (!defterdeAna.has(t.kaynak + "|" + t.id)) { ekle("numarasiz", { no: "", modul: t.modul, islem: t.islem, belgeNo: t.belge, tarih: t.tarih, cari: t.cari, tutar: t.tutar, not: "Kaynakta var, defterde numarası yok" }); return; }
+      // ana kayıt numaralı ama karşı kaydı deftere işlenmemiş (uygulama dışında eklenmiş)
+      kdBacaklariBul_(dunya.idx, key, t.id).forEach(b => {
+        if (!basvurulan.has(b.kaynak + "|" + b.kid)) ekle("numarasiz", { no: "", modul: t.modul, islem: t.islem + " → " + kdBacakTuru_(b.k, b.tip), belgeNo: t.belge, tarih: b.tarih, cari: t.cari, tutar: b.tutar, not: "Karşı kayıt kaynakta var ama defterde hiçbir satırda yok" });
+      });
     });
   });
-  yetimler.forEach(y => {
-    if (!defterdekiler.has(y.tanim.kaynak + "|" + y.tanim.id)) ekle("numarasiz", { no: "", modul: y.tanim.modul, islem: y.tanim.islem, belgeNo: "", tarih: y.tanim.tarih, cari: y.tanim.cari, tutar: y.tanim.tutar, not: "Kaynakta var, defterde numarası yok" });
+  kdYetimGirisleri_(dunya, ctx).forEach(y => {
+    if (!basvurulan.has(y.g.kaynak + "|" + y.g.kid)) ekle("numarasiz", { no: "", modul: y.g.modul, islem: y.g.islem, belgeNo: "", tarih: y.g.tarih, cari: y.g.cari, tutar: y.g.belgeTutari, not: "Kaynakta var, defterde numarası yok" });
   });
 
+  const aktif = satirlar.filter(r => r[KD_DURUM] === "Aktif").length;
   const ozet = {
-    toplamKayit: satirlar.length,
-    anaKayit: satirlar.filter(r => r[KD_ROL] === "Ana").length,
-    aktif: satirlar.filter(r => r[KD_DURUM] === "Aktif").length,
-    silinen: satirlar.filter(r => r[KD_DURUM] === "Silindi").length,
-    sorunSayisi: sayac.kaynakYok + sayac.karsiEksik + sayac.sahipsiz + sayac.numarasiz + sayac.tutarFarki + sayac.karsiKalmis,
+    toplamKayit: satirlar.length, aktif: aktif, silinen: satirlar.length - aktif,
+    sorunSayisi: sayac.kaynakYok + sayac.karsiEksik + sayac.tekTaraf + sayac.sahipsiz + sayac.numarasiz + sayac.tutarFarki + sayac.karsiKalmis,
     sayac: sayac,
   };
   return { ok: true, ozet: ozet, bulgular: s, kontrolZamani: kdSimdi_() };
 }
 
 // ── LİSTE ──
-// body: { sayfa, adet, modul, durum, rol, arama, sorunlu }
+// body: { sayfa, adet, modul, durum, arama, sorunlu, tarihBas, tarihSon }
 function getKayitDefteri(body) {
   body = body || {};
   const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -734,26 +749,31 @@ function getKayitDefteri(body) {
   const arama = String(body.arama || "").trim().toLocaleLowerCase("tr");
   const moduller = {};
   satirlar.forEach(r => { moduller[String(r[KD_MODUL])] = true; });
+  const gun = (r) => kdMetin_(r[KD_TARIH]).slice(0, 10);
   const uygun = satirlar.filter(r => {
     if (body.modul && String(r[KD_MODUL]) !== body.modul) return false;
     if (body.durum && String(r[KD_DURUM]) !== body.durum) return false;
-    if (body.rol && String(r[KD_ROL]) !== body.rol) return false;
-    if (body.sorunlu && !(String(r[KD_KARSI]).indexOf("⚠") >= 0 || r[KD_DURUM] === "Silindi")) return false;
+    if (body.sorunlu && !(String(r[KD_KONTROL]).indexOf("⚠") >= 0 || r[KD_DURUM] === "Silindi")) return false;
+    if (body.tarihBas && gun(r) < body.tarihBas) return false;
+    if (body.tarihSon && gun(r) > body.tarihSon) return false;
     if (arama) {
-      const metin = [r[KD_NO], r[KD_MODUL], r[KD_KARSI], r[KD_ISLEM], r[KD_BELGE], r[KD_CARI], r[KD_KID]].join(" ").toLocaleLowerCase("tr");
+      const metin = [r[KD_NO], r[KD_MODUL], r[KD_ISLEM], r[KD_BELGE], r[KD_CARI], r[KD_BHESAP], r[KD_AHESAP], r[KD_KONTROL], r[KD_KID]].join(" ").toLocaleLowerCase("tr");
       if (metin.indexOf(arama) < 0) return false;
     }
     return true;
   });
   uygun.sort((a, b) => Number(b[KD_NO]) - Number(a[KD_NO]));
+  let toplamBorc = 0, toplamAlacak = 0;
+  uygun.forEach(r => { if (r[KD_DURUM] === "Aktif") { toplamBorc += kdSayi_(r[KD_BTL]); toplamAlacak += kdSayi_(r[KD_ATL]); } });
   const dilim = uygun.slice(sayfa * adet, sayfa * adet + adet).map(r => ({
-    no: Number(r[KD_NO]), modul: kdMetin_(r[KD_MODUL]), karsi: kdMetin_(r[KD_KARSI]), islem: kdMetin_(r[KD_ISLEM]), rol: kdMetin_(r[KD_ROL]),
-    kaynakId: kdMetin_(r[KD_KID]), anaNo: r[KD_ANA] === "" ? "" : Number(r[KD_ANA]), belgeNo: kdMetin_(r[KD_BELGE]), tarih: kdMetin_(r[KD_TARIH]),
-    cari: kdMetin_(r[KD_CARI]), tutar: kdSayi_(r[KD_TUTAR]), yon: kdMetin_(r[KD_YON]), durum: kdMetin_(r[KD_DURUM]),
-    kayitZamani: kdMetin_(r[KD_KAYIT]), silinmeZamani: kdMetin_(r[KD_SILINME]),
+    no: Number(r[KD_NO]), modul: kdMetin_(r[KD_MODUL]), islem: kdMetin_(r[KD_ISLEM]), tarih: kdMetin_(r[KD_TARIH]), belgeNo: kdMetin_(r[KD_BELGE]),
+    cari: kdMetin_(r[KD_CARI]), belgeTutari: kdSayi_(r[KD_BTUTAR]), borcHesap: kdMetin_(r[KD_BHESAP]), borcTutar: r[KD_BTL] === "" ? null : kdSayi_(r[KD_BTL]),
+    alacakHesap: kdMetin_(r[KD_AHESAP]), alacakTutar: r[KD_ATL] === "" ? null : kdSayi_(r[KD_ATL]), kontrol: kdMetin_(r[KD_KONTROL]), durum: kdMetin_(r[KD_DURUM]),
+    grup: kdMetin_(r[KD_GRUP]), kaynakId: kdMetin_(r[KD_KID]), kayitZamani: kdMetin_(r[KD_KAYIT]), silinmeZamani: kdMetin_(r[KD_SILINME]),
   }));
   return { ok: true, toplam: uygun.length, satirlar: dilim, sayfa: sayfa, adet: adet, moduller: Object.keys(moduller).sort(),
-    ozet: { toplamKayit: satirlar.length, anaKayit: satirlar.filter(r => r[KD_ROL] === "Ana").length, silinen: satirlar.filter(r => r[KD_DURUM] === "Silindi").length,
-            uyarili: satirlar.filter(r => String(r[KD_KARSI]).indexOf("⚠") >= 0).length,
+    toplamBorc: toplamBorc, toplamAlacak: toplamAlacak,
+    ozet: { toplamKayit: satirlar.length, silinen: satirlar.filter(r => r[KD_DURUM] === "Silindi").length,
+            uyarili: satirlar.filter(r => r[KD_DURUM] === "Aktif" && String(r[KD_KONTROL]).indexOf("⚠") >= 0).length,
             sonNo: satirlar.length ? Number(satirlar[satirlar.length - 1][KD_NO]) : 0 } };
 }

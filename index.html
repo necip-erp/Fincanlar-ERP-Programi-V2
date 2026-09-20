@@ -1085,22 +1085,24 @@ setInterval(topbarSaatGuncelle, 10000);
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">📒 Kayıt Defteri</div>
       <p style="font-size:13px;color:var(--text2);margin-top:-8px">
-        Her işlem ve karşı kaydı (cari borç/alacak, stok giriş/çıkış, banka/POS) sıralı numarayla burada tutulur.
-        Silinen kayıt satırı kalır, "Silindi" olarak işaretlenir; numaralar bir daha kullanılmaz. Sipariş ve Teklif hariç
-        her işlemin karşı kaydı olmalıdır — eksik olan <b style="color:#b7791f">⚠ Eksik</b> olarak görünür.
+        Her işlem <b>tek satırda, iki taraflı</b> tutulur: <b style="color:#b91c1c">Borç</b> hesabı/tutarı ve <b style="color:#15803d">Alacak</b> hesabı/tutarı.
+        Sıralı numara verilir; silinen işlemin satırı kalır ("Silindi"), numara bir daha kullanılmaz. Sipariş ve Teklif satırları
+        <b style="background:#fff4b8;padding:0 5px;border-radius:4px;color:#3b3200">sarı</b>dır (borç/alacak yazmaz). Bir tarafın kaydı yoksa
+        <b style="color:#b7791f">⚠ Eksik</b> görünür.
       </p>
       <div id="kd-ozet" style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-        <input id="kd-arama" type="text" placeholder="Numara, belge no, cari, işlem ara..." style="flex:1;min-width:220px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)" oninput="kayitDefteriAramaDegisti()">
+        <input id="kd-arama" type="text" placeholder="Numara, belge no, cari, hesap, işlem ara..." style="flex:1;min-width:220px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)" oninput="kayitDefteriAramaDegisti()">
         <select id="kd-modul" onchange="kayitDefteriYukle(true)" style="padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><option value="">Tüm modüller</option></select>
-        <select id="kd-rol" onchange="kayitDefteriYukle(true)" style="padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><option value="">Ana + Karşı</option><option value="Ana">Sadece Ana</option><option value="Karşı">Sadece Karşı</option></select>
         <select id="kd-durum" onchange="kayitDefteriYukle(true)" style="padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><option value="">Tüm durumlar</option><option value="Aktif">Aktif</option><option value="Silindi">Silindi</option></select>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;margin:0">Tarih <input type="date" id="kd-tarih-bas" onchange="kayitDefteriYukle(true)" style="padding:6px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"> – <input type="date" id="kd-tarih-son" onchange="kayitDefteriYukle(true)" style="padding:6px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"></label>
         <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;margin:0"><input type="checkbox" id="kd-sorunlu" style="width:auto" onchange="kayitDefteriYukle(true)"> Sadece sorunlu / silinen</label>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
         <button class="btn" onclick="kayitDefteriYukle(true)">↻ Yenile</button>
         <button class="btn btn-primary" onclick="kayitDefteriKontrolEt()">🔍 Kontrol Et</button>
         <button class="btn" onclick="kayitDefteriNumarala()" title="Defterde olmayan mevcut kayıtları tarih sırasıyla numaralar (tekrar çalıştırmak güvenlidir)">🔢 Mevcut kayıtları numarala</button>
+        <button class="btn" id="kd-excel-btn" onclick="kayitDefteriExcelAktar()" title="Şu anki filtreye uyan TÜM satırları renkleriyle birlikte Excel dosyası olarak indirir">📊 Excel'e Aktar</button>
       </div>
       <div id="kd-kontrol"></div>
       <div id="kd-liste"><div class="cari-empty">Yükleniyor...</div></div>
@@ -8636,6 +8638,8 @@ function cariVirmanSilOnay(id){
 // ══════════════ KAYIT DEFTERİ ══════════════
 let _kdSayfa = 0, _kdToplam = 0, _kdSatirlar = [], _kdAramaZamanlayici = null, _kdIstek = 0;
 const KD_SAYFA_BOYUT = 200;
+// Renkler (hem ekranda hem Excel'de): Borç = kırmızı hücre, Alacak = yeşil hücre, Sipariş/Teklif = sarı satır
+const KD_RENK = { borcBg:"#fde2e2", borcYazi:"#b91c1c", alacakBg:"#dcf5e4", alacakYazi:"#15803d", sariBg:"#fff4b8", sariYazi:"#3b3200", uyari:"#b7791f" };
 
 function kayitDefteriAramaDegisti(){
   clearTimeout(_kdAramaZamanlayici);
@@ -8643,11 +8647,10 @@ function kayitDefteriAramaDegisti(){
 }
 
 function kayitDefteriFiltreleri_(){
+  const v = id => (document.getElementById(id)||{}).value || "";
   return {
-    arama: (document.getElementById("kd-arama")||{}).value || "",
-    modul: (document.getElementById("kd-modul")||{}).value || "",
-    rol: (document.getElementById("kd-rol")||{}).value || "",
-    durum: (document.getElementById("kd-durum")||{}).value || "",
+    arama: v("kd-arama"), modul: v("kd-modul"), durum: v("kd-durum"),
+    tarihBas: v("kd-tarih-bas"), tarihSon: v("kd-tarih-son"),
     sorunlu: !!(document.getElementById("kd-sorunlu")||{}).checked,
   };
 }
@@ -8662,7 +8665,6 @@ function kayitDefteriYukle(sifirla){
     if(!res.ok){ liste.innerHTML = '<div class="cari-empty">Hata: '+htmlKacis(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _kdToplam = res.toplam;
     _kdSatirlar = _kdSatirlar.concat(res.satirlar);
-    // modül seçeneklerini doldur (seçimi koruyarak)
     const sel = document.getElementById("kd-modul");
     if(sel){
       const mevcut = sel.value;
@@ -8670,11 +8672,13 @@ function kayitDefteriYukle(sifirla){
       sel.value = mevcut;
     }
     const o = res.ozet || {};
-    const chip = (etiket, deger, renk)=>`<div style="padding:8px 14px;border-radius:10px;background:var(--bg3);min-width:110px"><div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;font-weight:700">${etiket}</div><div style="font-size:18px;font-weight:800;${renk?'color:'+renk:''}">${deger}</div></div>`;
+    const chip = (etiket, deger, renk, bg)=>`<div style="padding:8px 14px;border-radius:10px;background:${bg||'var(--bg3)'};min-width:110px"><div style="font-size:10.5px;color:${renk||'var(--text3)'};text-transform:uppercase;font-weight:700">${etiket}</div><div style="font-size:18px;font-weight:800;${renk?'color:'+renk:''}">${deger}</div></div>`;
     document.getElementById("kd-ozet").innerHTML =
-      chip("Toplam satır", (o.toplamKayit||0).toLocaleString("tr-TR")) + chip("Ana kayıt", (o.anaKayit||0).toLocaleString("tr-TR")) +
-      chip("Silinen", o.silinen||0, o.silinen?"#c0392b":"") + chip("⚠ Uyarılı", o.uyarili||0, o.uyarili?"#b7791f":"") +
-      chip("Son numara", o.sonNo||"—");
+      chip("Toplam satır", (o.toplamKayit||0).toLocaleString("tr-TR")) +
+      chip("Silinen", o.silinen||0, o.silinen?"#c0392b":"") + chip("⚠ Uyarılı", o.uyarili||0, o.uyarili?KD_RENK.uyari:"") +
+      chip("Son numara", o.sonNo||"—") +
+      chip("Toplam Borç", paraFormat(res.toplamBorc||0), KD_RENK.borcYazi, KD_RENK.borcBg) +
+      chip("Toplam Alacak", paraFormat(res.toplamAlacak||0), KD_RENK.alacakYazi, KD_RENK.alacakBg);
     kayitDefteriCiz_();
   }).catch(err=>{ if(istekNo===_kdIstek) liste.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+htmlKacis(err.message)+'</div>'; });
 }
@@ -8687,27 +8691,39 @@ function kayitDefteriCiz_(){
     document.getElementById("kd-daha").innerHTML = "";
     return;
   }
-  const karsiHtml = (t)=> String(t||"").indexOf("⚠") >= 0
-    ? htmlKacis(t).replace(/⚠ Eksik: ([^·]*)/, '<b style="color:#b7791f">⚠ Eksik: $1</b>').replace(/⚠ (Ana kayıt[^<]*)/, '<b style="color:#b7791f">⚠ $1</b>')
-    : htmlKacis(t);
+  const hesapHtml = (h)=> String(h||"").indexOf("⚠") === 0 ? `<b style="color:${KD_RENK.uyari}">${htmlKacis(h)}</b>` : htmlKacis(h);
+  const kontrolHtml = (k)=>{
+    k = String(k||"");
+    if(k.indexOf("⚠") === 0) return `<b style="color:${KD_RENK.uyari}">${htmlKacis(k)}</b>`;
+    if(k === "✓") return '<b style="color:#15803d">✓</b>';
+    return `<span style="color:var(--text3)">${htmlKacis(k)}</span>`;
+  };
   liste.innerHTML = `
     <div style="overflow-x:auto"><table class="hareket-tbl">
-      <thead><tr><th>Kayıt No</th><th>Modül</th><th>Karşı Kayıt</th><th>İşlem</th><th>Belge No</th><th>Tarih</th><th>Cari</th><th style="text-align:right">Tutar</th><th>Durum</th></tr></thead>
+      <thead><tr><th>Kayıt No</th><th>Modül</th><th>İşlem</th><th>Tarih</th><th>Belge No</th><th>Cari</th><th style="text-align:right">Belge Tutarı</th>
+        <th>Borç Hesabı</th><th style="text-align:right">Borç</th><th>Alacak Hesabı</th><th style="text-align:right">Alacak</th><th>Kontrol</th><th>Durum</th></tr></thead>
       <tbody>
         ${_kdSatirlar.map(r=>{
           const silindi = r.durum === "Silindi";
-          const karsi = r.rol === "Karşı";
-          const stil = (silindi ? "opacity:.6;" : "") + (karsi ? "background:var(--bg3);" : "");
-          return `<tr style="${stil}">
-            <td style="white-space:nowrap;font-weight:${karsi?500:800};${karsi?'padding-left:22px;':''}${silindi?'text-decoration:line-through;':''}">${karsi?'↳ ':''}${r.no}</td>
+          const sari = r.grup === "Sipariş" || r.grup === "Teklif";
+          const satirStil = (sari ? `background:${KD_RENK.sariBg};color:${KD_RENK.sariYazi};` : "") + (silindi ? "opacity:.55;" : "");
+          const cizgi = silindi ? "text-decoration:line-through;" : "";
+          const borcHucre = r.borcTutar !== null && r.borcTutar !== undefined
+            ? `<td style="text-align:right;white-space:nowrap;background:${KD_RENK.borcBg};color:${KD_RENK.borcYazi};font-weight:700;${cizgi}">${paraFormat(r.borcTutar)}</td>` : '<td></td>';
+          const alacakHucre = r.alacakTutar !== null && r.alacakTutar !== undefined
+            ? `<td style="text-align:right;white-space:nowrap;background:${KD_RENK.alacakBg};color:${KD_RENK.alacakYazi};font-weight:700;${cizgi}">${paraFormat(r.alacakTutar)}</td>` : '<td></td>';
+          return `<tr style="${satirStil}">
+            <td style="white-space:nowrap;font-weight:800;${cizgi}">${r.no}</td>
             <td>${htmlKacis(r.modul)}</td>
-            <td style="font-size:12.5px">${karsiHtml(r.karsi)}</td>
-            <td>${htmlKacis(r.islem)}${r.yon && karsi ? '' : ''}</td>
-            <td>${htmlKacis(r.belgeNo)||"—"}</td>
+            <td>${htmlKacis(r.islem)}</td>
             <td style="white-space:nowrap">${r.tarih ? htmlKacis(tarihGoster(r.tarih)) : "—"}</td>
+            <td>${htmlKacis(r.belgeNo)||"—"}</td>
             <td>${htmlKacis(r.cari)||"—"}</td>
-            <td style="text-align:right;white-space:nowrap">${r.tutar ? paraFormat(r.tutar) : "—"}</td>
-            <td style="white-space:nowrap">${silindi ? '<b style="color:#c0392b">Silindi</b><div style="font-size:10.5px;color:var(--text3)">'+htmlKacis(r.silinmeZamani)+'</div>' : 'Aktif'}</td>
+            <td style="text-align:right;white-space:nowrap">${r.belgeTutari ? paraFormat(r.belgeTutari) : "—"}</td>
+            <td style="font-size:12.5px">${hesapHtml(r.borcHesap)}</td>${borcHucre}
+            <td style="font-size:12.5px">${hesapHtml(r.alacakHesap)}</td>${alacakHucre}
+            <td style="font-size:12.5px">${kontrolHtml(r.kontrol)}</td>
+            <td style="white-space:nowrap">${silindi ? '<b style="color:#c0392b">Silindi</b><div style="font-size:10.5px">'+htmlKacis(r.silinmeZamani)+'</div>' : 'Aktif'}</td>
           </tr>`;
         }).join("")}
       </tbody>
@@ -8719,22 +8735,23 @@ function kayitDefteriCiz_(){
 }
 
 function kayitDefteriNumarala(){
-  if(!confirm("Defterde numarası olmayan MEVCUT tüm kayıtlar (satış, alış, tahsilat, ödeme, çek/senet, virman, iade, manuel cari hareketleri ve karşı kayıtları) oluşturulma sırasına göre numaralanacak.\n\nTekrar çalıştırmak güvenlidir (zaten numaralı kayıtlar atlanır). Devam edilsin mi?")) return;
+  if(!confirm("Defterde numarası olmayan MEVCUT tüm kayıtlar (satış, alış, tahsilat, ödeme, çek/senet, virman, iade, manuel cari hareketleri) oluşturulma sırasına göre numaralanacak.\n\nTekrar çalıştırmak güvenlidir (zaten numaralı kayıtlar atlanır). Devam edilsin mi?")) return;
   const liste = document.getElementById("kd-liste");
   liste.innerHTML = '<div class="cari-empty">Numaralanıyor... (kayıt sayısına göre birkaç dakika sürebilir)</div>';
   cariApi("kayitDefteriBaslat", {}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||res.error||"bilinmiyor")); kayitDefteriYukle(true); return; }
-    alert("Tamamlandı.\n\nYeni numaralanan ana kayıt: "+res.yeniAnaKayit+"\nYeni numaralanan karşı kayıt: "+res.yeniKarsiKayit);
+    alert("Tamamlandı.\n\nYeni numaralanan kayıt: "+res.yeniKayit);
     kayitDefteriYukle(true);
   }).catch(err=>{ alert("Bağlantı hatası: "+err.message+"\n\nİşlem yarım kalmış olabilir; tekrar çalıştırmak güvenlidir."); kayitDefteriYukle(true); });
 }
 
 const KD_BULGU_BASLIK = {
   kaynakYok:   ["🚨", "Defterde var, kaynak sayfada YOK (uygulama dışından silinmiş olabilir)", true],
-  karsiEksik:  ["⚠️", "Karşı kaydı eksik işlemler", true],
+  karsiEksik:  ["⚠️", "Bir tarafı (borç/alacak kaydı) eksik işlemler", true],
+  tekTaraf:    ["⚠️", "Tek taraflı işlenen işlemler (stok/cari işlenmemiş)", true],
   karsiKalmis: ["⚠️", "Deftere göre silinmiş ama karşı kaydı hâlâ duruyor", true],
   sahipsiz:    ["⚠️", "Ana kaydı olmayan (sahipsiz) hareketler", true],
-  tutarFarki:  ["💲", "Ana tutar ile cari karşı kaydı tutmayanlar", true],
+  tutarFarki:  ["💲", "Borç ile alacak tutarı tutmayanlar", true],
   numarasiz:   ["🔢", "Numarası olmayan kayıtlar (\"Mevcut kayıtları numarala\" ile tamamlanır)", true],
   silinenler:  ["🗑️", "Uygulamadan silinen işlemler (bilgi)", false],
 };
@@ -8760,6 +8777,122 @@ function kayitDefteriKontrolEt(){
     }).join("");
     el.innerHTML = baslik + bolumler;
   }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+htmlKacis(err.message)+'</div>'; });
+}
+
+// ── Excel'e aktar: şu anki filtreye uyan TÜM satırlar, ekrandaki renklerle (.xlsx) ──
+function kdKutuphaneYukle_(adresler){
+  return new Promise((coz, red)=>{
+    if(window.ExcelJS){ coz(); return; }
+    const dene = (i)=>{
+      if(i >= adresler.length){ red(new Error("Excel kütüphanesi yüklenemedi")); return; }
+      const sc = document.createElement("script");
+      sc.src = adresler[i];
+      sc.onload = ()=>{ window.ExcelJS ? coz() : dene(i+1); };
+      sc.onerror = ()=>{ sc.remove(); dene(i+1); };
+      document.head.appendChild(sc);
+    };
+    dene(0);
+  });
+}
+
+async function kayitDefteriExcelAktar(){
+  const btn = document.getElementById("kd-excel-btn");
+  const eskiMetin = btn ? btn.textContent : "";
+  const durum = (m)=>{ if(btn){ btn.disabled = !!m; btn.textContent = m || eskiMetin; } };
+  try{
+    durum("⏳ Hazırlanıyor...");
+    // 1) Filtreye uyan tüm satırları sayfa sayfa çek
+    const filtre = kayitDefteriFiltreleri_();
+    let tum = [], sayfa = 0, toplam = 0, toplamBorc = 0, toplamAlacak = 0;
+    do{
+      const res = await cariApi("getKayitDefteri", Object.assign({sayfa, adet:1000}, filtre));
+      if(!res.ok) throw new Error(res.hata || res.error || "Liste alınamadı");
+      tum = tum.concat(res.satirlar); toplam = res.toplam; toplamBorc = res.toplamBorc; toplamAlacak = res.toplamAlacak;
+      sayfa++;
+      durum("⏳ "+tum.length+" / "+toplam+" satır...");
+    } while(tum.length < toplam && sayfa < 200);
+    if(tum.length === 0){ alert("Aktarılacak satır yok."); durum(""); return; }
+    tum.sort((a,b)=>a.no-b.no); // Excel'de kayıt no artan sırada
+
+    const bugun = new Date(), gunMetni = bugun.getFullYear()+"-"+String(bugun.getMonth()+1).padStart(2,"0")+"-"+String(bugun.getDate()).padStart(2,"0");
+    const dosyaAdi = "KayitDefteri_"+gunMetni+".xlsx";
+    const tarihNesnesi = (t)=>{ const m = String(t||"").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(Date.UTC(+m[1], +m[2]-1, +m[3])) : (t||""); };
+
+    // 2) Renkli .xlsx (ExcelJS); yüklenemezse renksiz (SheetJS) yedeği
+    let renkli = true;
+    try{
+      await kdKutuphaneYukle_(["https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js", "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"]);
+    }catch(e){ renkli = false; }
+
+    const BASLIK = ["Kayıt No","Modül","İşlem","Tarih","Belge No","Cari","Belge Tutarı","Borç Hesabı","Borç","Alacak Hesabı","Alacak","Kontrol","Durum","Silinme"];
+    if(!renkli){
+      if(typeof XLSX === "undefined"){ alert("Excel kütüphaneleri yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin."); durum(""); return; }
+      const aoa = [BASLIK].concat(tum.map(r=>[r.no, r.modul, r.islem, r.tarih, r.belgeNo, r.cari, r.belgeTutari, r.borcHesap, r.borcTutar===null?"":r.borcTutar, r.alacakHesap, r.alacakTutar===null?"":r.alacakTutar, r.kontrol, r.durum, r.silinmeZamani]));
+      const ws = XLSX.utils.aoa_to_sheet(aoa), wb2 = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb2, ws, "Kayıt Defteri"); XLSX.writeFile(wb2, dosyaAdi);
+      alert("Renk desteği için gereken kütüphane yüklenemedi; dosya renksiz olarak indirildi.");
+      durum(""); return;
+    }
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Fincanlar ERP";
+    const ws = wb.addWorksheet("Kayıt Defteri", { views:[{ state:"frozen", ySplit:1 }] });
+    ws.columns = [
+      {header:BASLIK[0], key:"no", width:13}, {header:BASLIK[1], key:"modul", width:13}, {header:BASLIK[2], key:"islem", width:34},
+      {header:BASLIK[3], key:"tarih", width:12, style:{numFmt:"dd.mm.yyyy"}}, {header:BASLIK[4], key:"belge", width:14}, {header:BASLIK[5], key:"cari", width:26},
+      {header:BASLIK[6], key:"belgeTutari", width:15, style:{numFmt:"#,##0.00"}}, {header:BASLIK[7], key:"borcHesap", width:26},
+      {header:BASLIK[8], key:"borc", width:15, style:{numFmt:"#,##0.00"}}, {header:BASLIK[9], key:"alacakHesap", width:26},
+      {header:BASLIK[10], key:"alacak", width:15, style:{numFmt:"#,##0.00"}}, {header:BASLIK[11], key:"kontrol", width:30},
+      {header:BASLIK[12], key:"durum", width:10}, {header:BASLIK[13], key:"silinme", width:18},
+    ];
+    const argb = (hex)=>"FF"+hex.replace("#","").toUpperCase();
+    const dolgu = (hex)=>({ type:"pattern", pattern:"solid", fgColor:{ argb: argb(hex) } });
+    const baslikSatir = ws.getRow(1);
+    baslikSatir.height = 22;
+    baslikSatir.eachCell(c=>{ c.font = { bold:true, color:{argb:"FFFFFFFF"} }; c.fill = dolgu("#1f2937"); c.alignment = { vertical:"middle", horizontal:"center" }; });
+
+    tum.forEach(r=>{
+      const sari = r.grup === "Sipariş" || r.grup === "Teklif", silindi = r.durum === "Silindi";
+      const satir = ws.addRow({
+        no: r.no, modul: r.modul, islem: r.islem, tarih: tarihNesnesi(r.tarih), belge: r.belgeNo, cari: r.cari,
+        belgeTutari: r.belgeTutari || null, borcHesap: r.borcHesap, borc: r.borcTutar, alacakHesap: r.alacakHesap, alacak: r.alacakTutar,
+        kontrol: r.kontrol, durum: r.durum, silinme: r.silinmeZamani,
+      });
+      satir.getCell("no").numFmt = "0";
+      satir.eachCell({includeEmpty:true}, c=>{
+        if(sari){ c.fill = dolgu(KD_RENK.sariBg); c.font = { color:{argb:argb(KD_RENK.sariYazi)} }; }
+        if(silindi){ c.font = { strike:true, color:{argb:"FF888888"} }; }
+      });
+      if(!sari){
+        if(r.borcTutar !== null && r.borcTutar !== undefined){ const c = satir.getCell("borc"); c.fill = dolgu(KD_RENK.borcBg); c.font = { bold:true, strike:silindi, color:{argb:silindi?"FF888888":argb(KD_RENK.borcYazi)} }; }
+        if(r.alacakTutar !== null && r.alacakTutar !== undefined){ const c = satir.getCell("alacak"); c.fill = dolgu(KD_RENK.alacakBg); c.font = { bold:true, strike:silindi, color:{argb:silindi?"FF888888":argb(KD_RENK.alacakYazi)} }; }
+        if(String(r.kontrol).indexOf("⚠") === 0) satir.getCell("kontrol").font = { bold:true, color:{argb:argb(KD_RENK.uyari)} };
+        if(String(r.borcHesap).indexOf("⚠") === 0) satir.getCell("borcHesap").font = { bold:true, color:{argb:argb(KD_RENK.uyari)} };
+        if(String(r.alacakHesap).indexOf("⚠") === 0) satir.getCell("alacakHesap").font = { bold:true, color:{argb:argb(KD_RENK.uyari)} };
+      }
+    });
+
+    // Toplam satırı (yalnız Aktif satırlar) — formüllü
+    const son = ws.rowCount, toplamSatir = ws.addRow({});
+    toplamSatir.getCell("borcHesap").value = "TOPLAM (Aktif)";
+    toplamSatir.getCell("borc").value = { formula:`SUMIF(M2:M${son},"Aktif",I2:I${son})`, result: toplamBorc };
+    toplamSatir.getCell("alacak").value = { formula:`SUMIF(M2:M${son},"Aktif",K2:K${son})`, result: toplamAlacak };
+    toplamSatir.eachCell({includeEmpty:true}, c=>{ c.font = { bold:true }; c.border = { top:{style:"medium"} }; });
+    toplamSatir.getCell("borc").numFmt = "#,##0.00"; toplamSatir.getCell("alacak").numFmt = "#,##0.00";
+    toplamSatir.getCell("borc").fill = dolgu(KD_RENK.borcBg); toplamSatir.getCell("borc").font = { bold:true, color:{argb:argb(KD_RENK.borcYazi)} };
+    toplamSatir.getCell("alacak").fill = dolgu(KD_RENK.alacakBg); toplamSatir.getCell("alacak").font = { bold:true, color:{argb:argb(KD_RENK.alacakYazi)} };
+    ws.autoFilter = { from:{row:1, column:1}, to:{row:son, column:14} };
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = dosyaAdi; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    durum("");
+  }catch(err){
+    alert("Excel'e aktarılamadı: "+err.message);
+    durum("");
+  }
 }
 
 let _silinenlerListe = [];
