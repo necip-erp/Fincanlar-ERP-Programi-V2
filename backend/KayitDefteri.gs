@@ -24,12 +24,12 @@
 
 const KD_SHEET_ADI = "KayitDefteriV2";
 const KD_BASLIKLAR = ["KAYIT_NO","MODUL","ISLEM","TARIH","BELGE_NO","CARI","BELGE_TUTARI","BORC_HESAP","BORC_TUTAR","ALACAK_HESAP","ALACAK_TUTAR",
-  "KONTROL","DURUM","KAYNAK","KAYNAK_ID","ALT","GRUP","BORC_KAYNAK","ALACAK_KAYNAK","BORC_BEKLENEN","ALACAK_BEKLENEN","KAYIT_ZAMANI","DEGISIKLIK_ZAMANI","SILINME_ZAMANI"];
+  "KONTROL","DURUM","KAYNAK","KAYNAK_ID","ALT","GRUP","BORC_KAYNAK","ALACAK_KAYNAK","BORC_BEKLENEN","ALACAK_BEKLENEN","KAYIT_ZAMANI","DEGISIKLIK_ZAMANI","SILINME_ZAMANI","CARI_KODU"];
 const KD_NO = 0, KD_MODUL = 1, KD_ISLEM = 2, KD_TARIH = 3, KD_BELGE = 4, KD_CARI = 5, KD_BTUTAR = 6, KD_BHESAP = 7, KD_BTL = 8, KD_AHESAP = 9, KD_ATL = 10,
       KD_KONTROL = 11, KD_DURUM = 12, KD_KAYNAK = 13, KD_KID = 14, KD_ALT = 15, KD_GRUP = 16, KD_BKAYNAK = 17, KD_AKAYNAK = 18,
-      KD_BBEKLENEN = 19, KD_ABEKLENEN = 20, KD_KAYIT = 21, KD_DEGISIM = 22, KD_SILINME = 23;
+      KD_BBEKLENEN = 19, KD_ABEKLENEN = 20, KD_KAYIT = 21, KD_DEGISIM = 22, KD_SILINME = 23, KD_CARIKOD = 24;
 // Sütun biçimleri: numaralar sayı, tutarlar para, gerisi METİN (E-Tablo "00", tarih vb. metinleri bozmasın).
-const KD_FORMATLAR = ["0","@","@","@","@","@","#,##0.00","@","#,##0.00","@","#,##0.00","@","@","@","@","@","@","@","@","@","@","@","@","@"];
+const KD_FORMATLAR = ["0","@","@","@","@","@","#,##0.00","@","#,##0.00","@","#,##0.00","@","@","@","@","@","@","@","@","@","@","@","@","@","@"];
 
 // Ana kayıt kaynakları. sheet = SHEETS anahtarı, prefix = CariHareketler/Banka/POS açıklamasındaki "PREFIX:id |" işareti.
 const KD_KAYNAKLAR = {
@@ -108,7 +108,20 @@ function kdZamanSayisi_(v) {
   return 0;
 }
 
-function kdSheet_(ss) { return getOrCreateSheet(ss, KD_SHEET_ADI, KD_BASLIKLAR); }
+function kdSheet_(ss) {
+  const sheet = getOrCreateSheet(ss, KD_SHEET_ADI, KD_BASLIKLAR);
+  kdBaslikGuvence_(sheet);
+  return sheet;
+}
+// (21 Eyl 2026) Sonradan eklenen CARI_KODU sütunu (25.) eski sayfalarda yoksa başlığı + sütun biçimini ekler.
+function kdBaslikGuvence_(sheet) {
+  if (sheet.getMaxColumns() < KD_BASLIKLAR.length) sheet.insertColumnsAfter(sheet.getMaxColumns(), KD_BASLIKLAR.length - sheet.getMaxColumns());
+  const h = sheet.getRange(1, KD_CARIKOD + 1);
+  if (String(h.getValue() || "") !== "CARI_KODU") {
+    h.setValue("CARI_KODU").setFontWeight("bold").setBackground("#e8edf5");
+    sheet.getRange(2, KD_CARIKOD + 1, Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("@");
+  }
+}
 
 function kdTumSatirlar_(sheet) {
   const son = sheet.getLastRow();
@@ -160,9 +173,28 @@ function kdBaglam_(ss) {
     }
     return onbellek[ad];
   };
+  // Cari kodu haritası (CariHesaplar 9. sütun) ve fatura kalemleri (KDV hariç tutar hesabı için) — yalnız istenirse okunur.
+  const kodHaritasi = () => {
+    if (!onbellek.cariKod) {
+      const m = {};
+      kdSayfaOku_(ss, SHEETS.cariHesaplar).forEach(r => { m[String(r[0])] = String(r[8] || ""); });
+      onbellek.cariKod = m;
+    }
+    return onbellek.cariKod;
+  };
+  const kalemGrupla = (ad, sheetKey) => {
+    if (!onbellek[ad]) {
+      const m = {};
+      kdSayfaOku_(ss, SHEETS[sheetKey]).forEach(r => { const id = String(r[1]); (m[id] = m[id] || []).push(r); });
+      onbellek[ad] = m;
+    }
+    return onbellek[ad];
+  };
   return {
     cari: () => yukle("cari", "cariHesaplar"), banka: () => yukle("banka", "bankaHesaplari"),
     pos: () => yukle("pos", "posCihazlari"), kart: () => yukle("kart", "krediKartlari"),
+    cariKod: kodHaritasi,
+    satisKalem: () => kalemGrupla("satisKalem", "satisKalemleri"), alisKalem: () => kalemGrupla("alisKalem", "alisKalemleri"),
   };
 }
 
@@ -179,11 +211,43 @@ function kdIsaretAyir_(aciklama) {
   return m ? { prefix: m[1], id: m[2] } : null;
 }
 
+// (21 Eyl 2026) Kayıt Defteri'nde FATURALARDA tutarlar her zaman KDV HARİÇ gösterilir (eskiden cari tarafı KDV dahil,
+// stok tarafı hariç olduğu için karışıklık yaratıyordu). Satış faturası: faturadaki "Ara Toplam" (kalem iskontoları + dip
+// iskonto düşülmüş, KDV hariç); Alış faturası: kalemlerin miktar × birim fiyat toplamı. Diğer belgelerde (iade, tahsilat,
+// ödeme, çek/senet, virman) KDV yoktur → null (mevcut tutarlar aynen kalır). Satış Sipariş/Teklif satırlarının (sarı) Belge
+// Tutarı da aynı kuralla KDV hariç gösterilir ki Belge Tutarı sütunu tek anlam taşısın.
+function kdHaricTutar_(key, row, ctx) {
+  const yuvarla = (x) => Math.round(x * 100) / 100;
+  if (key === "satis") {
+    const kalemler = ctx.satisKalem()[String(row[0])] || [];
+    if (!kalemler.length) return null;
+    let ara = 0;
+    kalemler.forEach(k => { ara += satisKalemHesapla(parseFloat(k[3]) || 0, parseFloat(k[5]) || 0, parseFloat(k[7]) || 0, parseFloat(k[8]) || 0).araToplam; });
+    ara -= ara * ((parseFloat(row[9]) || 0) / 100);
+    const tutarIsk = parseFloat(row[13]) || 0;
+    if (tutarIsk > 0 && String(row[14]) === "0") ara = Math.max(0, ara - tutarIsk); // KDV'den ÖNCE uygulanan tutar iskontosu matrahı düşürür
+    return yuvarla(ara);
+  }
+  if (key === "alis") {
+    const kalemler = ctx.alisKalem()[String(row[0])] || [];
+    if (!kalemler.length) return null;
+    let toplam = 0;
+    kalemler.forEach(k => { toplam += (parseFloat(k[3]) || 0) * (parseFloat(k[5]) || 0); });
+    return yuvarla(toplam);
+  }
+  return null;
+}
+function kdCariKodu_(cariIdler, ctx) {
+  const m = ctx.cariKod();
+  return (cariIdler || []).map(id => m[String(id || "")] || "").filter(Boolean).join(" → ");
+}
+
 // ── Ana kayıt tanımı ──
 function kdAnaTanimla_(key, row) {
   const kk = KD_KAYNAKLAR[key];
   const id = String(row[0]);
-  const t = { key: key, id: id, kaynak: SHEETS[kk.sheet], modul: kk.modul, belge: "", cariTek: true, grup: "" };
+  const t = { key: key, id: id, kaynak: SHEETS[kk.sheet], modul: kk.modul, belge: "", cariTek: true, grup: "",
+              cariIdler: key === "virman" ? [row[2], row[4]] : (key === "posaktarim" ? [] : [row[2]]) };
   if (key === "satis") {
     const bt = String(row[8] || "Fatura");
     t.islem = "Satış " + (bt === "Fatura" ? "Faturası" : bt === "Sipariş" ? "Siparişi" : "Teklifi");
@@ -373,7 +437,18 @@ function kdGirisleriKur_(key, row, legs, opts, t, ctx) {
                 kaynak: t.kaynak, kid: t.id, kayit: t.kayit };
     g.borc = kdTarafKur_(spec.borc, legs, kul, t, ctx);
     g.alacak = kdTarafKur_(spec.alacak, legs, kul, t, ctx);
-    g.kontrol = kdKontrolMetni_(g);
+    g.kontrol = kdKontrolMetni_(g); // kontrol GERÇEK karşı kayıt tutarlarıyla yapılır; aşağıdaki KDV hariç düzeltme yalnız gösterim içindir
+    g.cariKodu = kdCariKodu_(t.cariIdler, ctx);
+    // Faturanın kendi (ana) satırında Belge Tutarı ve iki tarafın tutarı KDV HARİÇ gösterilir. Faturaya bağlı
+    // "Havale ile tahsilat" gibi alt satırlar gerçek para hareketidir, olduğu gibi kalır.
+    if (!spec.alt && (key === "satis" || key === "alis")) {
+      const haric = kdHaricTutar_(key, row, ctx);
+      if (haric !== null) {
+        g.belgeTutari = haric;
+        if (g.borc && !g.borc.eksik) g.borc = Object.assign({}, g.borc, { tutar: haric });
+        if (g.alacak && !g.alacak.eksik) g.alacak = Object.assign({}, g.alacak, { tutar: haric });
+      }
+    }
     return g;
   });
 }
@@ -381,7 +456,8 @@ function kdGirisleriKur_(key, row, legs, opts, t, ctx) {
 // Manuel cari hareketi (işaretsiz) veya sahipsiz (ana kaydı olmayan) hareket → tek taraflı giriş.
 function kdTekBacakGirisi_(b, modulAdi, islem, grup, cariAd, ctx) {
   const t = { modul: modulAdi, cari: cariAd, cariTek: true, tutar: b.tutar };
-  const g = { alt: "", grup: grup, modul: modulAdi, islem: islem, tarih: b.tarih, belge: "", cari: cariAd, belgeTutari: b.tutar, kaynak: b.kaynak, kid: b.kid, kayit: b.kayit, borc: null, alacak: null };
+  const g = { alt: "", grup: grup, modul: modulAdi, islem: islem, tarih: b.tarih, belge: "", cari: cariAd, belgeTutari: b.tutar, kaynak: b.kaynak, kid: b.kid, kayit: b.kayit, borc: null, alacak: null,
+             cariKodu: b.k === "cari" ? (ctx.cariKod()[String(b.ek)] || "") : "" };
   const taraf = { ad: kdHesapAdi_(b, t, ctx), tutar: b.tutar, kaynak: b.kaynak + "|" + b.kid, tur: "" };
   if (kdBacakTarafi_(b) === "borc") g.borc = taraf; else g.alacak = taraf;
   g.kontrol = kdKontrolMetni_(g);
@@ -399,7 +475,7 @@ function kdSatiri_(no, g, kayitZamani) {
   s[KD_KONTROL] = g.kontrol; s[KD_DURUM] = "Aktif"; s[KD_KAYNAK] = g.kaynak; s[KD_KID] = g.kid; s[KD_ALT] = g.alt || ""; s[KD_GRUP] = g.grup || "";
   s[KD_BKAYNAK] = g.borc ? g.borc.kaynak : ""; s[KD_AKAYNAK] = g.alacak ? g.alacak.kaynak : "";
   s[KD_BBEKLENEN] = g.borc && g.borc.tur ? g.borc.tur : ""; s[KD_ABEKLENEN] = g.alacak && g.alacak.tur ? g.alacak.tur : "";
-  s[KD_KAYIT] = kayitZamani; s[KD_DEGISIM] = ""; s[KD_SILINME] = "";
+  s[KD_KAYIT] = kayitZamani; s[KD_DEGISIM] = ""; s[KD_SILINME] = ""; s[KD_CARIKOD] = g.cariKodu || "";
   return s;
 }
 
@@ -606,12 +682,9 @@ function kdZamanMetniDuzenle_(v) {
 }
 
 // ── MEVCUT KAYITLARI NUMARALA (geriye dönük / eksik tamamlama) ──
-function kayitDefteriBaslat(body) {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  const sheet = kdSheet_(ss);
-  const dunya = kdDunyaOku_(ss);
-  const ctx = kdBaglam_(ss);
-  const aday = []; // {g, zaman}
+// Kaynak sayfalardaki tüm kayıtlardan (ve sahipsiz/manuel hareketlerden) defter girişlerini üretir: [{g, zaman}]
+function kdTumGirisleriUret_(dunya, ctx) {
+  const aday = [];
   Object.keys(KD_KAYNAKLAR).forEach(key => {
     dunya.anaSatirlar[key].forEach(r => {
       const t = kdAnaTanimla_(key, r);
@@ -620,6 +693,15 @@ function kayitDefteriBaslat(body) {
     });
   });
   kdYetimGirisleri_(dunya, ctx).forEach(y => aday.push(y));
+  return aday;
+}
+
+function kayitDefteriBaslat(body) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = kdSheet_(ss);
+  const dunya = kdDunyaOku_(ss);
+  const ctx = kdBaglam_(ss);
+  const aday = kdTumGirisleriUret_(dunya, ctx); // {g, zaman}
   const idSirasi = (g) => parseInt((String(g.kid).match(/\d{10,}/) || ["0"])[0], 10) || 0;
   aday.sort((a, b) => (a.zaman - b.zaman) || (idSirasi(a.g) - idSirasi(b.g)));
 
@@ -639,6 +721,51 @@ function kayitDefteriBaslat(body) {
     });
   }
   return { ok: true, yeniKayit: yeni, toplamAday: aday.length };
+}
+
+// ── (21 Eyl 2026) MEVCUT SATIRLARI GÜNCELLE: Fatura tutarları KDV HARİÇ + Cari Kodu ──
+// Sadece BELGE_TUTARI / BORC_TUTAR / ALACAK_TUTAR / CARI_KODU hücrelerini, kaynak kayıtlardan yeniden hesaplanan
+// değerle yerinde günceller. Kayıt no, kontrol, durum, zaman damgaları (DEĞİŞİKLİK dahil) DOKUNULMAZ. Kaynağı artık
+// olmayan (Silindi) satırlar hesaplanamadığı için olduğu gibi kalır. Tekrar çalıştırmak güvenlidir. Bittiğinde bayrak
+// konur; getKayitDefteri "duzeltmeGerekli" bayrağını buna göre döner.
+function kayitDefteriTutarKoduDuzelt(body) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = kdSheet_(ss);
+  const dunya = kdDunyaOku_(ss);
+  const ctx = kdBaglam_(ss);
+  const aday = kdTumGirisleriUret_(dunya, ctx);
+  const esit = (a, b) => {
+    const sa = String(a === null || a === undefined ? "" : a), sb = String(b === null || b === undefined ? "" : b);
+    if (sa === "" || sb === "") return sa === sb;
+    const na = Number(sa), nb = Number(sb);
+    return (isNaN(na) || isNaN(nb)) ? sa === sb : Math.abs(na - nb) < 0.005;
+  };
+  let guncellenen = 0, incelenen = 0;
+  kdKilitli_(() => {
+    const satirlar = kdTumSatirlar_(sheet);
+    if (!satirlar.length) return;
+    const indeks = {};
+    satirlar.forEach((r, i) => { if (r[KD_DURUM] === "Aktif") indeks[kdGirisAnahtari_(r[KD_KAYNAK], r[KD_KID], r[KD_ALT])] = i; });
+    const kolonlar = [KD_BTUTAR, KD_BTL, KD_ATL, KD_CARIKOD];
+    aday.forEach(a => {
+      const i = indeks[kdGirisAnahtari_(a.g.kaynak, a.g.kid, a.g.alt)];
+      if (i === undefined) return;
+      incelenen++;
+      const yeni = kdSatiri_(0, a.g, "");
+      let degisti = false;
+      kolonlar.forEach(c => { if (!esit(satirlar[i][c], yeni[c])) { satirlar[i][c] = yeni[c]; degisti = true; } });
+      if (degisti) guncellenen++;
+    });
+    if (guncellenen) {
+      kolonlar.forEach(c => {
+        const aralik = sheet.getRange(2, c + 1, satirlar.length, 1);
+        aralik.setNumberFormats(satirlar.map(() => [KD_FORMATLAR[c]]));
+        aralik.setValues(satirlar.map(r => [r[c]]));
+      });
+    }
+  });
+  PropertiesService.getScriptProperties().setProperty("KD_HARIC_SURUM", "1");
+  return { ok: true, incelenen: incelenen, guncellenen: guncellenen };
 }
 
 // ── KONTROL ──
@@ -757,7 +884,7 @@ function getKayitDefteri(body) {
     if (body.tarihBas && gun(r) < body.tarihBas) return false;
     if (body.tarihSon && gun(r) > body.tarihSon) return false;
     if (arama) {
-      const metin = [r[KD_NO], r[KD_MODUL], r[KD_ISLEM], r[KD_BELGE], r[KD_CARI], r[KD_BHESAP], r[KD_AHESAP], r[KD_KONTROL], r[KD_KID]].join(" ").toLocaleLowerCase("tr");
+      const metin = [r[KD_NO], r[KD_MODUL], r[KD_ISLEM], r[KD_BELGE], r[KD_CARI], r[KD_CARIKOD], r[KD_BHESAP], r[KD_AHESAP], r[KD_KONTROL], r[KD_KID]].join(" ").toLocaleLowerCase("tr");
       if (metin.indexOf(arama) < 0) return false;
     }
     return true;
@@ -767,12 +894,13 @@ function getKayitDefteri(body) {
   uygun.forEach(r => { if (r[KD_DURUM] === "Aktif") { toplamBorc += kdSayi_(r[KD_BTL]); toplamAlacak += kdSayi_(r[KD_ATL]); } });
   const dilim = uygun.slice(sayfa * adet, sayfa * adet + adet).map(r => ({
     no: Number(r[KD_NO]), modul: kdMetin_(r[KD_MODUL]), islem: kdMetin_(r[KD_ISLEM]), tarih: kdMetin_(r[KD_TARIH]), belgeNo: kdMetin_(r[KD_BELGE]),
-    cari: kdMetin_(r[KD_CARI]), belgeTutari: kdSayi_(r[KD_BTUTAR]), borcHesap: kdMetin_(r[KD_BHESAP]), borcTutar: r[KD_BTL] === "" ? null : kdSayi_(r[KD_BTL]),
+    cari: kdMetin_(r[KD_CARI]), cariKodu: kdMetin_(r[KD_CARIKOD]), belgeTutari: kdSayi_(r[KD_BTUTAR]), borcHesap: kdMetin_(r[KD_BHESAP]), borcTutar: r[KD_BTL] === "" ? null : kdSayi_(r[KD_BTL]),
     alacakHesap: kdMetin_(r[KD_AHESAP]), alacakTutar: r[KD_ATL] === "" ? null : kdSayi_(r[KD_ATL]), kontrol: kdMetin_(r[KD_KONTROL]), durum: kdMetin_(r[KD_DURUM]),
-    grup: kdMetin_(r[KD_GRUP]), kaynakId: kdMetin_(r[KD_KID]), kayitZamani: kdMetin_(r[KD_KAYIT]), silinmeZamani: kdMetin_(r[KD_SILINME]),
+    grup: kdMetin_(r[KD_GRUP]), kaynak: kdMetin_(r[KD_KAYNAK]), kaynakId: kdMetin_(r[KD_KID]), kayitZamani: kdMetin_(r[KD_KAYIT]), silinmeZamani: kdMetin_(r[KD_SILINME]),
   }));
   return { ok: true, toplam: uygun.length, satirlar: dilim, sayfa: sayfa, adet: adet, moduller: Object.keys(moduller).sort(),
     toplamBorc: toplamBorc, toplamAlacak: toplamAlacak,
+    duzeltmeGerekli: PropertiesService.getScriptProperties().getProperty("KD_HARIC_SURUM") !== "1", // eski satırlar KDV hariç/cari kodu için henüz güncellenmedi
     ozet: { toplamKayit: satirlar.length, silinen: satirlar.filter(r => r[KD_DURUM] === "Silindi").length,
             uyarili: satirlar.filter(r => r[KD_DURUM] === "Aktif" && String(r[KD_KONTROL]).indexOf("⚠") >= 0).length,
             sonNo: satirlar.length ? Number(satirlar[satirlar.length - 1][KD_NO]) : 0 } };

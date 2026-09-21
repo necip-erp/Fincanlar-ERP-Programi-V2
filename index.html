@@ -1131,8 +1131,9 @@ setInterval(topbarSaatGuncelle, 10000);
         Her işlem <b>tek satırda, iki taraflı</b> tutulur: <b style="color:#b91c1c">Borç</b> hesabı/tutarı ve <b style="color:#15803d">Alacak</b> hesabı/tutarı.
         Sıralı numara verilir; silinen işlemin satırı kalır ("Silindi"), numara bir daha kullanılmaz. Sipariş ve Teklif satırları
         <b style="background:#fff4b8;padding:0 5px;border-radius:4px;color:#3b3200">sarı</b>dır (borç/alacak yazmaz). Bir tarafın kaydı yoksa
-        <b style="color:#b7791f">⚠ Eksik</b> görünür.
+        <b style="color:#b7791f">⚠ Eksik</b> görünür. <b>Fatura tutarları (Belge Tutarı, Borç, Alacak) her zaman KDV HARİÇ</b> gösterilir.
       </p>
+      <div id="kd-duzeltme"></div>
       <div id="kd-ozet" style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
         <input id="kd-arama" type="text" placeholder="Numara, belge no, cari, hesap, işlem ara..." style="flex:1;min-width:220px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)" oninput="kayitDefteriAramaDegisti()">
@@ -1803,6 +1804,8 @@ function sonIslemAc(tip, id){
   else if(tip === "TAHSILAT"){ kayitSekmesindeAc("tahsilat","💰","Tahsilat #"+id,"TAHSILAT:"+id, ()=>{ if(!_tahsilatYuklendi) tahsilatListesiYukle(); tahsilatAc(id); }); }
   else if(tip === "ODEME"){ kayitSekmesindeAc("odeme","💳","Ödeme #"+id,"ODEME:"+id, ()=>{ if(!_odemeYuklendi) odemeListesiYukle(); odemeAc(id); }); }
   else if(tip === "CEK"){ kayitSekmesindeAc("ceksenet","🧾","Çek/Senet #"+id,"CEK:"+id, ()=>{ if(!_cekSenetYuklendi) cekSenetListesiYukle(); cekSenetAc(id); }); }
+  else if(tip === "SATISIADE"){ kayitSekmesindeAc("satis","↩️","Satış İadesi #"+id,"SATISIADE:"+id, ()=>{ satisAltModulAc("Iade"); satisIadeAc(id); }); }
+  else if(tip === "ALISIADE"){ kayitSekmesindeAc("alis","↩️","Alış İadesi #"+id,"ALISIADE:"+id, ()=>{ alisAltModulAc("iade"); alisIadeAc(id); }); }
   else if(tip === "STOK"){ modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("hareket"); }
 }
 // NOT: İlk çağrı burada YAPILMIYOR (bkz. bugunOzetCiz ile aynı sebep) — CARI_API/cariApi
@@ -1894,6 +1897,7 @@ function kayitSekmesindeAc(modulId, ikon, etiket, kimlik, acFonksiyonu){
 function kayitSekmesiniGoster(sekmeId){
   const veri = _kayitSekmeVeri[sekmeId];
   if(!veri) return;
+  if(typeof kayitDefteriEkranDurumuKaydet_ === "function") kayitDefteriEkranDurumuKaydet_();
   document.getElementById("home").style.display = "none";
   document.querySelectorAll(".modview").forEach(v=>v.classList.remove("active"));
   const el = document.getElementById("mod-"+veri.modulId);
@@ -1967,6 +1971,7 @@ function sekmeGezin(yon){
 }
 
 function modulAc(id){
+  if(typeof kayitDefteriEkranDurumuKaydet_ === "function") kayitDefteriEkranDurumuKaydet_(); // Kayıt Defteri'nden ayrılırken ekran durumunu sakla
   document.getElementById("home").style.display = "none";
   document.querySelectorAll(".modview").forEach(v=>v.classList.remove("active"));
   const el = document.getElementById("mod-"+id);
@@ -1984,7 +1989,7 @@ function modulAc(id){
   sekmeSeridiCiz();
   // Silinenler listesi her açılışta taze olmalı (stale cache burada yanıltıcı olur).
   if(id === "silinenler") silinenlerYukle();
-  if(id === "kayitdefteri") kayitDefteriYukle(true);
+  if(id === "kayitdefteri") kayitDefteriAcildi_(); // artık her açılışta yenilemez
   // Cari/Tahsilat/Ödeme modülleri doğrudan liste ekranıyla açılır — sol arama kutusuna
   // odaklan ki kullanıcı hiçbir şeye tıklamadan yazmaya başlayabilsin. (Satış/Satış İadesi
   // önce Fatura/Teklif/Sipariş seçim ekranı gösterdiği için odaklanma satisAltModulAc'te.)
@@ -2001,6 +2006,7 @@ function odakSolAramaKutusu(girisId){
 }
 
 function gitAnaSayfa(){
+  if(typeof kayitDefteriEkranDurumuKaydet_ === "function") kayitDefteriEkranDurumuKaydet_();
   document.querySelectorAll(".modview").forEach(v=>v.classList.remove("active"));
   document.getElementById("home").style.display = "flex";
   document.getElementById("home-btn").classList.remove("show");
@@ -9130,6 +9136,53 @@ function shpSurukleBasla(e){
 
 // ══════════════ KAYIT DEFTERİ ══════════════
 let _kdSayfa = 0, _kdToplam = 0, _kdSatirlar = [], _kdAramaZamanlayici = null, _kdIstek = 0;
+// ★ (21 Eyl 2026) Kayıt Defteri başka sekmeye/sayfaya gidip geri dönülünce YENİLENMEZ: liste, filtreler, yüklenen sayfalar ve
+// kaydırma konumu olduğu gibi kalır. Yalnız ilk açılışta (ya da ilk yükleme başarısız olduysa) yüklenir; güncelleme için ↻ Yenile.
+let _kdYuklendi = false, _kdEkranDurumu = null, _kdDuzeltmeSuruyor = false;
+function kayitDefteriEkranDurumuKaydet_(){
+  const gorunum = document.getElementById("mod-kayitdefteri");
+  if(!gorunum || !gorunum.classList.contains("active")) return; // yalnız Kayıt Defteri ÖNDEYKEN ayrılırken
+  const tablo = document.querySelector("#kd-liste > div");
+  const ana = document.querySelector(".main"); // dikey kaydırma bu kapsayıcıda (pencere değil)
+  _kdEkranDurumu = { y: ana ? ana.scrollTop : 0, x: tablo ? tablo.scrollLeft : 0 };
+}
+function kayitDefteriAcildi_(){
+  if(!_kdYuklendi){ kayitDefteriYukle(true); return; }
+  const d = _kdEkranDurumu; if(!d) return;
+  requestAnimationFrame(()=>{
+    const ana = document.querySelector(".main");
+    if(ana) ana.scrollTop = d.y;
+    const tablo = document.querySelector("#kd-liste > div");
+    if(tablo) tablo.scrollLeft = d.x;
+  });
+}
+// Kaynak sayfa adı → "Belgeyi Aç" için belge türü (sonIslemAc'ın anladığı kısa tür).
+const KD_BELGE_TIPI = { Satislar:"SATIS", Alislar:"ALIS", Tahsilatlar:"TAHSILAT", Odemeler:"ODEME", CekSenetler:"CEK", SatisIadeler:"SATISIADE", AlisIadeler:"ALISIADE" };
+function kayitDefteriBelgeAc(kaynak, id){
+  const tip = KD_BELGE_TIPI[kaynak];
+  if(tip && id) sonIslemAc(tip, id);
+}
+// Eski satırları (bir kez) KDV hariç tutarlara + Cari Kodu'na günceller; backend "duzeltmeGerekli" bildirdiğinde kendiliğinden başlar.
+function kayitDefteriDuzeltmeBaslat_(){
+  const kutu = document.getElementById("kd-duzeltme");
+  if(!kutu) return;
+  _kdDuzeltmeSuruyor = true;
+  const bilgi = (metin, renk)=>`<div style="margin:8px 0;padding:8px 12px;border-radius:9px;background:var(--bg3);font-size:13px;${renk?'color:'+renk+';':''}">${metin}</div>`;
+  kutu.innerHTML = bilgi("⏳ Eski satırlar KDV hariç tutarlara ve Cari Kodu'na güncelleniyor… (bir kereye mahsus, birkaç saniye sürebilir)");
+  cariApi("kayitDefteriTutarKoduDuzelt", {}).then(res=>{
+    _kdDuzeltmeSuruyor = false;
+    if(!res || !res.ok){
+      kutu.innerHTML = bilgi("⚠ Güncelleme yapılamadı: "+htmlKacis((res && (res.hata||res.error))||"bilinmiyor")+' <button class="btn" style="padding:2px 9px;font-size:12px" onclick="kayitDefteriDuzeltmeBaslat_()">Tekrar dene</button>', "#b7791f");
+      return;
+    }
+    kutu.innerHTML = bilgi("✓ "+(res.guncellenen||0)+" satır KDV hariç tutar / Cari Kodu ile güncellendi.", "#15803d");
+    setTimeout(()=>{ if(kutu.firstChild) kutu.innerHTML = ""; }, 8000);
+    kayitDefteriYukle(true);
+  }).catch(err=>{
+    _kdDuzeltmeSuruyor = false;
+    kutu.innerHTML = bilgi("⚠ Bağlantı hatası: "+htmlKacis(err.message)+' <button class="btn" style="padding:2px 9px;font-size:12px" onclick="kayitDefteriDuzeltmeBaslat_()">Tekrar dene</button>', "#b7791f");
+  });
+}
 const KD_SAYFA_BOYUT = 200;
 // Renkler (hem ekranda hem Excel'de): Borç = kırmızı hücre, Alacak = yeşil hücre, Sipariş/Teklif = sarı satır
 const KD_RENK = { borcBg:"#fde2e2", borcYazi:"#b91c1c", alacakBg:"#dcf5e4", alacakYazi:"#15803d", sariBg:"#fff4b8", sariYazi:"#3b3200", uyari:"#b7791f" };
@@ -9157,7 +9210,9 @@ function kayitDefteriYukle(sifirla){
     if(istekNo !== _kdIstek) return; // daha yeni bir istek başlamış
     if(!res.ok){ liste.innerHTML = '<div class="cari-empty">Hata: '+htmlKacis(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _kdToplam = res.toplam;
+    _kdYuklendi = true;
     _kdSatirlar = _kdSatirlar.concat(res.satirlar);
+    if(res.duzeltmeGerekli && !_kdDuzeltmeSuruyor) kayitDefteriDuzeltmeBaslat_();
     const sel = document.getElementById("kd-modul");
     if(sel){
       const mevcut = sel.value;
@@ -9193,8 +9248,9 @@ function kayitDefteriCiz_(){
   };
   liste.innerHTML = `
     <div style="overflow-x:auto"><table class="hareket-tbl">
-      <thead><tr><th>Kayıt No</th><th>Modül</th><th>İşlem</th><th>Tarih</th><th>Belge No</th><th>Cari</th><th style="text-align:right">Belge Tutarı</th>
-        <th>Borç Hesabı</th><th style="text-align:right">Borç</th><th>Alacak Hesabı</th><th style="text-align:right">Alacak</th><th>Kontrol</th><th>Durum</th></tr></thead>
+      <thead><tr><th>Kayıt No</th><th>Modül</th><th>İşlem</th><th>Tarih</th><th>Belge No</th><th>Cari</th><th>Cari Kodu</th>
+        <th>Alacak Hesabı</th><th style="text-align:right">Alacak Tutarı</th><th style="text-align:right">Belge Tutarı</th><th style="text-align:right">Borç Tutarı</th><th>Borç Hesabı</th>
+        <th>Kontrol</th><th>Durum</th><th>Belge</th></tr></thead>
       <tbody>
         ${_kdSatirlar.map(r=>{
           const silindi = r.durum === "Silindi";
@@ -9212,11 +9268,13 @@ function kayitDefteriCiz_(){
             <td style="white-space:nowrap">${r.tarih ? htmlKacis(tarihGoster(r.tarih)) : "—"}</td>
             <td>${htmlKacis(r.belgeNo)||"—"}</td>
             <td>${htmlKacis(r.cari)||"—"}</td>
-            <td style="text-align:right;white-space:nowrap">${r.belgeTutari ? paraFormat(r.belgeTutari) : "—"}</td>
-            <td style="font-size:12.5px">${hesapHtml(r.borcHesap)}</td>${borcHucre}
+            <td style="white-space:nowrap">${htmlKacis(r.cariKodu)||"—"}</td>
             <td style="font-size:12.5px">${hesapHtml(r.alacakHesap)}</td>${alacakHucre}
+            <td style="text-align:right;white-space:nowrap">${r.belgeTutari ? paraFormat(r.belgeTutari) : "—"}</td>
+            ${borcHucre}<td style="font-size:12.5px">${hesapHtml(r.borcHesap)}</td>
             <td style="font-size:12.5px">${kontrolHtml(r.kontrol)}</td>
             <td style="white-space:nowrap">${silindi ? '<b style="color:#c0392b">Silindi</b><div style="font-size:10.5px">'+htmlKacis(r.silinmeZamani)+'</div>' : 'Aktif'}</td>
+            <td style="white-space:nowrap">${(!silindi && KD_BELGE_TIPI[r.kaynak]) ? `<button class="btn" style="padding:3px 9px;font-size:12px" onclick="kayitDefteriBelgeAc('${htmlKacis(r.kaynak)}','${htmlKacis(r.kaynakId)}')">📄 Belgeyi Aç</button>` : '<span style="color:var(--text3)">—</span>'}</td>
           </tr>`;
         }).join("")}
       </tbody>
@@ -9317,10 +9375,10 @@ async function kayitDefteriExcelAktar(){
       await kdKutuphaneYukle_(["https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js", "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"]);
     }catch(e){ renkli = false; }
 
-    const BASLIK = ["Kayıt No","Modül","İşlem","Tarih","Belge No","Cari","Belge Tutarı","Borç Hesabı","Borç","Alacak Hesabı","Alacak","Kontrol","Durum","Silinme"];
+    const BASLIK = ["Kayıt No","Modül","İşlem","Tarih","Belge No","Cari","Cari Kodu","Alacak Hesabı","Alacak Tutarı","Belge Tutarı","Borç Tutarı","Borç Hesabı","Kontrol","Durum","Silinme"];
     if(!renkli){
       if(typeof XLSX === "undefined"){ alert("Excel kütüphaneleri yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin."); durum(""); return; }
-      const aoa = [BASLIK].concat(tum.map(r=>[r.no, r.modul, r.islem, r.tarih, r.belgeNo, r.cari, r.belgeTutari, r.borcHesap, r.borcTutar===null?"":r.borcTutar, r.alacakHesap, r.alacakTutar===null?"":r.alacakTutar, r.kontrol, r.durum, r.silinmeZamani]));
+      const aoa = [BASLIK].concat(tum.map(r=>[r.no, r.modul, r.islem, r.tarih, r.belgeNo, r.cari, r.cariKodu, r.alacakHesap, r.alacakTutar===null?"":r.alacakTutar, r.belgeTutari, r.borcTutar===null?"":r.borcTutar, r.borcHesap, r.kontrol, r.durum, r.silinmeZamani]));
       const ws = XLSX.utils.aoa_to_sheet(aoa), wb2 = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb2, ws, "Kayıt Defteri"); XLSX.writeFile(wb2, dosyaAdi);
       alert("Renk desteği için gereken kütüphane yüklenemedi; dosya renksiz olarak indirildi.");
@@ -9333,10 +9391,10 @@ async function kayitDefteriExcelAktar(){
     ws.columns = [
       {header:BASLIK[0], key:"no", width:13}, {header:BASLIK[1], key:"modul", width:13}, {header:BASLIK[2], key:"islem", width:34},
       {header:BASLIK[3], key:"tarih", width:12, style:{numFmt:"dd.mm.yyyy"}}, {header:BASLIK[4], key:"belge", width:14}, {header:BASLIK[5], key:"cari", width:26},
-      {header:BASLIK[6], key:"belgeTutari", width:15, style:{numFmt:"#,##0.00"}}, {header:BASLIK[7], key:"borcHesap", width:26},
-      {header:BASLIK[8], key:"borc", width:15, style:{numFmt:"#,##0.00"}}, {header:BASLIK[9], key:"alacakHesap", width:26},
-      {header:BASLIK[10], key:"alacak", width:15, style:{numFmt:"#,##0.00"}}, {header:BASLIK[11], key:"kontrol", width:30},
-      {header:BASLIK[12], key:"durum", width:10}, {header:BASLIK[13], key:"silinme", width:18},
+      {header:BASLIK[6], key:"cariKodu", width:12}, {header:BASLIK[7], key:"alacakHesap", width:26},
+      {header:BASLIK[8], key:"alacak", width:15, style:{numFmt:"#,##0.00"}}, {header:BASLIK[9], key:"belgeTutari", width:15, style:{numFmt:"#,##0.00"}},
+      {header:BASLIK[10], key:"borc", width:15, style:{numFmt:"#,##0.00"}}, {header:BASLIK[11], key:"borcHesap", width:26},
+      {header:BASLIK[12], key:"kontrol", width:30}, {header:BASLIK[13], key:"durum", width:10}, {header:BASLIK[14], key:"silinme", width:18},
     ];
     const argb = (hex)=>"FF"+hex.replace("#","").toUpperCase();
     const dolgu = (hex)=>({ type:"pattern", pattern:"solid", fgColor:{ argb: argb(hex) } });
@@ -9347,7 +9405,7 @@ async function kayitDefteriExcelAktar(){
     tum.forEach(r=>{
       const sari = r.grup === "Sipariş" || r.grup === "Teklif", silindi = r.durum === "Silindi";
       const satir = ws.addRow({
-        no: r.no, modul: r.modul, islem: r.islem, tarih: tarihNesnesi(r.tarih), belge: r.belgeNo, cari: r.cari,
+        no: r.no, modul: r.modul, islem: r.islem, tarih: tarihNesnesi(r.tarih), belge: r.belgeNo, cari: r.cari, cariKodu: r.cariKodu,
         belgeTutari: r.belgeTutari || null, borcHesap: r.borcHesap, borc: r.borcTutar, alacakHesap: r.alacakHesap, alacak: r.alacakTutar,
         kontrol: r.kontrol, durum: r.durum, silinme: r.silinmeZamani,
       });
@@ -9368,13 +9426,13 @@ async function kayitDefteriExcelAktar(){
     // Toplam satırı (yalnız Aktif satırlar) — formüllü
     const son = ws.rowCount, toplamSatir = ws.addRow({});
     toplamSatir.getCell("borcHesap").value = "TOPLAM (Aktif)";
-    toplamSatir.getCell("borc").value = { formula:`SUMIF(M2:M${son},"Aktif",I2:I${son})`, result: toplamBorc };
-    toplamSatir.getCell("alacak").value = { formula:`SUMIF(M2:M${son},"Aktif",K2:K${son})`, result: toplamAlacak };
+    toplamSatir.getCell("borc").value = { formula:`SUMIF(N2:N${son},"Aktif",K2:K${son})`, result: toplamBorc };
+    toplamSatir.getCell("alacak").value = { formula:`SUMIF(N2:N${son},"Aktif",I2:I${son})`, result: toplamAlacak };
     toplamSatir.eachCell({includeEmpty:true}, c=>{ c.font = { bold:true }; c.border = { top:{style:"medium"} }; });
     toplamSatir.getCell("borc").numFmt = "#,##0.00"; toplamSatir.getCell("alacak").numFmt = "#,##0.00";
     toplamSatir.getCell("borc").fill = dolgu(KD_RENK.borcBg); toplamSatir.getCell("borc").font = { bold:true, color:{argb:argb(KD_RENK.borcYazi)} };
     toplamSatir.getCell("alacak").fill = dolgu(KD_RENK.alacakBg); toplamSatir.getCell("alacak").font = { bold:true, color:{argb:argb(KD_RENK.alacakYazi)} };
-    ws.autoFilter = { from:{row:1, column:1}, to:{row:son, column:14} };
+    ws.autoFilter = { from:{row:1, column:1}, to:{row:son, column:15} };
 
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
