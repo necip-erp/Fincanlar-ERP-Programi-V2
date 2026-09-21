@@ -939,7 +939,7 @@ const OTURUMSUZ_ACTIONLAR = { girisYap: true };
 const ADMIN_ACTIONLAR = {
   kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
-  getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
+  getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, kayitDefteriHatalariTemizle: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
 };
 
 function handleRequest(e) {
@@ -1098,6 +1098,7 @@ function handleRequest(e) {
       case "getKayitDefteriKontrol": result = getKayitDefteriKontrol(); break;
       case "kayitDefteriBaslat":     result = kayitDefteriBaslat(body); break;
       case "kayitDefteriTutarKoduDuzelt": result = kayitDefteriTutarKoduDuzelt(body); break;
+      case "kayitDefteriHatalariTemizle": result = kayitDefteriHatalariTemizle(body); break;
       case "nakliyeSorunluFaturalar": result = nakliyeSorunluFaturalar(); break;
       case "nakliyeSorunluFaturalariSil": result = nakliyeSorunluFaturalariSil(body); break;
       default: result = { error: "Bilinmeyen işlem: " + action };
@@ -4963,6 +4964,30 @@ function getMuhasebeRaporu(body) {
         gunSonuBakiye: devirSonuc.bakiye + gunSonuc.toplamGiris - gunSonuc.toplamCikis,
       };
     }
+    if (mod === "devirli") {
+      // GÜNLÜK DEVİRLİ KASA: seçilen aralıktaki her hareketli gün için Devir (önceki gün sonu bakiyesi) → gün hareketleri →
+      // Gün Sonu bakiyesi. Bir günün gün sonu bakiyesi ertesi hareketli günün devri olarak taşınır (hareketsiz günlerde bakiye değişmez).
+      const hamListe = kasaNakitHamListesiOku(ss);
+      const acilisDevir = baslangic ? kasaAgregatOlustur(hamListe, "", birGunOncesi(baslangic)).bakiye : 0;
+      const gunHaritasi = {};
+      hamListe.forEach(h => {
+        const g = String(h.tarih || "").slice(0, 10);
+        if (!g || !araligaDahilMi(g)) return;
+        (gunHaritasi[g] = gunHaritasi[g] || []).push(h);
+      });
+      let bakiye = acilisDevir, genelGiris = 0, genelCikis = 0;
+      const gunler = Object.keys(gunHaritasi).sort().map(g => {
+        const satirlar = gunHaritasi[g].slice().sort((a, b) => (a.yon === b.yon ? 0 : (a.yon === "Giriş" ? -1 : 1)));
+        let giris = 0, cikis = 0;
+        satirlar.forEach(h => { if (h.yon === "Giriş") giris += h.tutar; else cikis += h.tutar; });
+        const devir = bakiye;
+        bakiye = devir + giris - cikis;
+        genelGiris += giris; genelCikis += cikis;
+        return { gun: g, devir: devir, toplamGiris: giris, toplamCikis: cikis, gunSonuBakiye: bakiye, satirlar: satirlar };
+      });
+      return { ok: true, tip: tip, mod: "devirli", baslangic: baslangic, bitis: bitis, acilisDevir: acilisDevir,
+        gunler: gunler, toplamGiris: genelGiris, toplamCikis: genelCikis, kapanisBakiye: bakiye };
+    }
     const sonuc = kasaHareketleriTopla(ss, baslangic, bitis);
     return { ok: true, tip: tip, mod: "aralik", satirlar: sonuc.satirlar, toplamGiris: sonuc.toplamGiris, toplamCikis: sonuc.toplamCikis, bakiye: sonuc.bakiye };
   }
@@ -5089,7 +5114,7 @@ function getMuhasebeRaporu(body) {
     ensureSatisBelgeTipiColonu(sSheet);
     const sData = sSheet.getDataRange().getValues();
     const cariKoduMap = cariKoduHaritasiOlustur(ss);
-    const satisBelgeTipi = {}, satisTarih = {}, satisCariAd = {}, satisCariKodu = {};
+    const satisBelgeTipi = {}, satisTarih = {}, satisCariAd = {}, satisCariKodu = {}, satisFaturaNo = {}, satisOdemeTipi = {};
     for (let i = 1; i < sData.length; i++) {
       const id = String(sData[i][0] || "");
       if (!id) continue;
@@ -5097,6 +5122,8 @@ function getMuhasebeRaporu(body) {
       satisTarih[id] = hucreTarihStr(sData[i][1]);
       satisCariAd[id] = String(sData[i][3] || "");
       satisCariKodu[id] = cariKoduMap[String(sData[i][2] || "")] || "";
+      satisFaturaNo[id] = String(sData[i][16] || ""); // EFATURA_NO (varsa)
+      satisOdemeTipi[id] = String(sData[i][5] || "");
     }
 
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
@@ -5122,6 +5149,8 @@ function getMuhasebeRaporu(body) {
     // görülebilsin diye) — FATURALANAN_MIKTAR alanına göre. Filtre boşsa (tüm ürünler)
     // bu liste boş kalır, sadece aggregate tablo gösterilir (çok kalabalık olmasın diye).
     const siparisDetaylari = [];
+    // Ürün Bazlı Fatura Raporu da (Sipariş raporuyla aynı biçimde) bir stok seçilince kalem kalem döner.
+    const faturaDetaylari = [];
     for (let i = 1; i < kData.length; i++) {
       const row = kData[i];
       const satisId = String(row[1] || "");
@@ -5137,6 +5166,14 @@ function getMuhasebeRaporu(body) {
       if (tip === "urunBazliHareket" && belgeTipi !== "Fatura") continue;
       const stokKodu = String(row[10] || "");
       urunEkle(urunAdi, stokKodu, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
+      if (tip === "urunBazliFatura" && stokKoduFiltre && eslesiyorMu(urunAdi, stokKodu)) {
+        const fMiktar = parseFloat(row[3]) || 0, fTutar = parseFloat(row[6]) || 0;
+        faturaDetaylari.push({
+          satisId: satisId, tarih: tarih, faturaNo: satisFaturaNo[satisId] || "", cariAd: satisCariAd[satisId] || "", cariKodu: satisCariKodu[satisId] || "",
+          odemeTipi: satisOdemeTipi[satisId] || "", urunAdi: urunAdi, stokKodu: stokKodu, birim: String(row[4] || ""),
+          miktar: fMiktar, birimFiyat: parseFloat(row[5]) || 0, iskontoYuzde: parseFloat(row[7]) || 0, kdvOrani: parseFloat(row[8]) || 0, tutar: fTutar,
+        });
+      }
       if (tip === "urunBazliSiparis" && stokKoduFiltre && eslesiyorMu(urunAdi, stokKodu)) {
         const miktar = parseFloat(row[3]) || 0;
         const tutarToplam = parseFloat(row[6]) || 0;
@@ -5157,6 +5194,7 @@ function getMuhasebeRaporu(body) {
       }
     }
     siparisDetaylari.sort((a, b) => (a.tarih < b.tarih ? 1 : (a.tarih > b.tarih ? -1 : 0)));
+    faturaDetaylari.sort((a, b) => (a.tarih < b.tarih ? 1 : (a.tarih > b.tarih ? -1 : 0)));
 
     // Ürün Bazlı Hareket Raporu ayrıca alış (giriş) ve alış iadesi (giriş azaltan) hareketlerini de kapsar.
     let diagAlisKayitSayisi = null, diagAlisKalemSayisi = null;
@@ -5234,6 +5272,7 @@ function getMuhasebeRaporu(body) {
     const satirlar = Object.values(urunMap).sort((a, b) => b.tutar - a.tutar);
     const sonuc = { ok: true, tip: tip, satirlar: satirlar, toplam: satirlar.reduce((t, s) => t + s.tutar, 0) };
     if (tip === "urunBazliSiparis" && stokKoduFiltre) sonuc.siparisDetaylari = siparisDetaylari;
+    if (tip === "urunBazliFatura" && stokKoduFiltre) sonuc.faturaDetaylari = faturaDetaylari;
     // GEÇİCİ TEŞHİS: rapor beklenmedik şekilde boş geldiğinde ham veri sayılarını görmek için.
     if (tip === "urunBazliHareket" && satirlar.length === 0) {
       sonuc.diag = {

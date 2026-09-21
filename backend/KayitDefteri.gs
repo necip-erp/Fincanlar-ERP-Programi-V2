@@ -23,6 +23,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 const KD_SHEET_ADI = "KayitDefteriV2";
+const KD_TEMIZ_ON_EK = "✓ (hata temizlendi"; // KONTROL alanı bu ifadeyle başlıyorsa satırın hatası kullanıcı tarafından temizlenmiştir
 const KD_BASLIKLAR = ["KAYIT_NO","MODUL","ISLEM","TARIH","BELGE_NO","CARI","BELGE_TUTARI","BORC_HESAP","BORC_TUTAR","ALACAK_HESAP","ALACAK_TUTAR",
   "KONTROL","DURUM","KAYNAK","KAYNAK_ID","ALT","GRUP","BORC_KAYNAK","ALACAK_KAYNAK","BORC_BEKLENEN","ALACAK_BEKLENEN","KAYIT_ZAMANI","DEGISIKLIK_ZAMANI","SILINME_ZAMANI","CARI_KODU"];
 const KD_NO = 0, KD_MODUL = 1, KD_ISLEM = 2, KD_TARIH = 3, KD_BELGE = 4, KD_CARI = 5, KD_BTUTAR = 6, KD_BHESAP = 7, KD_BTL = 8, KD_AHESAP = 9, KD_ATL = 10,
@@ -769,19 +770,24 @@ function kayitDefteriTutarKoduDuzelt(body) {
 }
 
 // ── KONTROL ──
-function getKayitDefteriKontrol() {
+// opts.tumu: bulgu listeleri kısaltılmaz ve her bulguya satır indeksi (_i) + düzeltme notları eklenir (Hataları Temizle için).
+function getKayitDefteriKontrol(opts) {
+  opts = opts || {};
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = kdSheet_(ss);
   const satirlar = kdTumSatirlar_(sheet);
   const dunya = kdDunyaOku_(ss);
   const ctx = kdBaglam_(ss);
-  const LIMIT = 300;
+  const LIMIT = opts.tumu ? 1e9 : 300;
+  const duzeltNotlari = []; // {i, tur, taraf}
+  let sonIdx = -1;
   const kategoriler = ["silinenler", "kaynakYok", "karsiEksik", "tekTaraf", "sahipsiz", "numarasiz", "tutarFarki", "karsiKalmis", "nakliyeSupheli"];
   const nakliyeSupheli = nkSupheliAlisHaritasi_();
   const s = {}, sayac = {};
   kategoriler.forEach(k => { s[k] = []; sayac[k] = 0; });
   const ekle = (ad, o) => { sayac[ad]++; if (s[ad].length < LIMIT) s[ad].push(o); };
-  const ozetle = (r, not) => ({ no: Number(r[KD_NO]), modul: r[KD_MODUL], islem: r[KD_ISLEM], belgeNo: kdMetin_(r[KD_BELGE]), tarih: kdMetin_(r[KD_TARIH]), cari: kdMetin_(r[KD_CARI]), tutar: kdSayi_(r[KD_BTUTAR]), not: not });
+  const ozetle = (r, not) => ({ no: Number(r[KD_NO]), modul: r[KD_MODUL], islem: r[KD_ISLEM], belgeNo: kdMetin_(r[KD_BELGE]), tarih: kdMetin_(r[KD_TARIH]), cari: kdMetin_(r[KD_CARI]), tutar: kdSayi_(r[KD_BTUTAR]), not: not, _i: sonIdx });
+  const temizlendiMi = (r) => String(r[KD_KONTROL]).indexOf(KD_TEMIZ_ON_EK) === 0; // "Hataları Temizle" ile kabul edilmiş satır
 
   const idKumesi = (k) => new Set((dunya.idx[k] ? dunya.idx[k].hepsi : []).map(x => x.b.kid));
   const cariIdleri = idKumesi("cari"), bankaIdleri = idKumesi("banka"), posIdleri = idKumesi("pos"), kartIdleri = idKumesi("kart"), stokBelgeler = idKumesi("stok");
@@ -807,7 +813,8 @@ function getKayitDefteriKontrol() {
     [r[KD_BKAYNAK], r[KD_AKAYNAK]].forEach(x => { if (x && x !== "-") basvurulan.add(String(x)); });
   });
 
-  satirlar.forEach(r => {
+  satirlar.forEach((r, satirIdx) => {
+    sonIdx = satirIdx;
     const durum = r[KD_DURUM];
     const grup = String(r[KD_GRUP]);
     const anaAnahtar = String(r[KD_KAYNAK]) + "|" + String(r[KD_KID]);
@@ -815,29 +822,33 @@ function getKayitDefteriKontrol() {
       if (String(r[KD_ALT] || "") === "") ekle("silinenler", ozetle(r, "Silindi: " + kdMetin_(r[KD_SILINME])));
       // silinmiş satırın karşı kaydı hâlâ duruyor mu?
       [[r[KD_BKAYNAK], r[KD_BHESAP]], [r[KD_AKAYNAK], r[KD_AHESAP]]].forEach(([k, ad]) => {
-        if (k && k !== "-" && String(k) !== anaAnahtar && tarafVarMi(k)) {
+        if (!temizlendiMi(r) && k && k !== "-" && String(k) !== anaAnahtar && tarafVarMi(k)) {
           ekle("karsiKalmis", ozetle(r, "Deftere göre silinmiş ama karşı kayıt (" + ad + ") kaynak sayfada HÂLÂ duruyor"));
+          duzeltNotlari.push({ i: satirIdx, no: Number(r[KD_NO]), tur: "karsiKalmis", kaynak: String(k) });
         }
       });
       return;
     }
     if (!kaynakVarMi(r[KD_KAYNAK], r[KD_KID])) {
       ekle("kaynakYok", ozetle(r, "Defterde var ama kaynak sayfada kayıt YOK (uygulama dışından silinmiş olabilir)"));
+      duzeltNotlari.push({ i: satirIdx, no: Number(r[KD_NO]), tur: "kaynakYok" });
       return;
     }
-    if (grup === "Yetim") ekle("sahipsiz", ozetle(r, "Ana kaydı olmayan hareket"));
     if (String(r[KD_KAYNAK]) === SHEETS.alislar && String(r[KD_ALT] || "") === "" && nakliyeSupheli[String(r[KD_KID])]) ekle("nakliyeSupheli", ozetle(r, nakliyeSupheli[String(r[KD_KID])].not));
+    if (temizlendiMi(r)) return; // hatası "Hataları Temizle" ile kabul edilmiş satır: kaynak değişip satır yeniden hesaplanana kadar bulgu sayılmaz
+    if (grup === "Yetim") { ekle("sahipsiz", ozetle(r, "Ana kaydı olmayan hareket")); duzeltNotlari.push({ i: satirIdx, no: Number(r[KD_NO]), tur: "sahipsiz" }); }
     if (grup === "Sipariş" || grup === "Teklif" || grup === "Manuel") return;
-    if (String(r[KD_KONTROL]).indexOf("⚠ Tek taraflı") === 0) ekle("tekTaraf", ozetle(r, String(r[KD_KONTROL])));
+    if (String(r[KD_KONTROL]).indexOf("⚠ Tek taraflı") === 0) { ekle("tekTaraf", ozetle(r, String(r[KD_KONTROL]))); duzeltNotlari.push({ i: satirIdx, no: Number(r[KD_NO]), tur: "tekTaraf" }); }
     // Beklenen ama hiç bulunamayan taraflar
     [[r[KD_BBEKLENEN], r[KD_BKAYNAK]], [r[KD_ABEKLENEN], r[KD_AKAYNAK]]].forEach(([tur, kaynak]) => {
-      if (tur && !kaynak) ekle("karsiEksik", ozetle(r, "Eksik karşı kayıt: " + tur));
-      else if (kaynak && !tarafVarMi(kaynak)) ekle("karsiEksik", ozetle(r, "Karşı kayıt kaynak sayfada bulunamadı (elle silinmiş olabilir): " + kaynak));
+      if (tur && !kaynak) { ekle("karsiEksik", ozetle(r, "Eksik karşı kayıt: " + tur)); duzeltNotlari.push({ i: satirIdx, no: Number(r[KD_NO]), tur: "karsiEksik" }); }
+      else if (kaynak && !tarafVarMi(kaynak)) { ekle("karsiEksik", ozetle(r, "Karşı kayıt kaynak sayfada bulunamadı (elle silinmiş olabilir): " + kaynak)); duzeltNotlari.push({ i: satirIdx, no: Number(r[KD_NO]), tur: "karsiEksik" }); }
     });
     // Tutar kontrolü (stok tarafı KDV/iskonto nedeniyle farklı olabilir → hariç)
     const bt = kdSayi_(r[KD_BTL]), at = kdSayi_(r[KD_ATL]);
     if (r[KD_BKAYNAK] && r[KD_AKAYNAK] && !/^Stok/.test(String(r[KD_BHESAP])) && !/^Stok/.test(String(r[KD_AHESAP])) && Math.abs(bt - at) > 0.05) {
       ekle("tutarFarki", ozetle(r, "Borç " + bt.toFixed(2) + " ≠ Alacak " + at.toFixed(2)));
+      duzeltNotlari.push({ i: satirIdx, no: Number(r[KD_NO]), tur: "tutarFarki" });
     }
   });
 
@@ -863,7 +874,46 @@ function getKayitDefteriKontrol() {
     sorunSayisi: sayac.kaynakYok + sayac.karsiEksik + sayac.tekTaraf + sayac.sahipsiz + sayac.numarasiz + sayac.tutarFarki + sayac.karsiKalmis + sayac.nakliyeSupheli,
     sayac: sayac,
   };
-  return { ok: true, ozet: ozet, bulgular: s, kontrolZamani: kdSimdi_() };
+  const sonuc = { ok: true, ozet: ozet, bulgular: s, kontrolZamani: kdSimdi_() };
+  if (opts.tumu) sonuc.duzeltNotlari = duzeltNotlari;
+  return sonuc;
+}
+
+// ── HATALARI TEMİZLE (21 Eyl 2026) ──
+// Kontrol'ün bulduğu MEVCUT hatalı satırlar defterden SİLİNİR (bundan sonra oluşan yeni hatalar satırda ❗ ile görünür).
+// Silinen satırların kayıt numaraları bir daha kullanılmaz; kaynak kaydı hâlâ duran işlemler için "🔢 Mevcut kayıtları numarala"
+// çalıştırılınca yeni numarayla ve güncel durumlarıyla yeniden deftere alınır.
+// Hiçbir işlem/stok/cari/banka kaydına DOKUNULMAZ. Nakliye şüphelileri kapsam dışıdır (Ayarlar > Nakliye Dağıtımı Kontrolü).
+// body.onizleme=true → hiçbir şey silmez, yalnız sayıları döndürür.
+function kayitDefteriHatalariTemizle(body) {
+  body = body || {};
+  const kontrol = getKayitDefteriKontrol({ tumu: true });
+  const notlar = kontrol.duzeltNotlari || [];
+  const say = { kaynakYok: 0, karsiEksik: 0, tekTaraf: 0, tutarFarki: 0, sahipsiz: 0, karsiKalmis: 0 };
+  const silinecek = {}; // satır indeksi → kayıt no
+  const gorulen = {};
+  notlar.forEach(n => {
+    silinecek[n.i] = n.no;
+    const a = n.i + "|" + n.tur;
+    if (!gorulen[a]) { gorulen[a] = 1; say[n.tur]++; }
+  });
+  const indeksler = Object.keys(silinecek).map(Number).sort((a, b) => b - a); // sondan başa: satır kayması olmasın
+  const toplam = indeksler.length;
+  if (body.onizleme || !toplam) return { ok: true, onizleme: !!body.onizleme, temizlenecek: toplam, sayac: say, nakliyeSupheli: kontrol.ozet.sayac.nakliyeSupheli || 0 };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = kdSheet_(ss);
+  let silinen = 0;
+  kdKilitli_(() => {
+    // Kontrol ile silme arasında defter değişmiş olabilir: her satırın hâlâ aynı kayıt no'su olduğunu doğrula.
+    const guncel = kdTumSatirlar_(sheet);
+    indeksler.forEach(i => {
+      if (!guncel[i] || Number(guncel[i][KD_NO]) !== Number(silinecek[i])) return; // satır bu arada kaymışsa dokunma
+      sheet.deleteRow(i + 2);
+      silinen++;
+    });
+  });
+  return { ok: true, temizlenen: silinen, sayac: say, nakliyeSupheli: kontrol.ozet.sayac.nakliyeSupheli || 0 };
 }
 
 // ── LİSTE ──
