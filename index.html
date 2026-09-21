@@ -157,6 +157,10 @@ body.desen-acik{
 .son-islem-tbl-wrap{max-height:440px;overflow:auto;border:1px solid var(--border);border-radius:9px;background:var(--bg2)}
 .son-islem-tbl-wrap thead th{position:sticky;top:0;background:var(--bg2);z-index:1}
 .modtile-secili{outline:3px solid var(--blue);outline-offset:2px;box-shadow:0 8px 22px -6px rgba(67,56,202,.45)}
+.csm-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}
+.csm-grid .csm-tam{grid-column:1/-1}
+@media(max-width:640px){.csm-grid{grid-template-columns:1fr}}
+.kisayol-ipucu-koyu{margin-left:8px;color:#fff;background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.4)}
 .kisayol-ipucu{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.02em;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:1px 5px;line-height:1.35;white-space:nowrap;flex-shrink:0;vertical-align:middle}
 .homebtn .kisayol-ipucu{margin-left:5px}
 .modtile-no{position:absolute;top:6px;right:7px;font-size:9.5px;font-weight:800;letter-spacing:.02em;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:1px 5px;line-height:1.35;pointer-events:none}
@@ -1170,7 +1174,7 @@ setInterval(topbarSaatGuncelle, 10000);
 
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Kısayol Tuşları</div>
-      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Bir modülün kutusuna tıkla, sonra klavyede istediğin tuş kombinasyonuna bas — otomatik algılanır. Bir yazı alanındayken (input içinde) kısayollar çalışmaz.<br><b>Ctrl+1 … Ctrl+9</b> sabittir: Ana Sayfa'daki modül kutularının <i>sırasına</i> göre o sıradaki modülü açar (numara kutunun köşesinde yazar; kutuları sürükleyip sırayı değiştirince numaralar da değişir).<br><b>Ctrl + "</b> (sayı satırında 1'in solundaki tuş) her yerden Ana Sayfa'ya gider. <b>Ctrl+Y</b> açık ekrandaki "+" (yeni kayıt) düğmesine basar. Ana Sayfa'da ve seçim ekranlarında (Satış/Alış/Stok) <b>ok tuşları</b> kutular arasında gezer, <b>Enter</b> açar.</p>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Bir modülün kutusuna tıkla, sonra klavyede istediğin tuş kombinasyonuna bas — otomatik algılanır. Bir yazı alanındayken (input içinde) kısayollar çalışmaz.<br><b>Ctrl+1 … Ctrl+9</b> sabittir: Ana Sayfa'daki modül kutularının <i>sırasına</i> göre o sıradaki modülü açar (numara kutunun köşesinde yazar; kutuları sürükleyip sırayı değiştirince numaralar da değişir).<br><b>Ctrl + "</b> (sayı satırında 1'in solundaki tuş) her yerden Ana Sayfa'ya gider (açık pencere varsa önce onu kapatır; yarım iş varsa sorar). <b>Ctrl+S</b> açık pencerenin Kaydet düğmesine basar. <b>Ctrl+Y</b> açık ekrandaki "+" (yeni kayıt) düğmesine basar. Ana Sayfa'da ve seçim ekranlarında (Satış/Alış/Stok) <b>ok tuşları</b> kutular arasında gezer, <b>Enter</b> açar.</p>
       <div id="ayarlar-kisayol-liste"></div>
       <div class="modal-actions" style="justify-content:flex-start;margin-top:16px">
         <button class="btn btn-primary" onclick="kisayollariKaydet()">Kaydet</button>
@@ -1303,7 +1307,7 @@ setInterval(topbarSaatGuncelle, 10000);
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
         <div class="fld" style="width:140px;margin-bottom:0"><label>Önek</label><input id="edmonek-yeni-onek" type="text" placeholder="Örn. CNY" style="text-transform:uppercase"></div>
-        <div class="fld" style="flex:1;min-width:220px;margin-bottom:0"><label>Cari</label><select id="edmonek-yeni-cari"></select></div>
+        <div class="fld" style="flex:1;min-width:220px;margin-bottom:0"><label>Cari (Satıcı)</label><select id="edmonek-yeni-cari"></select></div>
         <button class="btn btn-primary" onclick="edmOnekEslesmeEkle()">+ Ekle</button>
       </div>
       <div id="edmonek-liste"><div class="cari-empty">Yükleniyor...</div></div>
@@ -2183,11 +2187,12 @@ function kisayollariAl(){
       if(kayitli._sekmeGeri === undefined) kayitli._sekmeGeri = "Ctrl+PageUp";
       if(kayitli._stokHareket === undefined) kayitli._stokHareket = "Ctrl+A";
       if(kayitli._sekmeKapat === undefined) kayitli._sekmeKapat = "Ctrl+W";
+      if(kayitli._kaydet === undefined) kayitli._kaydet = "Ctrl+S";
       return kayitli;
     }
   }catch(e){}
   // Varsayılanlar: Alt+Shift+1..8 modüller, Esc geri, Ctrl+PageUp/PageDown sekme gezinme
-  const varsayilan = { _geri: "Escape", _sekmeIleri: "Ctrl+PageDown", _sekmeGeri: "Ctrl+PageUp", _stokHareket: "Ctrl+A", _sekmeKapat: "Ctrl+W" };
+  const varsayilan = { _geri: "Escape", _sekmeIleri: "Ctrl+PageDown", _sekmeGeri: "Ctrl+PageUp", _stokHareket: "Ctrl+A", _sekmeKapat: "Ctrl+W", _kaydet: "Ctrl+S" };
   MODULLER.filter(m=>m.id!=="ayarlar").forEach((m,i)=>{ varsayilan[m.id] = "Alt+Shift+"+(i+1); });
   return varsayilan;
 }
@@ -5387,7 +5392,7 @@ function satisIadeModalAc(){
                onfocus="stimCariOneriGoster()"
                onblur="setTimeout(()=>stimCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'stim-cari-oneri')">
-        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('stim-cari').value=c.id; document.getElementById('stim-cari-arama').value=c.ad; stimCariSecimiDegisti(); })">🔍</button>
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('stim-cari').value=c.id; document.getElementById('stim-cari-arama').value=c.ad; stimCariSecimiDegisti(); cariSonrasiOdak_('stim'); })">🔍</button>
         <input type="hidden" id="stim-cari" value="">
         <div id="stim-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
@@ -5448,6 +5453,7 @@ function stimCariSec(i){
   document.getElementById("stim-cari-arama").value = c.ad;
   kutu.style.display = "none";
   stimCariSecimiDegisti();
+  cariSonrasiOdak_("stim");
 }
 
 function satisIadeKalemEkleUI(){
@@ -6208,7 +6214,7 @@ function alisIadeModalAc(){
                onfocus="aimCariOneriGoster()"
                onblur="setTimeout(()=>aimCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'aim-cari-oneri')">
-        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('aim-cari').value=c.id; document.getElementById('aim-cari-arama').value=c.ad; aimCariSecimiDegisti(); })">🔍</button>
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('aim-cari').value=c.id; document.getElementById('aim-cari-arama').value=c.ad; aimCariSecimiDegisti(); cariSonrasiOdak_('aim'); })">🔍</button>
         <input type="hidden" id="aim-cari" value="">
         <div id="aim-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
@@ -6269,6 +6275,7 @@ function aimCariSec(i){
   document.getElementById("aim-cari-arama").value = c.ad;
   kutu.style.display = "none";
   aimCariSecimiDegisti();
+  cariSonrasiOdak_("aim");
 }
 
 function alisIadeKalemEkleUI(){
@@ -6587,7 +6594,12 @@ function alisBekleyenDurumSifirla(faturaNo){
 let _edmOnekListe = [];
 function edmOnekCariSelectDoldur(){
   const selEl = document.getElementById("edmonek-yeni-cari");
-  if(selEl) selEl.innerHTML = '<option value="">— cari seçin —</option>' + _cariListe.map(c=>`<option value="${c.id}">${c.ad}</option>`).join("");
+  if(!selEl) return;
+  // ★ (21 Eyl 2026) Önek → TEDARİKÇİ eşleştirmesi olduğu için sadece Satıcı (Tedarikçi) carileri listelenir; cari kodu da yazılır.
+  // (Hiç satıcı yoksa boş kalmasın diye tüm cariler gösterilir.)
+  const saticilar = _cariListe.filter(c=>c.tip === "Tedarikçi");
+  const liste = (saticilar.length ? saticilar : _cariListe).slice().sort((a,b)=>String(a.ad||"").localeCompare(String(b.ad||""), "tr"));
+  selEl.innerHTML = '<option value="">— satıcı cari seçin —</option>' + liste.map(c=>`<option value="${c.id}">${c.cariKodu ? c.cariKodu+" — " : ""}${c.ad}</option>`).join("");
 }
 
 function edmOnekEslesmeYukle(){
@@ -6609,11 +6621,12 @@ function edmOnekEslesmeCiz(){
   if(_edmOnekListe.length === 0){ el.innerHTML = '<div class="cari-empty">Henüz bir eşleştirme tanımlanmamış.</div>'; return; }
   el.innerHTML = `
     <table class="hareket-tbl">
-      <thead><tr><th>Önek</th><th>Cari</th><th></th></tr></thead>
+      <thead><tr><th>Önek</th><th>Cari Kodu</th><th>Cari</th><th></th></tr></thead>
       <tbody>
         ${_edmOnekListe.map(k=>`
           <tr>
             <td><b>${k.onek}</b></td>
+            <td>${((_cariListe.find(c=>c.id===k.cariId)||{}).cariKodu) || "—"}</td>
             <td>${k.cariAd || "—"}</td>
             <td><button class="btn" style="padding:4px 12px;font-size:12.5px" onclick="edmOnekEslesmeSilOnay('${k.onek}')">🗑️ Sil</button></td>
           </tr>`).join("")}
@@ -7406,7 +7419,7 @@ function tahsilatModalAc(onCariId, editId){
                onfocus="tmCariOneriGoster()"
                onblur="setTimeout(()=>tmCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'tm-cari-oneri')">
-        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('tm-cari').value=c.id; document.getElementById('tm-cari-arama').value=c.ad; })">🔍</button>
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('tm-cari').value=c.id; document.getElementById('tm-cari-arama').value=c.ad; cariSonrasiOdak_('tm'); })">🔍</button>
         <input type="hidden" id="tm-cari" value="${baslangicCariId||''}">
         <div id="tm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
@@ -7484,6 +7497,22 @@ function tmCariOneriKapat(){
   const kutu = document.getElementById("tm-cari-oneri");
   if(kutu) kutu.style.display = "none";
 }
+// ★ (21 Eyl 2026) Cari seçilince (öneri kutusu / Rehber) imleç sıradaki asıl alana gider — Satış/Alış'taki gibi:
+// Tahsilat, Ödeme, Çek/Senet, Çek Ciro → Tutar; Satış/Alış İade → stok satırı (doluysa son stoğun Miktar'ı, yoksa ilk Ürün alanı).
+function cariSonrasiOdak_(tip){
+  setTimeout(()=>{
+    const hedefId = { tm:"tm-tutar", om:"om-tutar", csm:"csm-tutar", cekciro:"ci-tutar" }[tip];
+    let el = hedefId ? document.getElementById(hedefId) : null;
+    if(!el && (tip === "stim" || tip === "aim")){
+      const kap = document.getElementById(tip + "-kalemler");
+      if(kap){
+        const dolu = Array.from(kap.querySelectorAll(".satis-kalem-satir")).filter(kalemSatiriStokluMu_);
+        el = dolu.length ? dolu[dolu.length - 1].querySelector(".satis-kalem-miktar") : kap.querySelector(".satis-kalem-urun");
+      }
+    }
+    if(el){ el.focus(); try{ el.select(); }catch(_){} }
+  }, 60);
+}
 function tmCariSec(i){
   const kutu = document.getElementById("tm-cari-oneri");
   const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
@@ -7492,6 +7521,7 @@ function tmCariSec(i){
   document.getElementById("tm-cari").value = c.id;
   document.getElementById("tm-cari-arama").value = c.ad;
   kutu.style.display = "none";
+  cariSonrasiOdak_("tm");
 }
 
 // Cari detayındaki "İşlemler" panelinden çağrılır.
@@ -7684,7 +7714,7 @@ function odemeModalAc(onCariId){
                onfocus="omCariOneriGoster()"
                onblur="setTimeout(()=>omCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'om-cari-oneri')">
-        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('om-cari').value=c.id; document.getElementById('om-cari-arama').value=c.ad; })">🔍</button>
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('om-cari').value=c.id; document.getElementById('om-cari-arama').value=c.ad; cariSonrasiOdak_('om'); })">🔍</button>
         <input type="hidden" id="om-cari" value="${onCariId||''}">
         <div id="om-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
@@ -7851,6 +7881,7 @@ function omCariSec(i){
   document.getElementById("om-cari").value = c.id;
   document.getElementById("om-cari-arama").value = c.ad;
   kutu.style.display = "none";
+  cariSonrasiOdak_("om");
 }
 
 function odemeYontemDegisti(){
@@ -8113,7 +8144,7 @@ function cekSenetCiroModalAc(id){
                oninput="cekciroCariAramaDegisti(this.value)"
                onblur="setTimeout(()=>{const k=document.getElementById('cekciro-cari-oneri'); if(k) k.style.display='none';},200)"
                onfocus="cekciroCariAramaDegisti(this.value)">
-        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('cekciro-cari').value=c.id; document.getElementById('cekciro-cari-arama').value=c.ad; })">🔍</button>
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('cekciro-cari').value=c.id; document.getElementById('cekciro-cari-arama').value=c.ad; cariSonrasiOdak_('cekciro'); })">🔍</button>
         <input type="hidden" id="cekciro-cari" value="">
         <div id="cekciro-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
@@ -8146,6 +8177,7 @@ function cekciroCariSec(i){
   document.getElementById("cekciro-cari").value = c.id;
   document.getElementById("cekciro-cari-arama").value = c.ad;
   kutu.style.display = "none";
+  cariSonrasiOdak_("cekciro");
 }
 function cekSenetCiroKaydet(id){
   const ciroCariId = document.getElementById("cekciro-cari").value;
@@ -8205,8 +8237,9 @@ function cekSenetModalAc(onCariId){
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   const bugun = simdiTarihSaat();
   overlay.innerHTML = `
-    <div class="modal-box">
+    <div class="modal-box" style="max-width:860px">
       <h3>Yeni Çek/Senet</h3>
+      <div class="csm-grid">
       <div class="fld"><label>Belge Türü</label>
         <select id="csm-belgeturu">
           <option value="Çek">Çek</option>
@@ -8219,13 +8252,14 @@ function cekSenetModalAc(onCariId){
           <option value="Verilen" ${_cekSenetAktifTip==='Verilen'?'selected':''}>Verilen (tedarikçiye)</option>
         </select>
       </div>
-      <div class="fld" style="position:relative"><label>Cari *</label>
+      <div class="fld csm-tam" style="position:relative"><label>Cari *</label>
         <input id="csm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" style="padding-right:34px"
                value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
                oninput="csmCariAramaDegisti()"
                onfocus="csmCariOneriGoster()"
                onblur="setTimeout(()=>csmCariOneriKapat(),200)"
                onkeydown="oneriKlavyeYonet(event,'csm-cari-oneri')">
+        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('csm-cari').value=c.id; document.getElementById('csm-cari-arama').value=c.ad; cariSonrasiOdak_('csm'); })">🔍</button>
         <input type="hidden" id="csm-cari" value="${onCariId||''}">
         <div id="csm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
@@ -8234,8 +8268,9 @@ function cekSenetModalAc(onCariId){
       <div class="fld"><label>Banka</label><input id="csm-banka" type="text" placeholder="İsteğe bağlı"></div>
       <div class="fld"><label>Düzenlenme Tarihi</label><input id="csm-duzenlenme" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Vade</label><input id="csm-vade" type="date"></div>
-      <div class="fld"><label>Açıklama</label><input id="csm-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+      <div class="fld csm-tam"><label>Açıklama</label><input id="csm-aciklama" type="text" placeholder="İsteğe bağlı"></div>
       <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('csm-proje-kodu', '')}</div>
+      </div>
       <div class="modal-actions">
         <button class="btn" onclick="cekSenetModalKapat()">İptal</button>
         <button class="btn btn-primary" onclick="cekSenetKaydet()">Kaydet</button>
@@ -8287,6 +8322,7 @@ function csmCariSec(i){
   document.getElementById("csm-cari").value = c.id;
   document.getElementById("csm-cari-arama").value = c.ad;
   kutu.style.display = "none";
+  cariSonrasiOdak_("csm");
 }
 
 function cekSenetKaydet(){
@@ -10663,6 +10699,10 @@ function ayarlarListesiCiz(){
        <input readonly class="ayarlar-kisayol-input" data-modid="_sekmeGeri" value="${_ayarlarTaslak._sekmeGeri || ''}" onclick="kisayolYakala(this,'_sekmeGeri')" style="width:160px;text-align:center;cursor:pointer">
      </div>`,
     `<div class="satis-kalem-satir" style="justify-content:space-between">
+       <span style="flex:1" title="Açık pencerenin (Tahsilat, Satış, Alış, Çek/Senet vb.) Kaydet düğmesine basar">💾 Kaydet (açık pencere / form)</span>
+       <input readonly class="ayarlar-kisayol-input" data-modid="_kaydet" value="${_ayarlarTaslak._kaydet || ''}" onclick="kisayolYakala(this,'_kaydet')" style="width:160px;text-align:center;cursor:pointer">
+     </div>`,
+    `<div class="satis-kalem-satir" style="justify-content:space-between">
        <span style="flex:1" title="Ayrıca sabit yedek kısayol: Alt+Shift+W">✖ Sekmeyi kapat (tarayıcı sekmesinde Ctrl+W'yi tarayıcı yakalar; yedek: Alt+Shift+W)</span>
        <input readonly class="ayarlar-kisayol-input" data-modid="_sekmeKapat" value="${_ayarlarTaslak._sekmeKapat || ''}" onclick="kisayolYakala(this,'_sekmeKapat')" style="width:160px;text-align:center;cursor:pointer">
      </div>`,
@@ -11870,9 +11910,56 @@ if("serviceWorker" in navigator){
     if(e.code !== "Backquote" || !e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return;
     if(!girisYapildi()) return;
     e.preventDefault();
-    if(pencereOnde()) return; // önce pencere kapatılmalı (Esc); arkadaki ekran değişmesin
+    // ★ Önde açık pencere (modal / Rehber / yan panel / Stok Hareket Penceresi) varsa da çalışır: pencereler sırayla
+    // kapatılır (yarım kalan iş varsa Esc'teki gibi sorar; "Hayır" denirse Ana Sayfa'ya gidilmez), sonra Ana Sayfa açılır.
+    for(let deneme = 0; deneme < 12 && pencereOnde(); deneme++){
+      if(typeof _shp !== "undefined" && _shp && _shp.acik && typeof shpKapat === "function"){ shpKapat(); continue; }
+      const el = onPlanPencereBul_();
+      if(!el) break;
+      if(pencereyiKapatDene_(el) === false) return; // kullanıcı vazgeçti
+      if(document.body.contains(el)) return;         // kapanmadı (beklenmedik) — sonsuz döngüye girme
+    }
     gitAnaSayfa();
   });
+
+  // 2b) Ctrl+S (Ayarlar > Kısayol Tuşları'ndan değiştirilebilir) → önde açık pencerenin / formun KAYDET düğmesine basar.
+  // Kayıt oluşturan düğmeler: Kaydet, Fatura Oluştur, Ciro Et, Onayla ve Alış Oluştur. Geri alınamaz/dış sisteme giden
+  // işlemler (EDM "Onayla ve Gönder"), Yazdır, İçe Aktar bilerek KAPSAM DIŞI.
+  const KAYDET_METNI = /^(💾\s*)?(Kaydet|Fatura Oluştur|Ciro Et|Onayla ve Alış Oluştur)/;
+  const kaydetKisayolu = ()=> (typeof kisayollariAl === "function" && kisayollariAl()._kaydet) || "Ctrl+S";
+  function kaydetDugmesiBul_(){
+    const ust = typeof onPlanPencereBul_ === "function" ? onPlanPencereBul_() : null;
+    const adaylar = ust ? Array.from(ust.querySelectorAll(".modal-actions .btn-primary")) : [];
+    if(!ust){ // pencere yok: sayfa içi formlar (Cari Virman)
+      const v = document.getElementById("cvirman-kaydet-btn");
+      if(v && v.offsetParent !== null) adaylar.push(v);
+    }
+    return adaylar.reverse().find(b=> !b.disabled && KAYDET_METNI.test((b.textContent || "").trim()) || (b.id === "cvirman-kaydet-btn" && !b.disabled)) || null;
+  }
+  document.addEventListener("keydown", function(e){
+    if(!girisYapildi() || e.altKey || e.metaKey) return;
+    if(typeof kisayolMetni !== "function" || kisayolMetni(e) !== kaydetKisayolu()) return;
+    e.preventDefault(); // tarayıcının "Sayfayı kaydet" penceresi açılmasın
+    const b = kaydetDugmesiBul_();
+    if(b) b.click();
+  });
+  // Kaydet düğmelerinin içine kısayol ipucu ekle (pencereler sonradan oluşturulduğu için MutationObserver).
+  function kaydetIpuclari_(kok){
+    if(!kok || kok.nodeType !== 1) return;
+    const dugmeler = [];
+    if(kok.matches && kok.matches(".modal-actions .btn-primary, #cvirman-kaydet-btn")) dugmeler.push(kok);
+    if(kok.querySelectorAll) kok.querySelectorAll(".modal-actions .btn-primary, #cvirman-kaydet-btn").forEach(b=>dugmeler.push(b));
+    dugmeler.forEach(b=>{
+      if(b.querySelector(".kisayol-ipucu-koyu")) return;
+      if(b.id !== "cvirman-kaydet-btn" && !KAYDET_METNI.test((b.textContent || "").trim())) return;
+      const ip = document.createElement("span");
+      ip.className = "kisayol-ipucu kisayol-ipucu-koyu";
+      ip.textContent = kaydetKisayolu();
+      b.appendChild(ip);
+    });
+  }
+  new MutationObserver(l=> l.forEach(m=> m.addedNodes.forEach(kaydetIpuclari_))).observe(document.body, {childList:true, subtree:true});
+  kaydetIpuclari_(document.body);
 
   // 2) Ok tuşları ile modül/seçim kutularında (Ana Sayfa, Satış/Alış/Stok seçim ekranları) gezinme; Enter ile aç.
   document.addEventListener("keydown", function(e){
