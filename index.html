@@ -156,6 +156,9 @@ body.desen-acik{
 @media (max-width:1180px){#home{flex-direction:column}.home-yan{width:100%;max-height:none}}
 .son-islem-tbl-wrap{max-height:440px;overflow:auto;border:1px solid var(--border);border-radius:9px;background:var(--bg2)}
 .son-islem-tbl-wrap thead th{position:sticky;top:0;background:var(--bg2);z-index:1}
+.modtile-secili{outline:3px solid var(--blue);outline-offset:2px;box-shadow:0 8px 22px -6px rgba(67,56,202,.45)}
+.kisayol-ipucu{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.02em;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:1px 5px;line-height:1.35;white-space:nowrap;flex-shrink:0;vertical-align:middle}
+.homebtn .kisayol-ipucu{margin-left:5px}
 .modtile-no{position:absolute;top:6px;right:7px;font-size:9.5px;font-weight:800;letter-spacing:.02em;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:1px 5px;line-height:1.35;pointer-events:none}
 .modtile{background:var(--bg2);border:1px solid var(--border);border-top:3px solid var(--border);border-radius:var(--r);padding:var(--mod-pad);text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
 .modtile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--blue),var(--amber));transform:scaleX(0);transform-origin:left;transition:transform .22s var(--ease)}
@@ -506,7 +509,7 @@ body.giris-yapildi #login-ekran{display:none}
     <span class="si">🔍</span>
     <input id="global-ara" placeholder="Ürün ara (kod, isim, ebat)..." oninput="globalAraDegisti(this.value)">
   </div>
-  <button class="homebtn" id="home-btn" onclick="gitAnaSayfa()">← Ana Sayfa</button>
+  <button class="homebtn" id="home-btn" onclick="gitAnaSayfa()" title="Ana Sayfa (Ctrl + sayı satırında 1'in solundaki tuş)">← Ana Sayfa <span class="kisayol-ipucu">Ctrl+"</span></button>
   <div id="modul-switcher-wrap" style="position:relative">
     <button class="homebtn" id="modul-switcher-btn" onclick="modulSwitcherAcKapat(event)" title="Başka bir modülü sekme olarak aç">⇄ Modül</button>
     <div id="modul-switcher-liste" class="modul-switcher-liste" style="display:none"></div>
@@ -1167,7 +1170,7 @@ setInterval(topbarSaatGuncelle, 10000);
 
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Kısayol Tuşları</div>
-      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Bir modülün kutusuna tıkla, sonra klavyede istediğin tuş kombinasyonuna bas — otomatik algılanır. Bir yazı alanındayken (input içinde) kısayollar çalışmaz.<br><b>Ctrl+1 … Ctrl+9</b> sabittir: Ana Sayfa'daki modül kutularının <i>sırasına</i> göre o sıradaki modülü açar (numara kutunun köşesinde yazar; kutuları sürükleyip sırayı değiştirince numaralar da değişir).</p>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Bir modülün kutusuna tıkla, sonra klavyede istediğin tuş kombinasyonuna bas — otomatik algılanır. Bir yazı alanındayken (input içinde) kısayollar çalışmaz.<br><b>Ctrl+1 … Ctrl+9</b> sabittir: Ana Sayfa'daki modül kutularının <i>sırasına</i> göre o sıradaki modülü açar (numara kutunun köşesinde yazar; kutuları sürükleyip sırayı değiştirince numaralar da değişir).<br><b>Ctrl + "</b> (sayı satırında 1'in solundaki tuş) her yerden Ana Sayfa'ya gider. <b>Ctrl+Y</b> açık ekrandaki "+" (yeni kayıt) düğmesine basar. Ana Sayfa'da ve seçim ekranlarında (Satış/Alış/Stok) <b>ok tuşları</b> kutular arasında gezer, <b>Enter</b> açar.</p>
       <div id="ayarlar-kisayol-liste"></div>
       <div class="modal-actions" style="justify-content:flex-start;margin-top:16px">
         <button class="btn btn-primary" onclick="kisayollariKaydet()">Kaydet</button>
@@ -11848,6 +11851,95 @@ if("serviceWorker" in navigator){
     liste.forEach(m=>m.addedNodes.forEach(tara));
   }).observe(document.body, {childList:true, subtree:true});
   tara(document.body);
+})();
+</script>
+
+<!-- ══════════════ KLAVYE (21 Eyl 2026): Ctrl+" Ana Sayfa · ok tuşlarıyla kutu gezinme · Ctrl+Y yeni kayıt ══════════════ -->
+<script>
+(function(){
+  const girisYapildi = ()=> document.body.classList.contains("giris-yapildi");
+  // Önde açık pencere (modal / Rehber / yan panel / Stok Hareket Penceresi) var mı?
+  const pencereOnde = ()=> !!(
+    (typeof onPlanPencereBul_ === "function" && onPlanPencereBul_()) ||
+    (typeof _shp !== "undefined" && _shp && _shp.acik)
+  );
+  const yaziAlani = (a)=> !!(a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.isContentEditable));
+
+  // 1) Ctrl + (sayı satırında 1'in solundaki tuş) → Ana Sayfa. Fiziksel tuşa (code) bakılır: Türkçe Q'da "é/\"", ABD'de "`".
+  document.addEventListener("keydown", function(e){
+    if(e.code !== "Backquote" || !e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return;
+    if(!girisYapildi()) return;
+    e.preventDefault();
+    if(pencereOnde()) return; // önce pencere kapatılmalı (Esc); arkadaki ekran değişmesin
+    gitAnaSayfa();
+  });
+
+  // 2) Ok tuşları ile modül/seçim kutularında (Ana Sayfa, Satış/Alış/Stok seçim ekranları) gezinme; Enter ile aç.
+  document.addEventListener("keydown", function(e){
+    if(e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    const tus = e.key;
+    if(tus !== "ArrowLeft" && tus !== "ArrowRight" && tus !== "ArrowUp" && tus !== "ArrowDown" && tus !== "Enter") return;
+    if(!girisYapildi()) return;
+    const a = document.activeElement;
+    if(yaziAlani(a) || pencereOnde()) return;
+    const grid = Array.from(document.querySelectorAll(".modgrid")).find(g=> g.offsetParent !== null && g.querySelector(".modtile"));
+    if(!grid) return;
+    const kutular = Array.from(grid.querySelectorAll(".modtile")).filter(t=> t.offsetParent !== null);
+    if(!kutular.length) return;
+    let i = kutular.findIndex(t=> t.classList.contains("modtile-secili"));
+    if(tus === "Enter"){
+      // Bir düğme/bağlantıya odaklıysa Enter onun işidir; yalnız boşta (body) ya da kutunun kendisindeyken kutuyu aç.
+      if(i < 0 || (a && a !== document.body && !a.classList.contains("modtile"))) return;
+      e.preventDefault();
+      kutular[i].click();
+      return;
+    }
+    if(i < 0){
+      i = 0; // ilk ok tuşu: ilk kutuyu seçer
+    } else {
+      const rc0 = kutular[i].getBoundingClientRect();
+      let hedef = -1;
+      if(tus === "ArrowRight") hedef = Math.min(i + 1, kutular.length - 1);
+      else if(tus === "ArrowLeft") hedef = Math.max(i - 1, 0);
+      else {
+        const yon = tus === "ArrowDown" ? 1 : -1;
+        const adaylar = kutular.map((t, k)=> ({k, rc: t.getBoundingClientRect()})).filter(x=> yon > 0 ? x.rc.top > rc0.top + 5 : x.rc.top < rc0.top - 5);
+        if(adaylar.length){
+          const hedefUst = yon > 0 ? Math.min(...adaylar.map(x=>x.rc.top)) : Math.max(...adaylar.map(x=>x.rc.top));
+          const satir = adaylar.filter(x=> Math.abs(x.rc.top - hedefUst) < 5).sort((p, q)=> Math.abs(p.rc.left - rc0.left) - Math.abs(q.rc.left - rc0.left));
+          hedef = satir[0].k;
+        }
+      }
+      if(hedef >= 0) i = hedef;
+    }
+    kutular.forEach(t=> t.classList.remove("modtile-secili"));
+    kutular[i].classList.add("modtile-secili");
+    try{ kutular[i].scrollIntoView({block:"nearest", inline:"nearest"}); }catch(_){}
+    if(a && a !== document.body && a.blur) a.blur(); // odaktaki düğme sonraki Enter'ı yutmasın
+    e.preventDefault();
+  });
+
+  // 3) Ctrl+Y → açık ekrandaki "+" (yeni kayıt) düğmesine bas; düğmelerin yanında kısayol bilgisi yazar.
+  const YENI_KAYIT_FN = ["stokTanimModalAc","cariModalAc","tahsilatModalAc","odemeModalAc","cekSenetModalAc","alisModalAc","alisIadeModalAc","satisModalAc","satisIadeModalAc"];
+  const yeniKayitDugmeleri = ()=> Array.from(document.querySelectorAll(".cari-add-btn")).filter(b=>{
+    const oc = b.getAttribute("onclick") || "";
+    return YENI_KAYIT_FN.some(f=> oc.indexOf(f + "(") === 0);
+  });
+  yeniKayitDugmeleri().forEach(b=>{
+    b.title = (b.title ? b.title + " " : "") + "(Ctrl+Y)";
+    const ip = document.createElement("span");
+    ip.className = "kisayol-ipucu"; ip.textContent = "Ctrl+Y";
+    b.insertAdjacentElement("afterend", ip);
+    b._ctrlyIpucu = ip;
+  });
+  document.addEventListener("keydown", function(e){
+    if(!e.ctrlKey || e.altKey || e.shiftKey || e.metaKey || (e.key !== "y" && e.key !== "Y")) return;
+    if(!girisYapildi() || pencereOnde()) return; // pencere açıkken Ctrl+Y normal "yinele" olarak kalır
+    const btn = yeniKayitDugmeleri().find(b=> b.offsetParent !== null && !b.disabled);
+    if(!btn) return;
+    e.preventDefault();
+    btn.click();
+  });
 })();
 </script>
 
