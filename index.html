@@ -6784,7 +6784,9 @@ function alisBekleyenOnayModalAc(faturaNo){
         <th style="width:56px">Grup</th>
         <th style="min-width:130px">Stok Kodu</th><th style="min-width:200px">Ürün</th>
         <th style="width:80px">Miktar</th><th style="width:80px">Birim</th>
-        <th style="width:100px">Birim Fiyat</th><th style="width:80px">İsk.1 %</th><th style="width:80px">İsk.2 %</th>
+        ${f.kalemler.some(k=>(k.nakliyePayi||0) > 0)
+          ? `<th style="min-width:200px" title="Solda faturadaki birim fiyat (elle düzeltilebilir), sağda Alış'a AKTARILACAK birim fiyat: iskontolar sonrası net fiyat + nakliye/palet payı">Fatura Fiyatı / Aktarılacak</th>`
+          : `<th style="width:100px">Birim Fiyat</th>`}<th style="width:80px">İsk.1 %</th><th style="width:80px">İsk.2 %</th>
         <th style="width:70px">KDV%</th><th style="width:110px">Tutar</th><th style="width:36px"></th>
       </tr></thead>
       <tbody id="bfm-kalemler">
@@ -6866,7 +6868,7 @@ function bfmKalemSatiriHTML(k, i){
           <td>${k.birlesikMi ? `<input id="bfm-ad-${i}" type="text" value="${(k.urunAdi||'').replace(/"/g,'&quot;')}" style="width:160px">` : k.urunAdi}</td>
           <td><input id="bfm-miktar-${i}" type="number" min="0" step="0.01" value="${k.miktar>0?k.miktar:''}" placeholder="0" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
           <td><select id="bfm-birim-${i}">${bfmBirimSecenekleriHTML(k.stokKodu, k.urunAdi, k.birim)}</select></td>
-          <td><input id="bfm-fiyat-${i}" type="number" min="0" step="0.01" value="${k.birimFiyat||k.netFiyat}" style="width:100px" oninput="bfmSatirGuncelle(${i})"></td>
+          <td><div style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input id="bfm-fiyat-${i}" type="number" min="0" step="0.01" value="${k.birimFiyat||k.netFiyat}" style="width:100px" oninput="bfmSatirGuncelle(${i})"><span id="bfm-aktarilan-${i}"></span></div></td>
           <td><input id="bfm-isk1-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
           <td><input id="bfm-isk2-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto2||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
           <td><input id="bfm-kdv-${i}" type="number" min="0" max="100" step="0.01" value="${k.kdvOrani}" style="width:60px${bfmKdvSupheliMi(k.kdvOrani)?';border-color:var(--red);background:#fdecea':''}" title="${bfmKdvSupheliMi(k.kdvOrani)?'⚠️ FATURAFIYAT kaynağından şüpheli bir KDV oranı geldi (>%'+BFM_KDV_UST_SINIR+'). Muhtemelen bu alana bir tutar yazılmış — faturaya bakıp doğru oranı siz girin.':'FATURAFIYAT kaynağından gelen oran — gerekirse düzeltin'}" oninput="bfmSatirGuncelle(${i})"></td>
@@ -7149,6 +7151,15 @@ function bfmSatirGuncelle(i){
   const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100) + nakliyePayi;
   const tutarKdvHaric = miktar * netBirimFiyat;
   const tutarKdvDahil = tutarKdvHaric * (1 + kdvOrani/100);
+  // ★ (21 Eyl 2026) Nakliye/palet payı bölünmüş kalemlerde fatura fiyatının yanında "/ aktarılacak fiyat" gösterilir:
+  // Alış'a yazılacak birim fiyat = iskontolar sonrası fatura fiyatı + nakliye payı (bkz. alisBekleyenOnayla).
+  const aktarEl = document.getElementById(`bfm-aktarilan-${i}`);
+  if(aktarEl){
+    const bicim = (x)=> Number(x).toLocaleString("tr-TR", {minimumFractionDigits:2, maximumFractionDigits:4}) + "\u00A0₺";
+    aktarEl.innerHTML = nakliyePayi > 0
+      ? `<span style="color:var(--text3)">/</span> <b style="color:#b45309" title="Alış'a aktarılacak birim fiyat: iskontolu fatura fiyatı ${bicim(netBirimFiyat - nakliyePayi)} + nakliye/palet payı ${bicim(nakliyePayi)}">${bicim(netBirimFiyat)}</b>`
+      : "";
+  }
   const hucre = document.getElementById(`bfm-tutar-${i}`);
   if(hucre) hucre.innerHTML = paraFormat(tutarKdvDahil) + (nakliyePayi>0 ? ` <span style="font-size:9px;color:var(--amber)" title="Nakliye/palet payı dahil: ${paraFormat(nakliyePayi)}/birim">+N</span>` : "");
   bfmGenelToplamGuncelle();
