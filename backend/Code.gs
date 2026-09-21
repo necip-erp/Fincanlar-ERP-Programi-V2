@@ -939,7 +939,7 @@ const OTURUMSUZ_ACTIONLAR = { girisYap: true };
 const ADMIN_ACTIONLAR = {
   kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
-  getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, // Kayıt Defteri: sadece Admin
+  getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
 };
 
 function handleRequest(e) {
@@ -1098,6 +1098,8 @@ function handleRequest(e) {
       case "getKayitDefteriKontrol": result = getKayitDefteriKontrol(); break;
       case "kayitDefteriBaslat":     result = kayitDefteriBaslat(body); break;
       case "kayitDefteriTutarKoduDuzelt": result = kayitDefteriTutarKoduDuzelt(body); break;
+      case "nakliyeSorunluFaturalar": result = nakliyeSorunluFaturalar(); break;
+      case "nakliyeSorunluFaturalariSil": result = nakliyeSorunluFaturalariSil(body); break;
       default: result = { error: "Bilinmeyen işlem: " + action };
     }
     // Kayıt Defteri: işlem başarılıysa Ana kayıt + karşı kayıtlar deftere yazılır. Hata verirse

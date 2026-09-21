@@ -156,7 +156,8 @@ body.desen-acik{
 @media (max-width:1180px){#home{flex-direction:column}.home-yan{width:100%;max-height:none}}
 .son-islem-tbl-wrap{max-height:440px;overflow:auto;border:1px solid var(--border);border-radius:9px;background:var(--bg2)}
 .son-islem-tbl-wrap thead th{position:sticky;top:0;background:var(--bg2);z-index:1}
-.modtile-secili{outline:3px solid var(--blue);outline-offset:2px;box-shadow:0 8px 22px -6px rgba(67,56,202,.45)}
+.modtile-secili{outline:3px solid #f97316;outline-offset:2px;background:#fff6bf !important;border-color:#f97316 !important;box-shadow:0 10px 24px -6px rgba(249,115,22,.55)}
+.modtile-secili .lbl{color:#7c2d12}
 .csm-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}
 .csm-grid .csm-tam{grid-column:1/-1}
 @media(max-width:640px){.csm-grid{grid-template-columns:1fr}}
@@ -1311,6 +1312,21 @@ setInterval(topbarSaatGuncelle, 10000);
         <button class="btn btn-primary" onclick="edmOnekEslesmeEkle()">+ Ekle</button>
       </div>
       <div id="edmonek-liste"><div class="cari-empty">Yükleniyor...</div></div>
+    </div>
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Nakliye Dağıtımı Kontrolü</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">
+        e-Fatura okuma otomasyonu nakliye/palet bedelini sadece m² ürünlerine (stok kodu 33/66 + tanımlı ölçüler) böler.
+        Bir faturada nakliye payı dağıtılmışken m² kuralına uyan başka bir kalem pay ALMAMIŞSA fatura "tutarsız" sayılır
+        (örn. CNY2026000002602). <b>Bul</b> sadece listeler; <b>Sil</b> listelenen faturaları kaldırır: onaylanmışsa bağlı Alış kaydı
+        Silinenler'e taşınır (stok/cari hareketleri geri alınır, geri alınabilir), bekleyen faturalar listeden kalkar.
+        Yeni tutarsızlıklar Kayıt Defteri'nde <b>❗</b> ile görünür.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="nakliyeKontrolYukle()">🔍 Sorunlu faturaları bul</button>
+        <button class="btn" id="nakliye-sil-btn" style="display:none;color:#c0392b;border-color:#c0392b" onclick="nakliyeSorunluSil()">🗑️ Listelenenlerin hepsini sil</button>
+      </div>
+      <div id="nakliye-kontrol-liste" style="margin-top:14px"></div>
     </div>
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Geçmiş Alış KDV Düzeltmesi (Önizleme)</div>
@@ -6592,6 +6608,44 @@ function alisBekleyenDurumSifirla(faturaNo){
 
 // ── Ayarlar > EDM Önek → Tedarikçi Eşleştirme yönetim tablosu ──
 let _edmOnekListe = [];
+// ★ (21 Eyl 2026) Nakliye dağıtımı tutarsız faturaları bul / sil (Admin) — bkz. backend/NakliyeKontrol.gs
+let _nakliyeSorunlular = [];
+function nakliyeKontrolYukle(){
+  const el = document.getElementById("nakliye-kontrol-liste"), silBtn = document.getElementById("nakliye-sil-btn");
+  if(!el) return;
+  silBtn.style.display = "none";
+  el.innerHTML = '<div class="cari-empty">Faturalar taranıyor...</div>';
+  cariApi("nakliyeSorunluFaturalar", {}).then(res=>{
+    if(!res || !res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+htmlKacis((res && (res.hata||res.error))||"bilinmiyor")+'</div>'; return; }
+    _nakliyeSorunlular = res.faturalar || [];
+    if(!_nakliyeSorunlular.length){ el.innerHTML = '<div style="padding:12px 14px;border-radius:10px;background:#e8f6ee;color:#1e7e4a;font-weight:700">✅ Nakliye dağıtımı tutarsız fatura yok.</div>'; return; }
+    silBtn.style.display = "";
+    el.innerHTML = `<div style="overflow-x:auto"><table class="rapor-tbl">
+      <thead><tr><th>Fatura No</th><th>Tedarikçi</th><th>Durum</th><th>Nakliye (TL)</th><th>Pay almayan m² kalemleri</th></tr></thead>
+      <tbody>${_nakliyeSorunlular.map(f=>`<tr>
+        <td><b>${htmlKacis(f.faturaNo)}</b></td><td>${htmlKacis(f.tedarikci)||"—"}</td>
+        <td>${htmlKacis(f.durum)}${f.durum==="Onaylandı" ? (f.alisVar ? " · Alış kaydı var" : " · Alış kaydı yok") : ""}</td>
+        <td style="text-align:right">${paraFormat(f.toplamNakliye)}</td>
+        <td style="font-size:12.5px">${f.sorunluKalemler.map(k=>htmlKacis(k.kod+" "+k.ad)+" ("+k.miktar+")").join("<br>")}</td>
+      </tr>`).join("")}</tbody></table></div>
+      <div style="font-size:12.5px;color:var(--text3);margin-top:6px">${_nakliyeSorunlular.length} fatura bulundu.</div>`;
+  }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+htmlKacis(err.message)+'</div>'; });
+}
+function nakliyeSorunluSil(){
+  if(!_nakliyeSorunlular.length) return;
+  const onayli = _nakliyeSorunlular.filter(f=>f.durum==="Onaylandı" && f.alisVar).length;
+  if(!confirm(_nakliyeSorunlular.length+" fatura silinecek"+(onayli ? " (bunlardan "+onayli+" tanesi onaylanmış: Alış kayıtları Silinenler'e taşınır, stok ve cari hareketleri geri alınır)" : "")+".\n\nDevam edilsin mi?")) return;
+  const el = document.getElementById("nakliye-kontrol-liste"), silBtn = document.getElementById("nakliye-sil-btn");
+  silBtn.disabled = true;
+  el.innerHTML = '<div class="cari-empty">Siliniyor...</div>';
+  cariApi("nakliyeSorunluFaturalariSil", {faturaNolar: _nakliyeSorunlular.map(f=>f.faturaNo)}).then(res=>{
+    silBtn.disabled = false;
+    if(!res || !res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+htmlKacis((res && (res.hata||res.error))||"bilinmiyor")+'</div>'; return; }
+    silBtn.style.display = "none"; _nakliyeSorunlular = [];
+    el.innerHTML = '<div style="padding:12px 14px;border-radius:10px;background:#e8f6ee;color:#1e7e4a;font-weight:700">✅ '+res.silinenFatura+' fatura silindi'+(res.silinenAlis ? ', '+res.silinenAlis+' Alış kaydı Silinenler\'e taşındı' : '')+'.</div>'
+      + (res.atlanan && res.atlanan.length ? '<div style="margin-top:8px;color:#b7791f;font-size:13px">⚠ Atlanan: '+res.atlanan.map(a=>htmlKacis(a.faturaNo+" — "+a.neden)).join("; ")+'</div>' : '');
+  }).catch(err=>{ silBtn.disabled = false; el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+htmlKacis(err.message)+'</div>'; });
+}
 function edmOnekCariSelectDoldur(){
   const selEl = document.getElementById("edmonek-yeni-cari");
   if(!selEl) return;
@@ -9322,7 +9376,7 @@ function kayitDefteriCiz_(){
             <td style="font-size:12.5px">${hesapHtml(r.alacakHesap)}</td>${alacakHucre}
             <td style="text-align:right;white-space:nowrap">${r.belgeTutari ? paraFormat(r.belgeTutari) : "—"}</td>
             ${borcHucre}<td style="font-size:12.5px">${hesapHtml(r.borcHesap)}</td>
-            <td style="font-size:12.5px">${kontrolHtml(r.kontrol)}</td>
+            <td style="font-size:12.5px">${kontrolHtml(r.kontrol)}${r.uyari ? `<div style="color:#c0392b;font-weight:800;margin-top:3px;cursor:help" title="${htmlKacis(r.uyari)}">❗ Nakliye dağıtımı tutarsız</div>` : ""}</td>
             <td style="white-space:nowrap">${silindi ? '<b style="color:#c0392b">Silindi</b><div style="font-size:10.5px">'+htmlKacis(r.silinmeZamani)+'</div>' : 'Aktif'}</td>
             <td style="white-space:nowrap">${(!silindi && KD_BELGE_TIPI[r.kaynak]) ? `<button class="btn" style="padding:3px 9px;font-size:12px" onclick="kayitDefteriBelgeAc('${htmlKacis(r.kaynak)}','${htmlKacis(r.kaynakId)}')">📄 Belgeyi Aç</button>` : '<span style="color:var(--text3)">—</span>'}</td>
           </tr>`;
@@ -9353,6 +9407,7 @@ const KD_BULGU_BASLIK = {
   karsiKalmis: ["⚠️", "Deftere göre silinmiş ama karşı kaydı hâlâ duruyor", true],
   sahipsiz:    ["⚠️", "Ana kaydı olmayan (sahipsiz) hareketler", true],
   tutarFarki:  ["💲", "Borç ile alacak tutarı tutmayanlar", true],
+  nakliyeSupheli: ["❗", "Nakliye dağıtımı tutarsız onaylı alış faturaları (m² ürünü nakliye payı almamış)", true],
   numarasiz:   ["🔢", "Numarası olmayan kayıtlar (\"Mevcut kayıtları numarala\" ile tamamlanır)", true],
   silinenler:  ["🗑️", "Uygulamadan silinen işlemler (bilgi)", false],
 };

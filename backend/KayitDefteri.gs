@@ -776,7 +776,8 @@ function getKayitDefteriKontrol() {
   const dunya = kdDunyaOku_(ss);
   const ctx = kdBaglam_(ss);
   const LIMIT = 300;
-  const kategoriler = ["silinenler", "kaynakYok", "karsiEksik", "tekTaraf", "sahipsiz", "numarasiz", "tutarFarki", "karsiKalmis"];
+  const kategoriler = ["silinenler", "kaynakYok", "karsiEksik", "tekTaraf", "sahipsiz", "numarasiz", "tutarFarki", "karsiKalmis", "nakliyeSupheli"];
+  const nakliyeSupheli = nkSupheliAlisHaritasi_();
   const s = {}, sayac = {};
   kategoriler.forEach(k => { s[k] = []; sayac[k] = 0; });
   const ekle = (ad, o) => { sayac[ad]++; if (s[ad].length < LIMIT) s[ad].push(o); };
@@ -825,6 +826,7 @@ function getKayitDefteriKontrol() {
       return;
     }
     if (grup === "Yetim") ekle("sahipsiz", ozetle(r, "Ana kaydı olmayan hareket"));
+    if (String(r[KD_KAYNAK]) === SHEETS.alislar && String(r[KD_ALT] || "") === "" && nakliyeSupheli[String(r[KD_KID])]) ekle("nakliyeSupheli", ozetle(r, nakliyeSupheli[String(r[KD_KID])].not));
     if (grup === "Sipariş" || grup === "Teklif" || grup === "Manuel") return;
     if (String(r[KD_KONTROL]).indexOf("⚠ Tek taraflı") === 0) ekle("tekTaraf", ozetle(r, String(r[KD_KONTROL])));
     // Beklenen ama hiç bulunamayan taraflar
@@ -858,7 +860,7 @@ function getKayitDefteriKontrol() {
   const aktif = satirlar.filter(r => r[KD_DURUM] === "Aktif").length;
   const ozet = {
     toplamKayit: satirlar.length, aktif: aktif, silinen: satirlar.length - aktif,
-    sorunSayisi: sayac.kaynakYok + sayac.karsiEksik + sayac.tekTaraf + sayac.sahipsiz + sayac.numarasiz + sayac.tutarFarki + sayac.karsiKalmis,
+    sorunSayisi: sayac.kaynakYok + sayac.karsiEksik + sayac.tekTaraf + sayac.sahipsiz + sayac.numarasiz + sayac.tutarFarki + sayac.karsiKalmis + sayac.nakliyeSupheli,
     sayac: sayac,
   };
   return { ok: true, ozet: ozet, bulgular: s, kontrolZamani: kdSimdi_() };
@@ -892,11 +894,13 @@ function getKayitDefteri(body) {
   uygun.sort((a, b) => Number(b[KD_NO]) - Number(a[KD_NO]));
   let toplamBorc = 0, toplamAlacak = 0;
   uygun.forEach(r => { if (r[KD_DURUM] === "Aktif") { toplamBorc += kdSayi_(r[KD_BTL]); toplamAlacak += kdSayi_(r[KD_ATL]); } });
+  const nakliyeSupheli = nkSupheliAlisHaritasi_(); // ❗ Nakliye dağıtımı tutarsız onaylanmış alış faturaları
+  const uyariNotu = (r) => (r[KD_DURUM] === "Aktif" && String(r[KD_KAYNAK]) === SHEETS.alislar && nakliyeSupheli[String(r[KD_KID])]) ? nakliyeSupheli[String(r[KD_KID])].not : "";
   const dilim = uygun.slice(sayfa * adet, sayfa * adet + adet).map(r => ({
     no: Number(r[KD_NO]), modul: kdMetin_(r[KD_MODUL]), islem: kdMetin_(r[KD_ISLEM]), tarih: kdMetin_(r[KD_TARIH]), belgeNo: kdMetin_(r[KD_BELGE]),
     cari: kdMetin_(r[KD_CARI]), cariKodu: kdMetin_(r[KD_CARIKOD]), belgeTutari: kdSayi_(r[KD_BTUTAR]), borcHesap: kdMetin_(r[KD_BHESAP]), borcTutar: r[KD_BTL] === "" ? null : kdSayi_(r[KD_BTL]),
     alacakHesap: kdMetin_(r[KD_AHESAP]), alacakTutar: r[KD_ATL] === "" ? null : kdSayi_(r[KD_ATL]), kontrol: kdMetin_(r[KD_KONTROL]), durum: kdMetin_(r[KD_DURUM]),
-    grup: kdMetin_(r[KD_GRUP]), kaynak: kdMetin_(r[KD_KAYNAK]), kaynakId: kdMetin_(r[KD_KID]), kayitZamani: kdMetin_(r[KD_KAYIT]), silinmeZamani: kdMetin_(r[KD_SILINME]),
+    grup: kdMetin_(r[KD_GRUP]), kaynak: kdMetin_(r[KD_KAYNAK]), kaynakId: kdMetin_(r[KD_KID]), uyari: uyariNotu(r), kayitZamani: kdMetin_(r[KD_KAYIT]), silinmeZamani: kdMetin_(r[KD_SILINME]),
   }));
   return { ok: true, toplam: uygun.length, satirlar: dilim, sayfa: sayfa, adet: adet, moduller: Object.keys(moduller).sort(),
     toplamBorc: toplamBorc, toplamAlacak: toplamAlacak,
