@@ -6604,7 +6604,7 @@ function alisBekleyenListesiCiz(){
       </div>
       <div id="bfk-kalemler-${fi}" style="display:none;margin-top:8px;overflow:auto">
         <table class="hk-tablo"><thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim Fiyat</th><th>İsk.</th><th>Net Fiyat</th><th>KDV</th></tr></thead>
-        <tbody>${f.kalemler.map(k=>`<tr><td>${k.stokKodu||'—'}${k.stokVarMi===false?' <span class=\"hk-borc\">yeni</span>':''}</td><td>${k.urunAdi}</td><td>${k.miktar>0?k.miktar:'—'}</td><td>${paraFormat(k.birimFiyat)}</td><td>%${k.iskonto}</td><td>${paraFormat(k.netFiyat)}</td><td>%${k.kdvOrani}</td></tr>`).join("")}</tbody></table>
+        <tbody>${f.kalemler.map(k=>`<tr><td>${k.stokKodu||'—'}${k.stokVarMi===false?' <span class=\"hk-borc\">yeni</span>':''}${k.otomatikEslesme?' <span class=\"hk-alacak\" title=\"Tedarikçi ürün kodundan otomatik eşleşti\">oto</span>':''}</td><td>${k.urunAdi}</td><td>${k.miktar>0?k.miktar:'—'}</td><td>${paraFormat(k.birimFiyat)}</td><td>%${k.iskonto}</td><td>${paraFormat(k.netFiyat)}</td><td>%${k.kdvOrani}</td></tr>`).join("")}</tbody></table>
       </div>
       <div class="btnrow" style="margin-top:8px">
         ${f.faturaNo ? `<button type="button" class="btn" onclick="faturaGorsalAc('${f.faturaNo}')">📄 Faturayı Gör</button>` : ""}
@@ -6945,6 +6945,7 @@ function bfmKalemSatiriHTML(k, i){
         <input id="bfm-stokkodu-${i}" type="text" value="${k.stokKodu||''}" style="width:90px" placeholder="zorunlu">
         <button type="button" class="btn" style="padding:2px 6px;font-size:11px" onclick="bfmYeniStokAc(${i})" title="Marka/Ürün Grubu/Alt Ürün Grubu seçerek 12 haneli kod öner ve yeni stok kartı aç">🔧</button>
       </div>
+      ${k.otomatikEslesme ? `<div style="font-size:10px;color:var(--green);margin-top:2px" title="Tedarikçi ürün kodundan (${k.eslesenTedarikciKodu||''}) otomatik bulundu, kontrol edip onaylayın">✓ oto: ${k.eslesenTedarikciKodu||''}</div>` : ""}
       <div id="bfm-adoneri-${i}"></div>
       ${k.stokVarMi===false && k.stokKodu ? `<label style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--red);margin-top:3px;white-space:nowrap"><input type="checkbox" id="bfm-yenistok-${i}" ${k.yeniStokIsaretli===true?'checked':''} style="width:auto"> yeni stok kartı</label>` : ""}
       <label style="display:none">

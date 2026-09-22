@@ -33,6 +33,7 @@ const SHEETS = {
   seriTanimlari: "SeriTanimlari",
   tedarikciCariEslesme: "TedarikciCariEslesme",
   edmOnekEslesme: "EdmOnekEslesme",
+  tedarikciUrunKoduEslesme: "TedarikciUrunKoduEslesme",
   markalar: "Markalar",
   urunGruplari: "UrunGruplari",
   altUrunGruplari: "AltUrunGruplari",
@@ -1099,6 +1100,11 @@ function handleRequest(e) {
       case "getEdmOnekEslesmeListesi": result = getEdmOnekEslesmeListesi(); break;
       case "edmOnekEslesmeManuelKaydet": result = edmOnekEslesmeManuelKaydet(body); break;
       case "edmOnekEslesmeSil":    result = edmOnekEslesmeSil(body); break;
+      case "getTedarikciUrunKoduListesi": result = getTedarikciUrunKoduListesi(); break;
+      case "tedarikciUrunKoduManuelKaydet": result = tedarikciUrunKoduManuelKaydet(body); break;
+      case "tedarikciUrunKoduSil": result = tedarikciUrunKoduSil(body); break;
+      case "tedarikciUrunKoduTopluIceAktar": result = tedarikciUrunKoduTopluIceAktar(body); break;
+      case "gpdTedarikciKoduIlkYukleme": result = gpdTedarikciKoduIlkYukleme(); break;
       case "getKayitDefteri":        result = getKayitDefteri(body); break;
       case "getKayitDefteriKontrol": result = getKayitDefteriKontrol(); break;
       case "kayitDefteriBaslat":     result = kayitDefteriBaslat(body); break;
@@ -4654,6 +4660,170 @@ function edmOnekEslesmeSil(body) {
   return { ok: false, hata: "Eşleştirme bulunamadı" };
 }
 
+// ════════════════════════════════════════════════
+// TEDARİKÇİ ÜRÜN KODU → STOK KODU EŞLEŞTİRME HAFIZASI — bazı tedarikçiler (ör. GPD/Gül Pres)
+// e-faturada STOK_KODU alanını boş bırakır, ama ürün adının içinde KENDİ ürün kodlarını
+// (ör. "MTL160 PEDRA TEK GÖVDE LAVABO BATARYASI") geçirir. Bu tablo, fatura numarası
+// ÖNEKİ (ör. "GPD" — bkz. faturaOnekiCikar; TEDARIKCI gönderen adından daha güvenilir)
+// + o tedarikçinin ürün kodu (ör. "MTL160") ikilisini bizim STOK_KODU'muza bağlar.
+// Kullanım: BFM listesi hesaplanırken STOK_KODU boş gelen her kalemde, kalemin ürün adı bu
+// tablodaki bilinen kodlara karşı taranır (bkz. urunAdindanStokKoduBul_) — eşleşirse stok
+// kodu OTOMATİK ÖNERİLİR (kullanıcı yine de onaylamadan Alış'a işlenmez). Kullanıcı BFM onay
+// ekranında bir kalem için stok kodunu (elle ya da arayarak) seçip Onayla'ya bastığında,
+// ürün adından aynı yöntemle bir tedarikçi kodu çıkarılabiliyorsa bu eşleştirme öğrenilir/
+// güncellenir (bkz. onaylaAlisFaturasi) — böylece aynı kod bir sonraki faturada otomatik gelir.
+// ════════════════════════════════════════════════
+const TEDARIKCI_URUN_KODU_BASLIKLAR = ["ONEK","TEDARIKCI_KODU","STOK_KODU","STOK_ADI","LISTE_FIYATI","GUNCELLEME_TARIHI"];
+
+// Sayfayı { "GPD": [ {kod:"MTL160-S", stokKodu:"...", stokAdi:"...", listeFiyati:1234}, ... ], ... }
+// biçiminde okur — her önek grubu KOD UZUNLUĞUNA GÖRE AZALAN sırada tutulur, böylece
+// "MTL160-S" içeren bir üründe önce daha spesifik "MTL160-S" denenir, "MTL160" ile
+// yanlışlıkla erken eşleşip yanlış varyant seçilmez (bkz. urunAdindanStokKoduBul_).
+function tedarikciUrunKoduEslesmeOku(ss) {
+  const sheet = getOrCreateSheet(ss, SHEETS.tedarikciUrunKoduEslesme, TEDARIKCI_URUN_KODU_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const map = {};
+  for (let i = 1; i < data.length; i++) {
+    const onek = String(data[i][0] || "").trim().toUpperCase();
+    const kod = String(data[i][1] || "").trim().toUpperCase();
+    const stokKodu = String(data[i][2] || "").trim();
+    if (!onek || !kod || !stokKodu) continue;
+    if (!map[onek]) map[onek] = [];
+    map[onek].push({
+      kod: kod, stokKodu: stokKodu, stokAdi: String(data[i][3] || ""),
+      listeFiyati: parseFloat(data[i][4]) || 0,
+    });
+  }
+  Object.keys(map).forEach(o => map[o].sort((a, b) => b.kod.length - a.kod.length));
+  return map;
+}
+
+// (onek, kod) ikilisi üzerine upsert — aynı ikili zaten varsa stok kodu/adı/fiyatı güncellenir
+// (elle veya BFM'den her onaylamada tazelenir), yoksa yeni satır eklenir.
+function tedarikciUrunKoduEslesmeKaydet(ss, onek, kod, stokKodu, stokAdi, listeFiyati) {
+  const o = String(onek || "").trim().toUpperCase();
+  const k = String(kod || "").trim().toUpperCase();
+  const sk = String(stokKodu || "").trim();
+  if (!o || !k || !sk) return;
+  const sheet = getOrCreateSheet(ss, SHEETS.tedarikciUrunKoduEslesme, TEDARIKCI_URUN_KODU_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0] || "").trim().toUpperCase() === o && String(data[i][1] || "").trim().toUpperCase() === k) {
+      sheet.getRange(i + 1, 3, 1, 4).setValues([[sk, stokAdi || data[i][3] || "", listeFiyati || parseFloat(data[i][4]) || 0, simdi]]);
+      return;
+    }
+  }
+  sheet.appendRow([o, k, sk, stokAdi || "", listeFiyati || 0, simdi]);
+}
+
+// Bir ürün adının içinde, VERİLEN önek için bilinen tedarikçi kodlarından en spesifik
+// (en uzun) olanını kelime sınırına göre arar. "MTL160" ile "MTL160-S" birbirine
+// karışmasın diye liste zaten uzunluğa göre azalan sıraladır (bkz. tedarikciUrunKoduEslesmeOku).
+function urunAdindanStokKoduBul_(kodListesi, urunAdi) {
+  const ad = String(urunAdi || "").toUpperCase();
+  for (let i = 0; i < kodListesi.length; i++) {
+    const item = kodListesi[i];
+    const pattern = new RegExp("\\b" + item.kod.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b");
+    if (pattern.test(ad)) return item;
+  }
+  return null;
+}
+
+// Ürün adının içinden, bir tedarikçi ürün kodu gibi görünen (2-6 harf + 2-4 rakam,
+// isteğe bağlı "-EK" varyant parçalarıyla — ör. "MTL160", "MTL160-S", "FLB07-2-A")
+// bir jeneri̇k desen çıkarır. Öğrenme adımında (onaylaAlisFaturasi) kullanılıyor;
+// birden fazla aday varsa EN UZUN (en spesifik) olan tercih edilir.
+function urunAdindanKodCikar_(urunAdi) {
+  const ad = String(urunAdi || "").toUpperCase();
+  const adaylar = ad.match(/\b[A-ZÇĞİÖŞÜ]{2,6}[0-9]{2,4}(?:-[A-Z0-9]+)*\b/g);
+  if (!adaylar || !adaylar.length) return null;
+  adaylar.sort((a, b) => b.length - a.length);
+  return adaylar[0];
+}
+
+// Ayarlar ekranındaki yönetim tablosu için: tüm eşleştirmeleri listeler.
+function getTedarikciUrunKoduListesi() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const map = tedarikciUrunKoduEslesmeOku(ss);
+  const sonuc = [];
+  Object.keys(map).sort().forEach(onek => {
+    map[onek].forEach(item => sonuc.push({
+      onek: onek, kod: item.kod, stokKodu: item.stokKodu, stokAdi: item.stokAdi, listeFiyati: item.listeFiyati,
+    }));
+  });
+  return { ok: true, kayitlar: sonuc };
+}
+
+// body: { onek, kod, stokKodu, stokAdi, listeFiyati } — Ayarlar ekranından elle ekleme/düzenleme.
+function tedarikciUrunKoduManuelKaydet(body) {
+  const onek = String(body.onek || "").trim();
+  const kod = String(body.kod || "").trim();
+  const stokKodu = String(body.stokKodu || "").trim();
+  if (!onek) return { ok: false, hata: "Önek gerekli (ör. GPD)" };
+  if (!kod) return { ok: false, hata: "Tedarikçi ürün kodu gerekli" };
+  if (!stokKodu) return { ok: false, hata: "Stok kodu gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  tedarikciUrunKoduEslesmeKaydet(ss, onek, kod, stokKodu, String(body.stokAdi || ""), parseFloat(body.listeFiyati) || 0);
+  cacheTemizle(["bekleyenAlisFaturalari"]);
+  return { ok: true };
+}
+
+// body: { onek, kod }
+function tedarikciUrunKoduSil(body) {
+  const onek = String(body.onek || "").trim().toUpperCase();
+  const kod = String(body.kod || "").trim().toUpperCase();
+  if (!onek || !kod) return { ok: false, hata: "onek ve kod gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.tedarikciUrunKoduEslesme, TEDARIKCI_URUN_KODU_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0] || "").trim().toUpperCase() === onek && String(data[i][1] || "").trim().toUpperCase() === kod) {
+      sheet.deleteRow(i + 1);
+      cacheTemizle(["bekleyenAlisFaturalari"]);
+      return { ok: true };
+    }
+  }
+  return { ok: false, hata: "Eşleştirme bulunamadı" };
+}
+
+// body: { onek, kayitlar: [{kod, stokKodu, stokAdi, listeFiyati}, ...] } — toplu ilk yükleme
+// (ör. bir tedarikçinin tüm fiyat listesi Fincanlar stok kodlarıyla eşleştirilip tek seferde
+// aktarılırken kullanılır). Var olan (onek,kod) ikilileri güncellenir, yoklar eklenir.
+function tedarikciUrunKoduTopluIceAktar(body) {
+  const onek = String(body.onek || "").trim();
+  const kayitlar = body.kayitlar || [];
+  if (!onek) return { ok: false, hata: "Önek gerekli (ör. GPD)" };
+  if (!kayitlar.length) return { ok: false, hata: "Aktarılacak kayıt yok" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  let eklenen = 0, hatali = 0;
+  kayitlar.forEach(k => {
+    const kod = String(k.kod || "").trim();
+    const stokKodu = String(k.stokKodu || "").trim();
+    if (!kod || !stokKodu) { hatali++; return; }
+    tedarikciUrunKoduEslesmeKaydet(ss, onek, kod, stokKodu, String(k.stokAdi || ""), parseFloat(k.listeFiyati) || 0);
+    eklenen++;
+  });
+  cacheTemizle(["bekleyenAlisFaturalari"]);
+  return { ok: true, eklenen: eklenen, hatali: hatali };
+}
+
+
+// ════════════════════════════════════════════════
+// GPD (Gül Pres) TEDARİKÇİ ÜRÜN KODU İLK YÜKLEMESİ — 22 Eyl 2026 tarihli 2026 fiyat
+// listesi ile Fincanlar Stok Listesi çapraz eşleştirilerek üretilmiş 203 kayıt (kesin +
+// en uzun/spesifik kod otomatik seçilmiş kayıtlar; hiç eşleşmeyen eski seri ürünler
+// dahil edilmedi). Fiyatlar BRÜT LİSTE FİYATIDIR — alış/satışta iskonto uygulanır,
+// gerçek alış fiyatı her zaman faturadan gelir, bu sadece referans/karşılaştırma içindir.
+// TEK SEFERLİK ÇALIŞTIRILIR: dağıtımdan sonra bir kere cariApi("gpdTedarikciKoduIlkYukleme", {})
+// ile (veya Apps Script editöründen "Çalıştır" ile) tetiklenir; tekrar çalıştırmak zararsızdır
+// (tedarikciUrunKoduEslesmeKaydet var olan (onek,kod) ikilisini sadece günceller).
+// ════════════════════════════════════════════════
+function gpdTedarikciKoduIlkYukleme() {
+  const kayitlar = [{"kod": "TMS01", "stokKodu": "200519015011", "stokAdi": "GPD TAHARET MUSLUĞU BEYAZ TMS01", "listeFiyati": 650}, {"kod": "ADS03", "stokKodu": "200519015012", "stokAdi": "GPD ANKASTRE DUŞ BAŞLIĞI ADS03 (5 FONK)", "listeFiyati": 1300}, {"kod": "FKM01", "stokKodu": "200519015031", "stokAdi": "GPD FİLTRELİ ARA MUSLUK -FKM01", "listeFiyati": 430}, {"kod": "CMS03", "stokKodu": "200519201405", "stokAdi": "GPD FİLTRELİ ÇAMAŞIR MUSLUĞU CMS03", "listeFiyati": 850}, {"kod": "DSB05", "stokKodu": "200520000051", "stokAdi": "GPD MİX NİNO DUŞ BATARYASI DSB05", "listeFiyati": 5200}, {"kod": "MBB75", "stokKodu": "200520000751", "stokAdi": "GPD MİX FELİS BANYO BATARYASI -MBB75", "listeFiyati": 6650}, {"kod": "MBB100", "stokKodu": "200520001001", "stokAdi": "GPD MİX FREZİA BANYO BATARYASI MBB100", "listeFiyati": 7480}, {"kod": "MDL45", "stokKodu": "200520001451", "stokAdi": "GPD DOKTOR/BEDENSEL ENG.DÖNER LAV.BAT.MDL45", "listeFiyati": 5430}, {"kod": "MLB75", "stokKodu": "200520001751", "stokAdi": "GPD MİX FELİS LAVABO BATARYASI -MLB75", "listeFiyati": 4330}, {"kod": "LB30", "stokKodu": "200520002044", "stokAdi": "GPD ORBİS LAVABO BAT. LB30", "listeFiyati": 3180}, {"kod": "BB30", "stokKodu": "200520002045", "stokAdi": "GPD ORBİS BANYO BAT. BB30", "listeFiyati": 4250}, {"kod": "TE30", "stokKodu": "200520002046", "stokAdi": "GPD ORBİS TEK GÖVDE EVİYE BAT. TE30", "listeFiyati": 2800}, {"kod": "TL30", "stokKodu": "200520002047", "stokAdi": "GPD ORBİS TEK GÖVDE LAVABO BAT. TL30", "listeFiyati": 2750}, {"kod": "MTL85", "stokKodu": "200520002051", "stokAdi": "GPD RİTMO TEK GÖVDE LAVABO BATARYASI MTL85", "listeFiyati": 6330}, {"kod": "MAL45", "stokKodu": "200520002451", "stokAdi": "GPD DOKTOR/BEDENSEL ENG.APLİKE LAV.BAT. MAL45", "listeFiyati": 6080}, {"kod": "MTE75", "stokKodu": "200520002751", "stokAdi": "GPD MİX FELİS TEK GÖVDE EVİYE BATARYASI -MTE75", "listeFiyati": 4430}, {"kod": "FPB01", "stokKodu": "200520010011", "stokAdi": "GPD FOTOSELLİ PİSUVAR BATARYASI SIVA ÜSTÜ FPB01", "listeFiyati": 7800}, {"kod": "MLB100", "stokKodu": "200520011001", "stokAdi": "GPD MİX FREZİA LAVABO BATARYASI MLB100", "listeFiyati": 4730}, {"kod": "MBB70", "stokKodu": "200520012011", "stokAdi": "MBB70 ESPİNA BANYO BATARYASI GPD", "listeFiyati": 6030}, {"kod": "MTE70", "stokKodu": "200520012021", "stokAdi": "MTE70 ESPİNA TEK GÖVDE EVYE BATARYASI GPD", "listeFiyati": 4980}, {"kod": "MAR70", "stokKodu": "200520012022", "stokAdi": "GPD MİX ESPİNA ARITMA ÇIKIŞLI EVYE BATARYASI MAR70", "listeFiyati": 7750}, {"kod": "MTL70", "stokKodu": "200520012031", "stokAdi": "MTL70 ESPİNA TEK GÖVDE LAVABO BATARYASI GPD", "listeFiyati": 4800}, {"kod": "MLB70", "stokKodu": "200520012041", "stokAdi": "GPD MİX ESPİNA LAVABO BATARYASI MLB70", "listeFiyati": 4200}, {"kod": "MES70", "stokKodu": "200520012071", "stokAdi": "GPD MİX ESPİNA SPRALLİ EVYE BATARYASI MES70", "listeFiyati": 6000}, {"kod": "TMS70", "stokKodu": "200520012101", "stokAdi": "GPD ESPİNA TAHARET MUSLUĞU TMS70", "listeFiyati": 800}, {"kod": "AAK70", "stokKodu": "200520012701", "stokAdi": "GPD MİX ESPİNA ANKASTRE ARA KESME VALFİ -AAK70", "listeFiyati": 1350}, {"kod": "MLB45", "stokKodu": "200520012703", "stokAdi": "GPD Bedensel Engelli Lavabo Bataryası MLB45", "listeFiyati": 4680}, {"kod": "AAK05", "stokKodu": "200520013051", "stokAdi": "AAK05 GPD MİX NİNO ANKASTRE ARA KESME VALFİ", "listeFiyati": 1280}, {"kod": "DLB05", "stokKodu": "200520013151", "stokAdi": "GPD MİX NİNO DÖNER BORULU LAVABO BATARYASI DLB05", "listeFiyati": 5230}, {"kod": "UEB05", "stokKodu": "200520013171", "stokAdi": "GPD MİX NİNO DÖNER U BORULU EVYE BATARYASI -UEB05", "listeFiyati": 5400}, {"kod": "UEB05-B", "stokKodu": "200520013172", "stokAdi": "GPD MİX NİNO DÖNER U BORULU EVYE BATARYASI -UEB05-B BAKIR GÖRÜNÜMLÜ", "listeFiyati": 8630}, {"kod": "FLB07", "stokKodu": "200520013311", "stokAdi": "GPD FOTOSELLİ SET ÜSTÜ LAVABO BATARYASI FLB07", "listeFiyati": 11300}, {"kod": "MTE100", "stokKodu": "200520021001", "stokAdi": "GPD MİX FREZİA TEK GÖVDE EVİYE BATARYASI MTE100", "listeFiyati": 5330}, {"kod": "ADS07", "stokKodu": "200520023111", "stokAdi": "ADS07 ANKASTRE DUŞ SETİ (Ø200)", "listeFiyati": 2900}, {"kod": "TBB01", "stokKodu": "200520023251", "stokAdi": "GPD TERMOSTATİK BANYO BATARYASI -TBB01", "listeFiyati": 8750}, {"kod": "TBB02", "stokKodu": "200520032022", "stokAdi": "GPD TERMOSTATİK BANYO BATARYASI TBB02", "listeFiyati": 7930}, {"kod": "MTL135", "stokKodu": "200520032023", "stokAdi": "MTL135 TULİO TEK GÖVDE LAVABO BATARYASI GPD", "listeFiyati": 5430}, {"kod": "MTE135", "stokKodu": "200520032024", "stokAdi": "MTE135 TULİO TEK GÖVDE EVİYE BATARYASI GPD", "listeFiyati": 6000}, {"kod": "MLB135", "stokKodu": "200520032025", "stokAdi": "MLB135 TULİO LAVABO BATARYASI GPD", "listeFiyati": 4430}, {"kod": "BNB05", "stokKodu": "200520042011", "stokAdi": "GPD MİX NİNO BANYO BATARYASI BNB05", "listeFiyati": 7680}, {"kod": "BDB05", "stokKodu": "200520042021", "stokAdi": "GPD MİX NİNO EVYE BAT BDB05", "listeFiyati": 5450}, {"kod": "LEB05", "stokKodu": "200520042051", "stokAdi": "GPD MİX NİNO DÖNER L BORULU EVYE BAT.LEB05", "listeFiyati": 5380}, {"kod": "TMS05", "stokKodu": "200520042101", "stokAdi": "GPD NİNO TAHARET MUSLUĞU TMS05", "listeFiyati": 1000}, {"kod": "KRS58", "stokKodu": "200520052021", "stokAdi": "KÜRESEL RAKORLU MUSLUK (ÇELİK KOL)-KRS58", "listeFiyati": 1030}, {"kod": "TMZ01", "stokKodu": "200520052041", "stokAdi": "ARMATÜR TEMİZLEYİCİ VE PARLATICI-TMZ01", "listeFiyati": 350}, {"kod": "FKM03", "stokKodu": "200520052051", "stokAdi": "FİLTRELİ ARA MUSLUK (SERAMİK SALMASTRALI)-FKM03", "listeFiyati": 750}, {"kod": "MTL55", "stokKodu": "200520053011", "stokAdi": "MTL55 SOLUS TEK GÖVDE LAVABO BATARYASI GPD", "listeFiyati": 4280}, {"kod": "MTE55", "stokKodu": "200520053061", "stokAdi": "MTE55 SOLUS TEK GÖVDE EVİYE BATARYASI GPD", "listeFiyati": 4400}, {"kod": "MLB55", "stokKodu": "200520053062", "stokAdi": "GPD MİX SOLUS LAVABO BATARYASI -MLB55", "listeFiyati": 4030}, {"kod": "ADS11", "stokKodu": "200520053121", "stokAdi": "ANKASTRE DUŞ BAŞLIĞI (TAVANDAN)-ADS11", "listeFiyati": 2900}, {"kod": "ADS13", "stokKodu": "200520053122", "stokAdi": "ANKASTRE DUŞ SETİ-ADS13", "listeFiyati": 3930}, {"kod": "GGR04", "stokKodu": "200520053123", "stokAdi": "ANKASTRE KABİN GAGA-GGR04", "listeFiyati": 1150}, {"kod": "DST26", "stokKodu": "200520062011", "stokAdi": "DST26 ASKILI DUŞ SETİ TEK FONKSİYONLU KARE GPD", "listeFiyati": 950}, {"kod": "MLB65", "stokKodu": "200520063011", "stokAdi": "GPD MİX ATROS LAVABO BATARYASI -MLB65", "listeFiyati": 4300}, {"kod": "MTE65", "stokKodu": "200520063061", "stokAdi": "GPD MİX ATROS TEK GÖVDE EVİYE BATARYASI -MTE65", "listeFiyati": 4400}, {"kod": "MSL70", "stokKodu": "200520063141", "stokAdi": "GPD MİX ESPİNA SET ÜSTÜ LAVABO BAT.MSL70", "listeFiyati": 5230}, {"kod": "MSL65", "stokKodu": "200520063142", "stokAdi": "GPD ATROS SET ÜSTÜ LAVABO BAT. MSL65", "listeFiyati": 7850}, {"kod": "MSL65-C", "stokKodu": "200520063143", "stokAdi": "GPD ATROS SET ÜSTÜ LAVABO BAT. MSL65-C", "listeFiyati": 7980}, {"kod": "MTL65", "stokKodu": "200520072031", "stokAdi": "MTL65 ATROS TEK GÖVDE LAVABO GPD", "listeFiyati": 4250}, {"kod": "FPB02", "stokKodu": "200520072032", "stokAdi": "GPD Fotoselli Pisuvar Bataryası (sıva altı) FPB02", "listeFiyati": 7680}, {"kod": "MPN70", "stokKodu": "200520082021", "stokAdi": "ESPİNA PENCERE ÖNÜ BATARYASI-MPN70", "listeFiyati": 5880}, {"kod": "MTK70", "stokKodu": "200520106393", "stokAdi": "MTK70 ESPİNA TEK DELİKLİ KÜVET BATARYASI", "listeFiyati": 5050}, {"kod": "MTL75", "stokKodu": "200520118312", "stokAdi": "GPD MİX FELİS TEK GÖVDE LAVABO BATARYASI -MTL75", "listeFiyati": 4300}, {"kod": "MAB85", "stokKodu": "200520119310", "stokAdi": "MİX RİTMO ANKASTRE BANYO BATARYASI -MAB85 - GPD", "listeFiyati": 8430}, {"kod": "FLB11-2", "stokKodu": "200520124985", "stokAdi": "FOTOSELLİ LAVABO BATARYASI FLB11-2 GPD", "listeFiyati": 9230}, {"kod": "FLB10-S", "stokKodu": "200520124986", "stokAdi": "FOTOSELLİ LAVABO BATARYASI FLB10-S (SİYAH) GPD", "listeFiyati": 14430}, {"kod": "MAL120", "stokKodu": "200520125339", "stokAdi": "MİX ADRİO APLİKE LAVABO BATARYASI - MAL120", "listeFiyati": 5000}, {"kod": "MTT120", "stokKodu": "200520125396", "stokAdi": "ADRİO TEK SU GİRİŞLİ LAVABO BAT. - MTT120", "listeFiyati": 3330}, {"kod": "MLB155-A", "stokKodu": "200520130801", "stokAdi": "PROVİDO TEK LAVABO BATARYASI MLB155-A (ALTIN GÖRÜNÜM)", "listeFiyati": 7830}, {"kod": "MBB155-A", "stokKodu": "200520130803", "stokAdi": "PROVİDO BANYO BATARYASI MBB155-A (ALTIN GÖRÜNÜM)", "listeFiyati": 9350}, {"kod": "MTE155-A", "stokKodu": "200520130806", "stokAdi": "PROVİDO TEK GÖVDE EVİYE BATARYASI MTE155-A (ALTIN GÖRÜNÜM)", "listeFiyati": 9730}, {"kod": "MDB155-A", "stokKodu": "200520130813", "stokAdi": "PROVİDO BANYO BATARYASI MDB155-A (ALTIN GÖRÜNÜM)(TSEN817)", "listeFiyati": 6800}, {"kod": "MSL155-A", "stokKodu": "200520130814", "stokAdi": "PROVİDO SET ÜSTÜ LAVABO BATARYASI MSL155-A (ALTIN GÖRÜNÜM)", "listeFiyati": 9530}, {"kod": "MLB150", "stokKodu": "200520131301", "stokAdi": "TAURO LAVABO BATARYASI MLB150", "listeFiyati": 5430}, {"kod": "MTE150", "stokKodu": "200520131306", "stokAdi": "TAURO TEK GÖVDE EVİYE BATARYASI MTE150", "listeFiyati": 6750}, {"kod": "MLB150-A", "stokKodu": "200520131801", "stokAdi": "TAURO LAVABO BATARYASI MLB150-A (ALTIN GÖRÜNÜM)", "listeFiyati": 6500}, {"kod": "MBB150-A", "stokKodu": "200520131803", "stokAdi": "TAURO BANYO BATARYASI MBB150-A (ALTIN GÖRÜNÜM)", "listeFiyati": 9000}, {"kod": "MBB150", "stokKodu": "200520131804", "stokAdi": "TAURO BANYO BATARYASI MBB150 KROM", "listeFiyati": 7450}, {"kod": "MTE150-A", "stokKodu": "200520131806", "stokAdi": "TAURO EVİYE BATARYASI MTE150-A (ALTIN GÖRÜNÜM)", "listeFiyati": 8230}, {"kod": "MBB55", "stokKodu": "200520153031", "stokAdi": "MBB55 SOLUS BANYO BATARYASI GPD", "listeFiyati": 6530}, {"kod": "MAD55", "stokKodu": "200520153032", "stokAdi": "GPD SOLUS ANKASTRE DUŞ BATARYASI MAD55", "listeFiyati": 2980}, {"kod": "MAD65", "stokKodu": "200520153033", "stokAdi": "GPD ATROS ANKASTRE DUŞ BATARYASI MAD65", "listeFiyati": 3080}, {"kod": "MLB65", "stokKodu": "200520163011", "stokAdi": "MİX ATROS LAVABO BATARYASI -MLB65", "listeFiyati": 4300}, {"kod": "MBB65", "stokKodu": "200520163031", "stokAdi": "MBB65 ATROS BANYO BATARYASI GPD", "listeFiyati": 7400}, {"kod": "MES65-C", "stokKodu": "200520163032", "stokAdi": "ATROS SPİRALLİ EVİYE BATARYASI (MES65-C)", "listeFiyati": 7880}, {"kod": "MAK67", "stokKodu": "200520163901", "stokAdi": "MİX ATROS ANKASTRE KÜVET BATARYASI MAK67 -GPD", "listeFiyati": 16330}, {"kod": "MLB85", "stokKodu": "200520193011", "stokAdi": "MİX RİTMO LAVABO BATARYASI -MLB85  -GPD", "listeFiyati": 5200}, {"kod": "MBB85", "stokKodu": "200520193031", "stokAdi": "MİX RİTMO BANYO BATARYASI -MBB85  -GPD", "listeFiyati": 7330}, {"kod": "MTE85", "stokKodu": "200520193061", "stokAdi": "MİX RİTMO TEK GÖVDE EVİYE BATARYASI -MTE85  -GPD", "listeFiyati": 6800}, {"kod": "FPB02", "stokKodu": "200520200011", "stokAdi": "FOTOSELLİ PİSUAR BATARYASI -FPB02", "listeFiyati": 7680}, {"kod": "MLB105", "stokKodu": "200520213011", "stokAdi": "MİX FUEGO LAVABO BATARYASI -MLB105  -GPD", "listeFiyati": 6480}, {"kod": "MBB105", "stokKodu": "200520213031", "stokAdi": "MİX FUEGO BANYO BATARYASI -MBB105  -GPD", "listeFiyati": 12980}, {"kod": "MTE105", "stokKodu": "200520213061", "stokAdi": "MİX FUEGO TEK GÖVDE EVİYE BATARYASI -MTE105  -GPD", "listeFiyati": 9880}, {"kod": "MKB105", "stokKodu": "200520213062", "stokAdi": "FUEGO KABİN BATARYASI-MKB105", "listeFiyati": 7280}, {"kod": "MLB120", "stokKodu": "200520253011", "stokAdi": "MİX ADRİO LAVABO BATARYASI MLB120", "listeFiyati": 3480}, {"kod": "MDL120", "stokKodu": "200520253021", "stokAdi": "MİX ADRİO DÖNER LAVABO BATARYASI -MDL120", "listeFiyati": 2980}, {"kod": "MBB120", "stokKodu": "200520253031", "stokAdi": "MİX ADRİO BANYO BATARYASI -MBB120", "listeFiyati": 5050}, {"kod": "MDB120", "stokKodu": "200520253032", "stokAdi": "ADRİO DUŞ BATARYASI MDB120", "listeFiyati": 4130}, {"kod": "MTE120", "stokKodu": "200520253061", "stokAdi": "MİX ADRİO TEK GÖVDE EVİYE BATARYASI -MTE120", "listeFiyati": 3580}, {"kod": "MTL120", "stokKodu": "200520253121", "stokAdi": "MİX ADRİO TEK GÖVDE LAVABO BATARYASI -MTL120", "listeFiyati": 3430}, {"kod": "MAE120", "stokKodu": "200520253131", "stokAdi": "MİX ADRİO APLİKE EVİYE BATARYASI MAE120", "listeFiyati": 5100}, {"kod": "MTB120", "stokKodu": "200520254951", "stokAdi": "ADRİO TAHARET BATARYASI-(MTB120)", "listeFiyati": 4600}, {"kod": "AAK71-A", "stokKodu": "200520601904", "stokAdi": "GPD 1/2 MİX ESPİNA ANKASTRE ARA KESME VALFİ ALTIN GÖRÜNÜM (AAK71-A)", "listeFiyati": 2800}, {"kod": "AAK71", "stokKodu": "200534323901", "stokAdi": "GPD 1/2 MİX ESPİNA ANKASTRE ARA KESME VALFİ - AAK71", "listeFiyati": 1780}, {"kod": "MTA160", "stokKodu": "200535289031", "stokAdi": "MTA160 PEDRA TAM ANKASTR BANYO BATARYASI GPD", "listeFiyati": 9430}, {"kod": "MDB165-S", "stokKodu": "200535289161", "stokAdi": "GPD GİLDO DUŞ BAT. MDB165-S", "listeFiyati": 7400}, {"kod": "MBB160", "stokKodu": "200535289951", "stokAdi": "MBB160 PEDRA BANYO BATARYASI GPD", "listeFiyati": 7650}, {"kod": "MBB150-O", "stokKodu": "200535289983", "stokAdi": "TAURO BANYO BATARYASI SİYAH MBB150-O", "listeFiyati": 8650}, {"kod": "MBB165-K-R", "stokKodu": "200535289984", "stokAdi": "GİLDO BANYO BATARYASI KROM+ROSE GOLD MBB165-K-R", "listeFiyati": 10030}, {"kod": "MBB165-S", "stokKodu": "200535289985", "stokAdi": "GİLDO BANYO BATARYASI MBB165-S SİYAH", "listeFiyati": 8930}, {"kod": "DSP09", "stokKodu": "200537318985", "stokAdi": "DUŞ PANELİ ALÜM.SİYAH DSP09", "listeFiyati": 21330}, {"kod": "MES160-S", "stokKodu": "200538289984", "stokAdi": "MES160-S PEDRA  SPİRALLİ EVİYE BATARYASI KROM GPD", "listeFiyati": 8580}, {"kod": "MES71", "stokKodu": "200538289985", "stokAdi": "ESPİNA SPİRALLİ EVİYE BATARYASI MES71 KROM", "listeFiyati": 6880}, {"kod": "MTE160", "stokKodu": "200538322951", "stokAdi": "MTE160 PEDRA TEK GÖVDE EVİYE BATARYASI GPD", "listeFiyati": 5650}, {"kod": "MTE150-O", "stokKodu": "200538322984", "stokAdi": "TAURO TEK GÖVDE EVİYE BAT. SİYAH MTE150-O", "listeFiyati": 8280}, {"kod": "MLB160", "stokKodu": "200541289951", "stokAdi": "MLB160 PEDRA LAVABO BATARYASI GPD", "listeFiyati": 4580}, {"kod": "MLB150-O", "stokKodu": "200541289981", "stokAdi": "TAURO LAVABO BATARYASI SİYAH MLB150-O", "listeFiyati": 6500}, {"kod": "MTE165-K-R", "stokKodu": "200541289982", "stokAdi": "GİLDO LAVABO BATARYASI MTE165-K-R KROM+ROSE GOLD", "listeFiyati": 6150}, {"kod": "MLB165-K-R", "stokKodu": "200541289983", "stokAdi": "GİLDO LAVABO BATARYASI MLB165-K-R KROM+ROSE GOLD", "listeFiyati": 6000}, {"kod": "MTE165-S", "stokKodu": "200541289984", "stokAdi": "GİLDO TEK GÖVDE EVİYE BATARYASI MTE165-S SİYAH", "listeFiyati": 5500}, {"kod": "MSL155", "stokKodu": "200541289985", "stokAdi": "GPD SET ÜSTÜ LAVABO BATARYASI MSL155", "listeFiyati": 7830}, {"kod": "RDK07", "stokKodu": "201251074251", "stokAdi": "ÇAMAŞIR MUSLUK REDİKSİYON-RDK07", "listeFiyati": 230}, {"kod": "STS01", "stokKodu": "201252001461", "stokAdi": "SPREY TAHARET SETİ RED-(STS01)", "listeFiyati": 930}, {"kod": "UZT01", "stokKodu": "201764028101", "stokAdi": "UZATMA 1 CM -GPD (UZT01)", "listeFiyati": 130}, {"kod": "UZT02", "stokKodu": "201764028151", "stokAdi": "GPD UZATMA 1,5CM UZT02", "listeFiyati": 150}, {"kod": "UZT03", "stokKodu": "201764028201", "stokAdi": "GPD UZATMA 2 CM UZT03", "listeFiyati": 180}, {"kod": "UZT04", "stokKodu": "201764028251", "stokAdi": "GPD UZATMA 2,5CM UZT04", "listeFiyati": 230}, {"kod": "UZT05", "stokKodu": "201764028301", "stokAdi": "GPD UZATMA 3CM UZT05", "listeFiyati": 280}, {"kod": "UZT06", "stokKodu": "201764028401", "stokAdi": "GPD UZATMA 4CM UZT06", "listeFiyati": 350}, {"kod": "UZT07", "stokKodu": "201764028501", "stokAdi": "GPD UZATMA 5cm UZT07", "listeFiyati": 380}, {"kod": "DST37", "stokKodu": "201821000060", "stokAdi": "ASKILI DUŞ SETİ DST37 TEK FONK. -GPD", "listeFiyati": 1100}, {"kod": "ADS15", "stokKodu": "201821000062", "stokAdi": "ARBEKA ASKILI DUŞ SETİ (TEK.FONK)-ADS15", "listeFiyati": 3930}, {"kod": "DST24", "stokKodu": "201821000074", "stokAdi": "GPD SÜRGÜLÜ DUŞ SETİ 5FONKS. DST24", "listeFiyati": 8750}, {"kod": "MBB135", "stokKodu": "201821000075", "stokAdi": "MBB135 TULİO BANYO BATARYASI GPD", "listeFiyati": 6280}, {"kod": "AUG01", "stokKodu": "201821000091", "stokAdi": "AUG01 ANKASTRE ARA KESME UZATMA GRUBU (3 CM)(026)", "listeFiyati": 580}, {"kod": "DST16", "stokKodu": "201821013071", "stokAdi": "SÜRGÜLÜ DUŞ TAKIMI 3 FONKSİYONLU -DST16-GPD-", "listeFiyati": 1430}, {"kod": "DST30", "stokKodu": "201821013072", "stokAdi": "GPD SÜRGÜLÜ DUŞ SETİ (TEK FONKSİYONLU)-DST30", "listeFiyati": 3380}, {"kod": "DSP06", "stokKodu": "201821104032", "stokAdi": "DUŞ PANELİ BAMBU -DSP06 (20X150)", "listeFiyati": 25630}, {"kod": "ADS05", "stokKodu": "201821203302", "stokAdi": "ANKASTRE DUŞ SETİ (200X200) ADS05 - GPD", "listeFiyati": 3100}, {"kod": "SAG10", "stokKodu": "201821203303", "stokAdi": "SAG10-ANKASTRE DUŞ SIVA ALTI GRUBU(RİTMO-FUEGO)", "listeFiyati": 2080}, {"kod": "MAD65", "stokKodu": "200520254952", "stokAdi": "MAD65 ATROS ANKASTRE DUŞ BATARYASI (TSEN817)", "listeFiyati": 3080}, {"kod": "ADS02", "stokKodu": "2005202549523", "stokAdi": "ADS02 3 FONKSÜYONLU ANKASTRE DUŞ BAŞLIĞI (TSEN1112)", "listeFiyati": 1300}, {"kod": "ADS05", "stokKodu": "200520023112", "stokAdi": "ADS05 ANKASTRE DUŞ SETİ (200X200)", "listeFiyati": 3100}, {"kod": "DST51", "stokKodu": "201821013075", "stokAdi": "DST51 ASKILI DUŞ SETİ (5 FONK. )", "listeFiyati": 1030}, {"kod": "DST26", "stokKodu": "201821013076", "stokAdi": "DST26 ASKILI DUŞ SETİ TEK FONK. KARE", "listeFiyati": 950}, {"kod": "FPB02", "stokKodu": "200520010012", "stokAdi": "GPD FOTOSELLİ PİSUVAR BATARYASI SIVA ALTI -FPB02", "listeFiyati": 7680}, {"kod": "MLB155", "stokKodu": "200520130802", "stokAdi": "PROVİDO TEK LAVABO BATARYASI- MLB155", "listeFiyati": 6380}, {"kod": "MTE155", "stokKodu": "200520130807", "stokAdi": "PROVİDO TEK GÖVDE EVİYE BATARYASI MTE155", "listeFiyati": 8130}, {"kod": "MDA65", "stokKodu": "200520153034", "stokAdi": "GPD ATROS DUVARDAN ANKASTRE LAVABO BATARYASI-MDA65", "listeFiyati": 8550}, {"kod": "MES65", "stokKodu": "200520163033", "stokAdi": "ATROS SPİRALLİ EVİYE BATARYASI 2 FONKSİYONLU -MES65", "listeFiyati": 7750}, {"kod": "MTE180-B", "stokKodu": "200538322986", "stokAdi": "GPD RETRO TEK GÖVDE EVİYE BATARYASI MTE180-B", "listeFiyati": 13630}, {"kod": "MTL180-R", "stokKodu": "200538322988", "stokAdi": "GPD RETRO TEK GÖVDE LAVABO  BATARYASI MTL180-R", "listeFiyati": 15100}, {"kod": "MTE180-R", "stokKodu": "200538322989", "stokAdi": "GPD RETRO TEK GÖVDE EVİYE  BATARYASI MTE180-R", "listeFiyati": 16200}, {"kod": "MTA85", "stokKodu": "201821203304", "stokAdi": "RİTMO TAM ANKASTRE BANYO BATARYASI-MTA85", "listeFiyati": 9080}, {"kod": "MTA105", "stokKodu": "200535289032", "stokAdi": "FUEGO TAM ANKASTRE BANYO BATARYASI-MTA105", "listeFiyati": 9330}, {"kod": "MAD85", "stokKodu": "201821203305", "stokAdi": "RİTMO ANKASTRE DUŞ BATARYASI-MAD85", "listeFiyati": 3200}, {"kod": "MBB155", "stokKodu": "200520130804", "stokAdi": "GPD PROVİDO BANYO BATARYASI-MBB155", "listeFiyati": 7680}, {"kod": "PUP02", "stokKodu": "200520062013", "stokAdi": "PUP02-POP-UP ÜNİTESİ (BASMALI NORMAL)-GPD", "listeFiyati": 1330}, {"kod": "FLB10-2", "stokKodu": "200520124987", "stokAdi": "FLB10-2 FOTOSELLİ LAVABO BATARYASI (TSEN15091) (TEK GİRİŞLİ)-GPD", "listeFiyati": 11400}, {"kod": "DST50", "stokKodu": "201821013077", "stokAdi": "DST50-ASKILI DUŞ SETİ (5 FONK.)(TSEN1112)", "listeFiyati": 600}, {"kod": "MTE180-A", "stokKodu": "200538322990", "stokAdi": "GPD RETRO TEK GÖVDE EVİYE BATARYASI-MTE180-A", "listeFiyati": 15380}, {"kod": "FLB10", "stokKodu": "200520124988", "stokAdi": "FOTOSELLİ LAVABO BATARYASI (ÇİFT SU GİRİŞLİ)-FLB10-GPD", "listeFiyati": 13150}, {"kod": "PUP05", "stokKodu": "200520124989", "stokAdi": "POP-UP ÜNİTESİ (BASMALI-NORMAL/TAŞMA DELİKSİZ)-PUP05-GPD", "listeFiyati": 800}, {"kod": "DST19-3", "stokKodu": "200520124990", "stokAdi": "DST19-3 KROM KARE YÖNLENDİRİCİLİ DUŞ SETİ (TEK FONKSİYONLU EL DUŞU + 200X200) GPD", "listeFiyati": 4800}, {"kod": "PUP05-S", "stokKodu": "200520124991", "stokAdi": "POP-UP ÜNİTESİ (BASMALI-NORMAL/TAŞMA DELİKSİZ)-PUP05-S-GPD", "listeFiyati": 1050}, {"kod": "MAK65", "stokKodu": "200520163902", "stokAdi": "MAK65 ATROS ANKASTRE KÜVET BATARYASI (3 DELİKLİ ) (TSEN817)-GPD", "listeFiyati": 17750}, {"kod": "MTL180-B", "stokKodu": "200538322991", "stokAdi": "MTL180-B GPD RETRO TEK GÖVDE LAVABO BATARYASI (TSEN817)(BAKIR OKSİT)", "listeFiyati": 12700}, {"kod": "FPB02", "stokKodu": "200520130805", "stokAdi": "GDV015-FPB02 GÖZ DEVRESİ GRUBU (YENİ FOTOSELLİ)-GPD", "listeFiyati": 7680}, {"kod": "MDA65-S", "stokKodu": "200520153035", "stokAdi": "MDA65-S ATROS DUVARDAN ANKASTRE LAVABO BATARYASI(SİYAH)", "listeFiyati": 10450}, {"kod": "MKA165-S", "stokKodu": "200520153036", "stokAdi": "MKA165-S GİLDO MİX KOMBİNE ANKASTRE BANYO BATARYASI (TSEN817)(SİYAH)", "listeFiyati": 22180}, {"kod": "ADS25", "stokKodu": "200520153037", "stokAdi": "ADS25 ANKASTRE DUŞ SETİ (TAVANDAN) (500X500)(TSEN1112)", "listeFiyati": 12200}, {"kod": "MTE65-BG", "stokKodu": "200520153038", "stokAdi": "MTE65-BG ATROS TEK GÖVDE EVİYE BATARYASI(BEYAZ GRANİT KAPLAMA)(TSEN817)", "listeFiyati": 6350}, {"kod": "ADS23-S", "stokKodu": "200520153039", "stokAdi": "ADS23-S ANKASTRE DUŞ BAŞLIĞI TAVANDAN 400X400 SİYAH-GPD", "listeFiyati": 9400}, {"kod": "MCA156", "stokKodu": "200520153040", "stokAdi": "MCA156 PROVİDO MİX ÇEVİRMELİ ANKASTRE BAŞLIĞI TSEN817-GPD", "listeFiyati": 12050}, {"kod": "MKB65", "stokKodu": "201821013080", "stokAdi": "MKB65 ATROS ANKASTRE KABIN BATARYASI (TSEN817)", "listeFiyati": 6480}, {"kod": "MBB165", "stokKodu": "200535001655", "stokAdi": "MBB165 GİLDO BANYO BATARYASI GPD", "listeFiyati": 7400}, {"kod": "MTL165", "stokKodu": "200535011655", "stokAdi": "MTL165 GİLDO TEK GÖVDE LAVABO BATARYASI GPD", "listeFiyati": 4280}, {"kod": "MTE165", "stokKodu": "200535021655", "stokAdi": "MTE165 GİLDO TEK GÖVDE EVİYE BATARYASI GPD", "listeFiyati": 4500}, {"kod": "MTL160", "stokKodu": "200535001601", "stokAdi": "MTL160 PEDRA TEK GÖVDE LAVABO BATARYASI", "listeFiyati": 5300}, {"kod": "MTL180", "stokKodu": "200538001801", "stokAdi": "MTL180 RETRO TEK GÖVDE LAVABO BATARYASI GPD", "listeFiyati": 9500}, {"kod": "MTE180", "stokKodu": "200538011801", "stokAdi": "MTE180 RETRO TEK GÖVDE EVİYE BATARYASI GPD", "listeFiyati": 10380}, {"kod": "MBR65", "stokKodu": "200520000651", "stokAdi": "MBR65 ATROS BERBER BATARYASI", "listeFiyati": 5350}, {"kod": "FLB12", "stokKodu": "200520000121", "stokAdi": "FLB12 FOTOSELLİ LAVABO BATARYASI (MANUEL ISI KUMANDALI) -GPD", "listeFiyati": 13350}, {"kod": "AUG04", "stokKodu": "200538320041", "stokAdi": "AUG04 GPD ANKASTRE BANYO KABİN UZATMA GRUBU", "listeFiyati": 3730}, {"kod": "AUG03", "stokKodu": "200538000031", "stokAdi": "AUG03 GPD ANKASTRE BANYO KABİN UZATMA GRUBU", "listeFiyati": 3600}, {"kod": "AUG05", "stokKodu": "200538000051", "stokAdi": "AUG05 GPD ANKASTRE KABİN UZATMA GRUBU", "listeFiyati": 2350}, {"kod": "MAR71", "stokKodu": "200520012023", "stokAdi": "MAR71 ESPİNA ÇİFT AERATÖRLÜ ARITMA BATARYASI -GPD", "listeFiyati": 8080}, {"kod": "GGR12", "stokKodu": "200520013071", "stokAdi": "GGR12 ANKASTRE BATARYA GRUBU (YÖNLENDİRİCİLİ)(KARE)", "listeFiyati": 3380}, {"kod": "MLB190-S", "stokKodu": "200541281901", "stokAdi": "MİX QUADRO LAVABO BATARYASI -SİYAH MLB190-S", "listeFiyati": 6580}, {"kod": "MBB190-S", "stokKodu": "200541291901", "stokAdi": "MİX QUADRO BANYO BATARYASI -SİYAH MBB190-S", "listeFiyati": 14550}, {"kod": "DST19-3-S", "stokKodu": "201821013191", "stokAdi": "YÖNLENDİRİCİLİ DUŞ SETİ DST19-3-S -SİYAH", "listeFiyati": 6850}, {"kod": "FLB12", "stokKodu": "200538010051", "stokAdi": "KKT05 FOTOSELLİ LAV. BAT. KUMANDA KUTUSU (FLB12) -GPD", "listeFiyati": 13350}, {"kod": "ATB170", "stokKodu": "200520050170", "stokAdi": "ANKASTRE TAHARET BATARYASI ATB170 -GPD", "listeFiyati": 2650}, {"kod": "SBR26", "stokKodu": "200535000261", "stokAdi": "ŞİBER VANA 2\" SBR26 (TSEN 12288) -GPD", "listeFiyati": 4180}, {"kod": "MEE65", "stokKodu": "200538163151", "stokAdi": "MEE65 ATROS ENDÜSTRİYEL EVİYE BATARYASI -GPD", "listeFiyati": 16530}, {"kod": "DST19-3-S", "stokKodu": "200520124193", "stokAdi": "DST19-3-S SİYAH KARE YÖNLENDİRİCİLİ DUŞ SETİ (TEK FONKSİYONLU EL DUŞU + 200X200)-DST19-3-S GPD", "listeFiyati": 6850}, {"kod": "DST19-2", "stokKodu": "201821013019", "stokAdi": "DST19-2 KROM OVAL YÖNLENDİRİCİLİ DUŞ SETİ (Ø200)(3 FONK.) -GPD", "listeFiyati": 4780}, {"kod": "KRS49", "stokKodu": "200520040049", "stokAdi": "KRS49 1/2\" KÜRESEL RAKORLU MUSLUK (ÇELİK K.) -GPD", "listeFiyati": 800}, {"kod": "MCA161", "stokKodu": "200535219161", "stokAdi": "PEDRA MİX ÇEVİRMELİ ANKASTRE BATARYA MCA161 -GPD", "listeFiyati": 11850}, {"kod": "MBB165-S-R", "stokKodu": "200535289986", "stokAdi": "GİLDO BANYO BATARYASI  MBB165-S-R", "listeFiyati": 10580}, {"kod": "MSL165-S-R", "stokKodu": "200535289987", "stokAdi": "MSL165-S-R GİLDO SET ÜSTÜ LAVABO", "listeFiyati": 11030}, {"kod": "MSL160-S", "stokKodu": "200520011601", "stokAdi": "MSL160-S PEDRA SET ÜSTÜ LAVABO BATARYASI SİYAH", "listeFiyati": 10680}, {"kod": "UMS30", "stokKodu": "200520010301", "stokAdi": "UMS30 RİOS UZUN MUSLUK GPD", "listeFiyati": 1000}];
+  return tedarikciUrunKoduTopluIceAktar({ onek: "GPD", kayitlar: kayitlar });
+}
+
 // ★ Sunucu önbelleği (45 sn): FATURAFIYAT (dış e-tablo) + durum + alış + stok + cari sayfalarını her
 // açılışta baştan okuyan en yavaş liste buydu. Durum/eşleşme değiştiren işlemler (onayla/reddet/
 // sıfırla/önek eşleştirme) ve stok/cari/alış önbellekleri temizlenince (bkz. CACHE_BAGIMLI_) bu da
@@ -4726,6 +4896,8 @@ function getBekleyenAlisFaturalariHesapla_() {
   // EDM fatura no önekinden (ör. "CNY") tedarikçiye — bu SADECE bir ÖNERİ olarak sunulur,
   // otomatik seçilmez (tedarikçi adı eşleşmesinden farklı olarak kullanıcı onayı gerekir).
   const onekMap = edmOnekEslesmeOku(ss);
+  // Fatura no önekine göre bilinen tedarikçi ürün kodu → stok kodu eşleştirmeleri (ör. "GPD").
+  const tedarikciKoduEslesme = tedarikciUrunKoduEslesmeOku(ss);
   const cariListeSonuc = getCariListesi();
   const cariByIdMap = {};
   if (cariListeSonuc.ok) cariListeSonuc.cariler.forEach(c => { cariByIdMap[c.id] = c; });
@@ -4769,6 +4941,23 @@ function getBekleyenAlisFaturalariHesapla_() {
     // olarak geldiği için eskiden yanlışlıkla Can Alüminyum cari'sine eşleniyordu).
     // Sıra: (1) önek eşleşmesi (cari hâlâ varsa) → (2) gönderen adı eşleşmesi → (3) eşleşme yok.
     f.onek = faturaOnekiCikar(f.faturaNo);
+    // STOK_KODU boş gelen kalemler için, bu faturanın önekine ait bilinen tedarikçi ürün
+    // kodlarına (ör. GPD → MTL160) karşı ürün adı taranır — eşleşirse stok kodu OTOMATİK
+    // ÖNERİLİR ve BFM onay ekranında ilgili kutuya önceden dolu gelir (bkz. urunAdindanStokKoduBul_).
+    // Kullanıcı yine de "Onayla"ya basmadan hiçbir şey Alış'a işlenmez, dilerse değiştirebilir.
+    const bilinenKodlar = f.onek ? (tedarikciKoduEslesme[f.onek] || []) : [];
+    if (bilinenKodlar.length) {
+      f.kalemler.forEach(k => {
+        if (k.stokKodu) return; // zaten FATURAFIYAT'tan gelen bir kod varsa dokunma
+        const eslesme = urunAdindanStokKoduBul_(bilinenKodlar, k.urunAdi);
+        if (eslesme) {
+          k.stokKodu = eslesme.stokKodu;
+          k.stokVarMi = !!stokKoduSeti[eslesme.stokKodu];
+          k.otomatikEslesme = true;
+          k.eslesenTedarikciKodu = eslesme.kod;
+        }
+      });
+    }
     const adEslesenId = eslesmeMap[String(f.tedarikci || "").trim().toLocaleLowerCase('tr')] || "";
     const onekKaydi = f.onek ? onekMap[f.onek] : null;
     const onekCariGecerli = !!(onekKaydi && onekKaydi.cariId && (!cariListeSonuc.ok || cariByIdMap[onekKaydi.cariId]));
@@ -4845,6 +5034,23 @@ function onaylaAlisFaturasi(body) {
   const onek = faturaOnekiCikar(faturaNo);
   if (body.cariId && onek) {
     edmOnekEslesmeKaydet(ss, onek, String(body.cariId).trim(), String(body.cariAd || ""));
+  }
+
+  // Tedarikçi ürün kodu → stok kodu eşleştirmesini öğren/güncelle (bkz. yukarıdaki blok
+  // ve tedarikciUrunKoduEslesmeKaydet). Faturanın bir öneki varsa (ör. "GPD") ve kalemin
+  // ürün adında tedarikçi kodu gibi görünen bir desen (ör. "MTL160") tespit edilebiliyorsa,
+  // kullanıcının bu kalem için SEÇTİĞİ/onayladığı stok koduyla eşleştirilip kaydedilir —
+  // aynı kod bir sonraki faturada BFM'de otomatik önerilir. STOK_KODU zaten FATURAFIYAT'tan
+  // gelmiş kalemlerde de zararsızca aynı eşleşme tazelenir (bkz. tedarikciUrunKoduEslesmeKaydet).
+  if (onek && Array.isArray(body.kalemler)) {
+    body.kalemler.forEach(k => {
+      const stokKodu = String(k.stokKodu || "").trim();
+      if (!stokKodu) return;
+      const tedarikciKodu = urunAdindanKodCikar_(k.urunAdi);
+      if (tedarikciKodu) {
+        tedarikciUrunKoduEslesmeKaydet(ss, onek, tedarikciKodu, stokKodu, String(k.urunAdi || ""));
+      }
+    });
   }
 
   cacheTemizle(["bekleyenAlisFaturalari"]);
