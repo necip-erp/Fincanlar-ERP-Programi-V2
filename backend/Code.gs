@@ -45,6 +45,7 @@ const SHEETS = {
   cekSenetler: "CekSenetler",
   cekSenetHareketleri: "CekSenetHareketleri",
   cekSenetGorselleri: "CekSenetGorselleri",
+  cekYapraklari: "CekYapraklari",
   silinenIslemler: "SilinenIslemler",
   alisFaturaDurum: "AlisFaturaDurum",
   siparisDurumlari: "SiparisDurumlari",
@@ -1083,6 +1084,10 @@ function handleRequest(e) {
       case "cekSenetHareketGeriAl": result = cekSenetHareketGeriAl(body); break;
       case "cekSenetGorselYukle":  result = cekSenetGorselYukle(body); break;
       case "getCekSenetGorselleri": result = getCekSenetGorselleri(body.cekId); break;
+      case "getCekYapraklari":      result = getCekYapraklari(body); break;
+      case "saveCekKocani":         result = saveCekKocani(body); break;
+      case "silCekYaprak":          result = silCekYaprak(body); break;
+      case "cekYaprakDurumGuncelle": result = cekYaprakDurumGuncelle(body); break;
       case "silCekSenetGorseli":   result = silCekSenetGorseli(body); break;
       case "getSilinenlerListesi": result = getSilinenlerListesi(); break;
       case "silinenGeriAl":        result = silinenGeriAl(body); break;
@@ -3944,6 +3949,7 @@ function getCekSenetDetay(id) {
         aciklama: String(row[11] || ""), kayitTarihi: hucreTarihStr(row[12]),
         projeKodu: metinOku_(row[14]),
         belgeTuru: String(row[15] || "") === "Senet" ? "Senet" : "Çek",
+        yaprakId: String(row[16] || ""),
       };
       break;
     }
@@ -3987,24 +3993,203 @@ function saveCekSenet(body) {
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
   ensureCekSenetProjeKoduColonu(sheet);
   ensureCekSenetBelgeTuruColonu(sheet);
-  const id = "cs_" + Date.now();
+  ensureCekSenetYaprakColonu(sheet);
+  // Aynı milisaniyede toplu kayıt yapılırsa ID çakışmasın diye sayaçlı benzersizleştirme.
+  const id = "cs_" + Date.now() + (body._sira ? "_" + body._sira : "");
   const belgeTuru = String(body.belgeTuru || "Çek") === "Senet" ? "Senet" : "Çek";
   const duzenlenmeTarihi = String(body.duzenlenmeTarihi || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const vade = String(body.vade || "");
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  metinliSatirEkle_(sheet, [id, tip, cariId, cariAd, tutar, tutar, String(body.seriNo || ""), String(body.bankaAdi || ""),
-    duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi, "", String(body.projeKodu || "").trim(), belgeTuru], [15]);
 
-  // Alınan çek: müşteriden aldık → borcu kapanır (Alacak). Verilen çek: tedarikçiye borcumuzu kapattık (Borç).
-  cariHareketEkle({
-    cariId: cariId, tarih: duzenlenmeTarihi, tip: tip === "Alınan" ? "Alacak" : "Borç", tutar: tutar,
-    aciklama: cariHareketAciklamaOlustur("CEK", id, tip === "Alınan" ? "cek_alinan" : "cek_verilen", body.aciklama),
-    vade: vade,
-    projeKodu: body.projeKodu,
-  });
+  // VERİLEN ÇEK: kendi çek koçanımızdan boş bir yaprak seçilir (yaprakId) — çek no/banka yapraktan gelir.
+  // (Yeni ekran yaprakZorunlu:true gönderir; Silinenler'den geri yükleme gibi eski akışlar zorunlu değildir,
+  // banka+çek no bir boş yaprakla eşleşirse otomatik bağlanır.)
+  let yaprak = null, seriNo = String(body.seriNo || ""), bankaAdi = String(body.bankaAdi || "");
+  if (tip === "Verilen" && belgeTuru === "Çek") {
+    const sonuc = cekYaprakAyir_(ss, { yaprakId: body.yaprakId, bankaAdi: bankaAdi, seriNo: seriNo, zorunlu: !!body.yaprakZorunlu }, id);
+    if (!sonuc.ok) return sonuc;
+    yaprak = sonuc.yaprak;
+    if (yaprak) { seriNo = yaprak.cekNo; bankaAdi = yaprak.bankaAdi; }
+  }
+  try {
+    metinliSatirEkle_(sheet, [id, tip, cariId, cariAd, tutar, tutar, seriNo, bankaAdi,
+      duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi, "", String(body.projeKodu || "").trim(), belgeTuru, yaprak ? yaprak.id : ""], [7, 15]);
+
+    // Alınan çek: müşteriden aldık → borcu kapanır (Alacak). Verilen çek: tedarikçiye borcumuzu kapattık (Borç).
+    cariHareketEkle({
+      cariId: cariId, tarih: duzenlenmeTarihi, tip: tip === "Alınan" ? "Alacak" : "Borç", tutar: tutar,
+      aciklama: cariHareketAciklamaOlustur("CEK", id, tip === "Alınan" ? "cek_alinan" : "cek_verilen", body.aciklama),
+      vade: vade,
+      projeKodu: body.projeKodu,
+    });
+  } catch (e) {
+    if (yaprak) cekYaprakBirak_(ss, id); // kayıt yazılamadıysa yaprak boşa dönsün
+    throw e;
+  }
 
   cacheTemizle(["cekSenetListesi"]);
   return { ok: true, id: id };
+}
+
+// YAPRAK_ID (17. kolon) — Verilen çekin hangi çek koçanı yaprağından (CekYapraklari) çıkış yapıldığını tutar.
+function ensureCekSenetYaprakColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 17).getValue();
+  if (String(mevcutBaslik || "") !== "YAPRAK_ID") {
+    sheet.getRange(1, 17).setValue("YAPRAK_ID").setFontWeight("bold").setBackground("#e8edf5");
+  }
+}
+
+// ════════════════════════════════════════════════
+// ÇEK KOÇANI / ÇEK YAPRAKLARI — bankadan çek koçanı alınınca boş çek yaprakları ÇEK NUMARASI ile tanımlanır.
+// Banka, Finans > Banka Tanımlamaları'nda tanımlı bankalardan seçilir. Verilen (kendi) çeklerimiz bu yapraklardan
+// seçilerek çıkış yapılır: yaprak "Boş" → "Kullanıldı" olur (KULLANILAN_CEK_ID). Çek silinirse yaprak tekrar "Boş" olur.
+// Durumlar: Boş / Kullanıldı / İptal (zayi, bozuk vb. — seçilemez).
+// ════════════════════════════════════════════════
+const CEK_YAPRAK_BASLIKLAR = ["ID","BANKA_ID","BANKA_ADI","CEK_NO","DURUM","KULLANILAN_CEK_ID","KOCAN_ID","KAYIT_TARIHI"];
+
+function cekYaprakSheet_(ss) {
+  const sheet = getOrCreateSheet(ss, SHEETS.cekYapraklari, CEK_YAPRAK_BASLIKLAR);
+  metinKolonuGarantiEt_(sheet, 4); // çek no metin: baştaki sıfırlar (0012345) korunsun
+  return sheet;
+}
+
+function cekYaprakSatirObj_(row) {
+  return { id: String(row[0]), bankaId: String(row[1] || ""), bankaAdi: String(row[2] || ""), cekNo: metinOku_(row[3]),
+    durum: String(row[4] || "Boş"), kullanilanCekId: String(row[5] || ""), kocanId: String(row[6] || ""), kayitTarihi: String(row[7] || "") };
+}
+
+// body: { bankaId?, durum? }
+function getCekYapraklari(body) {
+  body = body || {};
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const data = cekYaprakSheet_(ss).getDataRange().getValues();
+  const bankaId = String(body.bankaId || ""), durum = String(body.durum || "");
+  const liste = [];
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i][0]) continue;
+    const y = cekYaprakSatirObj_(data[i]);
+    if (bankaId && y.bankaId !== bankaId) continue;
+    if (durum && y.durum !== durum) continue;
+    liste.push(y);
+  }
+  liste.sort((a, b) => a.bankaAdi.localeCompare(b.bankaAdi, "tr") || String(a.cekNo).localeCompare(String(b.cekNo), "tr", { numeric: true }));
+  return { ok: true, yapraklar: liste };
+}
+
+// body: { bankaId, cekNolari: [ "0012345", ... ] (veya satır/virgülle ayrılmış metin) }
+function saveCekKocani(body) {
+  const bankaId = String(body.bankaId || "").trim();
+  if (!bankaId) return { ok: false, hata: "Banka seçimi gerekli (Finans > Banka Tanımlamaları'ndaki bankalardan)" };
+  let nolar = body.cekNolari;
+  if (!Array.isArray(nolar)) nolar = String(nolar || "").split(/[\s,;]+/);
+  const temiz = [], gorulen = {};
+  nolar.forEach(n => { const t = String(n || "").trim(); if (t && !gorulen[t]) { gorulen[t] = 1; temiz.push(t); } });
+  if (!temiz.length) return { ok: false, hata: "En az bir çek numarası girin" };
+  if (temiz.length > 500) return { ok: false, hata: "Tek seferde en fazla 500 çek yaprağı tanımlanabilir" };
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const bSheet = getOrCreateSheet(ss, SHEETS.bankalar, ["ID","AD"]);
+  const bData = bSheet.getDataRange().getValues();
+  let bankaAdi = "";
+  for (let i = 1; i < bData.length; i++) if (String(bData[i][0]) === bankaId) { bankaAdi = String(bData[i][1] || ""); break; }
+  if (!bankaAdi) return { ok: false, hata: "Seçilen banka tanımlı değil" };
+
+  const sheet = cekYaprakSheet_(ss);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const data = sheet.getDataRange().getValues();
+    const mevcut = {};
+    for (let i = 1; i < data.length; i++) if (String(data[i][1]) === bankaId) mevcut[String(metinOku_(data[i][3]))] = true;
+    const eklenecek = temiz.filter(n => !mevcut[n]);
+    const atlanan = temiz.filter(n => mevcut[n]);
+    if (eklenecek.length) {
+      const kocanId = "kc_" + Date.now();
+      const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+      const bas = sheet.getLastRow() + 1;
+      if (bas + eklenecek.length - 1 > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), bas + eklenecek.length - 1 - sheet.getMaxRows());
+      const satirlar = eklenecek.map((n, k) => ["cy_" + Date.now() + "_" + k, bankaId, bankaAdi, n, "Boş", "", kocanId, simdi]);
+      const aralik = sheet.getRange(bas, 1, satirlar.length, CEK_YAPRAK_BASLIKLAR.length);
+      aralik.setNumberFormat("@"); // tüm hücreler metin (çek no'daki sıfırlar bozulmasın)
+      aralik.setValues(satirlar);
+    }
+    return { ok: true, eklenen: eklenecek.length, atlanan: atlanan };
+  } finally { lock.releaseLock(); }
+}
+
+// body: { id } — yalnız "Boş" yaprak silinebilir.
+function silCekYaprak(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = cekYaprakSheet_(ss);
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) !== id) continue;
+    if (String(data[i][4] || "Boş") === "Kullanıldı") return { ok: false, hata: "Bu yaprak bir çekte kullanılmış; önce o çek silinmeli." };
+    sheet.deleteRow(i + 1);
+    return { ok: true };
+  }
+  return { ok: false, hata: "Yaprak bulunamadı" };
+}
+
+// body: { id, durum: "İptal" | "Boş" } — kullanılmış yaprağın durumu değiştirilemez.
+function cekYaprakDurumGuncelle(body) {
+  const id = String(body.id || "").trim(), durum = String(body.durum || "");
+  if (durum !== "İptal" && durum !== "Boş") return { ok: false, hata: "Geçersiz durum" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = cekYaprakSheet_(ss);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) !== id) continue;
+    if (String(data[i][4] || "Boş") === "Kullanıldı") return { ok: false, hata: "Kullanılmış yaprağın durumu değiştirilemez." };
+    sheet.getRange(i + 1, 5).setValue(durum);
+    return { ok: true };
+  }
+  return { ok: false, hata: "Yaprak bulunamadı" };
+}
+
+// Verilen çek kaydedilirken yaprağı ayırır (KİLİT ALTINDA "Boş" → "Kullanıldı"). Dönüş: {ok, yaprak|null} veya {ok:false, hata}.
+// opts: { yaprakId, bankaAdi, seriNo, zorunlu }
+function cekYaprakAyir_(ss, opts, cekId) {
+  const sheet = cekYaprakSheet_(ss);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const data = sheet.getDataRange().getValues();
+    let idx = -1;
+    if (opts.yaprakId) {
+      for (let i = 1; i < data.length; i++) if (String(data[i][0]) === String(opts.yaprakId)) { idx = i; break; }
+      if (idx < 0) return { ok: false, hata: "Seçilen çek yaprağı bulunamadı" };
+      const durum = String(data[idx][4] || "Boş");
+      if (durum !== "Boş") return { ok: false, hata: "Çek no " + metinOku_(data[idx][3]) + " yaprağı artık boş değil (" + durum + "); başka bir yaprak seçin." };
+    } else if (opts.seriNo && opts.bankaAdi) {
+      const b = String(opts.bankaAdi).toLocaleLowerCase("tr"), n = String(opts.seriNo);
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][2]).toLocaleLowerCase("tr") === b && String(metinOku_(data[i][3])) === n && String(data[i][4] || "Boş") === "Boş") { idx = i; break; }
+      }
+    }
+    if (idx < 0) {
+      if (opts.zorunlu) return { ok: false, hata: "Verilen çek için çek koçanından boş bir yaprak seçin (Çek/Senet > 📒 Çek Koçanları'ndan tanımlayın)." };
+      return { ok: true, yaprak: null };
+    }
+    sheet.getRange(idx + 1, 5, 1, 2).setValues([["Kullanıldı", String(cekId)]]);
+    const y = cekYaprakSatirObj_(data[idx]);
+    return { ok: true, yaprak: y };
+  } finally { lock.releaseLock(); }
+}
+
+// Çek silinince (veya geri alınınca) yaprağı tekrar "Boş" yapar.
+function cekYaprakBirak_(ss, cekId) {
+  try {
+    const sheet = cekYaprakSheet_(ss);
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][5]) === String(cekId) && String(data[i][4]) === "Kullanıldı") {
+        sheet.getRange(i + 1, 5, 1, 2).setValues([["Boş", ""]]);
+      }
+    }
+  } catch (e) { /* yaprak serbest bırakılamasa da silme işlemi engellenmesin */ }
 }
 
 // CIRO_CARI_ID (14. kolon) — çek/senet ciro edildiğinde hangi cariye devredildiğini
@@ -4168,7 +4353,9 @@ function cekGorselKlasoruGetir_() {
 
 // body: { cekId, dosyaBase64 (data:image/...;base64,... öneki OLABİLİR de OLMAYABİLİR de), dosyaAdi, mimeType }
 function cekSenetGorselYukle(body) {
-  const cekId = String(body.cekId || "").trim();
+  // Toplu görsel: cekIdler dizisi verilirse dosya Drive'a BİR kez yüklenir, her çeke ayrı satırla bağlanır.
+  const hedefler = (Array.isArray(body.cekIdler) && body.cekIdler.length ? body.cekIdler : [body.cekId]).map(x => String(x || "").trim()).filter(Boolean);
+  const cekId = hedefler[0] || "";
   let base64 = String(body.dosyaBase64 || "");
   if (!cekId) return { ok: false, hata: "cekId gerekli" };
   if (!base64) return { ok: false, hata: "Dosya verisi gerekli" };
@@ -4193,12 +4380,17 @@ function cekSenetGorselYukle(body) {
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetGorselleri, CEK_GORSEL_BASLIKLAR);
-  const id = "csg_" + Date.now();
   const dosyaUrl = "https://drive.google.com/uc?export=view&id=" + dosya.getId();
-  sheet.appendRow([id, cekId, dosyaUrl, dosya.getName(), Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
-
-  cacheTemizle(["cekSenetGorselleri_" + cekId]);
-  return { ok: true, id: id, dosyaUrl: dosyaUrl };
+  const yuklemeTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+  const zaman = Date.now();
+  let ilkId = "";
+  hedefler.forEach((hid, k) => {
+    const id = "csg_" + zaman + "_" + k;
+    if (!ilkId) ilkId = id;
+    sheet.appendRow([id, hid, dosyaUrl, dosya.getName(), yuklemeTarihi]);
+    cacheTemizle(["cekSenetGorselleri_" + hid]);
+  });
+  return { ok: true, id: ilkId, dosyaUrl: dosyaUrl, baglanan: hedefler.length };
 }
 
 function getCekSenetGorselleri(cekId) {
@@ -4225,9 +4417,12 @@ function silCekSenetGorseli(body) {
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === id) {
       const dosyaUrl = String(data[i][2] || "");
+      // Aynı dosya toplu yükleme ile birden fazla çeke bağlanmış olabilir: başka satır hâlâ kullanıyorsa Drive'dan silme.
+      const baskaKullanan = data.some((r, j) => j >= 1 && j !== i && String(r[2] || "") === dosyaUrl);
       const m = dosyaUrl.match(/id=([a-zA-Z0-9_-]+)/);
-      if (m) { try { DriveApp.getFileById(m[1]).setTrashed(true); } catch (e) { /* dosya zaten yoksa yoksay */ } }
+      if (m && !baskaKullanan) { try { DriveApp.getFileById(m[1]).setTrashed(true); } catch (e) { /* dosya zaten yoksa yoksay */ } }
       sheet.deleteRow(i + 1);
+      cacheTemizle(["cekSenetGorselleri_" + String(data[i][1] || "")]);
       return { ok: true };
     }
   }
@@ -4287,6 +4482,8 @@ function silCekSenet(body) {
       }
     }
   }
+
+  cekYaprakBirak_(ss, id); // Verilen çek bir çek koçanı yaprağından çıkmışsa yaprak tekrar "Boş" olur
 
   // Not: buraya ulaşıldıysa çek/senette zaten hiç hareket geçmişi yoktu (üstteki kontrol
   // sayesinde) — CekSenetHareketleri'nde silinecek bir şey kalmamıştır.
