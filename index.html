@@ -11809,15 +11809,15 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
     <div class="modal-box modal-box-xwide">
       <h3>${k ? 'Stok Tanımını Düzenle' : 'Yeni Stok Tanımı'}</h3>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Stok Kodu</label>
+        <div class="fld" style="flex:1;min-width:200px;margin-bottom:0"><label>Stok Kodu</label>
           <div style="display:flex;gap:4px">
             <input id="st-stokkodu" type="text" value="${k?k.stokKodu:_stokTanimSonKod}" placeholder="İsteğe bağlı (ilk 2 hane marka kodu)" ${k?'readonly title="Var olan bir stok kartının kodu, bağlı tüm hareketleri de taşımak için sadece \'Değiştir\' ile güncellenebilir"':'oninput="_stokTanimSonKod=this.value"'}>
             ${k ? `<button type="button" class="btn" style="padding:6px 10px;white-space:nowrap" onclick="stokKoduDegistirSureci('${k.id}')">✏️ Değiştir</button>` : `<button type="button" class="btn" style="padding:6px 10px;white-space:nowrap" onclick="stokKoduOnerUygula()" title="Marka + Ürün Grubu + Alt Ürün Grubu seçiminden 12 haneli kod önerir">🔧 Öner</button>`}
           </div>
         </div>
-        <div class="fld" style="flex:2;min-width:220px;margin-bottom:0"><label>Stok Adı *</label><input id="st-stokadi" type="text" value="${k?k.stokAdi:_stokTanimSonAd}" ${k?'':'oninput="_stokTanimSonAd=this.value"'}></div>
         <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Barkod</label><input id="st-barkod" type="text" value="${k?k.barkod||'':''}" placeholder="İsteğe bağlı"></div>
       </div>
+      <div class="fld" style="margin-bottom:12px"><label>Stok Adı *</label><input id="st-stokadi" type="text" style="width:100%;box-sizing:border-box" value="${k?k.stokAdi:_stokTanimSonAd}" ${k?'':'oninput="_stokTanimSonAd=this.value"'}></div>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
         <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>1. Birim</label>
           <select id="st-birim1">
@@ -11832,11 +11832,16 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
         </div>
         <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Minimum Stok Miktarı</label><input id="st-minstok" type="number" min="0" step="1" value="${k?k.minStok||'':''}" placeholder="0 = uyarı kapalı"></div>
       </div>
-      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Alış Fiyatı</label><input id="st-alisfiyat" type="number" min="0" step="0.0001" value="${k?k.alisFiyati:''}"></div>
-        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Alış İskontosu (%)</label><input id="st-aliskonto" type="number" min="0" step="0.01" value="${k?k.alisIskontosu:''}"></div>
-        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Satış Fiyatı</label><input id="st-satisfiyat" type="number" min="0" step="0.0001" value="${k?k.satisFiyati:''}"></div>
-        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Satış İskontosu (%)</label><input id="st-satisiskonto" type="number" min="0" step="0.01" value="${k?k.satisIskontosu:''}"></div>
+      <div style="background:var(--blue-l);border:1px solid var(--border);border-radius:10px;padding:12px 14px 4px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px">Fiyat ve KDV Bilgileri</div>
+        <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+          <div class="fld" style="flex:1;min-width:130px;margin-bottom:0"><label>Alış Fiyatı</label><input id="st-alisfiyat" type="number" min="0" step="0.0001" value="${k?k.alisFiyati:''}"></div>
+          <div class="fld" style="flex:1;min-width:120px;margin-bottom:0"><label>Alış İskontosu (%)</label><input id="st-aliskonto" type="number" min="0" step="0.01" value="${k?k.alisIskontosu:''}"></div>
+          <div class="fld" style="flex:1;min-width:100px;margin-bottom:0"><label>KDV Alış (%)</label><input id="st-kdvalis" type="number" min="0" max="100" step="1" value="${k?(k.kdvAlis===undefined||k.kdvAlis===null?20:k.kdvAlis):20}"></div>
+          <div class="fld" style="flex:1;min-width:130px;margin-bottom:0"><label>Satış Fiyatı</label><input id="st-satisfiyat" type="number" min="0" step="0.0001" value="${k?k.satisFiyati:''}"></div>
+          <div class="fld" style="flex:1;min-width:120px;margin-bottom:0"><label>Satış İskontosu (%)</label><input id="st-satisiskonto" type="number" min="0" step="0.01" value="${k?k.satisIskontosu:''}"></div>
+          <div class="fld" style="flex:1;min-width:100px;margin-bottom:0"><label>KDV Satış (%)</label><input id="st-kdvsatis" type="number" min="0" max="100" step="1" value="${k?(k.kdvSatis===undefined||k.kdvSatis===null?20:k.kdvSatis):20}"></div>
+        </div>
       </div>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
         <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Marka</label><select id="st-marka">${secenekHtml(_markaListe, k?k.markaId:'')}</select></div>
@@ -11908,8 +11913,10 @@ function stokTanimKaydet(id){
     ambalajBirimi: document.getElementById("st-ambalajbirimi").value,
     alisFiyati: document.getElementById("st-alisfiyat").value,
     alisIskontosu: document.getElementById("st-aliskonto").value,
+    kdvAlis: document.getElementById("st-kdvalis").value,
     satisFiyati: document.getElementById("st-satisfiyat").value,
     satisIskontosu: document.getElementById("st-satisiskonto").value,
+    kdvSatis: document.getElementById("st-kdvsatis").value,
     markaId: document.getElementById("st-marka").value,
     urunGrubuId: document.getElementById("st-urungrubu").value,
     altUrunGrubuId: document.getElementById("st-alturungrubu").value,

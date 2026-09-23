@@ -5932,13 +5932,14 @@ function silKrediKarti(body) {
 // Eski Stok Paneli'nden tamamen bağımsız çalışır. Excel'den toplu içe aktarma destekler.
 // ════════════════════════════════════════════════
 
-const STOK_TANIM_BASLIKLAR = ["ID","STOK_KODU","STOK_ADI","BIRIM1","AMBALAJ_MIKTARI","AMBALAJ_BIRIMI","ALIS_FIYATI","ALIS_ISKONTOSU","SATIS_FIYATI","SATIS_ISKONTOSU","KAYIT_TARIHI","MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD"];
+const STOK_TANIM_BASLIKLAR = ["ID","STOK_KODU","STOK_ADI","BIRIM1","AMBALAJ_MIKTARI","AMBALAJ_BIRIMI","ALIS_FIYATI","ALIS_ISKONTOSU","SATIS_FIYATI","SATIS_ISKONTOSU","KAYIT_TARIHI","MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS"];
 
-// Eskiden 11 sütunlu oluşturulmuş StokTanimlari sayfalarına, sona 7 yeni
-// tanım sütunu ekler (yalnızca eksikse — getOrCreateSheet zaten var olan
-// sayfalara başlık eklemediği için bu göç adımı gerekli).
+// Eskiden 11 sütunlu oluşturulmuş StokTanimlari sayfalarına, sona yeni
+// tanım sütunlarını ekler (yalnızca eksikse — getOrCreateSheet zaten var olan
+// sayfalara başlık eklemediği için bu göç adımı gerekli). KDV_ALIS/KDV_SATIS
+// 23 Eyl 2026'da eklendi (Akınsoft ilhamlı Stok Tanımları yeniden tasarımı).
 function ensureStokTanimEkColonlari(sheet) {
-  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD"];
+  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS"];
   eklenecek.forEach((baslik, idx) => {
     const kolonNo = 12 + idx;
     const mevcut = sheet.getRange(1, kolonNo).getValue();
@@ -5970,6 +5971,9 @@ function stokTanimSatiriNesneYap(row) {
     renkId: String(row[15] || ""),
     minStok: parseFloat(row[16]) || 0,
     barkod: String(row[17] || ""),
+    // KDV oranları boşsa (eski kayıtlar) Türkiye'deki genel oran %20 varsayılır.
+    kdvAlis: (row[18] === "" || row[18] === undefined || row[18] === null) ? 20 : (parseFloat(row[18]) || 0),
+    kdvSatis: (row[19] === "" || row[19] === undefined || row[19] === null) ? 20 : (parseFloat(row[19]) || 0),
   };
 }
 
@@ -6077,7 +6081,7 @@ function getKritikStokListesi() {
 }
 
 // body: { id (varsa güncelleme), stokKodu, stokAdi, birim1, ambalajMiktari, ambalajBirimi,
-//         alisFiyati, alisIskontosu, satisFiyati, satisIskontosu,
+//         alisFiyati, alisIskontosu, kdvAlis, satisFiyati, satisIskontosu, kdvSatis,
 //         markaId, urunGrubuId, altUrunGrubuId, ebatId, renkId, minStok, barkod }
 function saveStokTanim(body) {
   const stokAdi = String(body.stokAdi || "").trim();
@@ -6130,6 +6134,8 @@ function saveStokTanim(body) {
     String(body.renkId || ""),
     parseFloat(body.minStok) || 0,
     String(body.barkod || ""),
+    body.kdvAlis === undefined || body.kdvAlis === "" ? 20 : (parseFloat(body.kdvAlis) || 0),
+    body.kdvSatis === undefined || body.kdvSatis === "" ? 20 : (parseFloat(body.kdvSatis) || 0),
   ];
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);
