@@ -2646,6 +2646,7 @@ function getAlisDetay(alisId) {
   ensureAlisKalemBrutIskontoColonlari(kSheet);
   ensureAlisTutarIskontosuColonu(aSheet);
   ensureAlisProjeKoduColonu(aSheet);
+  ensureAlisFaturaTipiColonu(aSheet);
 
   const data = aSheet.getDataRange().getValues();
   let alis = null;
@@ -2656,6 +2657,7 @@ function getAlisDetay(alisId) {
         cariAd: String(data[i][3] || ""), toplamTutar: parseFloat(data[i][4]) || 0,
         odemeTipi: String(data[i][5] || ""), aciklama: String(data[i][6] || ""), kayitTarihi: hucreTarihStr(data[i][7]),
         tutarIskontosu: parseFloat(data[i][8]) || 0, projeKodu: metinOku_(data[i][9]),
+        faturaTipi: metinOku_(data[i][10]),
       };
       break;
     }
@@ -2708,6 +2710,17 @@ function ensureAlisProjeKoduColonu(sheet) {
   metinKolonuGarantiEt_(sheet, 10);
 }
 
+// Alış faturasının Fatura Tipi etiketi (bkz. Satış'taki eşdeğeri) — PROJE_KODU'dan (kolon 10)
+// sonraki ilk boş kolon olan 11. kolona ekleniyor (23 Eyl 2026, Proje Kodu/Fatura Tipi Bazlı
+// Fatura Raporu ile birlikte: Alış tarafında bu ana kadar Fatura Tipi tutulmuyordu).
+function ensureAlisFaturaTipiColonu(sheet) {
+  const h11 = sheet.getRange(1, 11).getValue();
+  if (String(h11 || "") !== "FATURA_TIPI") {
+    sheet.getRange(1, 11).setValue("FATURA_TIPI").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  metinKolonuGarantiEt_(sheet, 11);
+}
+
 function saveAlis(body) {
   const kalemler = Array.isArray(body.kalemler) ? body.kalemler : [];
   if (kalemler.length === 0) return { ok: false, hata: "En az bir ürün kalemi eklemelisiniz" };
@@ -2727,6 +2740,7 @@ function saveAlis(body) {
   ensureAlisKalemBrutIskontoColonlari(kSheet);
   ensureAlisTutarIskontosuColonu(aSheet);
   ensureAlisProjeKoduColonu(aSheet);
+  ensureAlisFaturaTipiColonu(aSheet);
 
   // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
   // otomatik, minimal bir stok kartı oluşturulur (stok kodu + ürün adı ile).
@@ -2774,7 +2788,7 @@ function saveAlis(body) {
   const id = "al_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  metinliSatirEkle_(aSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim()], [10]);
+  metinliSatirEkle_(aSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim()], [10, 11]);
 
   kalemler.forEach((k, idx) => {
     const kId = "ak_" + Date.now() + "_" + idx;
@@ -2964,6 +2978,7 @@ function updateAlis(body) {
   ensureAlisKalemBrutIskontoColonlari(kSheet);
   ensureAlisTutarIskontosuColonu(aSheet);
   ensureAlisProjeKoduColonu(aSheet);
+  ensureAlisFaturaTipiColonu(aSheet);
   const kData = kSheet.getDataRange().getValues();
   for (let i = kData.length - 1; i >= 1; i--) {
     if (String(kData[i][1]) === id) kSheet.deleteRow(i + 1);
@@ -3019,7 +3034,7 @@ function updateAlis(body) {
 
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = String(data[satirIdx - 1][7] || "");
-  metinliSatirYaz_(aSheet, satirIdx, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim()], [10]);
+  metinliSatirYaz_(aSheet, satirIdx, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim()], [10, 11]);
 
   kalemler.forEach((k, idx) => {
     const kId = "ak_" + Date.now() + "_" + idx;
@@ -5455,6 +5470,8 @@ function getMuhasebeRaporu(body) {
   if (tip === "alisFatura") {
     const sheet = getOrCreateSheet(ss, SHEETS.alislar,
       ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+    ensureAlisProjeKoduColonu(sheet);
+    ensureAlisFaturaTipiColonu(sheet);
     const cariKoduMap = cariKoduHaritasiOlustur(ss);
     const data = sheet.getDataRange().getValues();
     const satirlar = [];
@@ -5465,7 +5482,8 @@ function getMuhasebeRaporu(body) {
       const tutar = parseFloat(row[4]) || 0;
       toplam += tutar;
       satirlar.push({ id: String(row[0]), tarih: hucreTarihStr(row[1]), cariAd: String(row[3] || ""), cariKodu: cariKoduMap[String(row[2] || "")] || "",
-        tutar: tutar, odemeTipi: String(row[5] || ""), aciklama: String(row[6] || "") });
+        tutar: tutar, odemeTipi: String(row[5] || ""), aciklama: String(row[6] || ""),
+        projeKodu: metinOku_(row[9]), faturaTipi: metinOku_(row[10]) });
     }
     satirlar.sort((a, b) => a.tarih < b.tarih ? 1 : -1);
     return { ok: true, tip: tip, satirlar: satirlar, toplam: toplam };
@@ -5487,10 +5505,79 @@ function getMuhasebeRaporu(body) {
       const tutar = parseFloat(row[4]) || 0;
       toplam += tutar;
       satirlar.push({ id: String(row[0]), tarih: hucreTarihStr(row[1]), cariAd: String(row[3] || ""), cariKodu: cariKoduMap[String(row[2] || "")] || "",
-        tutar: tutar, odemeTipi: String(row[5] || ""), aciklama: String(row[6] || "") });
+        tutar: tutar, odemeTipi: String(row[5] || ""), aciklama: String(row[6] || ""),
+        projeKodu: metinOku_(row[21]), faturaTipi: metinOku_(row[22]) });
     }
     satirlar.sort((a, b) => a.tarih < b.tarih ? 1 : -1);
     return { ok: true, tip: tip, satirlar: satirlar, toplam: toplam };
+  }
+
+  if (tip === "projeFaturaRaporu") {
+    // Kesilen (Satış Faturaları — sadece belgeTipi==="Fatura") ve Gelen (Alış Faturaları,
+    // hepsi fiili alış) faturalarını Proje Kodu + Fatura Tipi kırılımında özetler.
+    // "23 Eyl 2026: Proje Kodu/Fatura Tipi bazlı aylık fatura raporu" isteği.
+    const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+    ensureSatisBelgeTipiColonu(sSheet);
+    const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+    ensureAlisProjeKoduColonu(aSheet);
+    ensureAlisFaturaTipiColonu(aSheet);
+    const cariKoduMap = cariKoduHaritasiOlustur(ss);
+
+    const ozetHaritasi = {}; // anahtar: projeKodu+"||"+faturaTipi
+    const ozetAl = (projeKodu, faturaTipi) => {
+      const anahtar = projeKodu + "||" + faturaTipi;
+      if (!ozetHaritasi[anahtar]) ozetHaritasi[anahtar] = {
+        projeKodu: projeKodu, faturaTipi: faturaTipi,
+        kesilenAdet: 0, kesilenTutar: 0, gelenAdet: 0, gelenTutar: 0,
+      };
+      return ozetHaritasi[anahtar];
+    };
+
+    const kesilenDetay = [];
+    let toplamKesilenAdet = 0, toplamKesilenTutar = 0;
+    const sData = sSheet.getDataRange().getValues();
+    for (let i = 1; i < sData.length; i++) {
+      const row = sData[i];
+      if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
+      const belgeTipi = String(row[8] || "") || "Fatura";
+      if (belgeTipi !== "Fatura") continue;
+      const tutar = parseFloat(row[4]) || 0;
+      const projeKodu = metinOku_(row[21]);
+      const faturaTipi = metinOku_(row[22]);
+      toplamKesilenAdet++; toplamKesilenTutar += tutar;
+      const o = ozetAl(projeKodu, faturaTipi);
+      o.kesilenAdet++; o.kesilenTutar += tutar;
+      kesilenDetay.push({ id: String(row[0]), yon: "Kesilen", tarih: hucreTarihStr(row[1]), cariAd: String(row[3] || ""),
+        cariKodu: cariKoduMap[String(row[2] || "")] || "", tutar: tutar, projeKodu: projeKodu, faturaTipi: faturaTipi });
+    }
+
+    const gelenDetay = [];
+    let toplamGelenAdet = 0, toplamGelenTutar = 0;
+    const aData = aSheet.getDataRange().getValues();
+    for (let i = 1; i < aData.length; i++) {
+      const row = aData[i];
+      if (!row[0] || !araligaDahilMi(hucreTarihStr(row[1]))) continue;
+      const tutar = parseFloat(row[4]) || 0;
+      const projeKodu = metinOku_(row[9]);
+      const faturaTipi = metinOku_(row[10]);
+      toplamGelenAdet++; toplamGelenTutar += tutar;
+      const o = ozetAl(projeKodu, faturaTipi);
+      o.gelenAdet++; o.gelenTutar += tutar;
+      gelenDetay.push({ id: String(row[0]), yon: "Gelen", tarih: hucreTarihStr(row[1]), cariAd: String(row[3] || ""),
+        cariKodu: cariKoduMap[String(row[2] || "")] || "", tutar: tutar, projeKodu: projeKodu, faturaTipi: faturaTipi });
+    }
+
+    const satirlar = Object.values(ozetHaritasi).map(o => ({ ...o, net: o.kesilenTutar - o.gelenTutar }));
+    kesilenDetay.sort((a, b) => a.tarih < b.tarih ? 1 : -1);
+    gelenDetay.sort((a, b) => a.tarih < b.tarih ? 1 : -1);
+    return {
+      ok: true, tip: tip, satirlar: satirlar,
+      toplamKesilenAdet: toplamKesilenAdet, toplamKesilenTutar: toplamKesilenTutar,
+      toplamGelenAdet: toplamGelenAdet, toplamGelenTutar: toplamGelenTutar,
+      kesilenDetay: kesilenDetay, gelenDetay: gelenDetay,
+    };
   }
 
   if (tip === "karZarar") {

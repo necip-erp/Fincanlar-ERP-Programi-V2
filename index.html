@@ -1060,6 +1060,7 @@ setInterval(topbarSaatGuncelle, 10000);
           <option value="urunBazliHareket">Ürün Bazlı Hareket Raporu</option>
           <option value="urunBazliSiparis">Ürün Bazlı Sipariş Raporu</option>
           <option value="urunBazliFatura">Ürün Bazlı Fatura Raporu</option>
+          <option value="projeFaturaRaporu">Proje Kodu / Fatura Tipi Bazlı Fatura Raporu</option>
           <option value="karZarar">Kâr/Zarar Raporu</option>
           <option value="vadesiGecenler">Vadesi Geçmiş Alacaklar</option>
         </select>
@@ -4797,6 +4798,8 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
           # <span id="sm-siparis-no-metin">${s && s.siparisNo ? s.siparisNo : '—'}</span>
         </span>
         <input type="hidden" id="sm-siparis-no-deger" value="${s && s.siparisNo ? s.siparisNo : ''}">
+        <span id="sm-proje-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Proje: —</span>
+        <span id="sm-faturatipi-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Tip: —</span>
       </h3>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
         <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Belge Tipi</label>
@@ -4901,6 +4904,25 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   if(!duzenle && (belgeTipiBaslangic === "Sipariş" || belgeTipiBaslangic === "Fatura")) siparisNumarasiOnizlemeYukle();
   if(!duzenle && onCariId) smSonrakiOdak_(); // Cari sayfasından cari seçili açıldıysa imleç doğrudan stok alanında
   if(!duzenle) faturaTipiVarsayilanUygula_(); // Fatura Tipi standart "00"
+  document.getElementById("sm-proje-kodu").addEventListener("change", smProjeFaturaBadgeGuncelle);
+  document.getElementById("sm-fatura-tipi").addEventListener("change", smProjeFaturaBadgeGuncelle);
+  smProjeFaturaBadgeGuncelle();
+}
+
+// Fatura kesilirken (Satış modalı) seçili Proje Kodu / Fatura Tipi başlıktaki rozetlerde
+// canlı görünsün diye (23 Eyl 2026 isteği) — seçim boşsa ilgili rozet gizlenir.
+function smProjeFaturaBadgeGuncelle(){
+  const pj = document.getElementById("sm-proje-kodu"), ft = document.getElementById("sm-fatura-tipi");
+  const pjBadge = document.getElementById("sm-proje-badge"), ftBadge = document.getElementById("sm-faturatipi-badge");
+  if(pj && pjBadge){
+    pjBadge.style.display = pj.value ? "inline-flex" : "none";
+    pjBadge.textContent = "Proje: " + pj.value;
+  }
+  if(ft && ftBadge){
+    const ftGosterilsin = ft.value && document.getElementById("sm-fatura-tipi-fld").style.display !== "none";
+    ftBadge.style.display = ftGosterilsin ? "inline-flex" : "none";
+    ftBadge.textContent = "Tip: " + ft.value;
+  }
 }
 
 // Cari E-Fatura veya E-Arşiv mükellefiyse (bkz. edmBaglantisiVarMi backend) KDV
@@ -5242,6 +5264,7 @@ function satisModalBelgeTipiDegisti(){
   if(vadeInp && tip === "Sipariş" && !vadeInp.value) vadeInp.value = simdiTarihSaat().slice(0,10);
   if(tip === "Sipariş" || tip === "Fatura") siparisNumarasiOnizlemeYukle();
   satisKalemlerCiz();
+  smProjeFaturaBadgeGuncelle();
 }
 
 function smTutarIskontosuAl(){
@@ -5838,7 +5861,11 @@ function alisModalAc(duzenle){
   const bugun = (a && a.tarih) ? (/^\d{4}-\d{2}-\d{2}$/.test(a.tarih) ? a.tarih + "T00:00" : a.tarih.replace(" ", "T")) : simdiTarihSaat();
   overlay.innerHTML = `
     <div class="modal-box modal-box-xwide">
-      <h3>${duzenle ? 'Alışı Düzenle' : 'Yeni Alış'}</h3>
+      <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span>${duzenle ? 'Alışı Düzenle' : 'Yeni Alış'}</span>
+        <span id="am-proje-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Proje: —</span>
+        <span id="am-faturatipi-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Tip: —</span>
+      </h3>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
         <div class="fld" style="flex:2;min-width:220px;margin-bottom:0;position:relative">
           <label>Tedarikçi (Cari)</label>
@@ -5863,6 +5890,7 @@ function alisModalAc(duzenle){
         </div>
         <div class="fld" style="flex:2;min-width:220px"><label>Açıklama</label><input id="am-aciklama" type="text" placeholder="İsteğe bağlı" value="${htmlKacis(a ? (a.aciklama||'') : '')}"></div>
         <div class="fld" style="flex:1;min-width:140px"><label>Proje Kodu</label>${projeKoduSelectHTML('am-proje-kodu', a?a.projeKodu:'')}</div>
+        <div class="fld" style="flex:1;min-width:140px"><label>Fatura Tipi</label>${faturaTipiSelectHTML('am-fatura-tipi', a?a.faturaTipi:'', a?'':'00')}</div>
       </div>
 
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
@@ -5897,6 +5925,18 @@ function alisModalAc(duzenle){
     </div>`;
   document.body.appendChild(overlay);
   alisKalemlerCiz();
+  document.getElementById("am-proje-kodu").addEventListener("change", amProjeFaturaBadgeGuncelle);
+  document.getElementById("am-fatura-tipi").addEventListener("change", amProjeFaturaBadgeGuncelle);
+  amProjeFaturaBadgeGuncelle();
+}
+
+// Fatura kesilirken (Alış modalı) seçili Proje Kodu / Fatura Tipi başlıktaki rozetlerde
+// canlı görünsün diye (23 Eyl 2026 isteği) — seçim boşsa ilgili rozet gizlenir.
+function amProjeFaturaBadgeGuncelle(){
+  const pj = document.getElementById("am-proje-kodu"), ft = document.getElementById("am-fatura-tipi");
+  const pjBadge = document.getElementById("am-proje-badge"), ftBadge = document.getElementById("am-faturatipi-badge");
+  if(pj && pjBadge){ pjBadge.style.display = pj.value ? "inline-flex" : "none"; pjBadge.textContent = "Proje: " + pj.value; }
+  if(ft && ftBadge){ ftBadge.style.display = ft.value ? "inline-flex" : "none"; ftBadge.textContent = "Tip: " + ft.value; }
 }
 
 // Alış detayındaki "✏️ Düzenle" butonu — güncel alış detayını çekip modalı düzenleme
@@ -6138,6 +6178,7 @@ function alisKaydet(){
     odemeTipi: document.getElementById("am-odeme").value,
     aciklama: document.getElementById("am-aciklama").value,
     projeKodu: document.getElementById("am-proje-kodu").value,
+    faturaTipi: document.getElementById("am-fatura-tipi").value,
     tutarIskontosu: tutarIskontosuEl ? (parseFloat(tutarIskontosuEl.value)||0) : 0,
     kalemler,
   };
@@ -9330,6 +9371,22 @@ const MR_KOLONLAR = {
     { anahtar:"tutar", baslik:"Tutar", al:s=>parseFloat(s.tutar)||0 },
     { anahtar:"aciklama", baslik:"Açıklama", al:s=>(s.aciklama||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
   ],
+  projeFaturaRaporu: [
+    { anahtar:"projeKodu", baslik:"Proje Kodu", al:s=>(s.projeKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
+    { anahtar:"faturaTipi", baslik:"Fatura Tipi", al:s=>(s.faturaTipi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
+    { anahtar:"kesilenAdet", baslik:"Kesilen Adet", al:s=>parseFloat(s.kesilenAdet)||0 },
+    { anahtar:"kesilenTutar", baslik:"Kesilen Tutar", al:s=>parseFloat(s.kesilenTutar)||0 },
+    { anahtar:"gelenAdet", baslik:"Gelen Adet", al:s=>parseFloat(s.gelenAdet)||0 },
+    { anahtar:"gelenTutar", baslik:"Gelen Tutar", al:s=>parseFloat(s.gelenTutar)||0 },
+    { anahtar:"net", baslik:"Net", al:s=>parseFloat(s.net)||0 },
+  ],
+  projeFaturaDetay: [
+    { anahtar:"tarih", baslik:"Tarih", al:d=>d.tarih||"" },
+    { anahtar:"yon", baslik:"Yön", al:d=>d.yon||"" },
+    { anahtar:"cariKodu", baslik:"Cari Kodu", al:d=>(d.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
+    { anahtar:"cariAd", baslik:"Cari", al:d=>(d.cariAd||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
+    { anahtar:"tutar", baslik:"Tutar", al:d=>parseFloat(d.tutar)||0 },
+  ],
   karZarar: [
     { anahtar:"stokKodu", baslik:"Stok Kodu", al:s=>(s.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
     { anahtar:"urunAdi", baslik:"Ürün", al:s=>(s.urunAdi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
@@ -9475,6 +9532,33 @@ function mrIcerikCiz(tip, res){
       </table>`;
     return;
   }
+  if(tip === "projeFaturaRaporu"){
+    if(res.satirlar.length===0){ el.innerHTML = '<div class="cari-empty">Bu aralıkta kayıt yok.</div>'; return; }
+    const kolonlar = MR_KOLONLAR.projeFaturaRaporu;
+    const satirlar = mrSiraliDiz(res.satirlar, kolonlar);
+    el.innerHTML = `
+      <div class="finans-kartlar">
+        <div class="finans-kart"><div class="lbl">Kesilen (${res.toplamKesilenAdet} adet)</div><div class="num">${paraFormat(res.toplamKesilenTutar)}</div></div>
+        <div class="finans-kart"><div class="lbl">Gelen (${res.toplamGelenAdet} adet)</div><div class="num">${paraFormat(res.toplamGelenTutar)}</div></div>
+        <div class="finans-kart"><div class="lbl">Net</div><div class="num">${paraFormat(res.toplamKesilenTutar - res.toplamGelenTutar)}</div></div>
+      </div>
+      <p style="color:var(--text3);font-size:12px;margin:0 0 10px">Bir satıra tıklayınca o Proje Kodu / Fatura Tipi'ne ait fatura listesi altta açılır.</p>
+      <table class="rapor-tbl">
+        <thead><tr>${mrSiraliBasliklarHTML(kolonlar)}</tr></thead>
+        <tbody>
+          ${satirlar.map(s=>`
+            <tr style="cursor:pointer" onclick="mrProjeFaturaSatirAc('${s.projeKodu}','${s.faturaTipi}')">
+              <td>${s.projeKodu||'— Proje Yok —'}</td><td>${s.faturaTipi||'— Belirtilmedi —'}</td>
+              <td>${s.kesilenAdet}</td><td>${paraFormat(s.kesilenTutar)}</td>
+              <td>${s.gelenAdet}</td><td>${paraFormat(s.gelenTutar)}</td>
+              <td>${paraFormat(s.net)}</td>
+            </tr>`).join("")}
+        </tbody>
+        <tfoot><tr><td colspan="2"><b>Toplam</b></td><td><b>${res.toplamKesilenAdet}</b></td><td><b>${paraFormat(res.toplamKesilenTutar)}</b></td><td><b>${res.toplamGelenAdet}</b></td><td><b>${paraFormat(res.toplamGelenTutar)}</b></td><td><b>${paraFormat(res.toplamKesilenTutar - res.toplamGelenTutar)}</b></td></tr></tfoot>
+      </table>
+      <div id="mr-proje-fatura-detay" style="margin-top:14px"></div>`;
+    return;
+  }
   if(res.satirlar.length===0){
     const diagHtml = res.diag ? `<pre style="font-size:11px;text-align:left;background:#f4f4f4;padding:8px;border-radius:6px;margin-top:10px;overflow:auto">${JSON.stringify(res.diag,null,2)}</pre>` : '';
     el.innerHTML = '<div class="cari-empty">Bu aralıkta kayıt yok.</div>' + diagHtml;
@@ -9584,6 +9668,35 @@ function mrSiparisDetayHTML(detaylar){
     </table>`;
 }
 
+// Proje Kodu / Fatura Tipi Bazlı Fatura Raporu'nda bir özet satırına tıklanınca, o proje
+// kodu + fatura tipine ait TEK TEK kesilen (satış) ve gelen (alış) faturaları tarih sırasıyla
+// tek bir tabloda gösterir. Sunucuya tekrar gidilmez — _mrSonSonuc içindeki detay listeleri
+// (kesilenDetay/gelenDetay) burada filtrelenir. Satıra tıklanınca ilgili fatura kaydı yeni
+// sekmede açılır (kayitYeniSekmedeAc ile aynı desen).
+function mrProjeFaturaSatirAc(projeKodu, faturaTipi){
+  const res = _mrSonSonuc;
+  const kutu = document.getElementById("mr-proje-fatura-detay");
+  if(!res || !kutu) return;
+  const kolonlar = MR_KOLONLAR.projeFaturaDetay;
+  const eslesenler = [...(res.kesilenDetay||[]), ...(res.gelenDetay||[])]
+    .filter(d => (d.projeKodu||"") === projeKodu && (d.faturaTipi||"") === faturaTipi)
+    .sort((a,b)=> a.tarih < b.tarih ? 1 : -1);
+  if(eslesenler.length === 0){ kutu.innerHTML = '<div class="cari-empty">Bu kırılıma ait fatura bulunamadı.</div>'; return; }
+  kutu.innerHTML = `
+    <div class="rapor-baslik">${projeKodu||'— Proje Yok —'} / ${faturaTipi||'— Belirtilmedi —'} — Fatura Listesi</div>
+    <table class="rapor-tbl">
+      <thead><tr>${kolonlar.map(k=>`<th>${k.baslik}</th>`).join("")}</tr></thead>
+      <tbody>
+        ${eslesenler.map(d=>`
+          <tr style="cursor:pointer" onclick="kayitYeniSekmedeAc('${d.yon==='Kesilen'?'SATIS':'ALIS'}','${d.id}')" title="Fatura kaydını yeni sekmede aç">
+            <td>${tarihGoster(d.tarih)}</td>
+            <td><span style="font-size:11.5px;font-weight:700;color:${d.yon==='Kesilen'?'var(--green)':'var(--amber)'}">${d.yon}</span></td>
+            <td>${d.cariKodu||'—'}</td><td>${d.cariAd||'—'}</td><td>${paraFormat(d.tutar)}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
 // Ekrandaki güncel Muhasebe Raporu'nu (hangi tip seçiliyse) Excel dosyası olarak indirir.
 // Kasa Raporu kendi ayrı butonunu (kasaRaporuExcelAktar) kullanmaya devam eder.
 function muhasebeRaporuExcelAktar(){
@@ -9606,6 +9719,16 @@ function muhasebeRaporuExcelAktar(){
   } else if(tip === "karZarar"){
     dosya = "KarZararRaporu"; sayfaAdi = "Kâr-Zarar";
     ekle(MR_KOLONLAR.karZarar, res.satirlar, s=>[s.stokKodu||"", s.urunAdi||"", s.miktar, s.satisTutari, s.maliyet, s.kar]);
+  } else if(tip === "projeFaturaRaporu"){
+    dosya = "ProjeFaturaRaporu"; sayfaAdi = "Özet";
+    ekle(MR_KOLONLAR.projeFaturaRaporu, res.satirlar, s=>[s.projeKodu||"", s.faturaTipi||"", s.kesilenAdet, s.kesilenTutar, s.gelenAdet, s.gelenTutar, s.net]);
+    aoa.push(["", "", res.toplamKesilenAdet, res.toplamKesilenTutar, res.toplamGelenAdet, res.toplamGelenTutar, res.toplamKesilenTutar-res.toplamGelenTutar]);
+    const detaylar = [...(res.kesilenDetay||[]), ...(res.gelenDetay||[])].sort((a,b)=> a.tarih < b.tarih ? -1 : 1);
+    if(detaylar.length){
+      aoa.push([]);
+      aoa.push(["Fatura Detayı"]);
+      ekle(MR_KOLONLAR.projeFaturaDetay, detaylar, d=>[tarihGoster(d.tarih), d.yon||"", d.cariKodu||"", d.cariAd||"", d.tutar]);
+    }
   } else if(tip === 'urunBazliFatura' && res.faturaDetaylari && res.faturaDetaylari.length > 0){
     dosya = "UrunBazliFaturaRaporu"; sayfaAdi = "Fatura Detay";
     ekle(MR_KOLONLAR.faturaDetay, res.faturaDetaylari, d=>[tarihGoster(d.tarih), d.faturaNo||"", d.cariKodu||"", d.cariAd||"", d.urunAdi||"", d.miktar, d.birimFiyat, d.iskontoYuzde, d.tutar, d.odemeTipi||""]);
@@ -11064,6 +11187,8 @@ function faturaTipiSelectleriTazele(){
     sel.value = mevcut;
     if(!sel.value && sel.dataset.varsayilan) sel.value = sel.dataset.varsayilan;
   });
+  if(typeof smProjeFaturaBadgeGuncelle === "function") smProjeFaturaBadgeGuncelle();
+  if(typeof amProjeFaturaBadgeGuncelle === "function") amProjeFaturaBadgeGuncelle();
 }
 function faturaTipiVarsayilanUygula_(){
   const sel = document.getElementById("sm-fatura-tipi");
