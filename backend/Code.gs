@@ -1024,6 +1024,7 @@ function handleRequest(e) {
       case "stokKoduDegistir":    result = stokKoduDegistir(body); break;
       case "saveStokTanimTopluce": result = saveStokTanimTopluce(body); break;
       case "silStokTanim":        result = silStokTanim(body); break;
+      case "stokTanimMarkaKoduIsleToplu": result = stokTanimMarkaKoduIsleToplu(); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
       case "getBirimListesi": result = getBirimListesi(); break;
       case "saveBirim":       result = saveBirim(body); break;
@@ -6080,7 +6081,45 @@ function getKritikStokListesi() {
   return { ok: true, kalemler: sonuc };
 }
 
-// body: { id (varsa güncelleme), stokKodu, stokAdi, birim1, ambalajMiktari, ambalajBirimi,
+// ★ EKLENDİ (23 Eyl 2026): Stok kodunun ilk 2 hanesi marka kodu ise (bkz. stokTanimSatiriNesneYap
+// markaKodu alanı ve stokKoduOner'ın ürettiği şema), Marka Tanımlama'daki (Ayarlar) kayıtlı
+// markalardan KOD'u eşleşeni bulup id'sini döner; eşleşme yoksa "" döner.
+function markaKoduIleEslesenMarkaId_(stokKodu) {
+  const markaKodu = String(stokKodu || "").trim().toUpperCase().slice(0, 2);
+  if (markaKodu.length !== 2) return "";
+  const marka = (getMarkaListesi().markalar || []).find(m => m.kod === markaKodu);
+  return marka ? marka.id : "";
+}
+
+// ★ EKLENDİ (23 Eyl 2026): Var olan tüm stok kartlarında Marka alanı boşsa, stok kodunun ilk 2
+// hanesini Marka Tanımlama'daki kodlarla eşleştirip otomatik doldurur. Marka zaten seçiliyse
+// (elle seçilmiş olabilir) DOKUNULMAZ — kullanıcı isterse zaten dilediği zaman elle değiştirebilir.
+// Stok Tanımları ekranındaki "🏷️ Marka Kodlarını İşle" butonundan tetiklenir.
+function stokTanimMarkaKoduIsleToplu() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  ensureStokTanimEkColonlari(sheet);
+  const data = sheet.getDataRange().getValues();
+  const markalar = getMarkaListesi().markalar || [];
+  if (markalar.length === 0) return { ok: false, hata: "Önce Ayarlar › Marka Tanımlama'dan marka kodları girilmeli" };
+  const kodHaritasi = {};
+  markalar.forEach(m => { if (m.kod) kodHaritasi[m.kod] = m.id; });
+  let guncellenen = 0;
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i][0]) continue;
+    const markaIdMevcut = String(data[i][11] || "").trim();
+    if (markaIdMevcut) continue; // zaten seçilmiş — elle atanmış olabilir, dokunma
+    const stokKodu = String(data[i][1] || "").trim().toUpperCase();
+    const markaId = kodHaritasi[stokKodu.slice(0, 2)];
+    if (markaId) {
+      sheet.getRange(i + 1, 12).setValue(markaId); // MARKA_ID = 12. sütun
+      guncellenen++;
+    }
+  }
+  if (guncellenen > 0) cacheTemizle(["stokTanimListesi"]);
+  return { ok: true, guncellenen: guncellenen };
+}
+
 //         alisFiyati, alisIskontosu, kdvAlis, satisFiyati, satisIskontosu, kdvSatis,
 //         markaId, urunGrubuId, altUrunGrubuId, ebatId, renkId, minStok, barkod }
 function saveStokTanim(body) {
@@ -6115,6 +6154,12 @@ function saveStokTanim(body) {
     if (!stokKodu) stokKodu = "OTO" + Date.now();
   }
 
+  // ★ EKLENDİ (23 Eyl 2026): Marka elle seçilmediyse, stok kodunun ilk 2 hanesini Marka
+  // Tanımlama'daki kodlarla eşleştirip otomatik doldurur. Kullanıcı elle bir marka seçtiyse
+  // (body.markaId doluysa) buna asla dokunulmaz — otomatik atama sadece boşsa devreye girer.
+  let markaId = String(body.markaId || "").trim();
+  if (!markaId) markaId = markaKoduIleEslesenMarkaId_(stokKodu);
+
   const satir = [
     id,
     stokKodu,
@@ -6127,7 +6172,7 @@ function saveStokTanim(body) {
     parseFloat(body.satisFiyati) || 0,
     parseFloat(body.satisIskontosu) || 0,
     satirIdx > 0 ? data[satirIdx - 1][10] : Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"),
-    String(body.markaId || ""),
+    String(markaId),
     String(body.urunGrubuId || ""),
     String(body.altUrunGrubuId || ""),
     String(body.ebatId || ""),

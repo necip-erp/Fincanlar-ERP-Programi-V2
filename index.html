@@ -699,6 +699,7 @@ setInterval(topbarSaatGuncelle, 10000);
         <div class="cari-list-head">
           <input id="stoktanim-ara" placeholder="Ürün ara..." oninput="stokTanimAramaFiltrele(this.value)">
           <button class="cari-add-btn" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);width:auto;padding:0 10px;font-size:12px;font-weight:700" onclick="stokTanimIceAktarModalAc()" title="Excel'den içe aktar">📥 İçe Aktar</button>
+          <button class="cari-add-btn" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);width:auto;padding:0 10px;font-size:12px;font-weight:700" onclick="stokTanimMarkaKoduIsleUygula()" title="Marka alanı boş olan stok kartlarında, stok kodunun ilk 2 hanesini Marka Tanımlama'daki kodlarla eşleştirip otomatik doldurur">🏷️ Marka Kodlarını İşle</button>
           <button class="cari-add-btn" onclick="stokTanimModalAc()" title="Yeni ürün tanımla">+</button>
         </div>
         <div class="cari-items" id="stoktanim-items"><div class="cari-empty">Yükleniyor...</div></div>
@@ -2653,7 +2654,12 @@ function cariApi(action, params, _tokenYenidenDenendi){
   const postGovde = buyuk ? govdeMetni : undefined;
   // "İşlem yapılıyor" bandı: istek boyunca gösterilir, bitince (başarı/hata fark etmeksizin)
   // sayaç sıfırlanınca gizlenir — kullanıcı beklerken tekrar tuşa/butona basmasın diye.
-  if(window.islemYapiliyorGoster_) window.islemYapiliyorGoster_();
+  // "İşlem yapılıyor" bandı sadece gerçek bir YAZMA/işlem çağrısında gösterilir — sekme
+  // değiştirirken/listeler otomatik yüklenirken tetiklenen "get..." gibi sessiz okuma
+  // çağrılarında gösterilmez (23 Eyl 2026: ilk sürümde her çağrıda çıkıyordu, çok sık
+  // görünüyordu; artık sadece Kaydet/Sil/Onayla gibi asıl işlemlerde çıkıyor).
+  const _bantGoster = window.islemYapiliyorGoster_ && !CARI_API_YAZMA_DEGIL_.test(action);
+  if(_bantGoster) window.islemYapiliyorGoster_();
   return cariApiIstekYap_(url, postGovde).catch(err=>{
     if(!err.gecersizYanit) throw err; // ağ hatası (offline vb.) ise direkt fırlat, tekrar denemenin faydası yok
     return new Promise(resolve=>setTimeout(resolve, 800)).then(()=>cariApiIstekYap_(url, postGovde));
@@ -2685,7 +2691,7 @@ function cariApi(action, params, _tokenYenidenDenendi){
     }
     return res;
   }).finally(()=>{
-    if(window.islemYapiliyorGizle_) window.islemYapiliyorGizle_();
+    if(_bantGoster && window.islemYapiliyorGizle_) window.islemYapiliyorGizle_();
   });
 }
 // Veriyi DEĞİŞTİRMEYEN (ya da önbelleği ilgilendirmeyen) işlemler: bunlardan sonra önbellek temizlenmez.
@@ -11947,6 +11953,19 @@ function stokTanimSilOnay(id){
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("stoktanim-modal-overlay").remove();
     stokTanimListesiYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ★ EKLENDİ (23 Eyl 2026): Marka alanı boş bırakılmış tüm stok kartlarında, stok kodunun ilk
+// 2 hanesini (marka hanesi) Ayarlar › Marka Tanımlama'daki kodlarla eşleştirip toplu doldurur.
+// Marka zaten seçilmiş kartlara dokunulmaz — sadece eksik olanlar tamamlanır; kullanıcı
+// isterse sonradan Stok Tanımını Düzenle'den elle değiştirebilir.
+function stokTanimMarkaKoduIsleUygula(){
+  if(!confirm("Marka alanı boş olan tüm stok kartlarında, stok kodunun ilk 2 hanesi Marka Tanımlama'daki kodlarla eşleşiyorsa marka otomatik atanacak. Devam edilsin mi?")) return;
+  cariApi("stokTanimMarkaKoduIsleToplu", {}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    stokTanimListesiYukle();
+    alert(res.guncellenen > 0 ? `${res.guncellenen} stok kartına marka otomatik atandı.` : "Eşleşen boş marka bulunamadı (tüm kartlarda marka zaten seçili olabilir ya da kod eşleşmiyor).");
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
