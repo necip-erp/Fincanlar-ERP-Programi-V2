@@ -4171,9 +4171,9 @@ function cekYaprakAyir_(ss, opts, cekId) {
       const durum = String(data[idx][4] || "Boş");
       if (durum !== "Boş") return { ok: false, hata: "Çek no " + metinOku_(data[idx][3]) + " yaprağı artık boş değil (" + durum + "); başka bir yaprak seçin." };
     } else if (opts.seriNo && opts.bankaAdi) {
-      const b = String(opts.bankaAdi).toLocaleLowerCase("tr"), n = String(opts.seriNo);
+      const b = String(opts.bankaAdi).replace(/[İIıi]/g,"i").toLocaleLowerCase("tr"), n = String(opts.seriNo);
       for (let i = 1; i < data.length; i++) {
-        if (String(data[i][2]).toLocaleLowerCase("tr") === b && String(metinOku_(data[i][3])) === n && String(data[i][4] || "Boş") === "Boş") { idx = i; break; }
+        if (String(data[i][2]).replace(/[İIıi]/g,"i").toLocaleLowerCase("tr") === b && String(metinOku_(data[i][3])) === n && String(data[i][4] || "Boş") === "Boş") { idx = i; break; }
       }
     }
     if (idx < 0) {
@@ -4564,7 +4564,7 @@ function tedarikciCariEslesmeOku(ss) {
   const data = sheet.getDataRange().getValues();
   const map = {};
   for (let i = 1; i < data.length; i++) {
-    const ted = String(data[i][0] || "").trim().toLocaleLowerCase('tr');
+    const ted = String(data[i][0] || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
     if (ted) map[ted] = String(data[i][1] || "");
   }
   return map;
@@ -4575,10 +4575,10 @@ function tedarikciCariEslesmeKaydet(ss, tedarikci, cariId) {
   if (!t || !cariId) return;
   const sheet = getOrCreateSheet(ss, SHEETS.tedarikciCariEslesme, TEDARIKCI_ESLESME_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
-  const key = t.toLocaleLowerCase('tr');
+  const key = t.replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0] || "").trim().toLocaleLowerCase('tr') === key) {
+    if (String(data[i][0] || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') === key) {
       sheet.getRange(i + 1, 2, 1, 2).setValues([[cariId, simdi]]);
       return;
     }
@@ -5014,7 +5014,7 @@ function getBekleyenAlisFaturalariHesapla_() {
         }
       });
     }
-    const adEslesenId = eslesmeMap[String(f.tedarikci || "").trim().toLocaleLowerCase('tr')] || "";
+    const adEslesenId = eslesmeMap[String(f.tedarikci || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr')] || "";
     const onekKaydi = f.onek ? onekMap[f.onek] : null;
     const onekCariGecerli = !!(onekKaydi && onekKaydi.cariId && (!cariListeSonuc.ok || cariByIdMap[onekKaydi.cariId]));
     let eslesenCariId = "", eslesmeKaynagi = "";
@@ -5078,7 +5078,7 @@ function onaylaAlisFaturasi(body) {
   // eskisi gibi öğrenilir.
   const onekOgren = faturaOnekiCikar(faturaNo);
   if (body.cariId && body.tedarikci) {
-    const adAnahtar = String(body.tedarikci || "").trim().toLocaleLowerCase('tr');
+    const adAnahtar = String(body.tedarikci || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
     const mevcutAdEslesmeleri = tedarikciCariEslesmeOku(ss);
     if (!onekOgren || !mevcutAdEslesmeleri[adAnahtar]) {
       tedarikciCariEslesmeKaydet(ss, body.tedarikci, String(body.cariId).trim());
@@ -5493,7 +5493,7 @@ function getMuhasebeRaporu(body) {
   }
 
   if (tip === "karZarar") {
-    const stokKoduFiltre = String(body.stokKodu || "").trim().toLocaleLowerCase('tr');
+    const stokKoduFiltre = String(body.stokKodu || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
     const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
       ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
     ensureSatisBelgeTipiColonu(sSheet);
@@ -5511,7 +5511,7 @@ function getMuhasebeRaporu(body) {
     // stok tanımında olmayan/adı farklı yazılan ürünler maliyetsiz sayılır).
     const stokListe = getStokTanimListesi().kalemler;
     const alisFiyatHaritasi = {};
-    stokListe.forEach(s => { alisFiyatHaritasi[s.stokAdi.trim().toLocaleLowerCase('tr')] = s.alisFiyati; });
+    stokListe.forEach(s => { alisFiyatHaritasi[s.stokAdi.trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr')] = s.alisFiyati; });
 
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
       ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
@@ -5530,13 +5530,13 @@ function getMuhasebeRaporu(body) {
 
       const urunAdi = String(row[2] || "").trim();
       const stokKodu = String(row[10] || "");
-      if (stokKoduFiltre && !stokKodu.toLocaleLowerCase('tr').includes(stokKoduFiltre) && !urunAdi.toLocaleLowerCase('tr').includes(stokKoduFiltre)) continue;
+      if (stokKoduFiltre && !stokKodu.replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(stokKoduFiltre) && !urunAdi.replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(stokKoduFiltre)) continue;
       const miktar = parseFloat(row[3]) || 0;
       const birimFiyat = parseFloat(row[5]) || 0;
       const iskontoYuzde = parseFloat(row[7]) || 0;
       const satirSatisTutari = miktar * birimFiyat * (1 - iskontoYuzde / 100);
 
-      const alisFiyati = alisFiyatHaritasi[urunAdi.toLocaleLowerCase('tr')];
+      const alisFiyati = alisFiyatHaritasi[urunAdi.replace(/[İIıi]/g,"i").toLocaleLowerCase('tr')];
       const maliyetBilinmiyor = (alisFiyati === undefined);
       if (maliyetBilinmiyor) eslesmeyenSayisi++;
       const satirMaliyet = maliyetBilinmiyor ? 0 : (alisFiyati * miktar);
@@ -5567,13 +5567,13 @@ function getMuhasebeRaporu(body) {
 
   if (tip === "urunBazliHareket" || tip === "urunBazliSiparis" || tip === "urunBazliFatura") {
     // Kullanıcı stok kodu yazarak da (kısmi eşleşme, büyük/küçük harf duyarsız) filtreleyebilsin.
-    const stokKoduFiltre = String(body.stokKodu || "").trim().toLocaleLowerCase('tr');
+    const stokKoduFiltre = String(body.stokKodu || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
     const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
       ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
     ensureSatisBelgeTipiColonu(sSheet);
     const sData = sSheet.getDataRange().getValues();
     const cariKoduMap = cariKoduHaritasiOlustur(ss);
-    const satisBelgeTipi = {}, satisTarih = {}, satisCariAd = {}, satisCariKodu = {}, satisFaturaNo = {}, satisOdemeTipi = {};
+    const satisBelgeTipi = {}, satisTarih = {}, satisCariAd = {}, satisCariKodu = {}, satisFaturaNo = {}, satisOdemeTipi = {}, satisSiparisNo = {};
     for (let i = 1; i < sData.length; i++) {
       const id = String(sData[i][0] || "");
       if (!id) continue;
@@ -5583,6 +5583,7 @@ function getMuhasebeRaporu(body) {
       satisCariKodu[id] = cariKoduMap[String(sData[i][2] || "")] || "";
       satisFaturaNo[id] = String(sData[i][16] || ""); // EFATURA_NO (varsa)
       satisOdemeTipi[id] = String(sData[i][5] || "");
+      satisSiparisNo[id] = String(sData[i][15] || ""); // SIPARIS_NO
     }
 
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
@@ -5593,7 +5594,7 @@ function getMuhasebeRaporu(body) {
     // değiştiyse (veya hiç girilmediyse) satırlar birbirine karışmaz.
     function eslesiyorMu(urunAdi, stokKodu) {
       if (!stokKoduFiltre) return true;
-      return String(stokKodu || "").toLocaleLowerCase('tr').includes(stokKoduFiltre) || String(urunAdi || "").toLocaleLowerCase('tr').includes(stokKoduFiltre);
+      return String(stokKodu || "").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(stokKoduFiltre) || String(urunAdi || "").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(stokKoduFiltre);
     }
     function urunEkle(urunAdi, stokKodu, miktar, tutar, yon) {
       if (!eslesiyorMu(urunAdi, stokKodu)) return;
@@ -5644,7 +5645,7 @@ function getMuhasebeRaporu(body) {
         const faturalananTutar = miktar > 0 ? tutarToplam * (faturalananMiktar / miktar) : 0;
         const kalanTutar = Math.max(0, tutarToplam - faturalananTutar);
         siparisDetaylari.push({
-          satisId: satisId, tarih: tarih, cariAd: satisCariAd[satisId] || "", cariKodu: satisCariKodu[satisId] || "",
+          satisId: satisId, tarih: tarih, siparisNo: satisSiparisNo[satisId] || "", cariAd: satisCariAd[satisId] || "", cariKodu: satisCariKodu[satisId] || "",
           urunAdi: urunAdi, stokKodu: stokKodu, birim: String(row[4] || ""),
           miktar: miktar, faturalananMiktar: faturalananMiktar, kalanMiktar: kalanMiktar,
           tutar: tutarToplam, faturalananTutar: faturalananTutar, kalanTutar: kalanTutar,
@@ -7741,7 +7742,7 @@ function edmXmlEscape_(s) {
 
 // Serbest metin birim adlarını UN/CEFACT birim koduna çevirir (UBL-TR zorunlu alan).
 function edmBirimKodu_(birim) {
-  const b = String(birim || "").trim().toLocaleLowerCase("tr");
+  const b = String(birim || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase("tr");
   if (b.indexOf("m2") > -1 || b.indexOf("m²") > -1 || b.indexOf("metrekare") > -1) return "MTK";
   if (b.indexOf("kg") > -1) return "KGM";
   if (b === "metre" || b === "mt" || b === "m") return "MTR";
@@ -8463,7 +8464,7 @@ function silPosBankaAktarim(body) {
 // ════════════════════════════════════════════════
 
 function getUrunFiyatGecmisi(urunAdi) {
-  const arananUrun = String(urunAdi || "").trim().toLocaleLowerCase("tr");
+  const arananUrun = String(urunAdi || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase("tr");
   if (!arananUrun) return { ok: true, gecmis: [] };
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -8486,7 +8487,7 @@ function getUrunFiyatGecmisi(urunAdi) {
   for (let i = 1; i < kData.length; i++) {
     const row = kData[i];
     const urunAdiRow = String(row[2] || "");
-    if (!urunAdiRow.toLocaleLowerCase("tr").includes(arananUrun)) continue;
+    if (!urunAdiRow.replace(/[İIıi]/g,"i").toLocaleLowerCase("tr").includes(arananUrun)) continue;
     const satisId = String(row[1] || "");
     const bilgi = satisBilgi[satisId] || { tarih: "", cariAd: "" };
     eslesenler.push({
