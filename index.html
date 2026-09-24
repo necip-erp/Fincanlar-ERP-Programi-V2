@@ -1107,10 +1107,26 @@ setInterval(topbarSaatGuncelle, 10000);
         bakiyesi tutar kadar azalır, hedef carinin bakiyesi tutar kadar artar.
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
-        <div class="fld" style="flex:1;min-width:200px;margin-bottom:0"><label>Kaynak Cari (bakiyesi azalır)</label>
-          <select id="cvirman-kaynak"></select></div>
-        <div class="fld" style="flex:1;min-width:200px;margin-bottom:0"><label>Hedef Cari (bakiyesi artar)</label>
-          <select id="cvirman-hedef"></select></div>
+        <div class="fld" style="flex:1;min-width:220px;margin-bottom:0;position:relative"><label>Kaynak Cari (bakiyesi azalır)</label>
+          <input id="cvirman-kaynak-arama" type="text" placeholder="Cari kodu veya adı ile ara..." autocomplete="off" style="padding-right:34px"
+                 oninput="cvCariAramaDegisti('kaynak', this.value)"
+                 onfocus="cvCariOneriGoster('kaynak')"
+                 onblur="setTimeout(()=>cvCariOneriKapat('kaynak'),200)"
+                 onkeydown="oneriKlavyeYonet(event,'cvirman-kaynak-oneri')">
+          <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('cvirman-kaynak').value=c.id; document.getElementById('cvirman-kaynak-arama').value=c.ad+(c.cariKodu?' ('+c.cariKodu+')':''); })">🔍</button>
+          <input type="hidden" id="cvirman-kaynak">
+          <div id="cvirman-kaynak-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+        </div>
+        <div class="fld" style="flex:1;min-width:220px;margin-bottom:0;position:relative"><label>Hedef Cari (bakiyesi artar)</label>
+          <input id="cvirman-hedef-arama" type="text" placeholder="Cari kodu veya adı ile ara..." autocomplete="off" style="padding-right:34px"
+                 oninput="cvCariAramaDegisti('hedef', this.value)"
+                 onfocus="cvCariOneriGoster('hedef')"
+                 onblur="setTimeout(()=>cvCariOneriKapat('hedef'),200)"
+                 onkeydown="oneriKlavyeYonet(event,'cvirman-hedef-oneri')">
+          <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('cvirman-hedef').value=c.id; document.getElementById('cvirman-hedef-arama').value=c.ad+(c.cariKodu?' ('+c.cariKodu+')':''); })">🔍</button>
+          <input type="hidden" id="cvirman-hedef">
+          <div id="cvirman-hedef-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+        </div>
         <div class="fld" style="width:150px;margin-bottom:0"><label>Tarih</label>
           <input type="date" id="cvirman-tarih"></div>
         <div class="fld" style="width:150px;margin-bottom:0"><label>Tutar</label>
@@ -1118,6 +1134,7 @@ setInterval(topbarSaatGuncelle, 10000);
         <div class="fld" style="flex:1;min-width:200px;margin-bottom:0"><label>Açıklama (opsiyonel)</label>
           <input type="text" id="cvirman-aciklama"></div>
         <div class="fld" style="min-width:150px;margin-bottom:0"><label>Proje Kodu</label><select id="cvirman-proje-kodu" class="proje-kodu-secim"><option value="">— Proje Yok —</option></select></div>
+        <div class="fld" style="min-width:150px;margin-bottom:0"><label>Virman Tipi</label><select id="cvirman-tipi" class="virman-tipi-secim"><option value="">— Belirtilmedi —</option></select></div>
         <button class="btn btn-primary" id="cvirman-kaydet-btn" onclick="cariVirmanKaydet()">🔁 Virman Yap</button>
         <button class="btn" id="cvirman-iptal-btn" style="display:none" onclick="cariVirmanDuzenlemeIptal()">İptal</button>
       </div>
@@ -1375,6 +1392,15 @@ setInterval(topbarSaatGuncelle, 10000);
         <button class="btn btn-primary" onclick="tanimEkle('faturaTipi')">+ Ekle</button>
       </div>
       <div id="tanimliste-faturaTipi" style="margin-top:12px"></div>
+    </div>
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Virman Tipi Tanımlama</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Cari Virman işlemlerinde seçilebilen tip etiketleri (örn. Ortak Aktarımı, Şube İçi, Kasa Düzeltmesi) — ileride raporlarda kullanılacak.</p>
+      <div class="fld" style="flex-direction:row;gap:8px;align-items:flex-end">
+        <div style="flex:1"><label>Yeni Virman Tipi</label><input id="tanim-virmanTipi-yeni-ad" type="text" placeholder="Örn. Ortak Aktarımı"></div>
+        <button class="btn btn-primary" onclick="tanimEkle('virmanTipi')">+ Ekle</button>
+      </div>
+      <div id="tanimliste-virmanTipi" style="margin-top:12px"></div>
     </div>
     <div class="finans-panel" id="kullanici-yonetimi-panel" style="display:none">
       <div class="rapor-baslik" style="margin-top:0">Kullanıcı Yönetimi</div>
@@ -2197,6 +2223,7 @@ modulAc = function(id){
     if(id === "cvirman"){
       if(!_cariYuklendi) cariListesiYukle(); else cvirmanCariSelectDoldur();
       if(!_cvirmanYuklendi) cariVirmanListesiYukle();
+      if(!_tanimListeYuklendi.virmanTipi) tanimListesiYukle("virmanTipi"); else virmanTipiSelectleriTazele();
     }
     if(id === "ceksenet" && !_cekSenetYuklendi){ cekSenetListesiYukle(); }
     if(id === "finans"){ finansYukle(); if(!_bankaYapisiYuklendi) bankaYapisiYukle(); bankaHesapSecimDoldur(); bankaHesapHareketleriYukle(); posHesapSecimDoldur(); posHareketleriYukle(); }
@@ -9759,13 +9786,47 @@ let _cvirmanListe = [];
 let _cvirmanDuzenlenenId = null; // dolu ise "Virman Yap" formu düzenleme modunda çalışır
 
 function cvirmanCariSelectDoldur(){
-  const opts = '<option value="">— seçin —</option>' + _cariListe.map(c=>`<option value="${c.id}">${c.ad}</option>`).join("");
-  const k = document.getElementById("cvirman-kaynak");
-  const h = document.getElementById("cvirman-hedef");
-  if(k) k.innerHTML = opts;
-  if(h) h.innerHTML = opts;
+  // Artık Kaynak/Hedef alanları serbest arama (cvCariAramaDegisti) ile çalışıyor, ayrıca
+  // doldurulacak bir <select> yok — bu fonksiyon sadece Tarih alanına bugünün tarihini
+  // varsayılan olarak koyar (isim geriye dönük uyumluluk için korunuyor, bkz. çağıran yerler).
   const tarihEl = document.getElementById("cvirman-tarih");
   if(tarihEl && !tarihEl.value) tarihEl.value = new Date().toISOString().slice(0,10);
+}
+
+// Cari Virman'da Kaynak/Hedef cari seçimi — Cari Kodu VEYA Cari Adı ile arama yapılabilir
+// (23 Eyl 2026 isteği). 'which' "kaynak" ya da "hedef" olur, iki alan birbirinden bağımsız çalışır.
+function cvCariAramaDegisti(which, deger){
+  document.getElementById("cvirman-" + which).value = ""; // yazarken önceki seçim sıfırlanır, listeden yeniden seçilmeli
+  cvCariOneriGoster(which);
+}
+function cvCariOneriGoster(which){
+  const kutu = document.getElementById("cvirman-" + which + "-oneri");
+  if(!kutu) return;
+  const q = (document.getElementById("cvirman-" + which + "-arama").value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
+  if(q.length < 1){ kutu.style.display = "none"; return; }
+  const eslesenler = (_cariListe || []).filter(c =>
+    (c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
+  ).slice(0, 8);
+  if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
+  kutu.innerHTML = eslesenler.map((c,i)=>`
+    <div class="fiyat-gecmis-satir" onclick="cvCariSec('${which}',${i})" data-oneri-idx="${i}">
+      <span>${c.ad}</span><b>${c.cariKodu||''}</b>
+    </div>`).join("");
+  kutu.dataset.eslesenler = JSON.stringify(eslesenler);
+  kutu.style.display = "block";
+}
+function cvCariOneriKapat(which){
+  const kutu = document.getElementById("cvirman-" + which + "-oneri");
+  if(kutu) kutu.style.display = "none";
+}
+function cvCariSec(which, i){
+  const kutu = document.getElementById("cvirman-" + which + "-oneri");
+  const eslesenler = kutu && kutu.dataset.eslesenler ? JSON.parse(kutu.dataset.eslesenler) : [];
+  const c = eslesenler[i];
+  if(!c) return;
+  document.getElementById("cvirman-" + which).value = c.id;
+  document.getElementById("cvirman-" + which + "-arama").value = c.ad + (c.cariKodu ? " (" + c.cariKodu + ")" : "");
+  kutu.style.display = "none";
 }
 
 function cariVirmanKaydet(){
@@ -9790,6 +9851,7 @@ function cariVirmanKaydet(){
     tarih: document.getElementById("cvirman-tarih").value,
     tutar: tutar, aciklama: document.getElementById("cvirman-aciklama").value,
     projeKodu: document.getElementById("cvirman-proje-kodu").value,
+    virmanTipi: document.getElementById("cvirman-tipi").value,
   };
   cariApi(duzenleniyor ? "updateCariVirman" : "saveCariVirman", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
@@ -9807,24 +9869,32 @@ function cariVirmanDuzenle(id){
   if(!v) return;
   _cvirmanDuzenlenenId = id;
   document.getElementById("cvirman-kaynak").value = v.kaynakCariId;
+  document.getElementById("cvirman-kaynak-arama").value = v.kaynakCariAd + (v.kaynakCariKodu ? " (" + v.kaynakCariKodu + ")" : "");
   document.getElementById("cvirman-hedef").value = v.hedefCariId;
+  document.getElementById("cvirman-hedef-arama").value = v.hedefCariAd + (v.hedefCariKodu ? " (" + v.hedefCariKodu + ")" : "");
   document.getElementById("cvirman-tarih").value = String(v.tarih||"").slice(0,10);
   document.getElementById("cvirman-tutar").value = v.tutar;
   document.getElementById("cvirman-aciklama").value = v.aciklama || "";
   document.getElementById("cvirman-proje-kodu").value = v.projeKodu || "";
+  document.getElementById("cvirman-tipi").value = v.virmanTipi || "";
   const btn = document.getElementById("cvirman-kaydet-btn");
   btn.textContent = "💾 Virman Güncelle";
   document.getElementById("cvirman-iptal-btn").style.display = "";
-  document.getElementById("cvirman-kaynak").scrollIntoView({block:"center", behavior:"smooth"});
+  document.getElementById("cvirman-kaynak-arama").scrollIntoView({block:"center", behavior:"smooth"});
 }
 
 function cariVirmanDuzenlemeIptal(){
   _cvirmanDuzenlenenId = null;
   document.getElementById("cvirman-kaydet-btn").textContent = "🔁 Virman Yap";
   document.getElementById("cvirman-iptal-btn").style.display = "none";
+  document.getElementById("cvirman-kaynak").value = "";
+  document.getElementById("cvirman-kaynak-arama").value = "";
+  document.getElementById("cvirman-hedef").value = "";
+  document.getElementById("cvirman-hedef-arama").value = "";
   document.getElementById("cvirman-tutar").value = "";
   document.getElementById("cvirman-aciklama").value = "";
   document.getElementById("cvirman-proje-kodu").value = "";
+  document.getElementById("cvirman-tipi").value = "";
 }
 
 function cariVirmanListesiYukle(){
@@ -9845,7 +9915,7 @@ function cariVirmanListesiCiz(){
   if(_cvirmanListe.length === 0){ el.innerHTML = '<div class="cari-empty">Henüz bir virman kaydı yok.</div>'; return; }
   el.innerHTML = `
     <table class="hareket-tbl">
-      <thead><tr><th>Tarih</th><th>Kaynak</th><th>Hedef</th><th>Tutar</th><th>Açıklama</th><th></th></tr></thead>
+      <thead><tr><th>Tarih</th><th>Kaynak</th><th>Hedef</th><th>Tutar</th><th>Tip</th><th>Açıklama</th><th></th></tr></thead>
       <tbody>
         ${_cvirmanListe.map(v=>`
           <tr>
@@ -9853,6 +9923,7 @@ function cariVirmanListesiCiz(){
             <td>${v.kaynakCariAd}${v.kaynakCariKodu?` <span class="cari-item-kod">(${v.kaynakCariKodu})</span>`:""}</td>
             <td>${v.hedefCariAd}${v.hedefCariKodu?` <span class="cari-item-kod">(${v.hedefCariKodu})</span>`:""}</td>
             <td>${paraFormat(v.tutar)}</td>
+            <td>${v.virmanTipi || "—"}</td>
             <td>${v.aciklama || "—"}</td>
             <td style="white-space:nowrap">
               <button class="btn" style="padding:4px 10px;font-size:12.5px" onclick="cariVirmanDuzenle('${v.id}')">✏️ Düzenle</button>
@@ -11158,7 +11229,7 @@ function birimSilOnay(id){
 }
 
 // ── Ürün Grubu / Alt Ürün Grubu / Ebat / Renk Tanımlama (ortak, "tip" parametreli) ──
-let _tanimListeCache = { urunGrubu:[], altUrunGrubu:[], ebat:[], renk:[], ambalaj:[], giderUstGrup:[], giderAltGrup:[], projeKodu:[], faturaTipi:[] };
+let _tanimListeCache = { urunGrubu:[], altUrunGrubu:[], ebat:[], renk:[], ambalaj:[], giderUstGrup:[], giderAltGrup:[], projeKodu:[], faturaTipi:[], virmanTipi:[] };
 
 // Proje Kodu (Ayarlar'da tanımlanır) — Satış, Alış, Çek/Senet, Cari Virman, POS Tahsilat/
 // Ödeme ve BFM (EDM'den gelen Alış faturaları) onay ekranlarında ORTAK kullanılan select.
@@ -11204,6 +11275,15 @@ function projeKoduSelectleriTazele(){
     sel.value = mevcut;
   });
 }
+// Virman Tipi (yalnızca Cari Virman ekranında kullanılıyor — bkz. cvirman-tipi select).
+function virmanTipiSelectleriTazele(){
+  document.querySelectorAll("select.virman-tipi-secim").forEach(sel=>{
+    const mevcut = sel.value;
+    const secenekler = (_tanimListeCache.virmanTipi||[]).map(v=>`<option value="${v.ad}">${v.ad}</option>`).join("");
+    sel.innerHTML = '<option value="">— Belirtilmedi —</option>' + secenekler;
+    sel.value = mevcut;
+  });
+}
 let _tanimListeYuklendi = { urunGrubu:false, altUrunGrubu:false, ebat:false, renk:false, ambalaj:false, giderUstGrup:false, giderAltGrup:false };
 
 // "Alt grup" tipindeki basit tanımların, hangi "üst grup" tipine bağlı olduğunu belirtir.
@@ -11221,6 +11301,7 @@ function tanimListesiYukle(tip){
     _tanimListeYuklendi[tip] = true;
     if(tip === "projeKodu") projeKoduSelectleriTazele();
     if(tip === "faturaTipi") faturaTipiSelectleriTazele();
+    if(tip === "virmanTipi") virmanTipiSelectleriTazele();
     const ustTip = TANIM_ALT_UST_ESLESME[tip];
     if(ustTip){
       if(!_tanimListeYuklendi[ustTip]){ tanimListesiYukle(ustTip); }

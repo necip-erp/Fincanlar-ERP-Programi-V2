@@ -54,6 +54,7 @@ const SHEETS = {
   cariVirmanlar: "CariVirmanlar",
   projeKodlari: "ProjeKodlari",
   faturaTipleri: "FaturaTipleri",
+  virmanTipleri: "VirmanTipleri",
   kullanicilar: "Kullanicilar",
   oturumlar: "Oturumlar",
 };
@@ -1434,6 +1435,16 @@ function ensureCariVirmanProjeKoduColonu(sheet) {
   metinKolonuGarantiEt_(sheet, 12);
 }
 
+// Virman Tipi (örn. "Ortak Aktarımı", "Şube İçi", "Kasa Düzeltmesi" — Ayarlar'dan tanımlanır,
+// bkz. BASIT_TANIM_SHEET_ADI.virmanTipi). 23 Eyl 2026: ileride raporlarda kullanılmak üzere eklendi.
+function ensureCariVirmanVirmanTipiColonu(sheet) {
+  const mevcutBaslik = sheet.getRange(1, 13).getValue();
+  if (String(mevcutBaslik || "") !== "VIRMAN_TIPI") {
+    sheet.getRange(1, 13).setValue("VIRMAN_TIPI").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  metinKolonuGarantiEt_(sheet, 13);
+}
+
 // body: { kaynakCariId, kaynakCariAd, hedefCariId, hedefCariAd, tarih, tutar, aciklama, projeKodu }
 function saveCariVirman(body) {
   const kaynakId = String(body.kaynakCariId || "").trim();
@@ -1472,8 +1483,9 @@ function saveCariVirman(body) {
 
   const sheet = getOrCreateSheet(ss, SHEETS.cariVirmanlar, CARI_VIRMAN_BASLIKLAR);
   ensureCariVirmanProjeKoduColonu(sheet);
+  ensureCariVirmanVirmanTipiColonu(sheet);
   metinliSatirEkle_(sheet, [id, tarih, kaynakId, kaynakAd, hedefId, hedefAd, tutar, notu,
-    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), kaynakHareket.id, hedefHareket.id, String(body.projeKodu || "").trim()], [12]);
+    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), kaynakHareket.id, hedefHareket.id, String(body.projeKodu || "").trim(), String(body.virmanTipi || "").trim()], [12, 13]);
 
   cacheTemizle(["cariListesi_v3"]);
   return { ok: true, id: id };
@@ -1483,6 +1495,7 @@ function getCariVirmanListesi() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.cariVirmanlar, CARI_VIRMAN_BASLIKLAR);
   ensureCariVirmanProjeKoduColonu(sheet);
+  ensureCariVirmanVirmanTipiColonu(sheet);
   const data = sheet.getDataRange().getValues();
   const cariKoduMap = cariKoduHaritasiOlustur(ss);
   const sonuc = [];
@@ -1495,6 +1508,7 @@ function getCariVirmanListesi() {
       kaynakCariId: kaynakCariId, kaynakCariAd: String(row[3] || ""), kaynakCariKodu: cariKoduMap[kaynakCariId] || "",
       hedefCariId: hedefCariId, hedefCariAd: String(row[5] || ""), hedefCariKodu: cariKoduMap[hedefCariId] || "",
       tutar: parseFloat(row[6]) || 0, aciklama: String(row[7] || ""), projeKodu: metinOku_(row[11]),
+      virmanTipi: metinOku_(row[12]),
     });
   }
   sonuc.reverse();
@@ -7314,6 +7328,7 @@ const BASIT_TANIM_SHEET_ADI = {
   giderAltGrup: SHEETS.giderAltGruplari,
   projeKodu: SHEETS.projeKodlari,
   faturaTipi: SHEETS.faturaTipleri,
+  virmanTipi: SHEETS.virmanTipleri,
 };
 const BASIT_TANIM_CACHE_ANAHTARI = {
   urunGrubu: "urunGrubuListesi",
@@ -7325,6 +7340,7 @@ const BASIT_TANIM_CACHE_ANAHTARI = {
   giderAltGrup: "giderAltGrupListesi",
   projeKodu: "projeKoduListesi",
   faturaTipi: "faturaTipiListesi",
+  virmanTipi: "virmanTipiListesi",
 };
 const BASIT_TANIM_BASLIKLAR = ["ID", "AD", "UST_ID", "SIRA", "KOD"];
 // Stok Kodu'nun otomatik üretimi için hangi basit tanım tiplerinin 2 haneli bir KOD'a
