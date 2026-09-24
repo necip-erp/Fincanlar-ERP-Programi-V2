@@ -7,7 +7,10 @@
 <link rel="icon" type="image/png" href="./icon-192.png">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#4338ca">
+<meta name="theme-color" content="#3730a3">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
   /* ── Nötrler: hafif soğuk gri tonu (klasik "SaaS beyazı" değil).
@@ -21,27 +24,30 @@
   --mod-min:126px; --mod-gap:10px; --mod-pad:12px 8px 13px;
   --mod-ic:36px; --mod-icfont:17px; --mod-lblfont:12.5px; --mod-descfont:9.5px;
 
-  /* ── Marka rengi: indigo — jenerik Tailwind mavisinden (#2563eb) bilinçli olarak
-     uzaklaştırıldı, daha karakterli/güven veren bir ton ── */
-  --blue:#4338ca; --blue-l:#eeecfc;
+  /* ── TEMA DENEMESİ (24 Eyl 2026, dal: tema-denemesi) — Akınsoft Wolvox'un net/ayrık
+     "renk cümbüşü" mantığı + Bizim Hesap'ın doygun düz (flat) blok renkleri harmanlandı.
+     Marka rengi indigo ailesinde kaldı ama biraz koyultuldu (daha "kurumsal" ağırlık). ── */
+  --blue:#3730a3; --blue-l:#eae8fb;
 
-  /* ── Modül renk sistemi: gelir/gider mantığına oturan 4 net renk (bizimhesap tarzı) —
-     Satış+Tahsilat = yeşil (para giriyor), Alış+Ödeme = kırmızı (para çıkıyor),
-     Stok+Finans+Rapor = mavi (envanter/bilgi, marka rengiyle aynı aile),
-     Cari+Çek-Senet = sarı (takip/kayıt). Modül kartlarında ve ilgili ekranların
-     vurgu renklerinde (bakiye kutusu, seçili satır) kullanılır. ── */
-  --green:#16a34a;  --green-l:#e5f7ec;
-  --red:#dc2626;    --red-l:#fceaea;
-  --yellow:#ca8a04; --yellow-l:#fcf3d9;
+  /* ── Modül renk sistemi genişletildi (6→8 ton) — her modül grubu artık daha doygun,
+     birbirinden keskin ayrılan bir renkte; -l varyantları rozet/ikon fonu için. ── */
+  --green:#0f9d58;  --green-l:#e3f7ec;
+  --red:#e11d3c;    --red-l:#fdeaee;
+  --yellow:#d97706; --yellow-l:#fdf1de;
 
-  /* ── "Fincanlar" işaretine ince bir gönderme: sıcak bakır/amber ikincil vurgu.
-     Sadece imza niteliğindeki küçük detaylarda (aktif sekme çizgisi, rozet) kullanılır. ── */
-  --amber:#b5651d; --amber-l:#fbeee0;
+  /* ── "Fincanlar" imzası: bakır/amber — Bizim Hesap'taki bordo rapor kutularına
+     yakın bir sıcaklığa çekildi. ── */
+  --amber:#a3410a; --amber-l:#fbe8dd;
 
-  --violet:#6d28d9; --violet-l:#efe9fc;
-  --teal:#0f766e;   --teal-l:#e1f5f2;
+  --violet:#7c3aed; --violet-l:#f1eafd;
+  --teal:#0d9488;   --teal-l:#e0f5f3;
 
-  --r:6px; --r-sm:4px; --r-lg:10px;
+  /* ── Yeni: bordo ve koyu lacivert — Bizim Hesap rapor kutularından (KDV/Vadesi Geçen
+     Alacaklar gibi) esinlenen iki ek modül tonu, kategori sayısı arttıkça çakışma olmasın diye. ── */
+  --maroon:#9f1239; --maroon-l:#fbe7ec;
+  --navy:#1e3a5f;   --navy-l:#e7edf4;
+
+  --r:8px; --r-sm:5px; --r-lg:14px;
   --shadow-sm:0 1px 2px rgba(20,22,30,.06), 0 1px 1px rgba(20,22,30,.05);
   --shadow-md:0 6px 16px -6px rgba(30,32,60,.18), 0 2px 5px rgba(30,32,60,.08);
   --ease:cubic-bezier(.4,0,.2,1);
@@ -51,7 +57,8 @@
   *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important}
 }
 *{box-sizing:border-box}
-body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+body{margin:0;font-family:'Manrope',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.lbl,.btn-primary,.sekme.aktif{letter-spacing:-.01em}
 /* ── Modül kartı boyutu presetleri (varsayılan = yukarıdaki :root değerleri, "Orta") ── */
 body.modul-boyut-kucuk{--mod-min:98px;--mod-gap:8px;--mod-pad:8px 6px 9px;--mod-ic:28px;--mod-icfont:14px;--mod-lblfont:11px;--mod-descfont:8.5px}
 body.modul-boyut-buyuk{--mod-min:158px;--mod-gap:13px;--mod-pad:16px 10px 18px;--mod-ic:46px;--mod-icfont:21px;--mod-lblfont:14px;--mod-descfont:10.5px}
@@ -85,9 +92,9 @@ body.desen-acik{
    kendi içinde bir "sekme" olarak açılır (PWA kurulu haldeyken window.open görev
    çubuğunda ayrı bir program penceresi gibi göründüğü için bu yönteme geçildi). ── */
 .sekme-seridi{display:flex;align-items:stretch;gap:2px;padding:0 10px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:thin}
-.sekme{display:flex;align-items:center;justify-content:center;gap:9px;padding:8px 20px 7px;min-width:var(--sekme-genislik,140px);font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;cursor:pointer;border-bottom:2px solid transparent;user-select:none;transition:background var(--t),color var(--t)}
+.sekme{display:flex;align-items:center;justify-content:center;gap:9px;padding:8px 20px 7px;min-width:var(--sekme-genislik,140px);font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;cursor:pointer;border-radius:8px 8px 0 0;margin-top:4px;user-select:none;transition:background var(--t),color var(--t),margin var(--t)}
 .sekme:hover{background:var(--bg2);color:var(--text)}
-.sekme.aktif{color:var(--blue);border-bottom-color:var(--blue);background:var(--bg2)}
+.sekme.aktif{color:#fff;background:var(--blue);margin-top:0;font-weight:700;box-shadow:0 -2px 0 0 var(--blue) inset}
 .sekme .sekme-kapat{font-size:13px;line-height:1;padding:2px 4px;border-radius:5px;color:var(--text3,#9ca3af);opacity:.7}
 .sekme .sekme-kapat:hover{background:var(--red-l,#fee2e2);color:var(--red,#dc2626);opacity:1}
 .sayfa-baslik{font-size:13px;font-weight:700;color:var(--text2);padding:4px 12px;background:var(--bg3);border-radius:20px;white-space:nowrap;display:none}
@@ -166,12 +173,12 @@ body.desen-acik{
 .homebtn .kisayol-ipucu{margin-left:5px}
 .modtile-no{position:absolute;top:6px;right:7px;font-size:9.5px;font-weight:800;letter-spacing:.02em;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:1px 5px;line-height:1.35;pointer-events:none}
 .modtile{background:var(--bg2);border:1px solid var(--border);border-top:3px solid var(--border);border-radius:var(--r);padding:var(--mod-pad);text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
-.modtile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--blue),var(--amber));transform:scaleX(0);transform-origin:left;transition:transform .22s var(--ease)}
+.modtile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--tc,var(--blue)),var(--amber));transform:scaleX(0);transform-origin:left;transition:transform .22s var(--ease)}
 .modtile:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:transparent}
 .modtile:hover::before{transform:scaleX(1)}
 .modtile::after{content:"→";position:absolute;right:9px;bottom:6px;font-size:11px;color:var(--text3);opacity:0;transform:translateX(-4px);transition:opacity .18s var(--ease),transform .18s var(--ease)}
 .modtile:hover::after{opacity:1;transform:translateX(0)}
-.modtile .ic{font-size:var(--mod-icfont);width:var(--mod-ic);height:var(--mod-ic);display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--blue-l);margin:0 auto 7px;transition:transform .2s var(--ease)}
+.modtile .ic{font-size:var(--mod-icfont);width:var(--mod-ic);height:var(--mod-ic);display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--tcl,var(--blue-l));color:var(--tc,var(--blue));margin:0 auto 7px;transition:transform .2s var(--ease)}
 .modtile:hover .ic{transform:scale(1.08) rotate(-4deg)}
 .modtile .lbl{font-weight:700;font-size:var(--mod-lblfont)}
 .modtile .desc{color:var(--text3);font-size:var(--mod-descfont);margin-top:2px;line-height:1.3}
@@ -1417,15 +1424,15 @@ setInterval(topbarSaatGuncelle, 10000);
 
 <script>
 const MODULLER = [
-  {id:"stok",     ic:"📦", lbl:"Stok",      desc:"Stok listesi ve takip",   renk:"blue"},
+  {id:"stok",     ic:"📦", lbl:"Stok",      desc:"Stok listesi ve takip",   renk:"teal"},
   {id:"cari",     ic:"👥", lbl:"Cari",      desc:"Müşteri / tedarikçi",     renk:"yellow"},
   {id:"tahsilat", ic:"💰", lbl:"Tahsilat",  desc:"Gelen ödemeler",          renk:"green"},
   {id:"odeme",    ic:"💳", lbl:"Ödeme",     desc:"Giden ödemeler",          renk:"red"},
-  {id:"cvirman",  ic:"🔁", lbl:"Cari Virman", desc:"İki cari arasında bakiye aktarımı", renk:"yellow"},
-  {id:"ceksenet", ic:"🧾", lbl:"Çek/Senet", desc:"Vade ve tahsilat takibi", renk:"yellow"},
-  {id:"alis",     ic:"📥", lbl:"Alış",      desc:"Satın alma",              renk:"red"},
+  {id:"cvirman",  ic:"🔁", lbl:"Cari Virman", desc:"İki cari arasında bakiye aktarımı", renk:"violet"},
+  {id:"ceksenet", ic:"🧾", lbl:"Çek/Senet", desc:"Vade ve tahsilat takibi", renk:"amber"},
+  {id:"alis",     ic:"📥", lbl:"Alış",      desc:"Satın alma",              renk:"maroon"},
   {id:"satis",    ic:"📤", lbl:"Satış",     desc:"Satış işlemleri",         renk:"green"},
-  {id:"finans",   ic:"📊", lbl:"Finans",    desc:"Genel finans durumu",     renk:"blue"},
+  {id:"finans",   ic:"📊", lbl:"Finans",    desc:"Genel finans durumu",     renk:"navy"},
   {id:"rapor",    ic:"📈", lbl:"Rapor",     desc:"Raporlar",                renk:"blue"},
   {id:"silinenler", ic:"🗑️", lbl:"Silinenler", desc:"Silinen kayıtlar, geri al", renk:"neutral"},
   {id:"kayitdefteri", ic:"📒", lbl:"Kayıt Defteri", desc:"Numaralı işlem defteri, veri kaybı kontrolü", renk:"neutral", admin:true},
