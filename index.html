@@ -171,6 +171,16 @@ body.desen-acik{
 .kisayol-ipucu-koyu{margin-left:8px;color:#fff;background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.4)}
 .kisayol-ipucu{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.02em;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:1px 5px;line-height:1.35;white-space:nowrap;flex-shrink:0;vertical-align:middle}
 .homebtn .kisayol-ipucu{margin-left:5px}
+.hamburger-btn{width:34px;height:34px;border:1px solid var(--border);background:var(--bg);border-radius:var(--r-sm);font-size:16px;cursor:pointer;color:var(--text);display:flex;align-items:center;justify-content:center;transition:background var(--t)}
+.hamburger-btn:hover{background:var(--bg3)}
+#sidebar-perde{position:fixed;inset:0;background:rgba(15,23,42,.28);opacity:0;pointer-events:none;transition:opacity .18s var(--ease);z-index:40}
+#sidebar-perde.acik{opacity:1;pointer-events:auto}
+#sidebar-flyout{position:fixed;top:0;left:0;bottom:0;width:250px;background:#1a2233;box-shadow:4px 0 24px -6px rgba(0,0,0,.4);transform:translateX(-100%);transition:transform .2s var(--ease);z-index:41;overflow-y:auto;padding-bottom:12px}
+#sidebar-flyout.acik{transform:translateX(0)}
+.sidebar-baslik{padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:6px}
+.sidebar-satir{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;font-weight:600;color:#e2e8f0;cursor:pointer;transition:background var(--t)}
+.sidebar-satir:hover{background:rgba(255,255,255,.08)}
+.sidebar-satir .sic{width:20px;text-align:center;font-size:15px}
 .modtile-no{position:absolute;top:6px;right:7px;font-size:9.5px;font-weight:800;letter-spacing:.02em;color:#fff;background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.3);border-radius:5px;padding:1px 5px;line-height:1.35;pointer-events:none}
 .modtile{background:var(--tc,#475569);border:1px solid transparent;border-radius:var(--r);padding:var(--mod-pad);text-align:center;cursor:pointer;color:#fff;transition:transform .16s var(--ease),box-shadow .16s var(--ease),filter .16s var(--ease);user-select:none;position:relative;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.1)}
 .modtile::before{content:"";position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.16),rgba(255,255,255,0) 55%);pointer-events:none}
@@ -515,6 +525,9 @@ body.giris-yapildi #login-ekran{display:none}
 </div>
 
 <div class="topbar">
+  <div id="sidebar-hover-zone" onmouseenter="sidebarAc()">
+    <button id="sidebar-hamburger" class="hamburger-btn" title="Modülleri göster">☰</button>
+  </div>
   <div class="brand" onclick="gitAnaSayfa()">
     <img src="./fincanlar-logo.png" alt="Fincanlar" style="height:28px;width:auto;object-fit:contain">
   </div>
@@ -537,6 +550,16 @@ body.giris-yapildi #login-ekran{display:none}
     </div>
   </div>
 </div>
+
+<div id="sidebar-perde" onmouseenter="sidebarKapat()" onclick="sidebarKapat()"></div>
+<div id="sidebar-flyout" onmouseleave="sidebarKapat()">
+  <div class="sidebar-baslik">
+    <img src="./fincanlar-logo.png" alt="Fincanlar" style="height:24px;width:auto;object-fit:contain">
+  </div>
+  <div class="sidebar-satir" onclick="gitAnaSayfa();sidebarKapat()">🏠 Ana Sayfa</div>
+  <div id="sidebar-liste"></div>
+</div>
+
 <div class="sekme-seridi" id="sekme-seridi"></div>
 <script>
 // Topbar sağ üstteki canlı saat: gün/ay/yıl - Saat:Dakika (örn. 05/09/2026 - 16:47), her 10 sn'de güncellenir.
@@ -546,6 +569,24 @@ function topbarSaatGuncelle(){
   const d = new Date();
   const p = n => String(n).padStart(2,"0");
   el.textContent = `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} - ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// ── Sol flyout modül listesi (☰ üzerine gelince açılır, seçince veya dışarı
+// çıkınca kapanır). Var olan "⇄ Modül" düğmesine dokunulmadı, bu ek bir yol. ──
+function sidebarAc(){
+  const liste = document.getElementById("sidebar-liste");
+  if(liste && !liste.dataset.dolduruldu){
+    liste.innerHTML = MODULLER.filter(modulGorunurMu_).map(m=>
+      `<div class="sidebar-satir" onclick="modulAcYeniSekme('${m.id}');sidebarKapat()"><span class="sic">${m.ic}</span>${m.lbl}</div>`
+    ).join("");
+    liste.dataset.dolduruldu = "1";
+  }
+  document.getElementById("sidebar-flyout").classList.add("acik");
+  document.getElementById("sidebar-perde").classList.add("acik");
+}
+function sidebarKapat(){
+  document.getElementById("sidebar-flyout").classList.remove("acik");
+  document.getElementById("sidebar-perde").classList.remove("acik");
 }
 topbarSaatGuncelle();
 setInterval(topbarSaatGuncelle, 10000);
