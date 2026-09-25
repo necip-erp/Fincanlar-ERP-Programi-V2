@@ -1196,7 +1196,7 @@ setInterval(topbarSaatGuncelle, 10000);
     </div>
   </div>
   <div class="modview" id="mod-ayarlar">
-    <div class="finans-panel" id="ayarlar-son-islemler-panel" data-bolum-anahtar="ayarlar_bolum_son_islemler" data-varsayilan-acik="1">
+    <div class="finans-panel" id="ayarlar-son-islemler-panel" data-bolum-anahtar="ayarlar_bolum_son_islemler">
       <div class="rapor-baslik" style="margin-top:0">Son Yapılan İşlemler</div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Tüm modüllerdeki en son işlemler (Ana Sayfa'da sadece son 5 görünür). Bir satıra tıklayınca kaydı ayrı sekmede açılır.</p>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
@@ -1361,6 +1361,22 @@ setInterval(topbarSaatGuncelle, 10000);
         <button class="btn" id="nakliye-sil-btn" style="display:none;color:#c0392b;border-color:#c0392b" onclick="nakliyeSorunluSil()">🗑️ Listelenenlerin hepsini sil</button>
       </div>
       <div id="nakliye-kontrol-liste" style="margin-top:14px"></div>
+    </div>
+    <div class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">📊 Günlük İşlem Raporu</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">
+        Seçilen gün için Satış (Sipariş/Teklif/Fatura), Alış, Tahsilat, Ödeme, Cari Virman, Cari/Banka/POS/Kredi
+        Kartı/Stok hareket detaylarının TAMAMINI, o güne sisteme GİRİLDİĞİ ana göre (belgenin kendi tarihine göre
+        değil) her modül ayrı Excel sekmesinde toplayan bir nevi günlük yedekleme raporu. Oluşturulunca hem Drive'a
+        kaydedilir hem tanımlıysa e-postayla gönderilir hem de bilgisayarınıza indirilir. Ayrıca her gün otomatik
+        belirli bir saatte de (Apps Script tetikleyicisiyle) aynı rapor arka planda üretilir — bu buton sadece ek
+        bir emniyet sibobu / anlık talep içindir.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div class="fld" style="width:170px;margin-bottom:0"><label>Gün</label><input id="gunluk-rapor-tarih" type="date"></div>
+        <button class="btn btn-primary" id="gunluk-rapor-btn" onclick="gunlukRaporUret()">📊 Raporu Oluştur ve İndir</button>
+      </div>
+      <div id="gunluk-rapor-sonuc" style="margin-top:12px;font-size:13px;color:var(--text3)"></div>
     </div>
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Geçmiş Alış KDV Düzeltmesi (Önizleme)</div>
@@ -4879,6 +4895,15 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         <label>Havale — Banka / Hesap</label>
         <select id="sm-banka-hesap"></select>
       </div>
+      <div class="fld" id="sm-kk-fld" style="display:none">
+        <label>Kredi Kartı — POS Hesabı</label>
+        <select id="sm-kk-hesap"><option value="">— Seçiniz —</option></select>
+      </div>
+      <div class="fld" id="sm-odeme-tutar-fld" style="display:none">
+        <label>Tahsil Edilen Tutar</label>
+        <input id="sm-odeme-tutar" type="number" min="0" step="0.01" placeholder="Boş bırakılırsa faturanın tamamı varsayılır">
+        <div style="font-size:11px;color:#888;margin-top:3px">Farklı/daha az bir tutar tahsil edildiyse buraya girin — kalan kısım caride borç (Açık Hesap gibi) kalır.</div>
+      </div>
 
       <div id="sm-isleme-tikleri-fld" style="display:${belgeTipiBaslangic==='Fatura'?'flex':'none'};gap:18px;flex-wrap:wrap;margin:-4px 0 12px;padding:8px 10px;background:var(--bg3);border-radius:8px">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
@@ -4926,6 +4951,8 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   document.body.appendChild(overlay);
   satisKalemlerCiz();
   satisBankaSecenekleriYukle(s ? s.bankaHesapId : undefined);
+  satisPosSecenekleriYukle(s ? s.posHesapId : undefined);
+  document.getElementById("sm-odeme-tutar").value = (s && s.odemeTutari !== null && s.odemeTutari !== undefined) ? s.odemeTutari : "";
   satisOdemeTipiDegisti();
   smKdvSonraKisitiUygula();
   if(!duzenle && (belgeTipiBaslangic === "Sipariş" || belgeTipiBaslangic === "Fatura")) siparisNumarasiOnizlemeYukle();
@@ -5019,6 +5046,8 @@ function siparisNumarasiOnizlemeYukle(){
 function satisOdemeTipiDegisti(){
   const tip = document.getElementById("sm-odeme").value;
   document.getElementById("sm-banka-fld").style.display = (tip === "Havale") ? "flex" : "none";
+  document.getElementById("sm-kk-fld").style.display = (tip === "Kredi Kartı") ? "flex" : "none";
+  document.getElementById("sm-odeme-tutar-fld").style.display = (tip === "Havale" || tip === "Kredi Kartı") ? "flex" : "none";
   document.getElementById("sm-vade-fld").style.display = (tip === "Açık Hesap") ? "flex" : "none";
 }
 
@@ -5030,6 +5059,21 @@ function satisBankaSecenekleriYukle(onSecili){
     sel.innerHTML = res.hesaplar.map(h=>{
       const banka = res.bankalar.find(b=>b.id===h.bankaId);
       return `<option value="${h.id}">${banka?banka.ad:''} — ${h.hesapAdi}</option>`;
+    }).join("");
+    if(onSecili) sel.value = onSecili;
+  }).catch(()=>{});
+}
+
+// sm-kk-hesap, tahsilat/ödeme modallarındaki POS yüklemesiyle aynı desende
+// (paylaşılan _bankaYapisi önbelleğine güvenmeden) kendi taze isteğini yapar.
+function satisPosSecenekleriYukle(onSecili){
+  cariApiYapi("getBankaYapisi").then(res=>{
+    if(!res.ok) return;
+    const sel = document.getElementById("sm-kk-hesap");
+    if(!sel) return;
+    sel.innerHTML = '<option value="">— Seçiniz —</option>' + res.pos.map(p=>{
+      const banka = res.bankalar.find(b=>b.id===p.bankaId);
+      return `<option value="${p.id}">${p.posAdi}${banka?' — '+banka.ad:''}</option>`;
     }).join("");
     if(onSecili) sel.value = onSecili;
   }).catch(()=>{});
@@ -5341,6 +5385,26 @@ function satisKaydet(){
     }
   }
   const bankaHesapId = odemeTipi === "Havale" ? document.getElementById("sm-banka-hesap").value : "";
+  const posHesapId = odemeTipi === "Kredi Kartı" ? document.getElementById("sm-kk-hesap").value : "";
+  // Tahsilat/Ödeme'deki aynı kural: Kredi Kartı seçilip POS hesabı boş bırakılırsa
+  // Fatura'da hiçbir POS hareketine iz düşmeden kayıt kaçabiliyordu — burada engelleniyor.
+  if(odemeTipi === "Kredi Kartı" && belgeTipi === "Fatura" && !posHesapId){
+    alert("Kredi Kartı ile faturada POS hesabı seçimi zorunludur");
+    return;
+  }
+  // Havale/Kredi Kartı ile faturanın tamamından farklı (genelde daha az) bir tutar
+  // tahsil edilmiş olabilir — boş bırakılırsa faturanın tamamı o yöntemle alınmış varsayılır.
+  let odemeTutari = "";
+  if(odemeTipi === "Havale" || odemeTipi === "Kredi Kartı"){
+    const odemeTutariGirisi = document.getElementById("sm-odeme-tutar").value;
+    if(String(odemeTutariGirisi).trim() !== ""){
+      odemeTutari = parseFloat(odemeTutariGirisi) || 0;
+      if(belgeTipi === "Fatura" && (!(odemeTutari > 0) || odemeTutari > satisGenelToplamHesapla() + 0.01)){
+        alert((odemeTipi==="Havale"?"Havale":"Kredi Kartı") + " ile tahsil edilen tutar 0 ile fatura toplamı arasında olmalı");
+        return;
+      }
+    }
+  }
   const { tutar: tutarIskontosu, kdvSonra: tutarIskontoKdvSonra } = smTutarIskontosuAl();
   const body = {
     cariId: cariId,
@@ -5352,6 +5416,8 @@ function satisKaydet(){
     tutarIskontosu: tutarIskontosu,
     tutarIskontoKdvSonra: tutarIskontoKdvSonra,
     bankaHesapId: bankaHesapId,
+    posHesapId: posHesapId,
+    odemeTutari: odemeTutari,
     vade: odemeTipi === "Açık Hesap" ? document.getElementById("sm-vade").value : "",
     aciklama: document.getElementById("sm-aciklama").value,
     projeKodu: document.getElementById("sm-proje-kodu").value,
@@ -6729,6 +6795,39 @@ function alisBekleyenDurumSifirla(faturaNo){
 let _edmOnekListe = [];
 // ★ (21 Eyl 2026) Nakliye dağıtımı tutarsız faturaları bul / sil (Admin) — bkz. backend/NakliyeKontrol.gs
 let _nakliyeSorunlular = [];
+// Ayarlar > Günlük İşlem Raporu: seçilen günün raporunu üretir, Drive+e-posta
+// backend'de otomatik yapılır, burada sadece dönen base64'ü tarayıcıya indirir.
+function gunlukRaporUret(){
+  const btn = document.getElementById("gunluk-rapor-btn");
+  const sonucEl = document.getElementById("gunluk-rapor-sonuc");
+  const tarih = document.getElementById("gunluk-rapor-tarih").value || new Date().toISOString().slice(0,10);
+  btn.disabled = true; btn.textContent = "Oluşturuluyor...";
+  sonucEl.textContent = "";
+  cariApi("gunlukIslemRaporuUret", { tarih: tarih }).then(res=>{
+    btn.disabled = false; btn.textContent = "📊 Raporu Oluştur ve İndir";
+    if(!res || !res.ok){
+      sonucEl.innerHTML = '<span style="color:#c0392b">Hata: '+htmlKacis((res&&res.hata)||"bilinmiyor")+'</span>';
+      return;
+    }
+    // base64 -> Blob -> bilgisayara indir
+    try{
+      const bin = atob(res.base64);
+      const bytes = new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: res.mimeType || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = res.dosyaAdi || ("Gunluk_Islem_Raporu_"+tarih+".xlsx");
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    }catch(e){ /* indirme başarısız olsa da Drive/e-posta sonucu aşağıda gösterilir */ }
+    sonucEl.innerHTML = '✅ Rapor oluşturuldu ve bilgisayarınıza indirildi.<br>Drive: <a href="'+htmlKacis(res.driveUrl)+'" target="_blank">'+htmlKacis(res.driveUrl)+'</a><br>E-posta: '+htmlKacis(res.epostaSonuc||"");
+  }).catch(e=>{
+    btn.disabled = false; btn.textContent = "📊 Raporu Oluştur ve İndir";
+    sonucEl.innerHTML = '<span style="color:#c0392b">Hata: '+htmlKacis(e.message||String(e))+'</span>';
+  });
+}
+
 function nakliyeKontrolYukle(){
   const el = document.getElementById("nakliye-kontrol-liste"), silBtn = document.getElementById("nakliye-sil-btn");
   if(!el) return;
@@ -10846,6 +10945,8 @@ function ayarlarYukle(){
   if(sgInput) sgInput.value = sgKayitli;
   const sgEtiket = document.getElementById("sekme-genislik-deger");
   if(sgEtiket) sgEtiket.textContent = sgKayitli + "px";
+  const grTarihInput = document.getElementById("gunluk-rapor-tarih");
+  if(grTarihInput && !grTarihInput.value) grTarihInput.value = new Date().toISOString().slice(0,10);
   ayarlarBolumleriKur();
 }
 

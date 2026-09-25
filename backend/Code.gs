@@ -1042,6 +1042,7 @@ function handleRequest(e) {
       case "getAlisKdvGecmisListesi": result = getAlisKdvGecmisListesi(); break;
       case "getEdmPortalGirisLinki": result = getEdmPortalGirisLinki(); break;
       case "getSonIslemler": result = getSonIslemler(body); break;
+      case "gunlukIslemRaporuUret": result = gunlukIslemRaporuUret(body); break;
       case "stokHareketGecmisiDoldur": result = stokHareketGecmisiDoldur(); break;
       case "cariHareketGecmisiDoldur": result = cariHareketGecmisiDoldur(); break;
       case "stokHareketTopluEkle":  result = stokHareketTopluEkle(body); break;
@@ -1899,6 +1900,8 @@ function getSatisDetay(satisId) {
         odemeTipi: String(data[i][5] || ""), aciklama: String(data[i][6] || ""), kayitTarihi: hucreTarihStr(data[i][7]),
         belgeTipi: String(data[i][8] || "") || "Fatura",
         dipIskontoYuzde: parseFloat(data[i][9]) || 0, bankaHesapId: String(data[i][10] || ""),
+        posHesapId: String(data[i][23] || ""),
+        odemeTutari: data[i][24] === "" || data[i][24] === undefined ? null : (parseFloat(data[i][24]) || 0),
         kaynakSiparisId: String(data[i][11] || ""),
         siparisManuelDurum: String(data[i][12] || "") || "Beklemede",
         tutarIskontosu: parseFloat(data[i][13]) || 0,
@@ -2063,13 +2066,36 @@ function saveSatis(body) {
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   const bankaHesapId = String(body.bankaHesapId || "").trim();
+  const posHesapId = String(body.posHesapId || "").trim();
   const belgeTipi = String(body.belgeTipi || "Fatura");
+  // Tahsilat/Ödeme'deki aynı kural: Kredi Kartı seçilip POS hesabı belirtilmezse
+  // faturada hiçbir POS hareketine iz düşmeden kayıt kaçabiliyordu — burada
+  // (SADECE Fatura'da, çünkü Sipariş/Teklif zaten hiçbir hareket yaratmıyor) engelleniyor.
+  if (belgeTipi === "Fatura" && String(body.odemeTipi || "") === "Kredi Kartı" && !posHesapId) {
+    return { ok: false, hata: "Kredi Kartı ile faturada POS hesabı seçimi zorunludur" };
+  }
+  // Havale/Kredi Kartı ile faturanın TAMAMI değil, farklı (genelde daha az) bir tutar
+  // tahsil edilmiş olabilir — kalan kısım cari üzerinde Açık Hesap gibi kalmaya devam
+  // eder (cari Borç hareketi her zaman toplamTutar kadar, aşağıda değişmeden yazılıyor).
+  // Belirtilmezse geriye dönük uyumluluk için TAMAMI o yöntemle alınmış varsayılır.
+  const odemeTipiOnBelirtilen = String(body.odemeTipi || "");
+  let odemeTutari = toplamTutar;
+  if ((odemeTipiOnBelirtilen === "Havale" || odemeTipiOnBelirtilen === "Kredi Kartı") && belgeTipi === "Fatura") {
+    if (body.odemeTutari !== undefined && body.odemeTutari !== null && String(body.odemeTutari).trim() !== "") {
+      odemeTutari = parseFloat(body.odemeTutari) || 0;
+      if (!(odemeTutari > 0) || odemeTutari > toplamTutar + 0.01) {
+        return { ok: false, hata: (odemeTipiOnBelirtilen === "Havale" ? "Havale" : "Kredi Kartı") + " ile tahsil edilen tutar 0 ile fatura toplamı arasında olmalı" };
+      }
+    }
+  } else {
+    odemeTutari = "";
+  }
   let siparisDurumu = "";
   if (belgeTipi === "Sipariş") {
     const durumAdlari = getSiparisDurumlari().durumlar.map(d => d.ad);
     siparisDurumu = durumAdlari.includes(body.siparisDurumu) ? body.siparisDurumu : (durumAdlari[0] || "Beklemede");
   }
-  metinliSatirEkle_(sSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || ""), "", "", "", "", "", String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim()], [22, 23]);
+  metinliSatirEkle_(sSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || ""), "", "", "", "", "", String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim(), posHesapId, odemeTutari], [22, 23]);
 
   // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
   // otomatik, minimal bir stok kartı oluşturulur (Alış modülündeki mantığın aynısı).
@@ -2127,10 +2153,20 @@ function saveSatis(body) {
       });
     }
 
-    // Ödeme Tipi "Havale" ise ve bir banka hesabı seçildiyse, o hesaba GİRİŞ kaydı düşülür
-    // (satış tutarı doğrudan banka hesabına havale ile ödenmiş demektir).
+    // Ödeme Tipi "Havale" ise ve bir banka hesabı seçildiyse, o hesaba GİRİŞ kaydı düşülür.
+    // Tahsil edilen tutar (odemeTutari) fatura toplamından FARKLI/daha az olabilir —
+    // kalan kısım cari üzerinde borç (Açık Hesap gibi) olarak kalmaya devam eder.
     if (String(body.odemeTipi || "") === "Havale" && bankaHesapId) {
-      bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", toplamTutar,
+      bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", odemeTutari,
+        cariHareketAciklamaOlustur("SATIS", id, "satis_" + belgeTipi, body.aciklama));
+    }
+
+    // Ödeme Tipi "Kredi Kartı" ise ve bir POS hesabı seçildiyse, o POS hesabına
+    // BORÇ kaydı düşülür (POS/banka bize bu tutarı ödeyecek) — Tahsilat'taki
+    // Kredi Kartı mantığının aynısı. Tahsil edilen tutar (odemeTutari) fatura
+    // toplamından farklı/daha az olabilir, kalan kısım cari üzerinde borç kalır.
+    if (String(body.odemeTipi || "") === "Kredi Kartı" && posHesapId) {
+      posHareketEkle(posHesapId, tarih, "Borç", odemeTutari,
         cariHareketAciklamaOlustur("SATIS", id, "satis_" + belgeTipi, body.aciklama));
     }
   }
@@ -2442,6 +2478,8 @@ function silSatis(body) {
 
   // Bu satışla ilişkili bir Havale banka hareketi varsa geri al.
   bankaHesapHareketSilByAciklamaOnPrefix("SATIS:" + id);
+  // Bu satışla ilişkili bir Kredi Kartı POS hareketi varsa geri al.
+  posHareketSilByAciklamaOnPrefix("SATIS:" + id);
 
   cacheTemizle(["satisListesi"]);
   return { ok: true };
