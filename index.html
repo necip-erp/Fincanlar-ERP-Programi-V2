@@ -1071,10 +1071,33 @@ setInterval(topbarSaatGuncelle, 10000);
           <option value="projeFaturaRaporu">Proje Kodu / Fatura Tipi Bazlı Fatura Raporu</option>
           <option value="karZarar">Kâr/Zarar Raporu</option>
           <option value="vadesiGecenler">Vadesi Geçmiş Alacaklar</option>
+          <option value="cariHareketTopluRaporu">Cari Hareket Raporu (Toplu)</option>
+          <option value="borcAlacakRaporu">Borç-Alacak Raporu</option>
         </select>
       </div>
       <div style="margin-bottom:14px">
         <button type="button" class="btn" id="mr-excel-btn" onclick="muhasebeRaporuExcelAktar()" title="Ekrandaki raporu Excel dosyası olarak indirir">📊 Excel'e Aktar</button>
+      </div>
+      <div id="mr-cari-filtre-alani" style="display:none;margin-bottom:14px">
+        <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end">
+          <div class="fld" style="margin-bottom:0">
+            <label>Cari Türü</label>
+            <div style="display:flex;gap:14px;padding:6px 0 2px">
+              <label style="display:flex;align-items:center;gap:5px;font-weight:400;cursor:pointer"><input type="radio" name="mr-cari-tip" value="alici" checked onchange="muhasebeRaporuYukle()"> Alıcılar</label>
+              <label style="display:flex;align-items:center;gap:5px;font-weight:400;cursor:pointer"><input type="radio" name="mr-cari-tip" value="satici" onchange="muhasebeRaporuYukle()"> Satıcılar</label>
+              <label style="display:flex;align-items:center;gap:5px;font-weight:400;cursor:pointer"><input type="radio" name="mr-cari-tip" value="hepsi" onchange="muhasebeRaporuYukle()"> Hepsi</label>
+            </div>
+          </div>
+          <div class="fld" style="margin-bottom:0">
+            <label style="display:flex;align-items:center;gap:5px;font-weight:400;cursor:pointer"><input type="checkbox" id="mr-personel-dahil" onchange="muhasebeRaporuYukle()"> Personeli de dahil et (ayrı bölümde)</label>
+          </div>
+        </div>
+        <div class="fld" style="max-width:420px;margin-top:10px">
+          <label>Belirli Cariler (opsiyonel — boş bırakılırsa yukarıdaki filtreye uyan TÜM cariler)</label>
+          <input type="text" id="mr-cari-secim-ara" placeholder="Cari ara..." autocomplete="off" oninput="mrCariSecimOneriGoster()" style="margin-bottom:4px">
+          <select id="mr-cari-secim" multiple size="5" onchange="muhasebeRaporuYukle()" style="width:100%"></select>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">Ctrl/Cmd tuşuyla birden fazla cari seçebilirsiniz. Hiçbiri seçili değilse filtreye uyan tüm cariler kullanılır.</div>
+        </div>
       </div>
       <div id="mr-kasa-mod-alani" style="display:none;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px">
         <div class="fld" style="margin-bottom:0">
@@ -3139,13 +3162,15 @@ function rehberStokZenginlestir_(liste){
   });
 }
 // Cari Rehberi'nde Alıcı/Satıcı/Hepsi seçimine göre listeyi daraltır (25 Eyl 2026).
-// "Tedarikçi" tipindekiler Satıcı sayılır, geri kalan tüm cariler (Müşteri/Bağımsız/tipsiz) Alıcı sayılır.
+// "Tedarikçi" tipindekiler Satıcı sayılır, "Personel" tipindekiler ne Alıcı ne Satıcı'ya
+// dahil edilir (26 Eyl 2026'da eklenen Personel cari türü — bkz. cariTipPersonelMi_),
+// geri kalan tüm cariler (Müşteri/Bağımsız/tipsiz) Alıcı sayılır.
 function _rehberCariTipiUygula(satirlar){
   if(_rehberState.tip !== 'cari') return satirlar;
   const f = _rehberState.cariTipiFiltre || 'alici';
   if(f === 'hepsi') return satirlar;
   if(f === 'satici') return satirlar.filter(c=>c.tip==='Tedarikçi');
-  return satirlar.filter(c=>c.tip!=='Tedarikçi');
+  return satirlar.filter(c=>c.tip!=='Tedarikçi' && c.tip!=='Personel');
 }
 function rehberCariTipiDegisti(deger){
   _rehberState.cariTipiFiltre = deger;
@@ -3953,13 +3978,16 @@ function cariModalAc(editId){
       <div class="fld" style="grid-column:1/-1"><label>Cari Türü</label>
         <div style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0 2px">
           <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
-            <input type="radio" name="cm-tip" value="Müşteri" ${(!c||c.tip!=='Tedarikçi'&&c.tip!=='Bağımsız')?'checked':''} onchange="cariTuruDegisti(${duzenle})"> Alıcı
+            <input type="radio" name="cm-tip" value="Müşteri" ${(!c||(c.tip!=='Tedarikçi'&&c.tip!=='Bağımsız'&&c.tip!=='Personel'))?'checked':''} onchange="cariTuruDegisti(${duzenle})"> Alıcı
           </label>
           <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
             <input type="radio" name="cm-tip" value="Tedarikçi" ${c&&c.tip==='Tedarikçi'?'checked':''} onchange="cariTuruDegisti(${duzenle})"> Satıcı
           </label>
           <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
             <input type="radio" name="cm-tip" value="Bağımsız" ${c&&c.tip==='Bağımsız'?'checked':''} onchange="cariTuruDegisti(${duzenle})"> Bağımsız
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
+            <input type="radio" name="cm-tip" value="Personel" ${c&&c.tip==='Personel'?'checked':''} onchange="cariTuruDegisti(${duzenle})"> Personel
           </label>
         </div>
       </div>
@@ -4916,6 +4944,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <span>${duzenle ? belgeTipiBaslangic+"'i Düzenle" : "Yeni "+belgeTipiBaslangic}</span>
         <span id="sm-efatura-rozet" title="Seçili carinin E-Fatura mükellefiyeti" style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;padding:4px 14px;border-radius:20px;white-space:nowrap;background:var(--bg3);color:var(--text3)">E-Fatura: —</span>
+        <span id="sm-earsiv-rozet" title="Seçili carinin E-Arşiv mükellefiyeti" style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;padding:4px 14px;border-radius:20px;white-space:nowrap;background:var(--bg3);color:var(--text3)">E-Arşiv: —</span>
         <span id="sm-siparis-no-badge" style="display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">
           # <span id="sm-siparis-no-metin">${s && s.siparisNo ? s.siparisNo : '—'}</span>
         </span>
@@ -5081,6 +5110,14 @@ function smKdvSonraKisitiUygula(){
     if(!c){ rozet.textContent = "E-Fatura: —"; rozet.style.background = "var(--bg3)"; rozet.style.color = "var(--text3)"; }
     else if(eFaturaMi){ rozet.textContent = "E-Fatura: Evet"; rozet.style.background = "#dcf5e4"; rozet.style.color = "#15803d"; }
     else { rozet.textContent = "E-Fatura: Hayır"; rozet.style.background = "#fde2e2"; rozet.style.color = "#b91c1c"; }
+  }
+  // E-Arşiv rozeti — E-Fatura'dan bağımsız ikinci mükellefiyet bilgisi (bkz. backend E_ARSIV kolonu).
+  const eArsivMi = !!(c && c.eArsiv==='Evet');
+  const earsivRozet = document.getElementById("sm-earsiv-rozet");
+  if(earsivRozet){
+    if(!c){ earsivRozet.textContent = "E-Arşiv: —"; earsivRozet.style.background = "var(--bg3)"; earsivRozet.style.color = "var(--text3)"; }
+    else if(eArsivMi){ earsivRozet.textContent = "E-Arşiv: Evet"; earsivRozet.style.background = "#dcf5e4"; earsivRozet.style.color = "#15803d"; }
+    else { earsivRozet.textContent = "E-Arşiv: Hayır"; earsivRozet.style.background = "#fde2e2"; earsivRozet.style.color = "#b91c1c"; }
   }
   const dip = document.getElementById("sm-dip-iskonto"), tutarIsk = document.getElementById("sm-tutar-iskontosu");
   [dip, tutarIsk].forEach(inp=>{
@@ -9429,6 +9466,9 @@ function muhasebeRaporuTipDegisti(){
   _mrSirala = { anahtar: "tarih", yon: "desc" };
   const stokKoduDestekli = ["urunBazliHareket","urunBazliSiparis","urunBazliFatura","karZarar"].includes(tip);
   document.getElementById("mr-stokkodu-alani").style.display = stokKoduDestekli ? "flex" : "none";
+  const cariRaporuMu = (tip === "cariHareketTopluRaporu" || tip === "borcAlacakRaporu");
+  document.getElementById("mr-cari-filtre-alani").style.display = cariRaporuMu ? "block" : "none";
+  if(cariRaporuMu) mrCariSecimOneriGoster();
   if(tip === "kasaRaporu"){
     const gunEl = document.getElementById("mr-kasa-gun");
     if(!gunEl.value) gunEl.value = simdiTarihSaat().slice(0,10);
@@ -9698,6 +9738,29 @@ const MR_KOLONLAR = {
   ],
 };
 
+// Cari Hareket Raporu (Toplu) / Borç-Alacak Raporu'ndaki "Belirli Cariler" çoklu seçim
+// kutusunu, mevcut Alıcı/Satıcı/Hepsi radio seçimine ve arama kutusuna göre yeniden çizer;
+// önceden seçili olan cariler (hâlâ filtreye uyuyorlarsa) seçili kalır.
+function mrCariSecimOneriGoster(){
+  const sel = document.getElementById("mr-cari-secim");
+  if(!sel) return;
+  const oncekiSecili = Array.from(sel.selectedOptions || []).map(o=>o.value);
+  const tipEl = document.querySelector('input[name="mr-cari-tip"]:checked');
+  const cariTip = tipEl ? tipEl.value : "alici";
+  const arama = (document.getElementById("mr-cari-secim-ara").value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
+  const uygun = c => {
+    if(cariTip === "satici") return c.tip === "Tedarikçi";
+    if(cariTip === "hepsi") return true;
+    return c.tip !== "Tedarikçi";
+  };
+  const liste = (_cariListe||[]).filter(uygun).filter(c=>{
+    if(!arama) return true;
+    const hedef = ((c.ad||"")+" "+(c.cariKodu||"")).replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
+    return hedef.includes(arama);
+  }).sort((a,b)=>(a.ad||"").localeCompare(b.ad||"",'tr'));
+  sel.innerHTML = liste.map(c=>`<option value="${c.id}" ${oncekiSecili.includes(c.id)?'selected':''}>${c.ad}${c.cariKodu?' ('+c.cariKodu+')':''}</option>`).join("");
+}
+
 function muhasebeRaporuYukle(){
   const tip = document.getElementById("mr-tip-secim").value;
   const baslangic = document.getElementById("rapor-baslangic").value;
@@ -9719,6 +9782,13 @@ function muhasebeRaporuYukle(){
   const stokKodu = document.getElementById("mr-stokkodu").value.trim();
   const kasaMod = (tip === "kasaRaporu" && _kasaRaporuMod === "devirli") ? "devirli" : "aralik";
   const istekBody = gunlukSecili ? {tip, mod:"gunluk", gun, stokKodu} : {tip, mod:kasaMod, baslangic, bitis, stokKodu};
+  if(tip === "cariHareketTopluRaporu" || tip === "borcAlacakRaporu"){
+    const tipEl = document.querySelector('input[name="mr-cari-tip"]:checked');
+    istekBody.cariTipFiltre = tipEl ? tipEl.value : "alici";
+    istekBody.personelDahil = !!(document.getElementById("mr-personel-dahil")||{}).checked;
+    const secimSel = document.getElementById("mr-cari-secim");
+    istekBody.cariIdler = secimSel ? Array.from(secimSel.selectedOptions).map(o=>o.value) : [];
+  }
 
   cariApi("getMuhasebeRaporu", istekBody).then(res=>{
     if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
@@ -9823,6 +9893,51 @@ function mrIcerikCiz(tip, res){
         <tfoot><tr><td colspan="2"><b>Toplam</b></td><td><b>${res.toplamKesilenAdet}</b></td><td><b>${paraFormat(res.toplamKesilenTutar)}</b></td><td><b>${res.toplamGelenAdet}</b></td><td><b>${paraFormat(res.toplamGelenTutar)}</b></td><td><b>${paraFormat(res.toplamKesilenTutar - res.toplamGelenTutar)}</b></td></tr></tfoot>
       </table>
       <div id="mr-proje-fatura-detay" style="margin-top:14px"></div>`;
+    return;
+  }
+  if(tip === "borcAlacakRaporu"){
+    const satirHtml = s => `<tr><td>${s.cariKodu||'—'}</td><td>${s.cariAd}</td><td>${paraFormat(s.borc)}</td><td>${paraFormat(s.alacak)}</td><td class="${bakiyeSinifi(s.bakiye)}">${paraFormat(s.bakiye)}</td></tr>`;
+    const toplamSatir = liste => liste.reduce((t,s)=>({borc:t.borc+s.borc, alacak:t.alacak+s.alacak, bakiye:t.bakiye+s.bakiye}), {borc:0,alacak:0,bakiye:0});
+    if(res.satirlar.length===0 && res.personelSatirlar.length===0){ el.innerHTML = '<div class="cari-empty">Filtreye uyan hareketli cari bulunamadı.</div>'; return; }
+    const t = toplamSatir(res.satirlar);
+    let html = `<table class="rapor-tbl">
+      <thead><tr><th>Cari Kodu</th><th>Cari</th><th>Borç</th><th>Alacak</th><th>Bakiye</th></tr></thead>
+      <tbody>${res.satirlar.map(satirHtml).join("") || `<tr><td colspan="5" style="text-align:center;color:var(--text3)">Kayıt yok</td></tr>`}</tbody>
+      <tfoot><tr><td colspan="2"><b>Toplam</b></td><td><b>${paraFormat(t.borc)}</b></td><td><b>${paraFormat(t.alacak)}</b></td><td><b>${paraFormat(t.bakiye)}</b></td></tr></tfoot>
+    </table>`;
+    if(res.personelSatirlar.length){
+      const tp = toplamSatir(res.personelSatirlar);
+      html += `<div class="rapor-baslik" style="margin-top:18px">Personel</div>
+      <table class="rapor-tbl">
+        <thead><tr><th>Cari Kodu</th><th>Cari</th><th>Borç</th><th>Alacak</th><th>Bakiye</th></tr></thead>
+        <tbody>${res.personelSatirlar.map(satirHtml).join("")}</tbody>
+        <tfoot><tr><td colspan="2"><b>Toplam</b></td><td><b>${paraFormat(tp.borc)}</b></td><td><b>${paraFormat(tp.alacak)}</b></td><td><b>${paraFormat(tp.bakiye)}</b></td></tr></tfoot>
+      </table>`;
+    }
+    el.innerHTML = html;
+    return;
+  }
+  if(tip === "cariHareketTopluRaporu"){
+    if(res.bolumler.length===0 && res.personelBolumler.length===0){ el.innerHTML = '<div class="cari-empty">Filtreye uyan hareketli cari bulunamadı.</div>'; return; }
+    const bolumHtml = b => `
+      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:22px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+          <div><b style="font-size:15px">${b.cariAd}</b> <span style="color:var(--text3);font-size:12.5px">${b.cariKodu?'· '+b.cariKodu:''}${b.cariTip?' · '+b.cariTip:''}</span></div>
+          <div style="font-size:13px;color:var(--text3)">Devir: <b class="${bakiyeSinifi(b.devir)}">${paraFormat(b.devir)}</b> &nbsp; Kapanış: <b class="${bakiyeSinifi(b.kapanisBakiye)}">${paraFormat(b.kapanisBakiye)}</b></div>
+        </div>
+        ${b.hareketler.length===0 ? '<div class="cari-empty" style="padding:10px 0">Bu aralıkta hareket yok.</div>' : `
+        <table class="rapor-tbl">
+          <thead><tr><th>Tarih</th><th>Açıklama</th><th>Borç</th><th>Alacak</th><th>Bakiye</th></tr></thead>
+          <tbody>${b.hareketler.map(h=>`<tr><td>${tarihGoster(h.tarih)}</td><td>${hkAciklamaGoster(h.aciklama)}</td>
+            <td>${h.tip==='Borç'?paraFormat(h.tutar):''}</td><td>${h.tip==='Alacak'?paraFormat(h.tutar):''}</td>
+            <td class="${bakiyeSinifi(h.bakiyeSonrasi)}">${paraFormat(h.bakiyeSonrasi)}</td></tr>`).join("")}</tbody>
+        </table>`}
+      </div>`;
+    let html = res.bolumler.map(bolumHtml).join("");
+    if(res.personelBolumler.length){
+      html += `<div class="rapor-baslik">Personel</div>` + res.personelBolumler.map(bolumHtml).join("");
+    }
+    el.innerHTML = html || '<div class="cari-empty">Kayıt yok.</div>';
     return;
   }
   if(res.satirlar.length===0){
@@ -9978,6 +10093,30 @@ function muhasebeRaporuExcelAktar(){
   if(tip === "vadesiGecenler"){
     dosya = "VadesiGecmisAlacaklar"; sayfaAdi = "Vadesi Geçmiş";
     ekle(MR_KOLONLAR.vadesiGecenler, res.hareketler, h=>[h.cariKodu||"", h.cariAd||"", tarihGoster(h.vade), h.gecikenGunSayisi, h.tutar, h.aciklama||""]);
+  } else if(tip === "borcAlacakRaporu"){
+    dosya = "BorcAlacakRaporu"; sayfaAdi = "Borç-Alacak";
+    const kolonlar = [{baslik:"Cari Kodu"},{baslik:"Cari"},{baslik:"Borç"},{baslik:"Alacak"},{baslik:"Bakiye"}];
+    aoa.push(kolonlar.map(k=>k.baslik));
+    res.satirlar.forEach(s=>aoa.push([s.cariKodu||"", s.cariAd||"", s.borc, s.alacak, s.bakiye]));
+    if(res.personelSatirlar && res.personelSatirlar.length){
+      aoa.push([]); aoa.push(["Personel"]); aoa.push(kolonlar.map(k=>k.baslik));
+      res.personelSatirlar.forEach(s=>aoa.push([s.cariKodu||"", s.cariAd||"", s.borc, s.alacak, s.bakiye]));
+    }
+  } else if(tip === "cariHareketTopluRaporu"){
+    dosya = "CariHareketRaporu"; sayfaAdi = "Cari Hareket";
+    const bolumEkle = b => {
+      aoa.push([b.cariAd + (b.cariKodu?" ("+b.cariKodu+")":"")]);
+      aoa.push(["Devir", "", "", "", b.devir]);
+      aoa.push(["Tarih","Açıklama","Borç","Alacak","Bakiye"]);
+      b.hareketler.forEach(h=>aoa.push([tarihGoster(h.tarih), hkAciklamaGoster(h.aciklama), h.tip==='Borç'?h.tutar:"", h.tip==='Alacak'?h.tutar:"", h.bakiyeSonrasi]));
+      aoa.push(["", "", "", "Kapanış", b.kapanisBakiye]);
+      aoa.push([]);
+    };
+    res.bolumler.forEach(bolumEkle);
+    if(res.personelBolumler && res.personelBolumler.length){
+      aoa.push(["Personel"]); aoa.push([]);
+      res.personelBolumler.forEach(bolumEkle);
+    }
   } else if(tip === "alisFatura" || tip === "satisFatura"){
     dosya = tip==="alisFatura" ? "AlisFaturaRaporu" : "SatisFaturaRaporu"; sayfaAdi = "Fatura";
     ekle(MR_KOLONLAR.alisFatura, res.satirlar, s=>[tarihGoster(s.tarih), s.cariKodu||"", s.cariAd||"", s.odemeTipi||"", s.tutar, s.aciklama||""]);

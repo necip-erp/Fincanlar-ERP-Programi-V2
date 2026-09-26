@@ -5987,6 +5987,108 @@ function getMuhasebeRaporu(body) {
     return sonuc;
   }
 
+  // 26 Eyl 2026: Cari Hareket Raporu (Toplu) + Borç-Alacak Raporu — Alıcı/Satıcı/Hepsi
+  // filtresi ve isteğe bağlı "belirli cariler" seçimiyle, seçilen TÜM cariler için tek
+  // istekte hareket dökümü / güncel bakiye özeti döner. "Personel" cari türü (26 Eyl'de
+  // eklendi) varsayılan olarak filtrelere hiç dahil olmaz; personelDahil=true gönderilirse
+  // ayrı bir bölüm (personelBolumler/personelSatirlar) olarak eklenir.
+  if (tip === "cariHareketTopluRaporu" || tip === "borcAlacakRaporu") {
+    const cariTipFiltre = String(body.cariTipFiltre || "alici");
+    const personelDahil = !!body.personelDahil;
+    const cariIdler = Array.isArray(body.cariIdler) ? body.cariIdler.map(String).filter(Boolean) : [];
+
+    const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
+    ensureCariEkKolonlariHepsi(hSheet);
+    const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
+    ensureCariHareketVadeColonu(hkSheet);
+    ensureCariHareketProjeKoduColonu(hkSheet);
+
+    const hData = hSheet.getDataRange().getValues();
+    const tumCariler = [];
+    for (let i = 1; i < hData.length; i++) {
+      const row = hData[i];
+      const id = String(row[0] || "");
+      if (!id) continue;
+      tumCariler.push({ id: id, tip: String(row[1] || ""), ad: String(row[2] || ""), cariKodu: String(row[8] || "") });
+    }
+
+    function cariAnaFiltreyeUyuyorMu_(c) {
+      if (cariIdler.length) return cariIdler.indexOf(c.id) !== -1;
+      if (c.tip === "Personel") return false; // Personel ana filtreye hiç girmez, ayrı ele alınır
+      if (cariTipFiltre === "satici") return c.tip === "Tedarikçi";
+      if (cariTipFiltre === "hepsi") return true;
+      return c.tip !== "Tedarikçi"; // "alici" (varsayılan): Tedarikçi hariç geri kalan hepsi
+    }
+
+    const anaCariler = tumCariler.filter(cariAnaFiltreyeUyuyorMu_);
+    // Belirli cariler seçiliyse (cariIdler dolu) personel bölümü ayrıca eklenmez — seçim zaten netleşmiştir.
+    const personelCariler = (!cariIdler.length && personelDahil) ? tumCariler.filter(c => c.tip === "Personel") : [];
+
+    const hkData = hkSheet.getDataRange().getValues();
+    const hareketMap = {};
+    for (let i = 1; i < hkData.length; i++) {
+      const row = hkData[i];
+      const cariId = String(row[1] || "");
+      if (!cariId) continue;
+      (hareketMap[cariId] = hareketMap[cariId] || []).push({
+        id: String(row[0]), tarih: hucreTarihStr(row[2]), tip: String(row[3] || ""),
+        tutar: parseFloat(row[4]) || 0, aciklama: String(row[5] || ""),
+        kayitTarihi: hucreTarihStr(row[6]), vade: hucreTarihStr(row[7]), projeKodu: metinOku_(row[8]),
+      });
+    }
+    function siraliHareketAl_(cariId) {
+      const liste = (hareketMap[cariId] || []).slice();
+      liste.sort((a, b) => {
+        const gcmp = new Date(a.tarih) - new Date(b.tarih);
+        if (gcmp !== 0) return gcmp;
+        const kcmp = kayitTarihiEpoch_(a.kayitTarihi) - kayitTarihiEpoch_(b.kayitTarihi);
+        if (kcmp !== 0) return kcmp;
+        return String(a.id).localeCompare(String(b.id));
+      });
+      return liste;
+    }
+
+    if (tip === "borcAlacakRaporu") {
+      // "O anki durum": tarih aralığı UYGULANMAZ, cari açıldığından bugüne TÜM hareketler toplanır.
+      function borcAlacakSatiriOlustur_(c) {
+        const liste = hareketMap[c.id] || [];
+        let borc = 0, alacak = 0;
+        liste.forEach(h => { if (h.tip === "Borç") borc += h.tutar; else alacak += h.tutar; });
+        return { cariId: c.id, cariKodu: c.cariKodu, cariAd: c.ad, cariTip: c.tip, borc: borc, alacak: alacak, bakiye: borc - alacak };
+      }
+      const anaSatirlar = anaCariler.filter(c => (hareketMap[c.id] || []).length > 0)
+        .map(borcAlacakSatiriOlustur_).sort((a, b) => a.cariAd.localeCompare(b.cariAd, 'tr'));
+      const personelSatirlar = personelCariler.filter(c => (hareketMap[c.id] || []).length > 0)
+        .map(borcAlacakSatiriOlustur_).sort((a, b) => a.cariAd.localeCompare(b.cariAd, 'tr'));
+      return { ok: true, tip: tip, satirlar: anaSatirlar, personelSatirlar: personelSatirlar };
+    }
+
+    // cariHareketTopluRaporu: Başlangıç/Bitiş seçiliyse o aralıktan ÖNCEKİ hareketler
+    // "Devir" olarak toplanır (Kasa Raporu'ndaki Devir mantığıyla aynı fikir), aralık
+    // içindekiler tek tek listelenir ve kümülatif "Kapanış Bakiyesi" hesaplanır.
+    function cariBolumuOlustur_(c) {
+      const tumHareket = siraliHareketAl_(c.id);
+      let devir = 0;
+      const aralikHareketleri = [];
+      tumHareket.forEach(h => {
+        if (baslangic && String(h.tarih).slice(0, 10) < baslangic) {
+          devir += (h.tip === "Borç") ? h.tutar : -h.tutar;
+          return;
+        }
+        if (!araligaDahilMi(h.tarih)) return;
+        aralikHareketleri.push(h);
+      });
+      let bakiye = devir;
+      aralikHareketleri.forEach(h => { bakiye += (h.tip === "Borç") ? h.tutar : -h.tutar; h.bakiyeSonrasi = bakiye; });
+      return { cariId: c.id, cariKodu: c.cariKodu, cariAd: c.ad, cariTip: c.tip, devir: devir, hareketler: aralikHareketleri, kapanisBakiye: bakiye };
+    }
+    const anaBolumler = anaCariler.filter(c => (hareketMap[c.id] || []).length > 0)
+      .map(cariBolumuOlustur_).sort((a, b) => a.cariAd.localeCompare(b.cariAd, 'tr'));
+    const personelBolumler = personelCariler.filter(c => (hareketMap[c.id] || []).length > 0)
+      .map(cariBolumuOlustur_).sort((a, b) => a.cariAd.localeCompare(b.cariAd, 'tr'));
+    return { ok: true, tip: tip, bolumler: anaBolumler, personelBolumler: personelBolumler };
+  }
+
   return { ok: false, hata: "Bilinmeyen rapor tipi" };
   });
 }
