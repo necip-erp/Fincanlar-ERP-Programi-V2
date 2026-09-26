@@ -1082,6 +1082,7 @@ function handleRequest(e) {
       case "reddetAlisFaturasi": result = reddetAlisFaturasi(body); break;
       case "sifirlaAlisFaturaDurum": result = sifirlaAlisFaturaDurum(body); break;
       case "getCekSenetDetay":   result = getCekSenetDetay(body.id); break;
+      case "getSeriNoGrubu":     result = getSeriNoGrubu(body.seriNo); break;
       case "saveCekSenet":       result = saveCekSenet(body); break;
       case "silCekSenet":        result = silCekSenet(body); break;
       case "cekSenetIslemYap":   result = cekSenetIslemYap(body); break;
@@ -3731,6 +3732,20 @@ function ensureOdemePosBankaColonlari(sheet) {
     sheet.getRange(1, 15).setValue("PROJE_KODU").setFontWeight("bold").setBackground("#e8edf5");
   }
   metinKolonuGarantiEt_(sheet, 15);
+  // KREDI_KARTI_ID: Yöntem="Kredi Kartı" ile yapılan ödemede hangi ŞİRKET kredi kartıyla
+  // ödendiği (POS_HESAP_ID'den ayrı — o kolon artık kullanılmıyor, geriye dönük durur).
+  // SERI_NO: birden fazla ödemenin/verilen çekin AYNI toplu işlemin parçası olduğunu
+  // işaretlemek için kullanıcının girdiği veya otomatik üretilen toplu takip numarası (25 Eyl 2026).
+  const krediKartiBaslik = sheet.getRange(1, 16).getValue();
+  if (String(krediKartiBaslik || "") !== "KREDI_KARTI_ID") {
+    sheet.getRange(1, 16).setValue("KREDI_KARTI_ID").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  const seriNoBaslik = sheet.getRange(1, 17).getValue();
+  if (String(seriNoBaslik || "") !== "SERI_NO") {
+    sheet.getRange(1, 17).setValue("SERI_NO").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  metinKolonuGarantiEt_(sheet, 16);
+  metinKolonuGarantiEt_(sheet, 17);
 }
 
 function getOdemeListesi() {
@@ -3757,12 +3772,47 @@ function getOdemeListesi() {
       tutar: parseFloat(row[4]) || 0, yontem: String(row[5] || ""),
       aciklama: String(row[6] || ""), kayitTarihi: hucreTarihStr(row[7]),
       hedefTipi: hedefTipi, hedefAltTipi: String(row[11] || ""), hedefId: String(row[12] || ""), hedefAd: hedefAd,
-      projeKodu: metinOku_(row[14]),
+      projeKodu: metinOku_(row[14]), krediKartiId: metinOku_(row[15]), seriNo: metinOku_(row[16]),
     });
   }
   sonuc.reverse();
   return { ok: true, odemeler: sonuc };
   });
+}
+
+// Belirli bir "Seri No" (Ödeme veya çoklu Çek/Senet girişinde toplu takip için girilen ortak
+// numara) ile işaretlenmiş TÜM kayıtları (hem Ödeme hem Çek/Senet tarafından) tek listede döner —
+// cari harekette bir "[Seri No: X]" etiketine tıklanınca "birlikte yapılan işlemler" için (25 Eyl 2026).
+function getSeriNoGrubu(seriNo) {
+  const sn = String(seriNo || "").trim();
+  if (!sn) return { ok: false, hata: "Seri No gerekli" };
+  const kalemler = [];
+  let toplam = 0;
+  const vadeler = [];
+
+  const cekRes = getCekSenetListesi();
+  if (cekRes.ok) {
+    cekRes.cekSenetler.forEach(c => {
+      if (String(c.seriGrupNo || "") !== sn) return;
+      kalemler.push({ kaynak: "CekSenet", id: c.id, tip: c.tip, cariAd: c.cariAd, tutar: c.tutar, vade: c.vade, durum: c.durum, bankaAdi: c.bankaAdi });
+      toplam += c.tutar;
+      if (c.vade) vadeler.push(c.vade);
+    });
+  }
+  const odemeRes = getOdemeListesi();
+  if (odemeRes.ok) {
+    odemeRes.odemeler.forEach(o => {
+      if (String(o.seriNo || "") !== sn) return;
+      kalemler.push({ kaynak: "Odeme", id: o.id, tip: o.yontem, cariAd: o.cariAd, tutar: o.tutar, tarih: o.tarih });
+      toplam += o.tutar;
+    });
+  }
+  let ortalamaVade = "";
+  if (vadeler.length) {
+    const ortMs = vadeler.reduce((a, v) => a + new Date(v).getTime(), 0) / vadeler.length;
+    ortalamaVade = Utilities.formatDate(new Date(ortMs), "Europe/Istanbul", "yyyy-MM-dd");
+  }
+  return { ok: true, seriNo: sn, kalemler: kalemler, toplam: toplam, ortalamaVade: ortalamaVade };
 }
 
 // body: { cariId (hedefTipi="Cari" ise zorunlu), tarih, tutar, yontem, aciklama, posHesapId, bankaHesapId,
@@ -3777,11 +3827,11 @@ function saveOdeme(body) {
   if (!["Cari", "Banka", "Gider"].includes(hedefTipi)) return { ok: false, hata: "Geçersiz hedef tipi" };
 
   const yontem = String(body.yontem || "Nakit");
-  const posHesapId = String(body.posHesapId || "").trim();
+  const krediKartiId = String(body.krediKartiId || body.posHesapId || "").trim();
   const bankaHesapId = String(body.bankaHesapId || "").trim();
-  // Kredi Kartı/Havale seçilip kaynak POS/Banka hesabı belirtilmezse ödeme
+  // Kredi Kartı/Havale seçilip kaynak kredi kartı/Banka hesabı belirtilmezse ödeme
   // sadece cari/gider tarafına yazılır, hangi hesaptan çıktığı hiç görünmez.
-  if (yontem === "Kredi Kartı" && !posHesapId) return { ok: false, hata: "Kredi Kartı ile ödemede POS hesabı seçimi zorunludur" };
+  if (yontem === "Kredi Kartı" && !krediKartiId) return { ok: false, hata: "Kredi Kartı ile ödemede şirket kredi kartı seçimi zorunludur" };
   if (yontem === "Havale/EFT" && !bankaHesapId) return { ok: false, hata: "Havale/EFT ile ödemede banka hesabı seçimi zorunludur" };
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -3858,23 +3908,26 @@ function saveOdeme(body) {
   const id = "od_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  metinliSatirEkle_(oSheet, [id, tarih, cariId, cariAd, tutar, yontem, String(body.aciklama || ""), kayitTarihi, posHesapId, bankaHesapId,
-    hedefTipi, hedefAltTipi, hedefId, hedefAd, String(body.projeKodu || "").trim()], [15]);
+  const seriNo = String(body.seriNo || "").trim();
+  metinliSatirEkle_(oSheet, [id, tarih, cariId, cariAd, tutar, yontem, String(body.aciklama || ""), kayitTarihi, "", bankaHesapId,
+    hedefTipi, hedefAltTipi, hedefId, hedefAd, String(body.projeKodu || "").trim(), krediKartiId, seriNo], [15, 16, 17]);
 
   // Cariye borç hareketi yalnızca hedef bir Cari ise düşülür (Banka/Gider hedefli
-  // ödemelerin bağlı olduğu bir cari hesap yok).
+  // ödemelerin bağlı olduğu bir cari hesap yok). Seri No girilmişse açıklamaya eklenir ki
+  // toplu verilen ödemeler cari ekstresinde birlikte tanınabilsin (25 Eyl 2026).
   if (hedefTipi === "Cari") {
+    const seriEk = seriNo ? (" [Seri No: " + seriNo + "]") : "";
     cariHareketEkle({
       cariId: cariId, tarih: tarih, tip: "Borç", tutar: tutar,
-      aciklama: cariHareketAciklamaOlustur("ODEME", id, "odeme_" + yontem, body.aciklama),
+      aciklama: cariHareketAciklamaOlustur("ODEME", id, "odeme_" + yontem, (String(body.aciklama || "") + seriEk).trim()),
       projeKodu: body.projeKodu,
     });
   }
 
-  // Kredi Kartı ile ödeme yapıldıysa ve bir POS hesabı seçildiyse, o hesaba
-  // Alacak kaydı düşülür (Tahsilat'ın tam tersi yönde — kartla ödeme yaptık).
-  if (yontem === "Kredi Kartı" && posHesapId) {
-    posHareketEkle(posHesapId, tarih, "Alacak", tutar, cariHareketAciklamaOlustur("ODEME", id, "odeme_" + yontem, body.aciklama));
+  // Kredi Kartı ile ödeme yapıldıysa ve bir şirket kredi kartı seçildiyse, o karta
+  // Borç kaydı düşülür (kartla ödeme yapıldı, kart borcu arttı).
+  if (yontem === "Kredi Kartı" && krediKartiId) {
+    krediKartHareketEkle(krediKartiId, tarih, "Borç", tutar, cariHareketAciklamaOlustur("ODEME", id, "odeme_" + yontem, body.aciklama));
   }
 
   // Havale/EFT ile ödeme yapıldıysa ve bir banka hesabı seçildiyse, o hesaptan Çıkış kaydı düşülür.
@@ -3921,6 +3974,7 @@ function silOdeme(body) {
           yontem: String(row[5] || ""), aciklama: String(row[6] || ""),
           posHesapId: String(row[8] || ""), bankaHesapId: String(row[9] || ""),
           cariId: String(row[2] || ""), hedefAltTipi: String(row[11] || ""), hedefId: String(row[12] || ""),
+          krediKartiId: metinOku_(row[15]), seriNo: metinOku_(row[16]),
         });
       }
       oSheet.deleteRow(i + 1);
@@ -3992,6 +4046,7 @@ function getCekSenetListesi() {
       duzenlenmeTarihi: hucreTarihStr(row[8]), vade: vade, durum: durum,
       aciklama: String(row[11] || ""), kayitTarihi: hucreTarihStr(row[12]),
       belgeTuru: String(row[15] || "") === "Senet" ? "Senet" : "Çek",
+      seriGrupNo: metinOku_(row[17]),
       gecikmis: durum === "Portföyde" && !!vade && vade < bugun,
     });
   }
@@ -4032,6 +4087,7 @@ function getCekSenetDetay(id) {
         projeKodu: metinOku_(row[14]),
         belgeTuru: String(row[15] || "") === "Senet" ? "Senet" : "Çek",
         yaprakId: String(row[16] || ""),
+        seriGrupNo: metinOku_(row[17]),
       };
       break;
     }
@@ -4051,6 +4107,17 @@ function getCekSenetDetay(id) {
   }
   hareketler.reverse();
   return { ok: true, cek: cek, hareketler: hareketler };
+}
+
+// SERI_GRUP_NO (25 Eyl 2026): çek koçanından gelen SERI_NO (çekin kendi numarası) ile KARIŞTIRILMAMALI —
+// bu, birden fazla çek/senedin (veya bir Ödeme kaydının) AYNI toplu işlemin/teslimin parçası olduğunu
+// işaretleyen, kullanıcının girdiği ortak "Seri No" değeridir; Ödeme modülündeki SERI_NO ile aynı kavramdır.
+function ensureCekSenetSeriGrupColonu(sheet) {
+  const baslik = sheet.getRange(1, 18).getValue();
+  if (String(baslik || "") !== "SERI_GRUP_NO") {
+    sheet.getRange(1, 18).setValue("SERI_GRUP_NO").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  metinKolonuGarantiEt_(sheet, 18);
 }
 
 // body: { cariId, tip (Alınan/Verilen), tutar, seriNo, bankaAdi, duzenlenmeTarihi, vade, aciklama }
@@ -4076,6 +4143,7 @@ function saveCekSenet(body) {
   ensureCekSenetProjeKoduColonu(sheet);
   ensureCekSenetBelgeTuruColonu(sheet);
   ensureCekSenetYaprakColonu(sheet);
+  ensureCekSenetSeriGrupColonu(sheet);
   // Aynı milisaniyede toplu kayıt yapılırsa ID çakışmasın diye sayaçlı benzersizleştirme.
   const id = "cs_" + Date.now() + (body._sira ? "_" + body._sira : "");
   const belgeTuru = String(body.belgeTuru || "Çek") === "Senet" ? "Senet" : "Çek";
@@ -4094,13 +4162,23 @@ function saveCekSenet(body) {
     if (yaprak) { seriNo = yaprak.cekNo; bankaAdi = yaprak.bankaAdi; }
   }
   try {
+    const topluSeriNo = String(body.topluSeriNo || "").trim();
     metinliSatirEkle_(sheet, [id, tip, cariId, cariAd, tutar, tutar, seriNo, bankaAdi,
-      duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi, "", String(body.projeKodu || "").trim(), belgeTuru, yaprak ? yaprak.id : ""], [7, 15]);
+      duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi, "", String(body.projeKodu || "").trim(), belgeTuru, yaprak ? yaprak.id : "", topluSeriNo], [7, 15, 18]);
 
+    // Toplu Seri No girilmişse (birden fazla çek/senet aynı işlemde birlikte verildiyse/alındıysa)
+    // açıklamaya eklenir; ayrıca frontend'in hesapladığı ortalama vade ve toplam tutar da eklenir
+    // ki cari ekstresinde tek satıra bakarak toplu işlemin özeti görülebilsin (25 Eyl 2026).
+    let seriEk = "";
+    if (topluSeriNo) {
+      seriEk = " [Seri No: " + topluSeriNo + "]";
+      if (body.grupOrtalamaVade) seriEk += " (Ort. Vade: " + body.grupOrtalamaVade + ")";
+      if (body.grupToplamTutar) seriEk += " (Toplam: " + Utilities.formatString("%.2f", parseFloat(body.grupToplamTutar) || 0) + ")";
+    }
     // Alınan çek: müşteriden aldık → borcu kapanır (Alacak). Verilen çek: tedarikçiye borcumuzu kapattık (Borç).
     cariHareketEkle({
       cariId: cariId, tarih: duzenlenmeTarihi, tip: tip === "Alınan" ? "Alacak" : "Borç", tutar: tutar,
-      aciklama: cariHareketAciklamaOlustur("CEK", id, tip === "Alınan" ? "cek_alinan" : "cek_verilen", body.aciklama),
+      aciklama: cariHareketAciklamaOlustur("CEK", id, tip === "Alınan" ? "cek_alinan" : "cek_verilen", (String(body.aciklama || "") + seriEk).trim()),
       vade: vade,
       projeKodu: body.projeKodu,
     });
