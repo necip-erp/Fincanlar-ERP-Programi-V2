@@ -284,6 +284,8 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
 
 .modal-overlay{position:fixed;inset:0;background:rgba(16,18,30,.45);backdrop-filter:blur(1.5px);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;animation:fincanOverlayIn .15s var(--ease)}
 .modal-box{background:var(--bg2);border-radius:14px;padding:22px;width:100%;max-width:380px;max-height:90vh;overflow:auto;box-shadow:var(--shadow-md);animation:fincanModalIn .18s var(--ease)}
+.cari-modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+@media (max-width:600px){.cari-modal-grid{grid-template-columns:1fr}.cari-modal-grid>.fld{grid-column:1/-1!important}}
 .modal-box h3{margin:0 0 14px;font-size:16px}
 .modal-box .fld{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
 .modal-box label{font-size:10px;color:var(--text3);text-transform:uppercase}
@@ -412,7 +414,13 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .toast-kutu.gorunur{opacity:1}
 .rapor-baslik{font-size:14px;font-weight:800;margin:20px 0 4px}
 /* Ayarlar sayfası: her bölüm başlığı tıklanıp açılıp kapanabilir (accordion) */
-.ayarlar-bolum-baslik{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;user-select:none}
+.ayarlar-bolum-baslik{cursor:pointer;display:flex;align-items:center;gap:8px;user-select:none}
+.ayarlar-bolum-sira{color:var(--text3);font-size:12px;min-width:22px}
+.ayarlar-bolum-metin{flex:1}
+.ayarlar-bolum-tasi{display:flex;gap:4px}
+.ayarlar-bolum-tasi .btn-sm{border:1px solid var(--border,#ccc);background:transparent;border-radius:4px;font-size:11px;line-height:1;padding:3px 6px;cursor:pointer;color:var(--text3)}
+.ayarlar-bolum-tasi .btn-sm:hover:not(:disabled){color:var(--text1);border-color:var(--text3)}
+.ayarlar-bolum-tasi .btn-sm:disabled{opacity:.3;cursor:default}
 .ayarlar-bolum-ok{display:inline-block;transition:transform .18s;color:var(--text3);font-size:12px}
 .ayarlar-bolum-kapali .ayarlar-bolum-ok{transform:rotate(-90deg)}
 .ayarlar-bolum-govde{overflow:hidden}
@@ -1178,7 +1186,8 @@ setInterval(topbarSaatGuncelle, 10000);
       <div id="kd-ozet" style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
         <input id="kd-arama" type="text" placeholder="Numara, belge no, cari, hesap, işlem ara..." style="flex:1;min-width:220px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)" oninput="kayitDefteriAramaDegisti()">
-        <select id="kd-modul" onchange="kayitDefteriYukle(true)" style="padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><option value="">Tüm modüller</option></select>
+        <select id="kd-modul" onchange="kayitDefteriModulDegisti_()" style="padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><option value="">Tüm modüller</option></select>
+        <select id="kd-islem" onchange="kayitDefteriYukle(true)" style="padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><option value="">Tüm işlemler</option></select>
         <select id="kd-durum" onchange="kayitDefteriYukle(true)" style="padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><option value="">Tüm durumlar</option><option value="Aktif">Aktif</option><option value="Silindi">Silindi</option></select>
         <label style="display:flex;align-items:center;gap:5px;font-size:13px;margin:0">Tarih <input type="date" id="kd-tarih-bas" onchange="kayitDefteriYukle(true)" style="padding:6px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"> – <input type="date" id="kd-tarih-son" onchange="kayitDefteriYukle(true)" style="padding:6px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"></label>
         <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;margin:0"><input type="checkbox" id="kd-sorunlu" style="width:auto" onchange="kayitDefteriYukle(true)"> Sadece sorunlu / silinen</label>
@@ -1196,6 +1205,9 @@ setInterval(topbarSaatGuncelle, 10000);
     </div>
   </div>
   <div class="modview" id="mod-ayarlar">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button class="btn" onclick="ayarlarBolumleriHepsiniKapat()" title="Tüm bölüm başlıklarını kapat">⬆️ Hepsini Kapat</button>
+    </div>
     <div class="finans-panel" id="ayarlar-son-islemler-panel" data-bolum-anahtar="ayarlar_bolum_son_islemler">
       <div class="rapor-baslik" style="margin-top:0">Son Yapılan İşlemler</div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Tüm modüllerdeki en son işlemler (Ana Sayfa'da sadece son 5 görünür). Bir satıra tıklayınca kaydı ayrı sekmede açılır.</p>
@@ -3573,6 +3585,7 @@ function cariDetayCiz(res){
       <div class="cari-info-item"><div class="k">Cari Kodu</div><div class="v">${c.cariKodu||"—"}</div></div>
       <div class="cari-info-item"><div class="k">Telefon</div><div class="v">${c.telefon||"—"}</div></div>
       <div class="cari-info-item"><div class="k">Adres</div><div class="v">${c.adres||"—"}</div></div>
+      <div class="cari-info-item"><div class="k">İl / İlçe</div><div class="v">${[c.il,c.ilce].filter(Boolean).join(" / ")||"—"}</div></div>
       <div class="cari-info-item"><div class="k">Vergi No</div><div class="v">${c.vergiNo||"—"}</div></div>
       <div class="cari-info-item"><div class="k">Not</div><div class="v">${c.not||"—"}</div></div>
     </div>
@@ -3863,6 +3876,9 @@ function cariSilOnay(id){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
+// Yeni Cari Ekle formundaki İl seçimi için 81 il (plaka koduna göre sıralı).
+const TURKIYE_ILLERI = ["Adana","Adıyaman","Afyonkarahisar","Ağrı","Amasya","Ankara","Antalya","Artvin","Aydın","Balıkesir","Bilecik","Bingöl","Bitlis","Bolu","Burdur","Bursa","Çanakkale","Çankırı","Çorum","Denizli","Diyarbakır","Edirne","Elazığ","Erzincan","Erzurum","Eskişehir","Gaziantep","Giresun","Gümüşhane","Hakkari","Hatay","Isparta","Mersin","İstanbul","İzmir","Kars","Kastamonu","Kayseri","Kırklareli","Kırşehir","Kocaeli","Konya","Kütahya","Malatya","Manisa","Kahramanmaraş","Mardin","Muğla","Muş","Nevşehir","Niğde","Ordu","Rize","Sakarya","Samsun","Siirt","Sinop","Sivas","Tekirdağ","Tokat","Trabzon","Tunceli","Şanlıurfa","Uşak","Van","Yozgat","Zonguldak","Aksaray","Bayburt","Karaman","Kırıkkale","Batman","Şırnak","Bartın","Ardahan","Iğdır","Yalova","Karabük","Kilis","Osmaniye","Düzce"];
+
 // ── Yeni/Düzenle modal ──
 function cariModalAc(editId){
   const duzenle = !!editId;
@@ -3872,8 +3888,9 @@ function cariModalAc(editId){
   overlay.id = "cari-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   overlay.innerHTML = `
-    <div class="modal-box">
+    <div class="modal-box" style="max-width:760px">
       <h3>${duzenle?"Cariyi Düzenle":"Yeni Cari Ekle"}</h3>
+      <div class="cari-modal-grid">
       <div class="fld"><label>Cari Kodu</label>
         <div style="display:flex;gap:6px">
           <input id="cm-carikodu" type="text" value="${c?(c.cariKodu||''):''}" placeholder="İsteğe bağlı, örn. M-0001" style="flex:1">
@@ -3881,7 +3898,7 @@ function cariModalAc(editId){
         </div>
       </div>
       <div class="fld"><label>Ad Soyad / Firma *</label><input id="cm-ad" type="text" value="${c?c.ad:''}"></div>
-      <div class="fld"><label>Cari Türü</label>
+      <div class="fld" style="grid-column:1/-1"><label>Cari Türü</label>
         <div style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0 2px">
           <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
             <input type="radio" name="cm-tip" value="Müşteri" ${(!c||c.tip!=='Tedarikçi'&&c.tip!=='Bağımsız')?'checked':''} onchange="cariTuruDegisti(${duzenle})"> Alıcı
@@ -3895,13 +3912,20 @@ function cariModalAc(editId){
         </div>
       </div>
       <div class="fld"><label>Telefon</label><input id="cm-telefon" type="text" value="${c?c.telefon:''}"></div>
-      <div class="fld"><label>Adres</label><input id="cm-adres" type="text" value="${c?c.adres:''}"></div>
       <div class="fld"><label>Vergi No</label>
         <div style="display:flex;gap:6px">
           <input id="cm-vergino" type="text" value="${c?c.vergiNo:''}" style="flex:1">
           <button type="button" class="btn" title="EDM üzerinden VKN/TCKN'ye göre e-Fatura/e-Arşiv durumunu sorgula" onclick="cmEdmSorgula()">🔍 Sistemden Veri Çek</button>
         </div>
       </div>
+      <div class="fld" style="grid-column:1/-1"><label>Adres</label><input id="cm-adres" type="text" value="${c?c.adres:''}"></div>
+      <div class="fld"><label>İl</label>
+        <select id="cm-il">
+          <option value="">— Seçilmedi —</option>
+          ${TURKIYE_ILLERI.map(il=>`<option value="${il}" ${c&&c.il===il?'selected':''}>${il}</option>`).join("")}
+        </select>
+      </div>
+      <div class="fld"><label>İlçe</label><input id="cm-ilce" type="text" value="${c?(c.ilce||''):''}"></div>
       <div class="fld"><label>E-Fatura Mükellefi</label>
         <select id="cm-efatura">
           <option value="Hayır" ${(!c||c.eFatura!=='Evet')?'selected':''}>Hayır</option>
@@ -3914,7 +3938,7 @@ function cariModalAc(editId){
           <option value="Evet" ${c&&c.eArsiv==='Evet'?'selected':''}>Evet</option>
         </select>
       </div>
-      <p style="color:var(--text3);font-size:12px;margin:-6px 0 4px">E-Fatura/E-Arşiv "Hayır" olan cariler EDM ile hiçbir şekilde eşleştirilmez. Standart değer: Hayır.</p>
+      <p style="color:var(--text3);font-size:12px;margin:-6px 0 4px;grid-column:1/-1">E-Fatura/E-Arşiv "Hayır" olan cariler EDM ile hiçbir şekilde eşleştirilmez. Standart değer: Hayır.</p>
       <div class="fld"><label>Plasiyer</label>
         <select id="cm-plasiyer">
           <option value="">— Seçilmedi —</option>
@@ -3923,7 +3947,8 @@ function cariModalAc(editId){
       </div>
       <div class="fld"><label>Genel İskonto Oranı (%)</label><input id="cm-iskonto" type="number" min="0" max="100" step="0.01" value="${c?(c.iskontoOrani||''):''}" placeholder="0 = iskonto yok"></div>
       <div class="fld"><label>Kredi Limiti (₺)</label><input id="cm-kredilimiti" type="number" min="0" step="0.01" value="${c?(c.krediLimiti||''):''}" placeholder="0 = limitsiz"></div>
-      <div class="fld"><label>Not</label><textarea id="cm-not" rows="2">${c?c.not:''}</textarea></div>
+      <div class="fld" style="grid-column:1/-1"><label>Not</label><textarea id="cm-not" rows="2">${c?c.not:''}</textarea></div>
+      </div>
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('cari-modal-overlay').remove()">İptal</button>
         <button class="btn btn-primary" onclick="cariKaydet(${duzenle?`'${editId}'`:'null'})">Kaydet</button>
@@ -3980,6 +4005,8 @@ function cariKaydet(id){
     tip: (document.querySelector('input[name="cm-tip"]:checked')||{}).value || "Müşteri",
     telefon: document.getElementById("cm-telefon").value,
     adres: document.getElementById("cm-adres").value,
+    il: (document.getElementById("cm-il")||{}).value || "",
+    ilce: document.getElementById("cm-ilce").value,
     vergiNo: document.getElementById("cm-vergino").value,
     eFatura: (document.getElementById("cm-efatura")||{}).value || "Hayır",
     eArsiv: (document.getElementById("cm-earsiv")||{}).value || "Hayır",
@@ -10344,10 +10371,18 @@ function kayitDefteriAramaDegisti(){
 function kayitDefteriFiltreleri_(){
   const v = id => (document.getElementById(id)||{}).value || "";
   return {
-    arama: v("kd-arama"), modul: v("kd-modul"), durum: v("kd-durum"),
+    arama: v("kd-arama"), modul: v("kd-modul"), islem: v("kd-islem"), durum: v("kd-durum"),
     tarihBas: v("kd-tarih-bas"), tarihSon: v("kd-tarih-son"),
     sorunlu: !!(document.getElementById("kd-sorunlu")||{}).checked,
   };
+}
+
+// Modül seçimi değişince İşlem filtresi artık ANLAMSIZ kalabilir (başka modülün işlemi
+// seçili olabilir) — modül değişince İşlem "Tümü"ne döner, sonra liste yeniden yüklenir.
+function kayitDefteriModulDegisti_(){
+  const islemSel = document.getElementById("kd-islem");
+  if(islemSel) islemSel.value = "";
+  kayitDefteriYukle(true);
 }
 
 function kayitDefteriYukle(sifirla){
@@ -10367,6 +10402,12 @@ function kayitDefteriYukle(sifirla){
       const mevcut = sel.value;
       sel.innerHTML = '<option value="">Tüm modüller</option>' + (res.moduller||[]).map(m=>`<option value="${htmlKacis(m)}">${htmlKacis(m)}</option>`).join("");
       sel.value = mevcut;
+    }
+    const islemSel = document.getElementById("kd-islem");
+    if(islemSel){
+      const mevcutIslem = islemSel.value;
+      islemSel.innerHTML = '<option value="">Tüm işlemler</option>' + (res.islemler||[]).map(i=>`<option value="${htmlKacis(i)}">${htmlKacis(i)}</option>`).join("");
+      islemSel.value = mevcutIslem;
     }
     const o = res.ozet || {};
     const chip = (etiket, deger, renk, bg)=>`<div style="padding:8px 14px;border-radius:10px;background:${bg||'var(--bg3)'};min-width:110px"><div style="font-size:10.5px;color:${renk||'var(--text3)'};text-transform:uppercase;font-weight:700">${etiket}</div><div style="font-size:18px;font-weight:800;${renk?'color:'+renk:''}">${deger}</div></div>`;
@@ -10398,7 +10439,7 @@ function kayitDefteriCiz_(){
   };
   liste.innerHTML = `
     <div style="overflow-x:auto"><table class="hareket-tbl">
-      <thead><tr><th>Kayıt No</th><th>Modül</th><th>İşlem</th><th>Tarih</th><th>Belge No</th><th>Cari</th><th>Cari Kodu</th>
+      <thead><tr><th>Kayıt No</th><th>Modül No</th><th>Modül</th><th>İşlem</th><th>Tarih</th><th>Belge No</th><th>Cari</th><th>Cari Kodu</th>
         <th>Alacak Hesabı</th><th style="text-align:right">Alacak Tutarı</th><th style="text-align:right">Belge Tutarı</th><th style="text-align:right">Borç Tutarı</th><th>Borç Hesabı</th>
         <th>Kontrol</th><th>Durum</th><th>Belge</th></tr></thead>
       <tbody>
@@ -10413,6 +10454,7 @@ function kayitDefteriCiz_(){
             ? `<td style="text-align:right;white-space:nowrap;background:${KD_RENK.alacakBg};color:${KD_RENK.alacakYazi};font-weight:700;${cizgi}">${paraFormat(r.alacakTutar)}</td>` : '<td></td>';
           return `<tr style="${satirStil}">
             <td style="white-space:nowrap;font-weight:800;${cizgi}">${r.no}</td>
+            <td style="white-space:nowrap;color:var(--text3)" title="${htmlKacis(r.modul)} modülünün kendi sıra numarası">${(r.modulNo===null||r.modulNo===undefined)?"—":r.modulNo}</td>
             <td>${htmlKacis(r.modul)}</td>
             <td>${htmlKacis(r.islem)}</td>
             <td style="white-space:nowrap">${r.tarih ? htmlKacis(tarihGoster(r.tarih)) : "—"}</td>
@@ -10557,10 +10599,10 @@ async function kayitDefteriExcelAktar(){
       await kdKutuphaneYukle_(["https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js", "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"]);
     }catch(e){ renkli = false; }
 
-    const BASLIK = ["Kayıt No","Modül","İşlem","Tarih","Belge No","Cari","Cari Kodu","Alacak Hesabı","Alacak Tutarı","Belge Tutarı","Borç Tutarı","Borç Hesabı","Kontrol","Durum","Silinme"];
+    const BASLIK = ["Kayıt No","Modül No","Modül","İşlem","Tarih","Belge No","Cari","Cari Kodu","Alacak Hesabı","Alacak Tutarı","Belge Tutarı","Borç Tutarı","Borç Hesabı","Kontrol","Durum","Silinme"];
     if(!renkli){
       if(typeof XLSX === "undefined"){ alert("Excel kütüphaneleri yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin."); durum(""); return; }
-      const aoa = [BASLIK].concat(tum.map(r=>[r.no, r.modul, r.islem, r.tarih, r.belgeNo, r.cari, r.cariKodu, r.alacakHesap, r.alacakTutar===null?"":r.alacakTutar, r.belgeTutari, r.borcTutar===null?"":r.borcTutar, r.borcHesap, kdUnlemYap_(r.kontrol), r.durum, r.silinmeZamani]));
+      const aoa = [BASLIK].concat(tum.map(r=>[r.no, r.modulNo===null||r.modulNo===undefined?"":r.modulNo, r.modul, r.islem, r.tarih, r.belgeNo, r.cari, r.cariKodu, r.alacakHesap, r.alacakTutar===null?"":r.alacakTutar, r.belgeTutari, r.borcTutar===null?"":r.borcTutar, r.borcHesap, kdUnlemYap_(r.kontrol), r.durum, r.silinmeZamani]));
       const ws = XLSX.utils.aoa_to_sheet(aoa), wb2 = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb2, ws, "Kayıt Defteri"); XLSX.writeFile(wb2, dosyaAdi);
       alert("Renk desteği için gereken kütüphane yüklenemedi; dosya renksiz olarak indirildi.");
@@ -10571,12 +10613,12 @@ async function kayitDefteriExcelAktar(){
     wb.creator = "Fincanlar ERP";
     const ws = wb.addWorksheet("Kayıt Defteri", { views:[{ state:"frozen", ySplit:1 }] });
     ws.columns = [
-      {header:BASLIK[0], key:"no", width:13}, {header:BASLIK[1], key:"modul", width:13}, {header:BASLIK[2], key:"islem", width:34},
-      {header:BASLIK[3], key:"tarih", width:12, style:{numFmt:"dd.mm.yyyy"}}, {header:BASLIK[4], key:"belge", width:14}, {header:BASLIK[5], key:"cari", width:26},
-      {header:BASLIK[6], key:"cariKodu", width:12}, {header:BASLIK[7], key:"alacakHesap", width:26},
-      {header:BASLIK[8], key:"alacak", width:15, style:{numFmt:"#,##0.00"}}, {header:BASLIK[9], key:"belgeTutari", width:15, style:{numFmt:"#,##0.00"}},
-      {header:BASLIK[10], key:"borc", width:15, style:{numFmt:"#,##0.00"}}, {header:BASLIK[11], key:"borcHesap", width:26},
-      {header:BASLIK[12], key:"kontrol", width:30}, {header:BASLIK[13], key:"durum", width:10}, {header:BASLIK[14], key:"silinme", width:18},
+      {header:BASLIK[0], key:"no", width:13}, {header:BASLIK[1], key:"modulNo", width:11}, {header:BASLIK[2], key:"modul", width:13}, {header:BASLIK[3], key:"islem", width:34},
+      {header:BASLIK[4], key:"tarih", width:12, style:{numFmt:"dd.mm.yyyy"}}, {header:BASLIK[5], key:"belge", width:14}, {header:BASLIK[6], key:"cari", width:26},
+      {header:BASLIK[7], key:"cariKodu", width:12}, {header:BASLIK[8], key:"alacakHesap", width:26},
+      {header:BASLIK[9], key:"alacak", width:15, style:{numFmt:"#,##0.00"}}, {header:BASLIK[10], key:"belgeTutari", width:15, style:{numFmt:"#,##0.00"}},
+      {header:BASLIK[11], key:"borc", width:15, style:{numFmt:"#,##0.00"}}, {header:BASLIK[12], key:"borcHesap", width:26},
+      {header:BASLIK[13], key:"kontrol", width:30}, {header:BASLIK[14], key:"durum", width:10}, {header:BASLIK[15], key:"silinme", width:18},
     ];
     const argb = (hex)=>"FF"+hex.replace("#","").toUpperCase();
     const dolgu = (hex)=>({ type:"pattern", pattern:"solid", fgColor:{ argb: argb(hex) } });
@@ -10587,11 +10629,11 @@ async function kayitDefteriExcelAktar(){
     tum.forEach(r=>{
       const sari = r.grup === "Sipariş" || r.grup === "Teklif", silindi = r.durum === "Silindi";
       const satir = ws.addRow({
-        no: r.no, modul: r.modul, islem: r.islem, tarih: tarihNesnesi(r.tarih), belge: r.belgeNo, cari: r.cari, cariKodu: r.cariKodu,
+        no: r.no, modulNo: r.modulNo===null||r.modulNo===undefined?"":r.modulNo, modul: r.modul, islem: r.islem, tarih: tarihNesnesi(r.tarih), belge: r.belgeNo, cari: r.cari, cariKodu: r.cariKodu,
         belgeTutari: r.belgeTutari || null, borcHesap: r.borcHesap, borc: r.borcTutar, alacakHesap: r.alacakHesap, alacak: r.alacakTutar,
         kontrol: kdUnlemYap_(r.kontrol), durum: r.durum, silinme: r.silinmeZamani,
       });
-      satir.getCell("no").numFmt = "0";
+      satir.getCell("no").numFmt = "0"; satir.getCell("modulNo").numFmt = "0";
       satir.eachCell({includeEmpty:true}, c=>{
         if(sari){ c.fill = dolgu(KD_RENK.sariBg); c.font = { color:{argb:argb(KD_RENK.sariYazi)} }; }
         if(silindi){ c.font = { strike:true, color:{argb:"FF888888"} }; }
@@ -10608,13 +10650,13 @@ async function kayitDefteriExcelAktar(){
     // Toplam satırı (yalnız Aktif satırlar) — formüllü
     const son = ws.rowCount, toplamSatir = ws.addRow({});
     toplamSatir.getCell("borcHesap").value = "TOPLAM (Aktif)";
-    toplamSatir.getCell("borc").value = { formula:`SUMIF(N2:N${son},"Aktif",K2:K${son})`, result: toplamBorc };
-    toplamSatir.getCell("alacak").value = { formula:`SUMIF(N2:N${son},"Aktif",I2:I${son})`, result: toplamAlacak };
+    toplamSatir.getCell("borc").value = { formula:`SUMIF(O2:O${son},"Aktif",L2:L${son})`, result: toplamBorc };
+    toplamSatir.getCell("alacak").value = { formula:`SUMIF(O2:O${son},"Aktif",J2:J${son})`, result: toplamAlacak };
     toplamSatir.eachCell({includeEmpty:true}, c=>{ c.font = { bold:true }; c.border = { top:{style:"medium"} }; });
     toplamSatir.getCell("borc").numFmt = "#,##0.00"; toplamSatir.getCell("alacak").numFmt = "#,##0.00";
     toplamSatir.getCell("borc").fill = dolgu(KD_RENK.borcBg); toplamSatir.getCell("borc").font = { bold:true, color:{argb:argb(KD_RENK.borcYazi)} };
     toplamSatir.getCell("alacak").fill = dolgu(KD_RENK.alacakBg); toplamSatir.getCell("alacak").font = { bold:true, color:{argb:argb(KD_RENK.alacakYazi)} };
-    ws.autoFilter = { from:{row:1, column:1}, to:{row:son, column:15} };
+    ws.autoFilter = { from:{row:1, column:1}, to:{row:son, column:16} };
 
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -10954,17 +10996,29 @@ function ayarlarYukle(){
 // hale getirir. Sadece #mod-ayarlar içindekiler etkilenir; diğer sayfalardaki aynı
 // sınıflar (Finans, Rapor modüllerindeki .rapor-baslik gibi) DOKUNULMADAN kalır.
 // Tek seferlik kurulum: zaten kurulmuş bir bölümü tekrar sarmaz (data-kuruldu bayrağı).
-let _ayarlarBolumSayaci = 0;
+// Başlık metninden STABİL bir anahtar üretir (sayaç/indekse dayanmaz — bölümlerin sırası
+// değişse bile aynı başlık her zaman aynı anahtarı üretir, açık/kapalı ve sıra hafızası bozulmaz).
+function ayarlarBolumSlugUret(metin){
+  return String(metin||"").trim().toLocaleLowerCase('tr')
+    .replace(/ı/g,'i').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ş/g,'s').replace(/ö/g,'o').replace(/ç/g,'c')
+    .replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+}
+function ayarlarBolumSirasiOku(){
+  try{ return JSON.parse(localStorage.getItem("ayarlar_bolum_sirasi") || "[]"); }catch(_){ return []; }
+}
+function ayarlarBolumSirasiKaydet(sira){
+  try{ localStorage.setItem("ayarlar_bolum_sirasi", JSON.stringify(sira)); }catch(_){}
+}
 function ayarlarBolumleriKur(){
-  const panelller = document.querySelectorAll("#mod-ayarlar > .finans-panel");
+  const kapsayici = document.getElementById("mod-ayarlar");
+  const panelller = kapsayici.querySelectorAll(":scope > .finans-panel");
   panelller.forEach(panel=>{
     if(panel.dataset.kuruldu === "1") return;
     panel.dataset.kuruldu = "1";
     const baslikEl = panel.querySelector(".rapor-baslik");
     if(!baslikEl) return;
-    // Özel anahtarlı bölüm (ör. en üste eklenen Son Yapılan İşlemler) sayaca girmez: diğer bölümlerin
-    // kayıtlı açık/kapalı durumu (sıra numarası anahtarda) bozulmasın.
-    const anahtar = panel.dataset.bolumAnahtar || ("ayarlar_bolum_" + (_ayarlarBolumSayaci++) + "_" + baslikEl.textContent.trim());
+    const anahtar = panel.dataset.bolumAnahtar || ("ayarlar_bolum_" + ayarlarBolumSlugUret(baslikEl.textContent));
+    panel.dataset.bolumAnahtar = anahtar;
 
     // Başlıktan sonraki tüm kardeşleri bir gövde div'inde topla.
     const govde = document.createElement("div");
@@ -10975,18 +11029,74 @@ function ayarlarBolumleriKur(){
     tasinacaklar.forEach(n=>govde.appendChild(n));
     panel.appendChild(govde);
 
+    const baslikMetni = baslikEl.textContent.trim();
     baslikEl.classList.add("ayarlar-bolum-baslik");
-    baslikEl.innerHTML = `<span>${baslikEl.textContent}</span><span class="ayarlar-bolum-ok">▾</span>`;
+    baslikEl.innerHTML = `<span class="ayarlar-bolum-sira"></span><span class="ayarlar-bolum-metin">${baslikMetni}</span>` +
+      `<span class="ayarlar-bolum-tasi"><button type="button" class="btn-sm ayarlar-bolum-yukari" title="Yukarı taşı">▲</button>` +
+      `<button type="button" class="btn-sm ayarlar-bolum-asagi" title="Aşağı taşı">▼</button></span>` +
+      `<span class="ayarlar-bolum-ok">▾</span>`;
 
-    // Varsayılan: KAPALI (sadece başlıklar görünür, menü kısa kalır). Kullanıcı
-    // daha önce bir bölümü elle AÇMIŞSA (localStorage) o bölüm açık başlar.
+    // TÜM bölümler varsayılan KAPALI başlar (sadece başlıklar görünür, menü kısa kalır).
+    // Kullanıcı bir bölümü elle AÇMIŞSA (localStorage) o bölüm açık başlar.
     const kayitliDurum = localStorage.getItem(anahtar);
-    if(panel.dataset.varsayilanAcik === "1" ? kayitliDurum === "kapali" : kayitliDurum !== "acik"){ panel.classList.add("ayarlar-bolum-kapali"); }
+    if(kayitliDurum !== "acik"){ panel.classList.add("ayarlar-bolum-kapali"); }
 
-    baslikEl.onclick = function(){
+    baslikEl.onclick = function(e){
+      if(e.target.closest(".ayarlar-bolum-tasi")) return; // taşıma oklarına tıklarken açma/kapama tetiklenmesin
       panel.classList.toggle("ayarlar-bolum-kapali");
       localStorage.setItem(anahtar, panel.classList.contains("ayarlar-bolum-kapali") ? "kapali" : "acik");
     };
+    baslikEl.querySelector(".ayarlar-bolum-yukari").onclick = function(e){ e.stopPropagation(); ayarlarBolumTasi(panel, -1); };
+    baslikEl.querySelector(".ayarlar-bolum-asagi").onclick = function(e){ e.stopPropagation(); ayarlarBolumTasi(panel, 1); };
+  });
+
+  ayarlarBolumSirasiUygula();
+}
+
+// Kullanıcının kaydettiği sıraya göre panelleri yeniden diz, her başlığın yanına
+// güncel sıra numarasını yaz, uç panellerde ilgili taşıma okunu pasifleştir.
+function ayarlarBolumSirasiUygula(){
+  const kapsayici = document.getElementById("mod-ayarlar");
+  let panelller = Array.from(kapsayici.querySelectorAll(":scope > .finans-panel"));
+  const sira = ayarlarBolumSirasiOku();
+  if(sira.length){
+    panelller.sort((a,b)=>{
+      const ia = sira.indexOf(a.dataset.bolumAnahtar), ib = sira.indexOf(b.dataset.bolumAnahtar);
+      if(ia === -1 && ib === -1) return 0;
+      if(ia === -1) return 1;
+      if(ib === -1) return -1;
+      return ia - ib;
+    });
+    panelller.forEach(p=>kapsayici.appendChild(p));
+  }
+  panelller.forEach((p,i)=>{
+    const sayacEl = p.querySelector(".ayarlar-bolum-sira");
+    if(sayacEl) sayacEl.textContent = (i+1) + ".";
+    const yukari = p.querySelector(".ayarlar-bolum-yukari"), asagi = p.querySelector(".ayarlar-bolum-asagi");
+    if(yukari) yukari.disabled = (i === 0);
+    if(asagi) asagi.disabled = (i === panelller.length - 1);
+  });
+}
+
+// Bir bölümü bir üste/alta taşır (yon: -1 yukarı, +1 aşağı), yeni sırayı kalıcı kaydeder.
+function ayarlarBolumTasi(panel, yon){
+  const kapsayici = document.getElementById("mod-ayarlar");
+  const panelller = Array.from(kapsayici.querySelectorAll(":scope > .finans-panel"));
+  const idx = panelller.indexOf(panel);
+  const hedef = idx + yon;
+  if(hedef < 0 || hedef >= panelller.length) return;
+  if(yon < 0) kapsayici.insertBefore(panel, panelller[hedef]);
+  else kapsayici.insertBefore(panelller[hedef], panel);
+  ayarlarBolumSirasiKaydet(Array.from(kapsayici.querySelectorAll(":scope > .finans-panel")).map(p=>p.dataset.bolumAnahtar));
+  ayarlarBolumSirasiUygula();
+}
+
+// "Hepsini Kapat" butonu: tüm bölüm başlıklarını kapalı duruma alır ve kalıcı kaydeder.
+function ayarlarBolumleriHepsiniKapat(){
+  const kapsayici = document.getElementById("mod-ayarlar");
+  kapsayici.querySelectorAll(":scope > .finans-panel").forEach(panel=>{
+    panel.classList.add("ayarlar-bolum-kapali");
+    if(panel.dataset.bolumAnahtar) try{ localStorage.setItem(panel.dataset.bolumAnahtar, "kapali"); }catch(_){}
   });
 }
 

@@ -25,12 +25,12 @@
 const KD_SHEET_ADI = "KayitDefteriV2";
 const KD_TEMIZ_ON_EK = "✓ (hata temizlendi"; // KONTROL alanı bu ifadeyle başlıyorsa satırın hatası kullanıcı tarafından temizlenmiştir
 const KD_BASLIKLAR = ["KAYIT_NO","MODUL","ISLEM","TARIH","BELGE_NO","CARI","BELGE_TUTARI","BORC_HESAP","BORC_TUTAR","ALACAK_HESAP","ALACAK_TUTAR",
-  "KONTROL","DURUM","KAYNAK","KAYNAK_ID","ALT","GRUP","BORC_KAYNAK","ALACAK_KAYNAK","BORC_BEKLENEN","ALACAK_BEKLENEN","KAYIT_ZAMANI","DEGISIKLIK_ZAMANI","SILINME_ZAMANI","CARI_KODU"];
+  "KONTROL","DURUM","KAYNAK","KAYNAK_ID","ALT","GRUP","BORC_KAYNAK","ALACAK_KAYNAK","BORC_BEKLENEN","ALACAK_BEKLENEN","KAYIT_ZAMANI","DEGISIKLIK_ZAMANI","SILINME_ZAMANI","CARI_KODU","MODUL_NO"];
 const KD_NO = 0, KD_MODUL = 1, KD_ISLEM = 2, KD_TARIH = 3, KD_BELGE = 4, KD_CARI = 5, KD_BTUTAR = 6, KD_BHESAP = 7, KD_BTL = 8, KD_AHESAP = 9, KD_ATL = 10,
       KD_KONTROL = 11, KD_DURUM = 12, KD_KAYNAK = 13, KD_KID = 14, KD_ALT = 15, KD_GRUP = 16, KD_BKAYNAK = 17, KD_AKAYNAK = 18,
-      KD_BBEKLENEN = 19, KD_ABEKLENEN = 20, KD_KAYIT = 21, KD_DEGISIM = 22, KD_SILINME = 23, KD_CARIKOD = 24;
+      KD_BBEKLENEN = 19, KD_ABEKLENEN = 20, KD_KAYIT = 21, KD_DEGISIM = 22, KD_SILINME = 23, KD_CARIKOD = 24, KD_MODULNO = 25;
 // Sütun biçimleri: numaralar sayı, tutarlar para, gerisi METİN (E-Tablo "00", tarih vb. metinleri bozmasın).
-const KD_FORMATLAR = ["0","@","@","@","@","@","#,##0.00","@","#,##0.00","@","#,##0.00","@","@","@","@","@","@","@","@","@","@","@","@","@","@"];
+const KD_FORMATLAR = ["0","@","@","@","@","@","#,##0.00","@","#,##0.00","@","#,##0.00","@","@","@","@","@","@","@","@","@","@","@","@","@","@","0"];
 
 // Ana kayıt kaynakları. sheet = SHEETS anahtarı, prefix = CariHareketler/Banka/POS açıklamasındaki "PREFIX:id |" işareti.
 const KD_KAYNAKLAR = {
@@ -115,12 +115,19 @@ function kdSheet_(ss) {
   return sheet;
 }
 // (21 Eyl 2026) Sonradan eklenen CARI_KODU sütunu (25.) eski sayfalarda yoksa başlığı + sütun biçimini ekler.
+// (26 Eyl 2026) Aynı desenle MODUL_NO sütunu (26.) eklendi — genel KAYIT_NO'nun YANINDA, sadece o modülün
+// kendi işlemlerini sayan ayrı bir sıra numarası (bkz. kdModulNoAl_).
 function kdBaslikGuvence_(sheet) {
   if (sheet.getMaxColumns() < KD_BASLIKLAR.length) sheet.insertColumnsAfter(sheet.getMaxColumns(), KD_BASLIKLAR.length - sheet.getMaxColumns());
   const h = sheet.getRange(1, KD_CARIKOD + 1);
   if (String(h.getValue() || "") !== "CARI_KODU") {
     h.setValue("CARI_KODU").setFontWeight("bold").setBackground("#e8edf5");
     sheet.getRange(2, KD_CARIKOD + 1, Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("@");
+  }
+  const hm = sheet.getRange(1, KD_MODULNO + 1);
+  if (String(hm.getValue() || "") !== "MODUL_NO") {
+    hm.setValue("MODUL_NO").setFontWeight("bold").setBackground("#e8edf5");
+    sheet.getRange(2, KD_MODULNO + 1, Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat("0");
   }
 }
 
@@ -159,6 +166,28 @@ function kdNoAl_(sheet, adet) {
     const sonNo = parseInt(sheet.getRange(sonSatir, 1).getValue(), 10) || 0;
     if (Math.floor(sonNo / 1000000) === yil) son = Math.max(son, sonNo - yil * 1000000);
   }
+  props.setProperty(anahtar, String(son + adet));
+  return yil * 1000000 + son + 1;
+}
+
+// (26 Eyl 2026) Modülün KENDİ, genel KAYIT_NO'dan BAĞIMSIZ sıralı takip numarası — aynı
+// "yıl + 6 hane" biçimini kullanır ama sadece o modülün (ör. sadece Satış, sadece Alış)
+// işlemlerini sayar. "İhtiyaç halinde modül modül işlemleri kontrol edebileyim" isteğiyle
+// eklendi; genel numarayı DEĞİŞTİRMEZ, sadece yanına ikinci bir numara ekler.
+// KİLİT ALTINDA çağrılmalı (kdGirisleriYaz_/kayitDefteriBaslat zaten kdKilitli_ içinde çalışır).
+// satirlar: sheet'ten ÖNCEDEN okunmuş satır listesi (ek okumaya gerek kalmasın diye) — verilirse
+// property kaybolsa/eskise bile o modülün defterdeki en büyük MODUL_NO'suyla karşılaştırılıp
+// numara geri düşmesi önlenir.
+function kdModulNoAl_(modul, adet, satirlar) {
+  const yil = kdYil_();
+  const props = PropertiesService.getScriptProperties();
+  const anahtar = "KD2_MODULSAYAC_" + modul + "_" + yil;
+  let son = parseInt(props.getProperty(anahtar) || "0", 10) || 0;
+  (satirlar || []).forEach(r => {
+    if (String(r[KD_MODUL]) !== modul) return;
+    const mevcutNo = parseInt(r[KD_MODULNO], 10) || 0;
+    if (Math.floor(mevcutNo / 1000000) === yil) son = Math.max(son, mevcutNo - yil * 1000000);
+  });
   props.setProperty(anahtar, String(son + adet));
   return yil * 1000000 + son + 1;
 }
@@ -466,7 +495,7 @@ function kdTekBacakGirisi_(b, modulAdi, islem, grup, cariAd, ctx) {
 }
 
 // ── Satır kurucu ──
-function kdSatiri_(no, g, kayitZamani) {
+function kdSatiri_(no, g, kayitZamani, modulNo) {
   const s = new Array(KD_BASLIKLAR.length).fill("");
   s[KD_NO] = no; s[KD_MODUL] = g.modul; s[KD_ISLEM] = g.islem; s[KD_TARIH] = g.tarih || ""; s[KD_BELGE] = g.belge || ""; s[KD_CARI] = g.cari || "";
   s[KD_BTUTAR] = g.belgeTutari || 0;
@@ -476,7 +505,7 @@ function kdSatiri_(no, g, kayitZamani) {
   s[KD_KONTROL] = g.kontrol; s[KD_DURUM] = "Aktif"; s[KD_KAYNAK] = g.kaynak; s[KD_KID] = g.kid; s[KD_ALT] = g.alt || ""; s[KD_GRUP] = g.grup || "";
   s[KD_BKAYNAK] = g.borc ? g.borc.kaynak : ""; s[KD_AKAYNAK] = g.alacak ? g.alacak.kaynak : "";
   s[KD_BBEKLENEN] = g.borc && g.borc.tur ? g.borc.tur : ""; s[KD_ABEKLENEN] = g.alacak && g.alacak.tur ? g.alacak.tur : "";
-  s[KD_KAYIT] = kayitZamani; s[KD_DEGISIM] = ""; s[KD_SILINME] = ""; s[KD_CARIKOD] = g.cariKodu || "";
+  s[KD_KAYIT] = kayitZamani; s[KD_DEGISIM] = ""; s[KD_SILINME] = ""; s[KD_CARIKOD] = g.cariKodu || ""; s[KD_MODULNO] = modulNo || "";
   return s;
 }
 
@@ -503,12 +532,15 @@ function kdGirisleriYaz_(ss, sheet, kaynak, kid, girisler) {
     satirlar.forEach((r, i) => { if (String(r[KD_KAYNAK]) === String(kaynak) && String(r[KD_KID]) === String(kid) && r[KD_DURUM] === "Aktif") mevcut[String(r[KD_ALT] || "")] = i; });
     const yeniler = girisler.filter(g => mevcut[g.alt || ""] === undefined);
     const no0 = yeniler.length ? kdNoAl_(sheet, yeniler.length) : 0;
+    // Bir kdGirisleriYaz_ çağrısındaki TÜM girişler aynı ana kayda (dolayısıyla aynı modüle) ait
+    // olduğundan (bkz. kdGirisleriKur_: g.modul = t.modul), tek bir modül no bloğu yeterli.
+    const modulNo0 = yeniler.length ? kdModulNoAl_(yeniler[0].modul, yeniler.length, satirlar) : 0;
     const uretilen = {};
     girisler.forEach(g => {
       uretilen[g.alt || ""] = true;
       const i = mevcut[g.alt || ""];
       if (i !== undefined) {
-        const s = kdSatiri_(Number(satirlar[i][KD_NO]), g, satirlar[i][KD_KAYIT]);
+        const s = kdSatiri_(Number(satirlar[i][KD_NO]), g, satirlar[i][KD_KAYIT], satirlar[i][KD_MODULNO]);
         s[KD_DEGISIM] = simdi;
         kdSatirlariYaz_(sheet, i + 2, [s]);
       }
@@ -519,7 +551,7 @@ function kdGirisleriYaz_(ss, sheet, kaynak, kid, girisler) {
       const s = satirlar[i].slice(); s[KD_DURUM] = "Silindi"; s[KD_SILINME] = simdi; s[KD_DEGISIM] = simdi;
       kdSatirlariYaz_(sheet, i + 2, [s]);
     });
-    if (yeniler.length) kdSatirlariYaz_(sheet, sheet.getLastRow() + 1, yeniler.map((g, j) => kdSatiri_(no0 + j, g, simdi)));
+    if (yeniler.length) kdSatirlariYaz_(sheet, sheet.getLastRow() + 1, yeniler.map((g, j) => kdSatiri_(no0 + j, g, simdi, modulNo0 + j)));
   });
 }
 
@@ -711,13 +743,25 @@ function kayitDefteriBaslat(body) {
   for (let bas = 0; bas < aday.length; bas += PARCA) {
     const parca = aday.slice(bas, bas + PARCA);
     kdKilitli_(() => {
+      const guncelSatirlar = kdTumSatirlar_(sheet);
       const varOlan = {};
-      kdTumSatirlar_(sheet).forEach(r => { varOlan[kdGirisAnahtari_(r[KD_KAYNAK], r[KD_KID], r[KD_ALT])] = true; });
+      guncelSatirlar.forEach(r => { varOlan[kdGirisAnahtari_(r[KD_KAYNAK], r[KD_KID], r[KD_ALT])] = true; });
       const eklenecek = parca.filter(a => !varOlan[kdGirisAnahtari_(a.g.kaynak, a.g.kid, a.g.alt)]);
       if (!eklenecek.length) return;
       const no0 = kdNoAl_(sheet, eklenecek.length);
       const simdi = kdSimdi_();
-      kdSatirlariYaz_(sheet, sheet.getLastRow() + 1, eklenecek.map((a, j) => kdSatiri_(no0 + j, a.g, kdZamanMetniDuzenle_(a.g.kayit) || simdi)));
+      // Bu parça birden fazla modülü karışık içerebilir (zamana göre sıralı) — her modül için
+      // ayrı bir modül-no bloğu ayrılıp, parça içinde o modülün kaçıncı görülüşüyse ondan verilir.
+      const modulAdet = {};
+      eklenecek.forEach(a => { modulAdet[a.g.modul] = (modulAdet[a.g.modul] || 0) + 1; });
+      const modulBaslangic = {};
+      Object.keys(modulAdet).forEach(m => { modulBaslangic[m] = kdModulNoAl_(m, modulAdet[m], guncelSatirlar); });
+      const modulIlerleme = {};
+      kdSatirlariYaz_(sheet, sheet.getLastRow() + 1, eklenecek.map((a, j) => {
+        const m = a.g.modul;
+        modulIlerleme[m] = (modulIlerleme[m] || 0) + 1;
+        return kdSatiri_(no0 + j, a.g, kdZamanMetniDuzenle_(a.g.kayit) || simdi, modulBaslangic[m] + modulIlerleme[m] - 1);
+      }));
       yeni += eklenecek.length;
     });
   }
@@ -917,7 +961,7 @@ function kayitDefteriHatalariTemizle(body) {
 }
 
 // ── LİSTE ──
-// body: { sayfa, adet, modul, durum, arama, sorunlu, tarihBas, tarihSon }
+// body: { sayfa, adet, modul, islem, durum, arama, sorunlu, tarihBas, tarihSon }
 function getKayitDefteri(body) {
   body = body || {};
   const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -926,11 +970,17 @@ function getKayitDefteri(body) {
   const adet = Math.min(Math.max(parseInt(body.adet, 10) || 200, 1), 1000);
   const sayfa = Math.max(parseInt(body.sayfa, 10) || 0, 0);
   const arama = String(body.arama || "").trim().toLocaleLowerCase("tr");
-  const moduller = {};
-  satirlar.forEach(r => { moduller[String(r[KD_MODUL])] = true; });
+  const moduller = {}, islemler = {};
+  satirlar.forEach(r => {
+    moduller[String(r[KD_MODUL])] = true;
+    // Modül seçiliyse İşlem listesi SADECE o modüle ait işlemleri göstersin (aksi halde tüm
+    // modüllerin işlemleri karışık bir liste olur, seçim anlamsızlaşır).
+    if (!body.modul || String(r[KD_MODUL]) === body.modul) islemler[String(r[KD_ISLEM])] = true;
+  });
   const gun = (r) => kdMetin_(r[KD_TARIH]).slice(0, 10);
   const uygun = satirlar.filter(r => {
     if (body.modul && String(r[KD_MODUL]) !== body.modul) return false;
+    if (body.islem && String(r[KD_ISLEM]) !== body.islem) return false;
     if (body.durum && String(r[KD_DURUM]) !== body.durum) return false;
     if (body.sorunlu && !(String(r[KD_KONTROL]).indexOf("⚠") >= 0 || r[KD_DURUM] === "Silindi")) return false;
     if (body.tarihBas && gun(r) < body.tarihBas) return false;
@@ -947,12 +997,12 @@ function getKayitDefteri(body) {
   const nakliyeSupheli = nkSupheliAlisHaritasi_(); // ❗ Nakliye dağıtımı tutarsız onaylanmış alış faturaları
   const uyariNotu = (r) => (r[KD_DURUM] === "Aktif" && String(r[KD_KAYNAK]) === SHEETS.alislar && nakliyeSupheli[String(r[KD_KID])]) ? nakliyeSupheli[String(r[KD_KID])].not : "";
   const dilim = uygun.slice(sayfa * adet, sayfa * adet + adet).map(r => ({
-    no: Number(r[KD_NO]), modul: kdMetin_(r[KD_MODUL]), islem: kdMetin_(r[KD_ISLEM]), tarih: kdMetin_(r[KD_TARIH]), belgeNo: kdMetin_(r[KD_BELGE]),
+    no: Number(r[KD_NO]), modulNo: r[KD_MODULNO] === "" ? null : Number(r[KD_MODULNO]), modul: kdMetin_(r[KD_MODUL]), islem: kdMetin_(r[KD_ISLEM]), tarih: kdMetin_(r[KD_TARIH]), belgeNo: kdMetin_(r[KD_BELGE]),
     cari: kdMetin_(r[KD_CARI]), cariKodu: kdMetin_(r[KD_CARIKOD]), belgeTutari: kdSayi_(r[KD_BTUTAR]), borcHesap: kdMetin_(r[KD_BHESAP]), borcTutar: r[KD_BTL] === "" ? null : kdSayi_(r[KD_BTL]),
     alacakHesap: kdMetin_(r[KD_AHESAP]), alacakTutar: r[KD_ATL] === "" ? null : kdSayi_(r[KD_ATL]), kontrol: kdMetin_(r[KD_KONTROL]), durum: kdMetin_(r[KD_DURUM]),
     grup: kdMetin_(r[KD_GRUP]), kaynak: kdMetin_(r[KD_KAYNAK]), kaynakId: kdMetin_(r[KD_KID]), uyari: uyariNotu(r), kayitZamani: kdMetin_(r[KD_KAYIT]), silinmeZamani: kdMetin_(r[KD_SILINME]),
   }));
-  return { ok: true, toplam: uygun.length, satirlar: dilim, sayfa: sayfa, adet: adet, moduller: Object.keys(moduller).sort(),
+  return { ok: true, toplam: uygun.length, satirlar: dilim, sayfa: sayfa, adet: adet, moduller: Object.keys(moduller).sort(), islemler: Object.keys(islemler).sort(),
     toplamBorc: toplamBorc, toplamAlacak: toplamAlacak,
     duzeltmeGerekli: PropertiesService.getScriptProperties().getProperty("KD_HARIC_SURUM") !== "1", // eski satırlar KDV hariç/cari kodu için henüz güncellenmedi
     ozet: { toplamKayit: satirlar.length, silinen: satirlar.filter(r => r[KD_DURUM] === "Silindi").length,

@@ -384,20 +384,21 @@ function ensureCariPlasiyerColonu(sheet) {
   }
 }
 
-// PERF: yukarıdaki 6 ensureCari*Colonu fonksiyonunu tek tek çağırmak yerine (her biri
-// ayrı bir getRange(1,N).getValue() çağrısı = 6 ayrı Sheets servis isteği), başlık
-// satırının 9-14. kolonlarını TEK okuma ile alıp sadece eksik olanları tek seferde yazar.
+// PERF: yukarıdaki ensureCari*Colonu fonksiyonlarını tek tek çağırmak yerine (her biri
+// ayrı bir getRange(1,N).getValue() çağrısı = ayrı ayrı Sheets servis istekleri), başlık
+// satırının 9-16. kolonlarını TEK okuma ile alıp sadece eksik olanları tek seferde yazar.
 // Davranış aynı; sadece Cari sayfası açılışında (liste/detay/kayıt) daha az servis çağrısı.
+// IL/ILCE (15,16. kolonlar): cari adres bilgisine il/ilçe eklendi (Yeni Cari Ekle formu).
 function ensureCariEkKolonlariHepsi(sheet) {
-  const beklenen = ["CARI_KODU", "ISKONTO_ORANI", "KREDI_LIMITI", "E_FATURA", "E_ARSIV", "PLASIYER_ID"];
-  const mevcut = sheet.getRange(1, 9, 1, 6).getValues()[0];
+  const beklenen = ["CARI_KODU", "ISKONTO_ORANI", "KREDI_LIMITI", "E_FATURA", "E_ARSIV", "PLASIYER_ID", "IL", "ILCE"];
+  const mevcut = sheet.getRange(1, 9, 1, beklenen.length).getValues()[0];
   let degisti = false;
   const yeni = beklenen.map((ad, i) => {
     if (String(mevcut[i] || "") !== ad) { degisti = true; return ad; }
     return mevcut[i];
   });
   if (degisti) {
-    sheet.getRange(1, 9, 1, 6).setValues([yeni]).setFontWeight("bold").setBackground("#e8edf5");
+    sheet.getRange(1, 9, 1, beklenen.length).setValues([yeni]).setFontWeight("bold").setBackground("#e8edf5");
   }
 }
 
@@ -1182,6 +1183,8 @@ function getCariListesi() {
         eFatura: String(row[11] || "Hayır") || "Hayır",
         eArsiv: String(row[12] || "Hayır") || "Hayır",
         plasiyerId: String(row[13] || ""),
+        il: String(row[14] || ""),
+        ilce: String(row[15] || ""),
         bakiye: bakiyeMap[id] || 0,
         sonIslemTarihi: sonIslemMap[id] || "",
       });
@@ -1220,6 +1223,8 @@ function getCariDetay(cariId) {
         eFatura: String(hData[i][11] || "Hayır") || "Hayır",
         eArsiv: String(hData[i][12] || "Hayır") || "Hayır",
         plasiyerId: String(hData[i][13] || ""),
+        il: String(hData[i][14] || ""),
+        ilce: String(hData[i][15] || ""),
       };
       break;
     }
@@ -1311,6 +1316,8 @@ function saveCari(body) {
     String(body.eFatura) === "Evet" ? "Evet" : "Hayır",
     String(body.eArsiv) === "Evet" ? "Evet" : "Hayır",
     String(body.plasiyerId || ""),
+    String(body.il || ""),
+    String(body.ilce || ""),
   ];
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);
@@ -4689,7 +4696,11 @@ function edmOnekEslesmeKaydet(ss, onek, cariId, cariAd) {
   const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0] || "").trim().toUpperCase() === o) {
-      sheet.getRange(i + 1, 2, 1, 3).setValues([[cariId, cariAd || "", simdi]]);
+      // Boş/eksik cariAd ile çağrılırsa (ör. onay ekranından cari zaten seçiliyken cariAd
+      // gönderilmez), önceden kaydedilmiş DOĞRU firma ismini BOŞ değerle ezme — mevcut adı koru.
+      const mevcutAd = String(data[i][2] || "");
+      const yeniAd = (cariAd && String(cariAd).trim()) ? String(cariAd).trim() : mevcutAd;
+      sheet.getRange(i + 1, 2, 1, 3).setValues([[cariId, yeniAd, simdi]]);
       return;
     }
   }
@@ -5157,7 +5168,18 @@ function onaylaAlisFaturasi(body) {
   // (yine de otomatik uygulanmaz, kullanıcı onayı gerekir).
   const onek = faturaOnekiCikar(faturaNo);
   if (body.cariId && onek) {
-    edmOnekEslesmeKaydet(ss, onek, String(body.cariId).trim(), String(body.cariAd || ""));
+    // body.cariAd genelde boş gelir (gerçek bir cari seçiliyken frontend cariAd göndermiyor);
+    // bu yüzden ismi öncelikle cari listesinden çözüyoruz, olmazsa body.cariAd'a düşüyoruz
+    // (edmOnekEslesmeKaydet zaten boşsa eski ismi koruyor, bkz. yukarıdaki fonksiyon).
+    let onekCariAd = String(body.cariAd || "").trim();
+    if (!onekCariAd) {
+      const cl = getCariListesi();
+      if (cl && cl.ok) {
+        const bulunan = cl.cariler.find(c => String(c.id) === String(body.cariId).trim());
+        if (bulunan) onekCariAd = bulunan.ad || "";
+      }
+    }
+    edmOnekEslesmeKaydet(ss, onek, String(body.cariId).trim(), onekCariAd);
   }
 
   // Tedarikçi ürün kodu → stok kodu eşleştirmesini öğren/güncelle (bkz. yukarıdaki blok

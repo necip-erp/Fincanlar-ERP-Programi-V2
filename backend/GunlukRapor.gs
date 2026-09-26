@@ -3,6 +3,16 @@
 // (işlemin kendi tarihine değil, sisteme GİRİLDİĞİ KAYIT ZAMANINA göre) tek bir
 // Excel dosyasında, her modül ayrı sekmede toplayan bir nevi günlük yedekleme.
 //
+// Her kaynak (Satış, Alış, Tahsilat, ...) İKİ sekme üretir:
+//   - "<Modül Adı>"        : okunaklı, sadeleştirilmiş DETAY tablosu (ekranda okumak için)
+//   - "HAM - <Modül Adı>"  : kaynak Google E-Tablosu sayfasının O SATIRLARDAKİ TÜM sütunlarını
+//                            (gerçek sütun adları + gerçek ID'lerle) birebir içeren HAM YEDEK —
+//                            bir saldırı/veri kaybı halinde ilgili sayfaya satır satır geri
+//                            yapıştırılarak SİSTEME ENTEGRE EDİLEBİLİR.
+// Satış/Alış ayrıca KALEM KALEM (ürün satırı satırı) detay+ham çiftine de sahiptir
+// ("Satış Kalemleri (Detay)" / "Alış Kalemleri (Detay)" ve HAM eşleri) — o gün girilen her
+// satış/alışın içindeki tüm ürün satırları tek tek listelenir.
+//
 // Nasıl çalışır: Ayarlar ekranındaki "📊 Günlük İşlem Raporu" butonuyla
 // (gunlukIslemRaporuUret action'ı) istenildiğinde üretilir; ayrıca
 // gunlukRaporTetikleyiciKur() (Apps Script editöründen elle, TEK SEFERLİK
@@ -67,6 +77,21 @@ function grKaynaklar_() {
   ];
 }
 
+// Satış/Alış'ın KENDİSİ değil, o gün girilen satış/alışların TEK TEK KALEMLERİNİ (ürün
+// satırlarını) listeleyen kaynaklar. Kalem sayfalarının kendi KAYIT_TARIHI'i yok — bu yüzden
+// gün filtresi, o gün kayıtlı satislar/alislar ID'lerine (grKaynaklar_ işlenirken toplanır)
+// göre yapılır (ebeveynIdKolon o ID'yi kalem satırında tutan sütun).
+function grKalemKaynaklari_() {
+  return [
+    { anahtar: "satisKalemleri", ad: "Satış Kalemleri (Detay)", ebeveynAnahtar: "satislar", ebeveynIdKolon: "SATIS_ID",
+      headers: ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"],
+      goster: [["STOK_KODU","Stok Kodu"],["URUN_ADI","Ürün Adı"],["MIKTAR","Miktar"],["BIRIM","Birim"],["BIRIM_FIYAT","Birim Fiyat"],["ISKONTO_YUZDE","İskonto %"],["KDV_ORANI","KDV %"],["TUTAR","Tutar"],["SATIS_ID","Bağlı Satış ID"]] },
+    { anahtar: "alisKalemleri", ad: "Alış Kalemleri (Detay)", ebeveynAnahtar: "alislar", ebeveynIdKolon: "ALIS_ID",
+      headers: ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"],
+      goster: [["STOK_KODU","Stok Kodu"],["URUN_ADI","Ürün Adı"],["MIKTAR","Miktar"],["BIRIM","Birim"],["BIRIM_FIYAT","Birim Fiyat"],["TUTAR","Tutar"],["ALIS_ID","Bağlı Alış ID"]] },
+  ];
+}
+
 // "10/09/2026 14:32" veya Date nesnesi ya da "2026-09-25..." -> "yyyy-MM-dd" karşılaştırma anahtarı.
 function grGunAnahtari_(deger) {
   if (deger instanceof Date) return Utilities.formatDate(deger, "Europe/Istanbul", "yyyy-MM-dd");
@@ -125,21 +150,27 @@ function grHaritalarOlustur_(ss) {
 }
 
 // Bir kaynağı okuyup gunAnahtari'na eşleşen satırları [ [Türkçe başlık,...], [değerler,...], ... ] olarak döner.
+// Ayrıca (kalem kaynaklarının gün filtresini yapabilmesi ve HAM YEDEK sekmesi üretilebilmesi için):
+//   - idler: bu kaynağın "ID" sütunundaki, o gün eşleşen kayıtların ID seti (Set)
+//   - hamBaslik / hamSatirlar: sayfanın KENDİ (gerçek, o an sayfada yazılı) başlık satırı ve
+//     eşleşen satırların TÜM sütunlarıyla (kısaltılmamış) hali — bir sorun halinde bu veriler
+//     ilgili Google E-Tablosu sayfasına satır satır GERİ YAPIŞTIRILARAK sisteme entegre edilebilir.
 function grKaynakTablosu_(ss, kaynak, gunAnahtari, haritalar) {
   const sheetAdi = SHEETS[kaynak.anahtar];
   const sheet = ss.getSheetByName(sheetAdi);
   const baslikSatiri = kaynak.goster.map(g => g[1]);
-  if (!sheet) return { baslik: baslikSatiri, satirlar: [] };
+  if (!sheet) return { baslik: baslikSatiri, satirlar: [], idler: new Set(), hamBaslik: [], hamSatirlar: [] };
   const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return { baslik: baslikSatiri, satirlar: [] };
+  if (data.length < 2) return { baslik: baslikSatiri, satirlar: [], idler: new Set(), hamBaslik: data[0] || [], hamSatirlar: [] };
 
   const kayitIdx = kaynak.headers.indexOf(kaynak.kayitKolon);
+  const idIdx = kaynak.headers.indexOf("ID");
   const cariIdx = kaynak.cariKolon ? kaynak.headers.indexOf(kaynak.cariKolon) : -1;
   const bankaHesapIdx = kaynak.bankaHesapKolon ? kaynak.headers.indexOf(kaynak.bankaHesapKolon) : -1;
   const posIdx = kaynak.posKolon ? kaynak.headers.indexOf(kaynak.posKolon) : -1;
   const kartIdx = kaynak.kartKolon ? kaynak.headers.indexOf(kaynak.kartKolon) : -1;
 
-  const satirlar = [];
+  const satirlar = [], idler = new Set(), hamSatirlar = [];
   for (let i = 1; i < data.length; i++) {
     const r = data[i];
     if (kayitIdx < 0 || grGunAnahtari_(r[kayitIdx]) !== gunAnahtari) continue;
@@ -153,8 +184,48 @@ function grKaynakTablosu_(ss, kaynak, gunAnahtari, haritalar) {
       return idx >= 0 ? r[idx] : "";
     });
     satirlar.push(satir);
+    hamSatirlar.push(r);
+    if (idIdx >= 0) idler.add(String(r[idIdx]));
   }
-  return { baslik: baslikSatiri, satirlar: satirlar };
+  return { baslik: baslikSatiri, satirlar: satirlar, idler: idler, hamBaslik: data[0], hamSatirlar: hamSatirlar };
+}
+
+// Kalem (satış/alış satırı) kaynakları için: gün filtresi kayıt tarihine göre değil,
+// kalemin bağlı olduğu satış/alış'ın o gün girilmiş olmasına göre yapılır (ebeveynIdSeti).
+function grKalemKaynakTablosu_(ss, kaynak, ebeveynIdSeti) {
+  const sheetAdi = SHEETS[kaynak.anahtar];
+  const sheet = ss.getSheetByName(sheetAdi);
+  const baslikSatiri = kaynak.goster.map(g => g[1]);
+  if (!sheet) return { baslik: baslikSatiri, satirlar: [], hamBaslik: [], hamSatirlar: [] };
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { baslik: baslikSatiri, satirlar: [], hamBaslik: data[0] || [], hamSatirlar: [] };
+
+  const ebeveynIdx = kaynak.headers.indexOf(kaynak.ebeveynIdKolon);
+  const satirlar = [], hamSatirlar = [];
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    if (ebeveynIdx < 0 || !ebeveynIdSeti.has(String(r[ebeveynIdx]))) continue;
+    const satir = kaynak.goster.map(g => {
+      const idx = kaynak.headers.indexOf(g[0]);
+      return idx >= 0 ? r[idx] : "";
+    });
+    satirlar.push(satir);
+    hamSatirlar.push(r);
+  }
+  return { baslik: baslikSatiri, satirlar: satirlar, hamBaslik: data[0], hamSatirlar: hamSatirlar };
+}
+
+// Bir DETAY sekmesinin yanına, aynı kayıtların KAYNAK SAYFADAKİ TÜM sütunlarını (kısaltılmamış,
+// olduğu gibi) içeren bir "HAM YEDEK" sekmesi ekler. Bu sekme, bir saldırı/veri kaybı halinde
+// ilgili Google E-Tablosu sayfasına satır satır kopyalanıp SİSTEME GERİ YÜKLENEBİLECEK şekilde,
+// gerçek sütun adları ve gerçek ID'lerle birebir tutulur (görüntü için sadeleştirilmiş DETAY
+// sekmesinin aksine hiçbir sütun atlanmaz/yeniden adlandırılmaz).
+function grHamYedekSekmesiEkle_(gecici, ad, hamBaslik, hamSatirlar) {
+  if (!hamBaslik || !hamBaslik.length) return;
+  const sekme = gecici.insertSheet("HAM - " + ad);
+  sekme.getRange(1, 1, 1, hamBaslik.length).setValues([hamBaslik]).setFontWeight("bold").setBackground("#fde9d9");
+  if (hamSatirlar.length) sekme.getRange(2, 1, hamSatirlar.length, hamBaslik.length).setValues(hamSatirlar);
+  sekme.autoResizeColumns(1, hamBaslik.length);
 }
 
 function grKlasoruGetirVeyaOlustur_() {
@@ -173,16 +244,36 @@ function gunlukIslemRaporuOlustur_(gunAnahtari, istenenBase64) {
 
   const gecici = SpreadsheetApp.create("Günlük İşlem Raporu - " + gunAnahtari);
   const ozetSatirlari = [["Modül", "Kayıt Sayısı"]];
+  const ebeveynIdSetleri = {}; // { satislar: Set, alislar: Set } — kalem kaynakları bunu kullanır
 
+  // 1) Ana kaynaklar (Satış/Alış/Tahsilat/Ödeme/... başlıkları) — okunaklı DETAY sekmesi +
+  //    yanına aynı kayıtların TÜM sütunlarıyla HAM YEDEK sekmesi.
   kaynaklar.forEach(function (kaynak) {
     const tablo = grKaynakTablosu_(ss, kaynak, gunAnahtari, haritalar);
+    ebeveynIdSetleri[kaynak.anahtar] = tablo.idler;
+
     const sekme = gecici.insertSheet(kaynak.ad);
     sekme.getRange(1, 1, 1, tablo.baslik.length).setValues([tablo.baslik]).setFontWeight("bold");
-    if (tablo.satirlar.length) {
-      sekme.getRange(2, 1, tablo.satirlar.length, tablo.baslik.length).setValues(tablo.satirlar);
-    }
+    if (tablo.satirlar.length) sekme.getRange(2, 1, tablo.satirlar.length, tablo.baslik.length).setValues(tablo.satirlar);
     sekme.autoResizeColumns(1, tablo.baslik.length);
     ozetSatirlari.push([kaynak.ad, tablo.satirlar.length]);
+
+    grHamYedekSekmesiEkle_(gecici, kaynak.ad, tablo.hamBaslik, tablo.hamSatirlar);
+  });
+
+  // 2) Kalem kaynakları (Satış/Alış'ın TEK TEK ürün satırları) — o gün girilen satış/alışlara
+  //    bağlı kalemler, kalem kalem (aynı şekilde DETAY + HAM YEDEK ikilisiyle).
+  grKalemKaynaklari_().forEach(function (kaynak) {
+    const ebeveynIdSeti = ebeveynIdSetleri[kaynak.ebeveynAnahtar] || new Set();
+    const tablo = grKalemKaynakTablosu_(ss, kaynak, ebeveynIdSeti);
+
+    const sekme = gecici.insertSheet(kaynak.ad);
+    sekme.getRange(1, 1, 1, tablo.baslik.length).setValues([tablo.baslik]).setFontWeight("bold");
+    if (tablo.satirlar.length) sekme.getRange(2, 1, tablo.satirlar.length, tablo.baslik.length).setValues(tablo.satirlar);
+    sekme.autoResizeColumns(1, tablo.baslik.length);
+    ozetSatirlari.push([kaynak.ad, tablo.satirlar.length]);
+
+    grHamYedekSekmesiEkle_(gecici, kaynak.ad, tablo.hamBaslik, tablo.hamSatirlar);
   });
 
   // Özet sekmesini en başa al.
