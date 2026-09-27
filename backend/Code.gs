@@ -4698,6 +4698,13 @@ function silCekSenet(body) {
 // CekSenetHareketleri.TOPLU_ODEME_NO (26 Eyl 2026, 8. kolon) — birden fazla Verilen çek/senedin
 // AYNI oturumda birlikte ödendiğini işaretler (bkz. cekSenetTopluOdemeYap / getTopluOdemeGrubu).
 // Aynı gerekçeyle SERI_GRUP_NO'dan (çek/senedin girişte gruplanması) AYRI bir kavramdır.
+// "yyyy-AA-gg" formatındaki bir tarihi "gg/AA/yyyy" olarak gösterir (banka hareket
+// açıklamalarında çek vadesini okunaklı yazmak için, 27 Eyl 2026).
+function vadeGgAaYyyy_(isoTarih) {
+  const p = String(isoTarih || "").split("-");
+  return p.length === 3 ? (p[2] + "/" + p[1] + "/" + p[0]) : String(isoTarih || "");
+}
+
 function ensureCekSenetHareketGrupColonu(hSheet) {
   const baslik = hSheet.getRange(1, 8).getValue();
   if (String(baslik || "") !== "TOPLU_ODEME_NO") {
@@ -4728,12 +4735,12 @@ function cekSenetIslemYap(body) {
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
   ensureCekSenetBankaHesapColonu(sheet);
   const data = sheet.getDataRange().getValues();
-  let rowIdx = -1, tip = "", kalanTutar = 0, durum = "", cariAd = "", bankaHesapId = "";
+  let rowIdx = -1, tip = "", kalanTutar = 0, durum = "", cariAd = "", bankaHesapId = "", vade = "";
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === id) {
       rowIdx = i + 1; tip = String(data[i][1] || ""); cariAd = String(data[i][3] || "");
       kalanTutar = parseFloat(data[i][5]) || 0; durum = String(data[i][10] || "");
-      bankaHesapId = String(data[i][18] || "");
+      bankaHesapId = String(data[i][18] || ""); vade = hucreTarihStr(data[i][9]);
       break;
     }
   }
@@ -4772,15 +4779,17 @@ function cekSenetIslemYap(body) {
   // açıklamaya eklenir ki Banka Hesap Hareketleri listesinde 📦 ile birlikte görülebilsin.
   if (tip === "Verilen" && bankaHesapId) {
     const grupEk = topluOdemeNo ? (" [Toplu Ödeme: " + topluOdemeNo + "]") : "";
+    const vadeEk = vade ? (" (Vade: " + vadeGgAaYyyy_(vade) + ")") : "";
     bankaHesapHareketEkle(bankaHesapId, tarih, "Çıkış", tutar,
-      "CEKODEME:" + hId + " | Çek/Senet Ödemesi - " + cariAd + (body.aciklama ? " - " + body.aciklama : "") + grupEk);
+      "CEKODEME:" + hId + " | Çek/Senet Ödemesi - " + cariAd + vadeEk + (body.aciklama ? " - " + body.aciklama : "") + grupEk);
   }
 
   // Alınan çek Banka'ya tahsil edildiyse: o hesaba Giriş hareketi düş. CEKTAHSIL:<hId> ile
   // benzersiz şekilde geri alınabilir (bkz. cekSenetHareketGeriAl).
   if (tip === "Alınan" && hedefTipi === "Banka" && hedefBankaHesapId) {
+    const vadeEk = vade ? (" (Vade: " + vadeGgAaYyyy_(vade) + ")") : "";
     bankaHesapHareketEkle(hedefBankaHesapId, tarih, "Giriş", tutar,
-      "CEKTAHSIL:" + hId + " | Çek/Senet Tahsilatı - " + cariAd + (body.aciklama ? " - " + body.aciklama : ""));
+      "CEKTAHSIL:" + hId + " | Çek/Senet Tahsilatı - " + cariAd + vadeEk + (body.aciklama ? " - " + body.aciklama : ""));
   }
 
   cacheTemizle(["cekSenetListesi"]);
@@ -5892,6 +5901,16 @@ function getMuhasebeRaporu(body) {
 
   if (tip === "karZarar") {
     const stokKoduFiltre = String(body.stokKodu || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
+    // Maliyet yöntemi (27 Eyl 2026 — eskiden tek/statik "stok tanımı > alış fiyatı" alanı
+    // kullanılıyordu; bu hem YANLIŞTI (gerçek alış geçmişini yansıtmıyordu, BFM'den giren
+    // ürünlerin maliyeti hiç güncellenmiyordu) hem de tek seçenekti. Artık gerçek
+    // StokHareketleri kayıtlarından (her girişin KENDİ MALİYET_FIYATI'ndan) 3 yöntemle
+    // hesaplanıyor — ileride başka yöntemler de eklenebilir):
+    //   fifo     → İlk giren ilk çıkar (kuyruk mantığı, en doğru/gerçek envanter maliyeti).
+    //   sonGiris → Satış tarihinden ÖNCEKİ en son alışın birim fiyatı.
+    //   enYakin  → Satış tarihine (öncesi/sonrası fark etmeksizin) tarih olarak en yakın alışın birim fiyatı.
+    const maliyetYontemi = ["fifo", "sonGiris", "enYakin"].includes(body.maliyetYontemi) ? body.maliyetYontemi : "fifo";
+
     const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
       ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
     ensureSatisBelgeTipiColonu(sSheet);
@@ -5904,20 +5923,14 @@ function getMuhasebeRaporu(body) {
       satisTarih[id] = String(sData[i][1] || "");
     }
 
-    // Ürün adı → alış fiyatı eşleşmesi (Satış Kalemleri stokTanimId TUTMUYOR,
-    // sadece serbest metin ürün adı var; bu yüzden isim eşleşmesi kullanılıyor —
-    // stok tanımında olmayan/adı farklı yazılan ürünler maliyetsiz sayılır).
-    const stokListe = getStokTanimListesi().kalemler;
-    const alisFiyatHaritasi = {};
-    stokListe.forEach(s => { alisFiyatHaritasi[s.stokAdi.trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr')] = s.alisFiyati; });
-
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
       ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
     ensureSatisKalemVergiKolonlari(kSheet);
     const kData = kSheet.getDataRange().getValues();
 
-    const urunMap = {}; // anahtar (urunAdi+stokKodu) -> {satisTutari, maliyet, miktar}
-    let toplamSatis = 0, toplamMaliyet = 0, eslesmeyenSayisi = 0;
+    // ── 1) GELİR TARAFI: Satış Kalemleri'nden (mevcut mantık aynen korunuyor) ──
+    const urunMap = {}; // anahtar (urunAdi||stokKodu) -> {urunAdi, stokKodu, miktar, satisTutari, maliyet, maliyetBilinmiyor}
+    let toplamSatis = 0;
     for (let i = 1; i < kData.length; i++) {
       const row = kData[i];
       const satisId = String(row[1] || "");
@@ -5934,31 +5947,152 @@ function getMuhasebeRaporu(body) {
       const iskontoYuzde = parseFloat(row[7]) || 0;
       const satirSatisTutari = miktar * birimFiyat * (1 - iskontoYuzde / 100);
 
-      const alisFiyati = alisFiyatHaritasi[urunAdi.replace(/[İIıi]/g,"i").toLocaleLowerCase('tr')];
-      const maliyetBilinmiyor = (alisFiyati === undefined);
-      if (maliyetBilinmiyor) eslesmeyenSayisi++;
-      const satirMaliyet = maliyetBilinmiyor ? 0 : (alisFiyati * miktar);
-
       toplamSatis += satirSatisTutari;
-      toplamMaliyet += satirMaliyet;
-
       const anahtar = urunAdi + "||" + stokKodu;
       if (!urunMap[anahtar]) urunMap[anahtar] = { urunAdi, stokKodu, miktar: 0, satisTutari: 0, maliyet: 0, maliyetBilinmiyor: false };
       urunMap[anahtar].miktar += miktar;
       urunMap[anahtar].satisTutari += satirSatisTutari;
-      urunMap[anahtar].maliyet += satirMaliyet;
-      if (maliyetBilinmiyor) urunMap[anahtar].maliyetBilinmiyor = true;
     }
+
+    // ── 2) MALİYET TARAFI: StokHareketleri'nden (gerçek alış/çıkış geçmişi) ──
+    // Aynı (urunAdi||stokKodu) anahtarı kullanılır ki gelir ve maliyet tarafı doğru eşleşsin
+    // (stok kodu boş/eski kayıtlarda bile isim eşleşmesiyle tutarlı çalışır, çünkü
+    // stokHareketOtomatikYaz de aynı urunAdi/stokKodu çiftini yazıyor).
+    // NOT: "Satış İadesi" (Giriş) kayıtları BİLEREK dahil edilmiyor — iade edilen ürün,
+    // satış fiyatıyla yeni bir "maliyet lotu" gibi davranıp gelecekteki kârı yapay şekilde
+    // şişirmesin diye (kullanıcı isteği, 27 Eyl 2026). "Alış İadesi" (Çıkış) ise FIFO
+    // kuyruğunu normal bir çıkış gibi tüketir (mal tedarikçiye iade edildiği için sonraki
+    // satışlara kalan lot azalır) ama Kar/Zarar tablosunda satış kalemi olarak görünmez.
+    const shSheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+    const shData = shSheet.getDataRange().getValues();
+    const hareketlerByAnahtar = {};
+    for (let i = 1; i < shData.length; i++) {
+      const row = shData[i];
+      if (!row[0]) continue;
+      const belgeTipi = String(row[10] || "");
+      if (belgeTipi === "Satış İadesi") continue;
+      const hareketTipi = String(row[6] || "");
+      if (hareketTipi === "Giriş" && belgeTipi !== "Alış Faturası") continue; // sadece gerçek alışlar maliyet lotu sayılır
+      if (hareketTipi !== "Giriş" && hareketTipi !== "Çıkış") continue;
+      const miktar = parseFloat(row[7]) || 0;
+      if (miktar <= 0) continue;
+      const urunAdi = String(row[4] || "").trim();
+      const stokKodu = String(row[3] || "");
+      const anahtar = urunAdi + "||" + stokKodu;
+      if (!hareketlerByAnahtar[anahtar]) hareketlerByAnahtar[anahtar] = [];
+      hareketlerByAnahtar[anahtar].push({
+        tarih: String(row[1] || "").slice(0, 10), hareketTipi, miktar,
+        birimMaliyet: hareketTipi === "Giriş" ? (parseFloat(row[12]) || 0) : null,
+        belgeTipi, belgeNo: String(row[11] || ""),
+      });
+    }
+    // Her ürün için kronolojik sırala — Sheets satırları eklenme sırasında olduğundan,
+    // stable sort ile aynı tarihli kayıtlarda giriş sırası (dolayısıyla mantıklı öncelik) korunur.
+    Object.keys(hareketlerByAnahtar).forEach(k => hareketlerByAnahtar[k].sort((a, b) => a.tarih < b.tarih ? -1 : (a.tarih > b.tarih ? 1 : 0)));
+
+    // FIFO kuyruk motoru — "borç" mekanizması sayesinde girişi yapılmadan önce çıkışı
+    // yapılmış bir stoğun maliyeti, DAHA SONRA (tarih olarak önce olsa bile, geç girilmiş)
+    // bir alış eklendiğinde otomatik olarak çözülür ("sonradan giriş yapıldığı zaman o
+    // maliyetle rapor güncellensin" isteği, 27 Eyl 2026) — rapor her çalıştığında TÜM
+    // geçmiş baştan işlendiği için bu doğal olarak sağlanır.
+    function fifoIsle_(hareketler) {
+      const kuyruk = [], borclar = [];
+      hareketler.forEach(h => {
+        if (h.hareketTipi === "Giriş") {
+          let kalan = h.miktar;
+          const birimMaliyet = h.birimMaliyet;
+          while (kalan > 0.0001 && borclar.length) {
+            const b = borclar[0];
+            const odenen = Math.min(kalan, b.kalanMiktar);
+            b.sonuc.toplamMaliyet += odenen * birimMaliyet;
+            b.sonuc.cozulenMiktar += odenen;
+            b.kalanMiktar -= odenen;
+            kalan -= odenen;
+            if (b.kalanMiktar <= 0.0001) borclar.shift();
+          }
+          if (kalan > 0.0001) kuyruk.push({ miktar: kalan, birimMaliyet });
+        } else {
+          const sonuc = { toplamMaliyet: 0, cozulenMiktar: 0, miktar: h.miktar };
+          let kalan = h.miktar;
+          while (kalan > 0.0001 && kuyruk.length) {
+            const lot = kuyruk[0];
+            const kullanilan = Math.min(kalan, lot.miktar);
+            sonuc.toplamMaliyet += kullanilan * lot.birimMaliyet;
+            sonuc.cozulenMiktar += kullanilan;
+            lot.miktar -= kullanilan;
+            kalan -= kullanilan;
+            if (lot.miktar <= 0.0001) kuyruk.shift();
+          }
+          if (kalan > 0.0001) borclar.push({ kalanMiktar: kalan, sonuc });
+          h._sonuc = sonuc;
+        }
+      });
+    }
+    // "Son Giriş"/"En Yakın Giriş" için basit tarih-bazlı fiyat bulma (kuyruk/miktar takibi yok).
+    function enYakinAlisBul_(alislar, hedefTarih) {
+      let en = null, enFark = Infinity;
+      const hedefMs = new Date(hedefTarih).getTime();
+      alislar.forEach(l => {
+        const fark = Math.abs(new Date(l.tarih).getTime() - hedefMs);
+        if (fark < enFark) { enFark = fark; en = l; }
+      });
+      return en;
+    }
+    function birimMaliyetBul_(alislar, hedefTarih, yontem) {
+      if (!alislar.length) return null;
+      if (yontem === "sonGiris") {
+        let secilen = null;
+        for (const l of alislar) { if (l.tarih <= hedefTarih) secilen = l; else break; }
+        if (secilen) return secilen.birimMaliyet;
+        const en = enYakinAlisBul_(alislar, hedefTarih); // hiç öncesi yoksa en yakınına düş
+        return en ? en.birimMaliyet : null;
+      }
+      const en = enYakinAlisBul_(alislar, hedefTarih);
+      return en ? en.birimMaliyet : null;
+    }
+
+    let toplamMaliyet = 0, eslesmeyenSayisi = 0;
+    // Sadece bu aralıkta gerçekten satışı olan ürünler için maliyet motoru çalıştırılır
+    // (performans: binlerce satır/ürün olsa bile sadece ilgili ürünler işlenir); her ürün
+    // için yine de KENDİ TÜM geçmişi (aralık sınırı olmadan) işlenir ki FIFO/borç çözümü
+    // doğru olsun (bkz. yukarıdaki yorum).
+    Object.keys(urunMap).forEach(anahtar => {
+      const hareketler = hareketlerByAnahtar[anahtar] || [];
+      if (maliyetYontemi === "fifo") {
+        fifoIsle_(hareketler);
+      } else {
+        const alislar = hareketler.filter(h => h.hareketTipi === "Giriş");
+        hareketler.forEach(h => {
+          if (h.hareketTipi !== "Çıkış") return;
+          const birimMaliyet = birimMaliyetBul_(alislar, h.tarih, maliyetYontemi);
+          h._sonuc = birimMaliyet === null
+            ? { toplamMaliyet: 0, cozulenMiktar: 0, miktar: h.miktar }
+            : { toplamMaliyet: birimMaliyet * h.miktar, cozulenMiktar: h.miktar, miktar: h.miktar };
+        });
+      }
+      // "Alış İadesi" çıkışları kuyruğu tükettiği için yukarıda işlendi ama Kar/Zarar
+      // tablosuna satış kalemi olarak YANSITILMAZ — sadece "Satış Faturası" çıkışları sayılır.
+      const u = urunMap[anahtar];
+      hareketler.forEach(h => {
+        if (h.hareketTipi !== "Çıkış" || h.belgeTipi !== "Satış Faturası" || !h._sonuc) return;
+        if (!araligaDahilMi(h.tarih)) return;
+        u.maliyet += h._sonuc.toplamMaliyet;
+        if (h._sonuc.cozulenMiktar < h.miktar - 0.0001) { u.maliyetBilinmiyor = true; eslesmeyenSayisi++; }
+      });
+    });
+    Object.values(urunMap).forEach(u => { toplamMaliyet += u.maliyet; });
 
     const satirlar = Object.values(urunMap).map(u => ({
       urunAdi: u.urunAdi, stokKodu: u.stokKodu, miktar: u.miktar, satisTutari: u.satisTutari, maliyet: u.maliyet,
-      kar: u.satisTutari - u.maliyet, maliyetBilinmiyor: u.maliyetBilinmiyor,
+      kar: u.satisTutari - u.maliyet, karYuzde: u.satisTutari > 0 ? ((u.satisTutari - u.maliyet) / u.satisTutari) * 100 : null,
+      maliyetBilinmiyor: u.maliyetBilinmiyor,
     }));
     satirlar.sort((a, b) => b.kar - a.kar);
 
     return {
-      ok: true, tip: tip, satirlar: satirlar,
+      ok: true, tip: tip, satirlar: satirlar, maliyetYontemi: maliyetYontemi,
       toplamSatis: toplamSatis, toplamMaliyet: toplamMaliyet, toplamKar: toplamSatis - toplamMaliyet,
+      toplamKarYuzde: toplamSatis > 0 ? ((toplamSatis - toplamMaliyet) / toplamSatis) * 100 : null,
       eslesmeyenSayisi: eslesmeyenSayisi,
     };
   }

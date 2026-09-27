@@ -1117,6 +1117,15 @@ setInterval(topbarSaatGuncelle, 10000);
         </div>
         <button type="button" class="btn" id="mr-kasa-excel-btn" onclick="kasaRaporuExcelAktar()" title="Ekrandaki kasa raporunu Excel dosyası olarak indirir">📊 Excel'e Aktar</button>
       </div>
+      <div id="mr-maliyet-yontemi-alani" style="display:none;max-width:420px;margin-bottom:14px" class="fld">
+        <label>Maliyet Yöntemi</label>
+        <select id="mr-maliyet-yontemi" onchange="muhasebeRaporuYukle()">
+          <option value="fifo">FIFO (ilk giren ilk çıkar) — önerilen</option>
+          <option value="sonGiris">Son Giriş Maliyeti (satıştan önceki en son alış fiyatı)</option>
+          <option value="enYakin">En Yakın Giriş Maliyeti (tarihçe en yakın alış fiyatı)</option>
+        </select>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;max-width:420px">Bu yöntemler ileride daha da geliştirilecektir; şu an için gerçek alış/giriş geçmişine dayanır (eski "Stok Tanımı &gt; Alış Fiyatı" alanı artık kullanılmıyor).</div>
+      </div>
       <div id="mr-stokkodu-alani" style="display:none;max-width:420px;margin-bottom:14px" class="fld">
         <label>Stok Kodu veya Ürün Adı ile filtrele (opsiyonel)</label>
         <div style="position:relative">
@@ -7114,6 +7123,19 @@ function alisBekleyenOnayModalAc(faturaNo){
   let tarihISO = new Date().toISOString().slice(0,10);
   const parcalar = String(f.tarih||"").split("/");
   if(parcalar.length===3) tarihISO = `${parcalar[2]}-${parcalar[1]}-${parcalar[0]}`;
+  // Stok kodu "44" ile başlayan ürünler (Termalkim Yapı Kimyasalları): nakliye maliyeti
+  // torba başına sabit 17,75 TL (+KDV, KDV faturanın genel toplamı hesaplanırken zaten
+  // ekleniyor) ve bu ürünlerde palet maliyeti YOK — FATURAFIYAT kaynağından gelen (genelde
+  // palet bazlı dağıtılmış) nakliye payı bu ürünler için burada sabit tutarla override
+  // edilir; faturadaki DİĞER kalemlerin nakliye payı olduğu gibi kalır (27 Eyl 2026).
+  const TERMALKIM_TORBA_NAKLIYE = 17.75;
+  f.kalemler.forEach(k => {
+    const kod = String(k.stokKodu || "").trim();
+    if (kod.indexOf("44") === 0 && (k.nakliyePayi || 0) !== TERMALKIM_TORBA_NAKLIYE) {
+      k._nakliyeOverride = true;
+      k.nakliyePayi = TERMALKIM_TORBA_NAKLIYE;
+    }
+  });
   const yeniStokSayisi = f.kalemler.filter(k=>k.stokVarMi===false && k.stokKodu).length;
   const yanda = bfmFaturaYandaMi();
   overlay.innerHTML = `
@@ -7514,6 +7536,13 @@ function bfmKdvSupheliMi(kdvOrani){
 function bfmSatirGuncelle(i){
   const f = window._bfmAktifFatura;
   if(!f || !f.kalemler[i]) return;
+  // Stok kodu "44" ile başlayan ürünler (Termalkim): nakliye payı burada da (kullanıcı stok
+  // kodunu SONRADAN seçtiyse/değiştirdiyse de) sabit torba fiyatına göre güncellenir.
+  const TERMALKIM_TORBA_NAKLIYE = 17.75;
+  if(String(f.kalemler[i].stokKodu||"").trim().indexOf("44")===0 && (f.kalemler[i].nakliyePayi||0) !== TERMALKIM_TORBA_NAKLIYE){
+    f.kalemler[i]._nakliyeOverride = true;
+    f.kalemler[i].nakliyePayi = TERMALKIM_TORBA_NAKLIYE;
+  }
   const kdvOrani = parseFloat((document.getElementById(`bfm-kdv-${i}`)||{}).value) || 0;
   const nakliyePayi = f.kalemler[i].nakliyePayi || 0;
   const miktar = parseFloat((document.getElementById(`bfm-miktar-${i}`)||{}).value) || 0;
@@ -7528,8 +7557,11 @@ function bfmSatirGuncelle(i){
   const aktarEl = document.getElementById(`bfm-aktarilan-${i}`);
   if(aktarEl){
     const bicim = (x)=> Number(x).toLocaleString("tr-TR", {minimumFractionDigits:2, maximumFractionDigits:4}) + "\u00A0₺";
+    const nakliyeEtiket = f.kalemler[i]._nakliyeOverride
+      ? `title="Alış'a aktarılacak birim fiyat: iskontolu fatura fiyatı ${bicim(netBirimFiyat - nakliyePayi)} + Termalkim torba nakliyesi (sabit, palet maliyeti yok) ${bicim(nakliyePayi)}"`
+      : `title="Alış'a aktarılacak birim fiyat: iskontolu fatura fiyatı ${bicim(netBirimFiyat - nakliyePayi)} + nakliye/palet payı ${bicim(nakliyePayi)}"`;
     aktarEl.innerHTML = nakliyePayi > 0
-      ? `<span style="color:var(--text3)">/</span> <b style="color:#b45309" title="Alış'a aktarılacak birim fiyat: iskontolu fatura fiyatı ${bicim(netBirimFiyat - nakliyePayi)} + nakliye/palet payı ${bicim(nakliyePayi)}">${bicim(netBirimFiyat)}</b>`
+      ? `<span style="color:var(--text3)">/</span> <b style="color:#b45309" ${nakliyeEtiket}>${bicim(netBirimFiyat)}</b>${f.kalemler[i]._nakliyeOverride ? ` <span style="font-size:9px;color:var(--accent)" title="Bu ürün için nakliye payı, torba başına sabit tutarla otomatik güncellendi (palet maliyeti uygulanmaz)">🚚 sabit</span>` : ``}`
       : "";
   }
   const hucre = document.getElementById(`bfm-tutar-${i}`);
@@ -8475,6 +8507,11 @@ function cekSenetTopluOdemeAc(){
   const secili = _cekSenetListe.filter(c=>_cekSenetTopluSecim.has(c.id) && c.durum==="Portföyde");
   if(secili.length < 2){ alert("Birlikte ödemek için en az 2 çek/senet seçin"); return; }
   const toplam = secili.reduce((a,c)=>a+c.kalanTutar,0);
+  // Ortalama vade (26 Eyl 2026): seçilen çeklerin vadeleri gün cinsinden ortalanır — kaç gün
+  // sonraya "bağlanmış" para olduğunu tek bakışta görebilmek için (nakit akışı planlaması).
+  const vadeMsListesi = secili.map(c=>new Date(c.vade+"T00:00:00").getTime()).filter(t=>!isNaN(t));
+  const ortalamaVade = vadeMsListesi.length ? new Date(vadeMsListesi.reduce((a,b)=>a+b,0)/vadeMsListesi.length) : null;
+  const ortalamaVadeStr = ortalamaVade ? tarihIsoYaz_(ortalamaVade) : "";
   const bugun = new Date().toISOString().slice(0,10);
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -8489,6 +8526,7 @@ function cekSenetTopluOdemeAc(){
         </div>`).join("")}
       </div>
       <div class="fld"><label>Toplam</label><input value="${paraFormat(toplam)}" disabled></div>
+      ${ortalamaVadeStr ? `<div class="fld"><label>Ortalama Vade</label><input value="${tarihGoster(ortalamaVadeStr)}" disabled></div>` : ``}
       <div class="fld"><label>Tarih</label><input id="ct-tarih" type="date" value="${bugun}"></div>
       <div class="fld"><label>Açıklama</label><input id="ct-aciklama" type="text" placeholder="İsteğe bağlı"></div>
       <div class="modal-actions">
@@ -8498,6 +8536,7 @@ function cekSenetTopluOdemeAc(){
     </div>`;
   document.body.appendChild(overlay);
 }
+function tarihIsoYaz_(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 
 function cekSenetTopluOdemeKaydet(){
   const idler = Array.from(_cekSenetTopluSecim);
@@ -9631,6 +9670,7 @@ const MR_BASLIKLAR = {
 };
 
 let _kasaRaporuMod = "gunluk";
+let _mrOncekiTip = "";
 
 // "YYYY-MM-DD" bir tarihten bir gün öncesini aynı formatta döndürür (Devir kartı etiketi için).
 function birGunOncesiGoster(gunStr){
@@ -9645,12 +9685,18 @@ function birGunOncesiGoster(gunStr){
 // "Rapor Seç" değiştiğinde çağrılır — Kasa Raporu seçiliyse mod (Günlük/Tarih Aralıklı) alanını gösterir.
 function muhasebeRaporuTipDegisti(){
   const tip = document.getElementById("mr-tip-secim").value;
+  // Kar/Zarar Raporu, elle bir tarih seçilmediği sürece TÜM geçmişten itibaren hesaplanır
+  // (maliyet/FIFO hesaplaması geçmişe bağımlı olduğu için "son 2 ay" varsayılanı burada
+  // yanıltıcı olurdu) — kullanıcı dilerse yine kendi tarih aralığını seçebilir (27 Eyl 2026).
+  if(tip === "karZarar" && _mrOncekiTip !== "karZarar") document.getElementById("rapor-baslangic").value = "";
+  _mrOncekiTip = tip;
   document.getElementById("mr-kasa-mod-alani").style.display = (tip === "kasaRaporu") ? "flex" : "none";
   // Kasa Raporu kendi Excel butonuna sahip (mr-kasa-mod-alani içinde) — genel buton onunla çakışmasın diye gizlenir.
   document.getElementById("mr-excel-btn").style.display = (tip === "kasaRaporu") ? "none" : "inline-flex";
   _mrSirala = { anahtar: "tarih", yon: "desc" };
   const stokKoduDestekli = ["urunBazliHareket","urunBazliSiparis","urunBazliFatura","karZarar"].includes(tip);
   document.getElementById("mr-stokkodu-alani").style.display = stokKoduDestekli ? "flex" : "none";
+  document.getElementById("mr-maliyet-yontemi-alani").style.display = (tip === "karZarar") ? "flex" : "none";
   const cariRaporuMu = (tip === "cariHareketTopluRaporu" || tip === "borcAlacakRaporu");
   document.getElementById("mr-cari-filtre-alani").style.display = cariRaporuMu ? "block" : "none";
   if(cariRaporuMu) mrCariSecimOneriGoster();
@@ -9885,6 +9931,7 @@ const MR_KOLONLAR = {
     { anahtar:"satisTutari", baslik:"Satış Tutarı", al:s=>parseFloat(s.satisTutari)||0 },
     { anahtar:"maliyet", baslik:"Maliyet", al:s=>parseFloat(s.maliyet)||0 },
     { anahtar:"kar", baslik:"Kâr", al:s=>parseFloat(s.kar)||0 },
+    { anahtar:"karYuzde", baslik:"Kâr %", al:s=>(s.karYuzde===null||s.karYuzde===undefined)?-Infinity:parseFloat(s.karYuzde) },
   ],
   urunBazliAggregate: (tip)=>[
     { anahtar:"stokKodu", baslik:"Stok Kodu", al:s=>(s.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
@@ -9967,6 +10014,7 @@ function muhasebeRaporuYukle(){
   const stokKodu = document.getElementById("mr-stokkodu").value.trim();
   const kasaMod = (tip === "kasaRaporu" && _kasaRaporuMod === "devirli") ? "devirli" : "aralik";
   const istekBody = gunlukSecili ? {tip, mod:"gunluk", gun, stokKodu} : {tip, mod:kasaMod, baslangic, bitis, stokKodu};
+  if(tip === "karZarar") istekBody.maliyetYontemi = document.getElementById("mr-maliyet-yontemi").value;
   if(tip === "cariHareketTopluRaporu" || tip === "borcAlacakRaporu"){
     const tipEl = document.querySelector('input[name="mr-cari-tip"]:checked');
     istekBody.cariTipFiltre = tipEl ? tipEl.value : "alici";
@@ -10037,19 +10085,36 @@ function mrIcerikCiz(tip, res){
     if(res.satirlar.length===0){ el.innerHTML = '<div class="cari-empty">Bu aralıkta satış yok.</div>'; return; }
     const kolonlar = MR_KOLONLAR.karZarar;
     const satirlar = mrSiraliDiz(res.satirlar, kolonlar);
+    const yontemAdi = {fifo:"FIFO", sonGiris:"Son Giriş Maliyeti", enYakin:"En Yakın Giriş Maliyeti"}[res.maliyetYontemi] || "FIFO";
     el.innerHTML = `
       <div class="finans-kartlar">
         <div class="finans-kart"><div class="lbl">Toplam Satış</div><div class="num">${paraFormat(res.toplamSatis)}</div></div>
-        <div class="finans-kart"><div class="lbl">Toplam Maliyet</div><div class="num">${paraFormat(res.toplamMaliyet)}</div></div>
-        <div class="finans-kart"><div class="lbl">Kâr</div><div class="num">${paraFormat(res.toplamKar)}</div></div>
+        <div class="finans-kart"><div class="lbl">Toplam Maliyet (${yontemAdi})</div><div class="num">${paraFormat(res.toplamMaliyet)}</div></div>
+        <div class="finans-kart ${res.toplamKar>=0?'pos':'neg'}"><div class="lbl">Kâr/Zarar</div><div class="num">${paraFormat(res.toplamKar)}${res.toplamKarYuzde!==null?' · %'+res.toplamKarYuzde.toFixed(1):''}</div></div>
       </div>
-      ${res.eslesmeyenSayisi>0 ? `<p style="color:var(--text3);font-size:12px;margin:0 0 10px">⚠️ ${res.eslesmeyenSayisi} kalemin Stok Tanımları'nda eşleşen alış fiyatı bulunamadı — bu kalemlerin maliyeti 0 kabul edildi (kâr olduğundan yüksek görünebilir). Ürün adının Stok Tanımları'ndaki adla birebir aynı olduğundan emin olun.</p>` : ""}
+      ${res.eslesmeyenSayisi>0 ? `<p style="color:var(--text3);font-size:12px;margin:0 0 10px">⚠️ ${res.eslesmeyenSayisi} kalemin bu tarih aralığında hiç alış/giriş kaydı bulunamadı — bu kalemlerin maliyeti eksik/0 kabul edildi (kâr olduğundan yüksek görünebilir). Stok kodunun Alış Faturaları'nda da aynı şekilde kullanıldığından emin olun.</p>` : ""}
       <table class="rapor-tbl">
         <thead><tr>${mrSiraliBasliklarHTML(kolonlar)}</tr></thead>
         <tbody>
-          ${satirlar.map(s=>`
-            <tr><td>${s.stokKodu||'—'}</td><td>${s.urunAdi}${s.maliyetBilinmiyor?' ⚠️':''}</td><td>${miktarFormat(s.miktar)}</td><td>${paraFormat(s.satisTutari)}</td><td>${paraFormat(s.maliyet)}</td><td>${paraFormat(s.kar)}</td></tr>`).join("")}
+          ${satirlar.map(s=>{
+            const karPozitif = s.kar>=0;
+            return `<tr>
+              <td>${s.stokKodu||'—'}</td>
+              <td>${s.urunAdi}${s.maliyetBilinmiyor?' <span title="Bu tarih aralığında alış/giriş kaydı eksik">⚠️</span>':''}</td>
+              <td style="text-align:right">${miktarFormat(s.miktar)}</td>
+              <td style="text-align:right">${paraFormat(s.satisTutari)}</td>
+              <td style="text-align:right">${paraFormat(s.maliyet)}</td>
+              <td style="text-align:right" class="${karPozitif?'hk-alacak':'hk-borc'}">${paraFormat(s.kar)}</td>
+              <td style="text-align:right" class="${karPozitif?'hk-alacak':'hk-borc'}">${(s.karYuzde===null)?'—':s.karYuzde.toFixed(1)+'%'}</td>
+            </tr>`;}).join("")}
         </tbody>
+        <tfoot><tr>
+          <td colspan="3" style="font-weight:800">Toplam</td>
+          <td style="text-align:right;font-weight:800">${paraFormat(res.toplamSatis)}</td>
+          <td style="text-align:right;font-weight:800">${paraFormat(res.toplamMaliyet)}</td>
+          <td style="text-align:right;font-weight:800" class="${res.toplamKar>=0?'hk-alacak':'hk-borc'}">${paraFormat(res.toplamKar)}</td>
+          <td style="text-align:right;font-weight:800" class="${res.toplamKar>=0?'hk-alacak':'hk-borc'}">${res.toplamKarYuzde===null?'—':res.toplamKarYuzde.toFixed(1)+'%'}</td>
+        </tr></tfoot>
       </table>`;
     return;
   }
