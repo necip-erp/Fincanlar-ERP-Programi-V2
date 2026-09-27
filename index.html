@@ -1033,7 +1033,10 @@ setInterval(topbarSaatGuncelle, 10000);
       <div id="finans-panel"><div class="cari-empty">Yükleniyor...</div></div>
       <div class="rapor-baslik">Banka Tanımlamaları</div>
       <div id="banka-yapisi-alani"><div class="cari-empty">Yükleniyor...</div></div>
-      <div class="rapor-baslik">Banka Hesap Hareketleri</div>
+      <div class="rapor-baslik" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span>Banka Hesap Hareketleri</span>
+        <button class="btn" style="padding:4px 12px;font-size:12.5px" onclick="bankaMasrafEkleAc()">💸 Masraf Ekle</button>
+      </div>
       <div class="fld" style="max-width:320px"><label>Hesap</label>
         <select id="bhh-hesap-secim" onchange="bankaHesapHareketleriYukle()"><option value="">— Tüm hesaplar —</option></select>
       </div>
@@ -8088,10 +8091,11 @@ function odemeSilOnay(id){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
-function odemeModalAc(onCariId){
+function odemeModalAc(onCariId, onSecenekler){
   if(!_cariYuklendi) cariListesiYukle();
   if(!_tanimListeYuklendi.giderUstGrup) tanimListesiYukle("giderUstGrup");
   if(!_tanimListeYuklendi.giderAltGrup) tanimListesiYukle("giderAltGrup");
+  onSecenekler = onSecenekler || {};
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "odeme-modal-overlay";
@@ -8154,10 +8158,28 @@ function odemeModalAc(onCariId){
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  odemeBankaSecenekleriYukle();
+  const bankaHesapPromise = odemeBankaSecenekleriYukle();
   odemePosSecenekleriYukle();
   odemeHedefBankaSecenekleriYukle();
   odemeGiderUstDoldur();
+  // Finans > Banka Hesap Hareketleri'ndeki "💸 Masraf Ekle" kısayolundan açıldıysa, Hedef:Gider +
+  // Yöntem:Havale/EFT + o an seçili banka hesabıyla önceden doldurulur (26 Eyl 2026).
+  if(onSecenekler.hedefTipi){
+    document.getElementById("om-hedef-tip").value = onSecenekler.hedefTipi;
+    odemeHedefTipDegisti();
+  }
+  if(onSecenekler.bankaHesapId){
+    document.getElementById("om-yontem").value = "Havale/EFT";
+    odemeYontemDegisti();
+    (bankaHesapPromise || Promise.resolve()).then(()=>{
+      const sel = document.getElementById("om-banka-hesap");
+      if(sel) sel.value = onSecenekler.bankaHesapId;
+    });
+  }
+  if(onSecenekler.giderUstId){
+    const sel = document.getElementById("om-gider-ust");
+    if(sel){ sel.value = onSecenekler.giderUstId; odemeGiderAltDoldur(); }
+  }
 }
 
 // "Ödeme Hedefi" seçimine göre Cari / Banka / Gider alanlarını gösterir-gizler.
@@ -8227,7 +8249,7 @@ function odemeModalAcOnCari(cariId){
 }
 
 function odemeBankaSecenekleriYukle(){
-  cariApiYapi("getBankaYapisi").then(res=>{
+  return cariApiYapi("getBankaYapisi").then(res=>{
     if(!res.ok) return;
     const sel = document.getElementById("om-banka-hesap");
     if(!sel) return;
@@ -8281,6 +8303,49 @@ function omCariSec(i){
   document.getElementById("om-cari-arama").value = c.ad;
   kutu.style.display = "none";
   cariSonrasiOdak_("om");
+}
+
+// Banka Hesap Hareketleri ekranından hızlı masraf girişi: mevcut Ödeme > Hedef:Gider
+// mekanizmasını (Yöntem:Havale/EFT ile seçilen hesaptan otomatik Çıkış düşer) o an seçili
+// hesap önceden dolu olacak şekilde açar. "Banka Masrafları" gider grubu + POS/Çek
+// Tahsilat/Faiz/Havale-EFT masraf tipleri ilk kullanımda otomatik oluşturulur (26 Eyl 2026).
+function bankaMasrafEkleAc(){
+  const bankaHesapId = document.getElementById("bhh-hesap-secim") ? document.getElementById("bhh-hesap-secim").value : "";
+  cariApi("ensureBankaMasrafTanimlari").then(res=>{
+    const giderUstId = res && res.ok ? res.ustId : "";
+    // Az önce oluşturulmuş/güncellenmiş olabileceği için tanım listelerini taze çek.
+    _tanimListeYuklendi.giderUstGrup = false; _tanimListeYuklendi.giderAltGrup = false;
+    Promise.all([
+      cariApiYapi("getBasitTanimListesi", {tip:"giderUstGrup"}),
+      cariApiYapi("getBasitTanimListesi", {tip:"giderAltGrup"})
+    ]).then(([ustRes, altRes])=>{
+      if(ustRes.ok){ _tanimListeCache.giderUstGrup = ustRes.kalemler; _tanimListeYuklendi.giderUstGrup = true; }
+      if(altRes.ok){ _tanimListeCache.giderAltGrup = altRes.kalemler; _tanimListeYuklendi.giderAltGrup = true; }
+      odemeModalAc(null, { hedefTipi: "Gider", bankaHesapId, giderUstId });
+    });
+  }).catch(()=>{ odemeModalAc(null, { hedefTipi: "Gider", bankaHesapId }); });
+}
+
+// Banka Hesap Hareketleri listesinde bir "📦 Toplu Ödeme" etiketine tıklanınca, aynı oturumda
+// birlikte ödenmiş TÜM çek/senetleri tek modalda gösterir (26 Eyl 2026).
+function topluOdemeGrubuGoster(topluOdemeNo){
+  cariApi("getTopluOdemeGrubu", {topluOdemeNo}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <h3>Birlikte Ödenen Çek/Senetler</h3>
+        <table class="hareket-tbl">
+          <thead><tr><th>Cari</th><th>Banka</th><th>Tarih</th><th>Tutar</th></tr></thead>
+          <tbody>${res.kalemler.map(k=>`<tr><td>${k.cariAd}</td><td>${k.bankaAdi||''}</td><td>${tarihGoster(k.tarih)}</td><td style="text-align:right">${paraFormat(k.tutar)}</td></tr>`).join("")}</tbody>
+          <tfoot><tr><td colspan="3" style="font-weight:800">Toplam</td><td style="text-align:right;font-weight:800">${paraFormat(res.toplam)}</td></tr></tfoot>
+        </table>
+        <div class="modal-actions"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Kapat</button></div>
+      </div>`;
+    document.body.appendChild(overlay);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
 function odemeYontemDegisti(){
@@ -8347,6 +8412,7 @@ let _cekSenetYuklendi = false;
 let _cekSenetListe = [];
 let _cekSenetSecili = null;
 let _cekSenetAktifTip = "Alınan";
+let _cekSenetTopluSecim = new Set();
 
 function cekSenetListesiYukle(){
   _cekSenetYuklendi = true;
@@ -8365,6 +8431,7 @@ function cekSenetListesiYukle(){
 
 function cekSenetTipDegistir(tip){
   _cekSenetAktifTip = tip;
+  _cekSenetTopluSecim.clear();
   document.querySelectorAll("#mod-ceksenet .belge-tab").forEach(b=>b.classList.toggle("active", b.dataset.tip===tip));
   cekSenetListesiCiz();
 }
@@ -8384,14 +8451,85 @@ function cekSenetListesiCiz(){
   let liste = _cekSenetListe.filter(c=>c.tip===_cekSenetAktifTip);
   if(q) liste = liste.filter(c => c.cariAd.replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.seriNo||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q));
   if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı çek/senet yok. "+" ile ekleyin.</div>'; return; }
-  el.innerHTML = liste.map(c=>`
+  // Borç çeklerinde (Kendi Çekim = "Verilen") birden fazla çeki tek seferde ödeyip Banka Hesap
+  // Hareketleri'nde birlikte (gruplu) görebilmek için çoklu seçim (26 Eyl 2026).
+  const topluAktif = _cekSenetAktifTip === "Verilen";
+  const secilebilirler = liste.filter(c=>c.durum==="Portföyde");
+  let barHtml = "";
+  if(topluAktif && secilebilirler.length){
+    const seciliSay = secilebilirler.filter(c=>_cekSenetTopluSecim.has(c.id)).length;
+    const seciliToplam = secilebilirler.filter(c=>_cekSenetTopluSecim.has(c.id)).reduce((a,c)=>a+c.kalanTutar,0);
+    barHtml = `<div style="display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:12.5px;border-bottom:1px solid var(--border)">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${seciliSay===secilebilirler.length?'checked':''} onchange="cekSenetTopluHepsiSecToggle(this.checked)"> Hepsini seç</label>
+      <span style="flex:1;color:var(--text2)">${seciliSay?seciliSay+' seçili — '+paraFormat(seciliToplam):''}</span>
+      <button class="btn" style="padding:3px 10px;font-size:12px" ${seciliSay<2?'disabled':''} onclick="cekSenetTopluOdemeAc()">Seçilenleri Birlikte Öde</button>
+    </div>`;
+  }
+  el.innerHTML = barHtml + liste.map(c=>`
     <div class="cari-item ${_cekSenetSecili===c.id?'sel':''}" onclick="cekSenetAc('${c.id}')">
       <div class="cari-item-top">
+        ${(topluAktif && c.durum==="Portföyde") ? `<input type="checkbox" style="margin-right:6px" ${_cekSenetTopluSecim.has(c.id)?'checked':''} onclick="event.stopPropagation()" onchange="cekSenetTopluSecToggle('${c.id}')">` : ''}
         <span class="cari-item-ad">${c.cariAd}</span>
         <span class="cari-item-bakiye">${paraFormat(c.kalanTutar)}</span>
       </div>
       <span class="cari-item-tip">${tarihGoster(c.vade)}${c.seriNo?' · '+c.seriNo:''} · ${cekSenetDurumEtiket(c)}</span>
     </div>`).join("");
+}
+
+function cekSenetTopluSecToggle(id){
+  if(_cekSenetTopluSecim.has(id)) _cekSenetTopluSecim.delete(id); else _cekSenetTopluSecim.add(id);
+  cekSenetListesiCiz();
+}
+function cekSenetTopluHepsiSecToggle(hepsi){
+  const secilebilirler = _cekSenetListe.filter(c=>c.tip===_cekSenetAktifTip && c.durum==="Portföyde");
+  if(hepsi) secilebilirler.forEach(c=>_cekSenetTopluSecim.add(c.id));
+  else secilebilirler.forEach(c=>_cekSenetTopluSecim.delete(c.id));
+  cekSenetListesiCiz();
+}
+
+// Seçilen borç çeklerinin KALAN TUTARININ TAMAMINI tek seferde öder; hepsi ortak bir "Toplu Ödeme
+// No" ile etiketlenir ki Banka Hesap Hareketleri listesinde birlikte (gruplu) görülebilsinler
+// (bkz. backend cekSenetTopluOdemeYap / getTopluOdemeGrubu — "birlikte ödenen çekler listede tek
+// tek karşıma geliyor" isteği, 26 Eyl 2026).
+function cekSenetTopluOdemeAc(){
+  const secili = _cekSenetListe.filter(c=>_cekSenetTopluSecim.has(c.id) && c.durum==="Portföyde");
+  if(secili.length < 2){ alert("Birlikte ödemek için en az 2 çek/senet seçin"); return; }
+  const toplam = secili.reduce((a,c)=>a+c.kalanTutar,0);
+  const bugun = new Date().toISOString().slice(0,10);
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "cektoplu-modal-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h3>Seçilen ${secili.length} Çek/Senedi Birlikte Öde</h3>
+      <div style="max-height:200px;overflow-y:auto;font-size:12.5px;border:1px solid var(--border);border-radius:6px;padding:6px 8px;margin-bottom:8px">
+        ${secili.map(c=>`<div style="display:flex;justify-content:space-between;padding:2px 0">
+          <span>${c.cariAd}${c.seriNo?' · '+c.seriNo:''} · Vade ${tarihGoster(c.vade)}</span><span>${paraFormat(c.kalanTutar)}</span>
+        </div>`).join("")}
+      </div>
+      <div class="fld"><label>Toplam</label><input value="${paraFormat(toplam)}" disabled></div>
+      <div class="fld"><label>Tarih</label><input id="ct-tarih" type="date" value="${bugun}"></div>
+      <div class="fld"><label>Açıklama</label><input id="ct-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('cektoplu-modal-overlay').remove()">İptal</button>
+        <button class="btn btn-primary" id="ct-kaydet-btn" onclick="cekSenetTopluOdemeKaydet()">Öde</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function cekSenetTopluOdemeKaydet(){
+  const idler = Array.from(_cekSenetTopluSecim);
+  const btn = document.getElementById("ct-kaydet-btn"); btn.disabled = true;
+  const body = { idler, tarih: document.getElementById("ct-tarih").value, aciklama: document.getElementById("ct-aciklama").value };
+  cariApi("cekSenetTopluOdemeYap", body).then(res=>{
+    if(!res || (!res.ok && res.hataSay===idler.length)){ alert("Hata: "+((res&&res.hata)||"bilinmiyor")); btn.disabled=false; return; }
+    const overlayEl = document.getElementById("cektoplu-modal-overlay"); if(overlayEl) overlayEl.remove();
+    _cekSenetTopluSecim.clear();
+    cekSenetListesiYukle();
+    if(res.hataSay) alert(res.hataSay+" kayıt işlenemedi (durumu değişmiş olabilir), geri kalanı ödendi.");
+  }).catch(err=>{ alert("Bağlantı hatası: "+err.message); btn.disabled=false; });
 }
 
 function cekSenetAramaFiltrele(){ cekSenetListesiCiz(); }
@@ -8610,6 +8748,7 @@ function cekSenetIslemModalAc(id){
       <div class="fld"><label>Tutar (kalan: ${paraFormat(c.kalanTutar)})</label><input id="ci-tutar" type="number" min="0" max="${c.kalanTutar}" step="0.01" value="${c.kalanTutar}"></div>
       <div class="fld"><label>Tarih</label><input id="ci-tarih" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Açıklama</label><input id="ci-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+      ${(c.tip==='Verilen' && c.bankaHesapId) ? '<div style="font-size:12.5px;color:var(--text2);margin-top:-4px">🏦 Ödenen tutar, çeke bağlı banka hesabından otomatik "Çıkış" olarak düşülecek.</div>' : ''}
       <input type="hidden" id="ci-id" value="${c.id}">
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('cekislem-modal-overlay').remove()">İptal</button>
@@ -8637,12 +8776,13 @@ function cekSenetIslemKaydet(){
 // VERİLEN çekte banka Finans > Banka Tanımlamaları'ndaki bankalardan seçilir ve çek no, o bankanın çek koçanından
 // tanımlanmış BOŞ yapraklardan seçilir (bkz. 📒 Çek Koçanları). Her satıra ayrı, ayrıca hepsine ortak görsel eklenebilir;
 // görseller kayıttan sonra yüklenir ve Cari hareketteki 🖼️ düğmesinden görülür.
-let _csmSatirlar = [], _csmTopluDosyalar = [], _csmYapraklar = [], _csmBankalar = [], _csmKaydediliyor = false;
+let _csmSatirlar = [], _csmTopluDosyalar = [], _csmYapraklar = [], _csmBankalar = [], _csmHesaplar = [], _csmKaydediliyor = false;
 
 function csmYeniSatir_(oncekiSatir){
   return {
     belgeTuru: oncekiSatir ? oncekiSatir.belgeTuru : "Çek",
     bankaId: oncekiSatir ? oncekiSatir.bankaId : "", bankaAdi: oncekiSatir ? oncekiSatir.bankaAdi : "",
+    bankaHesapId: oncekiSatir ? oncekiSatir.bankaHesapId : "",
     yaprakId: "", seriNo: "", vade: "", tutar: oncekiSatir ? oncekiSatir.tutar : "", dosyalar: []
   };
 }
@@ -8650,7 +8790,7 @@ function csmYeniSatir_(oncekiSatir){
 function cekSenetModalAc(onCariId){
   if(!_cariYuklendi) cariListesiYukle();
   if(document.getElementById("ceksenet-modal-overlay")) return;
-  _csmSatirlar = [csmYeniSatir_(null)]; _csmTopluDosyalar = []; _csmYapraklar = []; _csmBankalar = []; _csmKaydediliyor = false;
+  _csmSatirlar = [csmYeniSatir_(null)]; _csmTopluDosyalar = []; _csmYapraklar = []; _csmBankalar = []; _csmHesaplar = []; _csmKaydediliyor = false;
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "ceksenet-modal-overlay";
@@ -8708,7 +8848,7 @@ function cekSenetModalAc(onCariId){
   document.body.appendChild(overlay);
   csmSatirlariCiz();
   // Bankalar (tanımlı) + boş çek yaprakları
-  cariApiYapi("getBankaYapisi").then(res=>{ if(res && res.ok){ _csmBankalar = res.bankalar || []; csmSatirlariCiz(); } }).catch(()=>{});
+  cariApiYapi("getBankaYapisi").then(res=>{ if(res && res.ok){ _csmBankalar = res.bankalar || []; _csmHesaplar = res.hesaplar || []; csmSatirlariCiz(); } }).catch(()=>{});
   csmYapraklariYukle_();
 }
 
@@ -8742,11 +8882,18 @@ function csmSatirlariCiz(){
   const bankaSecenek = (secili)=>'<option value="">— banka seçin —</option>' + _csmBankalar.map(b=>`<option value="${htmlKacis(b.id)}"${b.id===secili?' selected':''}>${htmlKacis(b.ad)}</option>`).join("");
   const satirlar = _csmSatirlar.map((s,i)=>{
     const yaprakli = verilen && s.belgeTuru === "Çek";
-    let bankaHucre, noHucre;
+    let bankaHucre, noHucre, hesapHucre;
     if(verilen){
       bankaHucre = `<select onchange="csmBankaSecildi(${i}, this.value)">${bankaSecenek(s.bankaId)}</select>`;
+      const hesaplar = s.bankaId ? _csmHesaplar.filter(h=>h.bankaId===s.bankaId) : [];
+      hesapHucre = !s.bankaId
+        ? '<select disabled><option>Önce banka seçin</option></select>'
+        : (hesaplar.length
+          ? `<select onchange="_csmSatirlar[${i}].bankaHesapId=this.value"><option value="">— hesap seçin (opsiyonel) —</option>${hesaplar.map(h=>`<option value="${htmlKacis(h.id)}"${h.id===s.bankaHesapId?' selected':''}>${htmlKacis(h.hesapAdi)}</option>`).join("")}</select>`
+          : '<select disabled><option>Bu bankada tanımlı hesap yok</option></select>');
     } else {
       bankaHucre = `<input type="text" list="csm-banka-liste" value="${htmlKacis(s.bankaAdi)}" placeholder="Banka" oninput="_csmSatirlar[${i}].bankaAdi=this.value">`;
+      hesapHucre = "";
     }
     if(yaprakli){
       if(!s.bankaId) noHucre = '<select disabled><option>Önce banka seçin</option></select>';
@@ -8766,6 +8913,7 @@ function csmSatirlariCiz(){
       <td style="text-align:center;color:var(--text3)">${i+1}</td>
       <td><select onchange="csmTurDegisti(${i}, this.value)"><option value="Çek"${s.belgeTuru==='Çek'?' selected':''}>Çek</option><option value="Senet"${s.belgeTuru==='Senet'?' selected':''}>Senet</option></select></td>
       <td>${bankaHucre}</td>
+      <td>${verilen?hesapHucre:''}</td>
       <td>${noHucre}</td>
       <td><input type="date" value="${htmlKacis(s.vade)}" onchange="_csmSatirlar[${i}].vade=this.value"></td>
       <td><input type="text" inputmode="decimal" class="csm-satir-tutar" ${i===0?'id="csm-tutar"':''} value="${htmlKacis(String(s.tutar||''))}" placeholder="0,00" style="text-align:right" oninput="_csmSatirlar[${i}].tutar=this.value; csmToplamGuncelle()" onchange="_csmSatirlar[${i}].tutar=this.value; csmToplamGuncelle()"></td>
@@ -8776,7 +8924,7 @@ function csmSatirlariCiz(){
   kap.innerHTML = `
     <datalist id="csm-banka-liste">${_csmBankalar.map(b=>`<option value="${htmlKacis(b.ad)}">`).join("")}</datalist>
     <table class="rapor-tbl" style="min-width:820px">
-      <thead><tr><th style="width:34px">#</th><th style="width:90px">Tür</th><th style="min-width:170px">Banka${verilen?' (tanımlı)':''}</th><th style="min-width:150px">${verilen?'Çek No (koçandan)':'Çek/Seri No'}</th><th style="width:140px">Vade *</th><th style="width:130px">Tutar *</th><th style="width:110px">Görsel</th><th style="width:34px"></th></tr></thead>
+      <thead><tr><th style="width:34px">#</th><th style="width:90px">Tür</th><th style="min-width:170px">Banka${verilen?' (tanımlı)':''}</th><th style="min-width:150px">${verilen?'Hesap':''}</th><th style="min-width:150px">${verilen?'Çek No (koçandan)':'Çek/Seri No'}</th><th style="width:140px">Vade *</th><th style="width:130px">Tutar *</th><th style="width:110px">Görsel</th><th style="width:34px"></th></tr></thead>
       <tbody>${satirlar}</tbody>
     </table>`;
   csmToplamGuncelle();
@@ -8793,7 +8941,7 @@ function csmToplamGuncelle(){
 function csmBankaSecildi(i, bankaId){
   const s = _csmSatirlar[i]; if(!s) return;
   const b = _csmBankalar.find(x=>x.id===bankaId);
-  s.bankaId = bankaId; s.bankaAdi = b ? b.ad : ""; s.yaprakId = "";
+  s.bankaId = bankaId; s.bankaAdi = b ? b.ad : ""; s.yaprakId = ""; s.bankaHesapId = "";
   csmYaprakOtoSec_(s);
   csmSatirlariCiz();
 }
@@ -8988,6 +9136,7 @@ function cekSenetKaydet(){
         belgeTuru: s.belgeTuru, vade: s.vade,
         seriNo: yaprakli(s) ? "" : s.seriNo, bankaAdi: s.bankaAdi,
         yaprakId: s.yaprakId || "", yaprakZorunlu: yaprakli(s), _sira: i+1,
+        bankaHesapId: (tip==="Verilen") ? (s.bankaHesapId || "") : "",
       });
       try{
         const res = await cariApi("saveCekSenet", body);
@@ -9287,15 +9436,22 @@ function bankaHesapHareketleriYukle(){
     el.innerHTML = `
       <div class="finans-kart ${res.toplam>=0?'pos':'neg'}" style="max-width:260px;margin-bottom:10px"><div class="lbl">Net Bakiye</div><div class="num">${paraFormat(res.toplam)}</div></div>
       <table class="hareket-tbl">
-        <thead><tr><th>Tarih</th><th>Tip</th><th>Tutar</th><th>Açıklama</th></tr></thead>
+        <thead><tr><th>Tarih</th><th>Tip</th><th>Tutar</th><th>Bakiye</th><th>Açıklama</th></tr></thead>
         <tbody>
-          ${res.hareketler.map(h=>`
+          ${res.hareketler.map(h=>{
+            const giris = h.tip==='Giriş';
+            const grupEsleme = /\[Toplu Ödeme: (grp_\d+)\]/.exec(h.aciklama||"");
+            const aciklamaGosterim = grupEsleme
+              ? htmlKacis(h.aciklama).replace(/\[Toplu Ödeme: grp_\d+\]/, `<span style="cursor:pointer;text-decoration:underline" onclick="topluOdemeGrubuGoster('${grupEsleme[1]}')" title="Birlikte ödenen diğer çek/senetleri gör">📦 Toplu Ödeme</span>`)
+              : htmlKacis(h.aciklama);
+            return `
             <tr>
               <td>${tarihGoster(h.tarih)}</td>
-              <td>${h.tip}</td>
-              <td>${h.tip==='Giriş'?'+':'-'}${paraFormat(h.tutar)}</td>
-              <td>${h.aciklama}</td>
-            </tr>`).join("")}
+              <td><span class="${giris?'hk-alacak':'hk-borc'}">${h.tip}</span></td>
+              <td style="text-align:right" class="${giris?'hk-alacak':'hk-borc'}">${giris?'+':'-'}${paraFormat(h.tutar)}</td>
+              <td style="text-align:right">${paraFormat(h.bakiye)}</td>
+              <td>${aciklamaGosterim}</td>
+            </tr>`;}).join("")}
         </tbody>
       </table>`;
   }).catch(err=>{

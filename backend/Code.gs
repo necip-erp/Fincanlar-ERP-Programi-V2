@@ -1086,6 +1086,9 @@ function handleRequest(e) {
       case "saveCekSenet":       result = saveCekSenet(body); break;
       case "silCekSenet":        result = silCekSenet(body); break;
       case "cekSenetIslemYap":   result = cekSenetIslemYap(body); break;
+      case "cekSenetTopluOdemeYap": result = cekSenetTopluOdemeYap(body); break;
+      case "getTopluOdemeGrubu": result = getTopluOdemeGrubu(body.topluOdemeNo); break;
+      case "ensureBankaMasrafTanimlari": result = ensureBankaMasrafTanimlari_(); break;
       case "cekSenetDurumGuncelle": result = cekSenetDurumGuncelle(body); break;
       case "cekSenetHareketGeriAl": result = cekSenetHareketGeriAl(body); break;
       case "cekSenetGorselYukle":  result = cekSenetGorselYukle(body); break;
@@ -4047,6 +4050,7 @@ function getCekSenetListesi() {
       aciklama: String(row[11] || ""), kayitTarihi: hucreTarihStr(row[12]),
       belgeTuru: String(row[15] || "") === "Senet" ? "Senet" : "Çek",
       seriGrupNo: metinOku_(row[17]),
+      bankaHesapId: String(row[18] || ""),
       gecikmis: durum === "Portföyde" && !!vade && vade < bugun,
     });
   }
@@ -4088,6 +4092,7 @@ function getCekSenetDetay(id) {
         belgeTuru: String(row[15] || "") === "Senet" ? "Senet" : "Çek",
         yaprakId: String(row[16] || ""),
         seriGrupNo: metinOku_(row[17]),
+        bankaHesapId: String(row[18] || ""),
       };
       break;
     }
@@ -4120,6 +4125,17 @@ function ensureCekSenetSeriGrupColonu(sheet) {
   metinKolonuGarantiEt_(sheet, 18);
 }
 
+// BANKA_HESAP_ID (26 Eyl 2026): VERİLEN çeklerde, çekin hangi banka hesabından karşılanacağını
+// tutar — çek "Ödendi" durumuna geçtiğinde (bkz. cekSenetIslemYap) bu hesaptan otomatik
+// "Çıkış" hareketi düşürülür. Alınan çeklerde kullanılmaz (boş kalır).
+function ensureCekSenetBankaHesapColonu(sheet) {
+  const baslik = sheet.getRange(1, 19).getValue();
+  if (String(baslik || "") !== "BANKA_HESAP_ID") {
+    sheet.getRange(1, 19).setValue("BANKA_HESAP_ID").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  metinKolonuGarantiEt_(sheet, 19);
+}
+
 // body: { cariId, tip (Alınan/Verilen), tutar, seriNo, bankaAdi, duzenlenmeTarihi, vade, aciklama }
 function saveCekSenet(body) {
   const cariId = String(body.cariId || "").trim();
@@ -4144,6 +4160,7 @@ function saveCekSenet(body) {
   ensureCekSenetBelgeTuruColonu(sheet);
   ensureCekSenetYaprakColonu(sheet);
   ensureCekSenetSeriGrupColonu(sheet);
+  ensureCekSenetBankaHesapColonu(sheet);
   // Aynı milisaniyede toplu kayıt yapılırsa ID çakışmasın diye sayaçlı benzersizleştirme.
   const id = "cs_" + Date.now() + (body._sira ? "_" + body._sira : "");
   const belgeTuru = String(body.belgeTuru || "Çek") === "Senet" ? "Senet" : "Çek";
@@ -4161,10 +4178,12 @@ function saveCekSenet(body) {
     yaprak = sonuc.yaprak;
     if (yaprak) { seriNo = yaprak.cekNo; bankaAdi = yaprak.bankaAdi; }
   }
+  // VERİLEN ÇEK: hangi banka hesabından karşılanacağı (çek ödendiğinde otomatik Çıkış için).
+  const bankaHesapId = (tip === "Verilen") ? String(body.bankaHesapId || "").trim() : "";
   try {
     const topluSeriNo = String(body.topluSeriNo || "").trim();
     metinliSatirEkle_(sheet, [id, tip, cariId, cariAd, tutar, tutar, seriNo, bankaAdi,
-      duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi, "", String(body.projeKodu || "").trim(), belgeTuru, yaprak ? yaprak.id : "", topluSeriNo], [7, 15, 18]);
+      duzenlenmeTarihi, vade, "Portföyde", String(body.aciklama || ""), kayitTarihi, "", String(body.projeKodu || "").trim(), belgeTuru, yaprak ? yaprak.id : "", topluSeriNo, bankaHesapId], [7, 15, 18, 19]);
 
     // Toplu Seri No girilmişse (birden fazla çek/senet aynı işlemde birlikte verildiyse/alındıysa)
     // açıklamaya eklenir; ayrıca frontend'in hesapladığı ortalama vade ve toplam tutar da eklenir
@@ -4462,10 +4481,15 @@ function cekSenetHareketGeriAl(body) {
 
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
   ensureCekSenetCiroColonu(sheet);
+  ensureCekSenetBankaHesapColonu(sheet);
   const data = sheet.getDataRange().getValues();
-  let rowIdx = -1, kalanTutar = 0, tutar = 0, ciroCariId = "";
+  let rowIdx = -1, kalanTutar = 0, tutar = 0, ciroCariId = "", cekTip = "", bankaHesapId = "";
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === id) { rowIdx = i + 1; kalanTutar = parseFloat(data[i][5]) || 0; tutar = parseFloat(data[i][4]) || 0; ciroCariId = String(data[i][13] || ""); break; }
+    if (String(data[i][0]) === id) {
+      rowIdx = i + 1; kalanTutar = parseFloat(data[i][5]) || 0; tutar = parseFloat(data[i][4]) || 0;
+      ciroCariId = String(data[i][13] || ""); cekTip = String(data[i][1] || ""); bankaHesapId = String(data[i][18] || "");
+      break;
+    }
   }
   if (rowIdx === -1) return { ok: false, hata: "Çek/senet bulunamadı" };
 
@@ -4489,6 +4513,11 @@ function cekSenetHareketGeriAl(body) {
     const yeniKalan = Math.round((kalanTutar + hareketTutar) * 100) / 100;
     sheet.getRange(rowIdx, 6).setValue(Math.min(yeniKalan, tutar));
     sheet.getRange(rowIdx, 11).setValue("Portföyde");
+    // Verilen çek + bağlı banka hesabı ile ödenmişse, o hesaba düşen Çıkış hareketi de geri alınır
+    // (bkz. cekSenetIslemYap — CEKODEME:<hareketId> ile benzersiz olarak etiketlenmişti).
+    if (cekTip === "Verilen" && bankaHesapId && hareketTip === "Ödeme") {
+      bankaHesapHareketSilByAciklamaOnPrefix("CEKODEME:" + String(sonHareket[0]));
+    }
   }
 
   hSheet.deleteRow(sonHareketRowIdx);
@@ -4652,9 +4681,23 @@ function silCekSenet(body) {
   return { ok: true };
 }
 
-// body: { id, tarih, tutar, aciklama } — kısmi veya tam tahsilat/ödeme.
+// CekSenetHareketleri.TOPLU_ODEME_NO (26 Eyl 2026, 8. kolon) — birden fazla Verilen çek/senedin
+// AYNI oturumda birlikte ödendiğini işaretler (bkz. cekSenetTopluOdemeYap / getTopluOdemeGrubu).
+// Aynı gerekçeyle SERI_GRUP_NO'dan (çek/senedin girişte gruplanması) AYRI bir kavramdır.
+function ensureCekSenetHareketGrupColonu(hSheet) {
+  const baslik = hSheet.getRange(1, 8).getValue();
+  if (String(baslik || "") !== "TOPLU_ODEME_NO") {
+    hSheet.getRange(1, 8).setValue("TOPLU_ODEME_NO").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  metinKolonuGarantiEt_(hSheet, 8);
+}
+
+// body: { id, tarih, tutar, aciklama, topluOdemeNo (dahili, bkz. cekSenetTopluOdemeYap) } — kısmi veya tam tahsilat/ödeme.
 // Alınan çekte "Tahsilat", Verilen çekte "Ödeme" hareketi olarak CekSenetHareketleri'ne düşer.
 // Kalan tutar sıfırlanınca durum otomatik "Tahsil Edildi" / "Ödendi" olur.
+// VERİLEN çekte, çek oluşturulurken bir BANKA_HESAP_ID seçildiyse (bkz. saveCekSenet), ödeme
+// anında o hesaptan otomatik "Çıkış" hareketi düşürülür (26 Eyl 2026 — daha önce çek ödemesi
+// hiçbir banka hesabına işlenmiyordu, banka hesabı bakiyesi gerçek durumu yansıtmıyordu).
 function cekSenetIslemYap(body) {
   const id = String(body.id || "").trim();
   const tutar = parseFloat(body.tutar) || 0;
@@ -4663,12 +4706,14 @@ function cekSenetIslemYap(body) {
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
+  ensureCekSenetBankaHesapColonu(sheet);
   const data = sheet.getDataRange().getValues();
-  let rowIdx = -1, tip = "", kalanTutar = 0, durum = "";
+  let rowIdx = -1, tip = "", kalanTutar = 0, durum = "", cariAd = "", bankaHesapId = "";
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === id) {
-      rowIdx = i + 1; tip = String(data[i][1] || "");
+      rowIdx = i + 1; tip = String(data[i][1] || ""); cariAd = String(data[i][3] || "");
       kalanTutar = parseFloat(data[i][5]) || 0; durum = String(data[i][10] || "");
+      bankaHesapId = String(data[i][18] || "");
       break;
     }
   }
@@ -4682,13 +4727,86 @@ function cekSenetIslemYap(body) {
   sheet.getRange(rowIdx, 11).setValue(yeniDurum);  // DURUM
 
   const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
+  ensureCekSenetHareketGrupColonu(hSheet);
   const hId = "csh_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
-  hSheet.appendRow([hId, id, tarih, tip === "Alınan" ? "Tahsilat" : "Ödeme", tutar, String(body.aciklama || ""),
-    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+  const topluOdemeNo = String(body.topluOdemeNo || "").trim();
+  metinliSatirEkle_(hSheet, [hId, id, tarih, tip === "Alınan" ? "Tahsilat" : "Ödeme", tutar, String(body.aciklama || ""),
+    Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), topluOdemeNo], [8]);
+
+  // Verilen çek + bağlı banka hesabı varsa: o hesaptan Çıkış hareketi düş. CEKODEME:<hId> ile
+  // benzersiz şekilde geri alınabilir (bkz. cekSenetHareketGeriAl). Toplu ödemede grup etiketi
+  // açıklamaya eklenir ki Banka Hesap Hareketleri listesinde 📦 ile birlikte görülebilsin.
+  if (tip === "Verilen" && bankaHesapId) {
+    const grupEk = topluOdemeNo ? (" [Toplu Ödeme: " + topluOdemeNo + "]") : "";
+    bankaHesapHareketEkle(bankaHesapId, tarih, "Çıkış", tutar,
+      "CEKODEME:" + hId + " | Çek/Senet Ödemesi - " + cariAd + (body.aciklama ? " - " + body.aciklama : "") + grupEk);
+  }
 
   cacheTemizle(["cekSenetListesi"]);
   return { ok: true, kalanTutar: yeniKalan, durum: yeniDurum };
+}
+
+// body: { idler: [cekId, ...], tarih, aciklama } — birden fazla Verilen çek/senedin (borç
+// çeklerinin) kalan tutarının TAMAMINI tek bir işlemde ödenmiş sayar. Her çek kendi
+// hareketine ve (varsa) kendi banka hesabına ayrı ayrı işlenir (böylece tek tek geri
+// alınabilirler) ama ortak bir TOPLU_ODEME_NO ile etiketlenir — Banka Hesap Hareketleri
+// listesinde bu etikete tıklanınca (📦) hepsi birlikte, tek ekranda görülebilir
+// ("Birlikte yapılan çek ödemesi listede tek tek karşıma geliyor" isteği, 26 Eyl 2026).
+function cekSenetTopluOdemeYap(body) {
+  const idler = Array.isArray(body.idler) ? body.idler.map(x => String(x || "").trim()).filter(Boolean) : [];
+  if (idler.length === 0) return { ok: false, hata: "En az bir çek/senet seçilmeli" };
+  if (idler.length === 1) {
+    // Tek kayıt için gruplamaya gerek yok, normal işlemi çalıştır (kalan tutarın tamamı).
+    const listeRes = getCekSenetListesi();
+    const tek = listeRes.ok ? listeRes.cekSenetler.find(c => c.id === idler[0]) : null;
+    if (!tek) return { ok: false, hata: "Çek/senet bulunamadı" };
+    return cekSenetIslemYap({ id: idler[0], tutar: tek.kalanTutar, tarih: body.tarih, aciklama: body.aciklama });
+  }
+
+  const listeRes = getCekSenetListesi();
+  if (!listeRes.ok) return listeRes;
+  const grup = "grp_" + Date.now();
+  const sonuclar = [];
+  let toplam = 0, hataSay = 0;
+  idler.forEach(id => {
+    const c = listeRes.cekSenetler.find(x => x.id === id);
+    if (!c) { sonuclar.push({ id, ok: false, hata: "Bulunamadı" }); hataSay++; return; }
+    if (c.durum !== "Portföyde") { sonuclar.push({ id, ok: false, hata: "Zaten kapatılmış (" + c.durum + ")" }); hataSay++; return; }
+    const res = cekSenetIslemYap({ id, tutar: c.kalanTutar, tarih: body.tarih, aciklama: body.aciklama, topluOdemeNo: grup });
+    sonuclar.push(Object.assign({ id, cariAd: c.cariAd, tutar: c.kalanTutar }, res));
+    if (res.ok) toplam += c.kalanTutar; else hataSay++;
+  });
+  return { ok: hataSay < idler.length, topluOdemeNo: grup, sonuclar: sonuclar, toplam: toplam, hataSay: hataSay };
+}
+
+// Belirli bir "Toplu Ödeme No" (bkz. cekSenetTopluOdemeYap) ile birlikte ödenmiş TÜM çek/senetleri
+// tek listede döner — Banka Hesap Hareketleri'nde "[Toplu Ödeme: X]" etiketine tıklanınca (📦).
+function getTopluOdemeGrubu(topluOdemeNo) {
+  const grp = String(topluOdemeNo || "").trim();
+  if (!grp) return { ok: false, hata: "Toplu Ödeme No gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
+  ensureCekSenetHareketGrupColonu(hSheet);
+  const hData = hSheet.getDataRange().getValues();
+  const cekRes = getCekSenetListesi();
+  const cekMap = {};
+  if (cekRes.ok) cekRes.cekSenetler.forEach(c => { cekMap[c.id] = c; });
+
+  const kalemler = [];
+  let toplam = 0;
+  for (let i = 1; i < hData.length; i++) {
+    const row = hData[i];
+    if (String(row[7] || "") !== grp) continue;
+    const cek = cekMap[String(row[1])] || {};
+    const tutar = parseFloat(row[4]) || 0;
+    kalemler.push({
+      cekId: String(row[1]), tarih: hucreTarihStr(row[2]), tip: String(row[3] || ""), tutar: tutar,
+      cariAd: cek.cariAd || "", bankaAdi: cek.bankaAdi || "", seriNo: cek.seriNo || "",
+    });
+    toplam += tutar;
+  }
+  return { ok: true, topluOdemeNo: grp, kalemler: kalemler, toplam: toplam };
 }
 
 // ════════════════════════════════════════════════
@@ -7684,6 +7802,28 @@ function basitTanimSiraGuncelle(body) {
   return { ok: true };
 }
 
+// Banka Hesap Hareketleri ekranından "💸 Masraf Ekle" ile hızlı erişim için, ilk kullanımda
+// "Banka Masrafları" üst grubunu ve altına POS/Çek Tahsilat/Faiz/Havale-EFT masraf tiplerini
+// (giderUstGrup/giderAltGrup — Ödeme modülünün mevcut Hedef:Gider mekanizması) bir kere
+// oluşturur; sonraki çağrılarda hiçbir şey yapmaz (26 Eyl 2026, mevcutları tekrar oluşturmaz).
+function ensureBankaMasrafTanimlari_() {
+  const ustListe = getBasitTanimListesi("giderUstGrup");
+  if (!ustListe.ok) return ustListe;
+  let ust = ustListe.kalemler.find(k => k.ad === "Banka Masrafları");
+  if (!ust) {
+    const res = saveBasitTanim({ tip: "giderUstGrup", ad: "Banka Masrafları" });
+    if (!res.ok) return res;
+    ust = { id: res.id, ad: "Banka Masrafları" };
+  }
+  const altListe = getBasitTanimListesi("giderAltGrup");
+  if (!altListe.ok) return altListe;
+  const mevcutAdlar = new Set(altListe.kalemler.filter(k => k.ustId === ust.id).map(k => k.ad));
+  ["POS Masrafı", "Çek Tahsilat Masrafı", "Faiz Gideri", "Havale/EFT Masrafı"].forEach(ad => {
+    if (!mevcutAdlar.has(ad)) saveBasitTanim({ tip: "giderAltGrup", ad: ad, ustId: ust.id });
+  });
+  return { ok: true, ustId: ust.id };
+}
+
 // ════════════════════════════════════════════════
 // MARKA TANIMLARI (Stok > Tanımlar > Marka Tanımları — Birim'den farklı
 // olarak 2 haneli bir KOD alanı da tutar. Bu kod, ürünün Stok Kodu'nun
@@ -8706,21 +8846,29 @@ function bankaHesapHareketSilByAciklamaOnPrefix(prefix) {
 }
 
 // Bir banka hesabının (veya tüm hesapların) hareket dökümü — Finans > Banka Hesap Hareketleri.
+// NOT (26 Eyl 2026): her satırın kendi hesabına göre O ANA KADAR OLUŞAN bakiyesi ("bakiye" alanı)
+// satır satır hesaplanıp eklenir — "Tüm hesaplar" seçiliyken bile her satır KENDİ hesabının
+// kronolojik bakiyesini taşır (data satırları zaten ekleniş sırasına göre kronolojiktir).
 function getBankaHesapHareketleri(bankaHesapId) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.bankaHesapHareketleri, BANKA_HESAP_HAREKET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   const sonuc = [];
   let toplam = 0;
+  const hesapBakiye = {}; // her hesabın kendi kronolojik running bakiyesi (tüm hesaplar dahil, filtre uygulanmadan önce hesaplanır)
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (!row[0]) continue;
-    if (bankaHesapId && String(row[1]) !== String(bankaHesapId)) continue;
+    const rowHesapId = String(row[1]);
     const tutar = parseFloat(row[4]) || 0;
-    toplam += (String(row[3]) === "Giriş") ? tutar : -tutar;
+    const yon = (String(row[3]) === "Giriş") ? tutar : -tutar;
+    hesapBakiye[rowHesapId] = Math.round(((hesapBakiye[rowHesapId] || 0) + yon) * 100) / 100;
+    if (bankaHesapId && rowHesapId !== String(bankaHesapId)) continue;
+    toplam += yon;
     sonuc.push({
-      id: String(row[0]), bankaHesapId: String(row[1]), tarih: hucreTarihStr(row[2]),
+      id: String(row[0]), bankaHesapId: rowHesapId, tarih: hucreTarihStr(row[2]),
       tip: String(row[3] || ""), tutar: tutar, aciklama: String(row[5] || ""), kayitTarihi: hucreTarihStr(row[6]),
+      bakiye: hesapBakiye[rowHesapId],
     });
   }
   sonuc.reverse();
