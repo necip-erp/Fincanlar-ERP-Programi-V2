@@ -2085,17 +2085,24 @@ function saveSatis(body) {
   if (belgeTipi === "Fatura" && String(body.odemeTipi || "") === "Kredi Kartı" && !posHesapId) {
     return { ok: false, hata: "Kredi Kartı ile faturada POS hesabı seçimi zorunludur" };
   }
+  // Havale ödeme tipi Fatura'dan KALDIRILDI (27 Eyl 2026) — bankaHesapId boş
+  // bırakılabildiği için parayı hiç bankaya işlemeden fatura+cari kaydı geçebiliyordu.
+  // Havale/EFT ile tahsilat artık SADECE Tahsilat ekranından yapılmalı (orada banka
+  // hesabı zaten zorunlu). Fatura'da Havale hâlâ gönderilirse reddedilir.
+  if (belgeTipi === "Fatura" && String(body.odemeTipi || "") === "Havale") {
+    return { ok: false, hata: "Fatura'da Havale ödeme tipi kaldırıldı. Faturayı Açık Hesap/Peşin olarak kaydedip tahsilatı Tahsilat ekranından Havale/EFT ile girin." };
+  }
   // Havale/Kredi Kartı ile faturanın TAMAMI değil, farklı (genelde daha az) bir tutar
   // tahsil edilmiş olabilir — kalan kısım cari üzerinde Açık Hesap gibi kalmaya devam
   // eder (cari Borç hareketi her zaman toplamTutar kadar, aşağıda değişmeden yazılıyor).
   // Belirtilmezse geriye dönük uyumluluk için TAMAMI o yöntemle alınmış varsayılır.
   const odemeTipiOnBelirtilen = String(body.odemeTipi || "");
   let odemeTutari = toplamTutar;
-  if ((odemeTipiOnBelirtilen === "Havale" || odemeTipiOnBelirtilen === "Kredi Kartı") && belgeTipi === "Fatura") {
+  if (odemeTipiOnBelirtilen === "Kredi Kartı" && belgeTipi === "Fatura") {
     if (body.odemeTutari !== undefined && body.odemeTutari !== null && String(body.odemeTutari).trim() !== "") {
       odemeTutari = parseFloat(body.odemeTutari) || 0;
       if (!(odemeTutari > 0) || odemeTutari > toplamTutar + 0.01) {
-        return { ok: false, hata: (odemeTipiOnBelirtilen === "Havale" ? "Havale" : "Kredi Kartı") + " ile tahsil edilen tutar 0 ile fatura toplamı arasında olmalı" };
+        return { ok: false, hata: "Kredi Kartı ile tahsil edilen tutar 0 ile fatura toplamı arasında olmalı" };
       }
     }
   } else {
@@ -2164,13 +2171,8 @@ function saveSatis(body) {
       });
     }
 
-    // Ödeme Tipi "Havale" ise ve bir banka hesabı seçildiyse, o hesaba GİRİŞ kaydı düşülür.
-    // Tahsil edilen tutar (odemeTutari) fatura toplamından FARKLI/daha az olabilir —
-    // kalan kısım cari üzerinde borç (Açık Hesap gibi) olarak kalmaya devam eder.
-    if (String(body.odemeTipi || "") === "Havale" && bankaHesapId) {
-      bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", odemeTutari,
-        cariHareketAciklamaOlustur("SATIS", id, "satis_" + belgeTipi, body.aciklama));
-    }
+    // Havale ödeme tipi Fatura'dan kaldırıldığı için (bkz. yukarı) burada artık bir
+    // Havale/banka bloğu yok — Havale tahsilatı Tahsilat ekranından yapılır.
 
     // Ödeme Tipi "Kredi Kartı" ise ve bir POS hesabı seçildiyse, o POS hesabına
     // BORÇ kaydı düşülür (POS/banka bize bu tutarı ödeyecek) — Tahsilat'taki
@@ -4179,7 +4181,13 @@ function saveCekSenet(body) {
     if (yaprak) { seriNo = yaprak.cekNo; bankaAdi = yaprak.bankaAdi; }
   }
   // VERİLEN ÇEK: hangi banka hesabından karşılanacağı (çek ödendiğinde otomatik Çıkış için).
+  // ZORUNLU (27 Eyl 2026 düzeltmesi): önceden arayüzde "opsiyonel" bırakılabiliyordu — bu
+  // durumda çek ödendiğinde (cekSenetIslemYap) bankaHesapId boş olduğu için hiçbir Çıkış
+  // hareketi yazılmıyor, çek "Ödendi" görünüyor ama banka bakiyesi hiç etkilenmiyordu.
   const bankaHesapId = (tip === "Verilen") ? String(body.bankaHesapId || "").trim() : "";
+  if (tip === "Verilen" && !bankaHesapId) {
+    return { ok: false, hata: "Verilen çek/senette, ödendiğinde hangi banka hesabından düşüleceği (Hesap) seçilmelidir." };
+  }
   try {
     const topluSeriNo = String(body.topluSeriNo || "").trim();
     metinliSatirEkle_(sheet, [id, tip, cariId, cariAd, tutar, tutar, seriNo, bankaAdi,
@@ -4518,6 +4526,12 @@ function cekSenetHareketGeriAl(body) {
     if (cekTip === "Verilen" && bankaHesapId && hareketTip === "Ödeme") {
       bankaHesapHareketSilByAciklamaOnPrefix("CEKODEME:" + String(sonHareket[0]));
     }
+    // Alınan çek Banka'ya tahsil edilmişse, o hesaba düşen Giriş hareketi de geri alınır
+    // (bkz. cekSenetIslemYap — CEKTAHSIL:<hareketId> ile benzersiz olarak etiketlenmişti;
+    // "Kasa" seçilmişse zaten banka hareketi hiç yoktu, bu çağrı o durumda no-op'tur).
+    if (cekTip === "Alınan" && hareketTip === "Tahsilat") {
+      bankaHesapHareketSilByAciklamaOnPrefix("CEKTAHSIL:" + String(sonHareket[0]));
+    }
   }
 
   hSheet.deleteRow(sonHareketRowIdx);
@@ -4698,6 +4712,12 @@ function ensureCekSenetHareketGrupColonu(hSheet) {
 // VERİLEN çekte, çek oluşturulurken bir BANKA_HESAP_ID seçildiyse (bkz. saveCekSenet), ödeme
 // anında o hesaptan otomatik "Çıkış" hareketi düşürülür (26 Eyl 2026 — daha önce çek ödemesi
 // hiçbir banka hesabına işlenmiyordu, banka hesabı bakiyesi gerçek durumu yansıtmıyordu).
+// ALINAN çekte (body.hedefTipi: "Kasa" | "Banka") tahsil edilen tutarın nereye alındığı ARTIK
+// ZORUNLU (27 Eyl 2026 düzeltmesi) — önceden Alınan bir çek "Tahsil Edildi" işaretlendiğinde
+// hiçbir bankaya/kasaya Giriş kaydı düşmüyordu, para sisteme hiç girmemiş gibi görünüyordu.
+// "Banka" seçilirse hedefBankaHesapId zorunludur ve o hesaba Giriş yazılır; "Kasa" seçilirse
+// (elden/nakit tahsil) banka hareketi yazılmaz ama seçim açıklamaya işlenir ki en azından
+// çek/senet hareket geçmişinden nereye alındığı görülebilsin.
 function cekSenetIslemYap(body) {
   const id = String(body.id || "").trim();
   const tutar = parseFloat(body.tutar) || 0;
@@ -4721,6 +4741,18 @@ function cekSenetIslemYap(body) {
   if (durum !== "Portföyde") return { ok: false, hata: "Bu çek/senet zaten kapatılmış (" + durum + ")" };
   if (tutar > kalanTutar + 0.01) return { ok: false, hata: "Tutar kalan tutardan (" + kalanTutar + ") büyük olamaz" };
 
+  let hedefTipi = "", hedefBankaHesapId = "";
+  if (tip === "Alınan") {
+    hedefTipi = String(body.hedefTipi || "").trim();
+    if (hedefTipi !== "Kasa" && hedefTipi !== "Banka") {
+      return { ok: false, hata: "Tahsil edilen tutarın nereye alındığı (Kasa veya Banka) seçilmelidir." };
+    }
+    if (hedefTipi === "Banka") {
+      hedefBankaHesapId = String(body.hedefBankaHesapId || "").trim();
+      if (!hedefBankaHesapId) return { ok: false, hata: "Banka seçildiyse hangi hesaba yatırıldığı da seçilmelidir." };
+    }
+  }
+
   const yeniKalan = Math.round((kalanTutar - tutar) * 100) / 100;
   const yeniDurum = yeniKalan <= 0.01 ? (tip === "Alınan" ? "Tahsil Edildi" : "Ödendi") : "Portföyde";
   sheet.getRange(rowIdx, 6).setValue(yeniKalan);   // KALAN_TUTAR
@@ -4731,7 +4763,8 @@ function cekSenetIslemYap(body) {
   const hId = "csh_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const topluOdemeNo = String(body.topluOdemeNo || "").trim();
-  metinliSatirEkle_(hSheet, [hId, id, tarih, tip === "Alınan" ? "Tahsilat" : "Ödeme", tutar, String(body.aciklama || ""),
+  const hedefEk = hedefTipi ? (" [" + hedefTipi + "]") : "";
+  metinliSatirEkle_(hSheet, [hId, id, tarih, tip === "Alınan" ? "Tahsilat" : "Ödeme", tutar, (String(body.aciklama || "") + hedefEk).trim(),
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), topluOdemeNo], [8]);
 
   // Verilen çek + bağlı banka hesabı varsa: o hesaptan Çıkış hareketi düş. CEKODEME:<hId> ile
@@ -4741,6 +4774,13 @@ function cekSenetIslemYap(body) {
     const grupEk = topluOdemeNo ? (" [Toplu Ödeme: " + topluOdemeNo + "]") : "";
     bankaHesapHareketEkle(bankaHesapId, tarih, "Çıkış", tutar,
       "CEKODEME:" + hId + " | Çek/Senet Ödemesi - " + cariAd + (body.aciklama ? " - " + body.aciklama : "") + grupEk);
+  }
+
+  // Alınan çek Banka'ya tahsil edildiyse: o hesaba Giriş hareketi düş. CEKTAHSIL:<hId> ile
+  // benzersiz şekilde geri alınabilir (bkz. cekSenetHareketGeriAl).
+  if (tip === "Alınan" && hedefTipi === "Banka" && hedefBankaHesapId) {
+    bankaHesapHareketEkle(hedefBankaHesapId, tarih, "Giriş", tutar,
+      "CEKTAHSIL:" + hId + " | Çek/Senet Tahsilatı - " + cariAd + (body.aciklama ? " - " + body.aciklama : ""));
   }
 
   cacheTemizle(["cekSenetListesi"]);

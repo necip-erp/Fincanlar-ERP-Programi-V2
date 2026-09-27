@@ -4506,7 +4506,6 @@ function siparisFaturaModalAc(siparisId){
           <div class="fld" style="flex:1;min-width:180px"><label>Ödeme Tipi</label>
             <select id="sf-odeme">
               <option value="Peşin">Peşin</option>
-              <option value="Havale">Havale</option>
               <option value="Kredi Kartı">Kredi Kartı</option>
               <option value="Açık Hesap">Açık Hesap</option>
             </select>
@@ -4994,17 +4993,12 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
             <option value="" ${s && s.odemeTipi===''?'selected':''}>— Seçilmedi —</option>
             <option value="Nakit" ${s && s.odemeTipi==='Nakit'?'selected':''}>Nakit</option>
             <option value="Kredi Kartı" ${s && s.odemeTipi==='Kredi Kartı'?'selected':''}>Kredi Kartı</option>
-            <option value="Havale" ${s && s.odemeTipi==='Havale'?'selected':''}>Havale</option>
             <option value="Açık Hesap" ${!s || s.odemeTipi==='Açık Hesap'?'selected':''}>Açık Hesap</option>
           </select>
         </div>
         <div class="fld" style="flex:2;min-width:220px"><label>Açıklama</label><input id="sm-aciklama" type="text" placeholder="İsteğe bağlı" value="${s ? (s.aciklama||'') : ''}"></div>
         <div class="fld" style="flex:1;min-width:140px"><label>Proje Kodu</label>${projeKoduSelectHTML('sm-proje-kodu', s?s.projeKodu:'')}</div>
         <div class="fld" id="sm-fatura-tipi-fld" style="flex:1;min-width:140px;display:${belgeTipiBaslangic==='Fatura'?'flex':'none'}"><label>Fatura Tipi</label>${faturaTipiSelectHTML('sm-fatura-tipi', s?s.faturaTipi:'', s?'':'00')}</div>
-      </div>
-      <div class="fld" id="sm-banka-fld" style="display:none">
-        <label>Havale — Banka / Hesap</label>
-        <select id="sm-banka-hesap"></select>
       </div>
       <div class="fld" id="sm-kk-fld" style="display:none">
         <label>Kredi Kartı — POS Hesabı</label>
@@ -5061,7 +5055,6 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
     </div>`;
   document.body.appendChild(overlay);
   satisKalemlerCiz();
-  satisBankaSecenekleriYukle(s ? s.bankaHesapId : undefined);
   satisPosSecenekleriYukle(s ? s.posHesapId : undefined);
   document.getElementById("sm-odeme-tutar").value = (s && s.odemeTutari !== null && s.odemeTutari !== undefined) ? s.odemeTutari : "";
   satisOdemeTipiDegisti();
@@ -5161,26 +5154,14 @@ function siparisNumarasiOnizlemeYukle(){
   }).catch(()=>{});
 }
 
-// Ödeme Tipi "Havale" seçildiğinde banka/hesap, "Açık Hesap" seçildiğinde vade tarihi alanını gösterir.
+// Ödeme Tipi "Açık Hesap" seçildiğinde vade tarihi alanını gösterir. "Havale" 27 Eyl 2026'da
+// Fatura'dan kaldırıldı (bankaHesapId opsiyonel bırakılabildiği için bankaya hiç düşmeden fatura
+// geçebiliyordu) — Havale/EFT tahsilatı artık Tahsilat ekranından yapılmalı (orada zorunlu).
 function satisOdemeTipiDegisti(){
   const tip = document.getElementById("sm-odeme").value;
-  document.getElementById("sm-banka-fld").style.display = (tip === "Havale") ? "flex" : "none";
   document.getElementById("sm-kk-fld").style.display = (tip === "Kredi Kartı") ? "flex" : "none";
-  document.getElementById("sm-odeme-tutar-fld").style.display = (tip === "Havale" || tip === "Kredi Kartı") ? "flex" : "none";
+  document.getElementById("sm-odeme-tutar-fld").style.display = (tip === "Kredi Kartı") ? "flex" : "none";
   document.getElementById("sm-vade-fld").style.display = (tip === "Açık Hesap") ? "flex" : "none";
-}
-
-function satisBankaSecenekleriYukle(onSecili){
-  cariApiYapi("getBankaYapisi").then(res=>{
-    if(!res.ok) return;
-    const sel = document.getElementById("sm-banka-hesap");
-    if(!sel) return;
-    sel.innerHTML = res.hesaplar.map(h=>{
-      const banka = res.bankalar.find(b=>b.id===h.bankaId);
-      return `<option value="${h.id}">${banka?banka.ad:''} — ${h.hesapAdi}</option>`;
-    }).join("");
-    if(onSecili) sel.value = onSecili;
-  }).catch(()=>{});
 }
 
 // sm-kk-hesap, tahsilat/ödeme modallarındaki POS yüklemesiyle aynı desende
@@ -5503,7 +5484,6 @@ function satisKaydet(){
       }
     }
   }
-  const bankaHesapId = odemeTipi === "Havale" ? document.getElementById("sm-banka-hesap").value : "";
   const posHesapId = odemeTipi === "Kredi Kartı" ? document.getElementById("sm-kk-hesap").value : "";
   // Tahsilat/Ödeme'deki aynı kural: Kredi Kartı seçilip POS hesabı boş bırakılırsa
   // Fatura'da hiçbir POS hareketine iz düşmeden kayıt kaçabiliyordu — burada engelleniyor.
@@ -5511,15 +5491,16 @@ function satisKaydet(){
     alert("Kredi Kartı ile faturada POS hesabı seçimi zorunludur");
     return;
   }
-  // Havale/Kredi Kartı ile faturanın tamamından farklı (genelde daha az) bir tutar
-  // tahsil edilmiş olabilir — boş bırakılırsa faturanın tamamı o yöntemle alınmış varsayılır.
+  // Kredi Kartı ile faturanın tamamından farklı (genelde daha az) bir tutar tahsil edilmiş
+  // olabilir — boş bırakılırsa faturanın tamamı o yöntemle alınmış varsayılır. (Havale, 27 Eyl
+  // 2026'da Fatura'dan kaldırıldı — Havale/EFT tahsilatı artık Tahsilat ekranından yapılıyor.)
   let odemeTutari = "";
-  if(odemeTipi === "Havale" || odemeTipi === "Kredi Kartı"){
+  if(odemeTipi === "Kredi Kartı"){
     const odemeTutariGirisi = document.getElementById("sm-odeme-tutar").value;
     if(String(odemeTutariGirisi).trim() !== ""){
       odemeTutari = parseFloat(odemeTutariGirisi) || 0;
       if(belgeTipi === "Fatura" && (!(odemeTutari > 0) || odemeTutari > satisGenelToplamHesapla() + 0.01)){
-        alert((odemeTipi==="Havale"?"Havale":"Kredi Kartı") + " ile tahsil edilen tutar 0 ile fatura toplamı arasında olmalı");
+        alert("Kredi Kartı ile tahsil edilen tutar 0 ile fatura toplamı arasında olmalı");
         return;
       }
     }
@@ -5534,7 +5515,6 @@ function satisKaydet(){
     siparisNo: (belgeTipi === "Sipariş" || belgeTipi === "Fatura") ? (document.getElementById("sm-siparis-no-deger")||{}).value || "" : undefined,
     tutarIskontosu: tutarIskontosu,
     tutarIskontoKdvSonra: tutarIskontoKdvSonra,
-    bankaHesapId: bankaHesapId,
     posHesapId: posHesapId,
     odemeTutari: odemeTutari,
     vade: odemeTipi === "Açık Hesap" ? document.getElementById("sm-vade").value : "",
@@ -8742,27 +8722,73 @@ function cekSenetIslemModalAc(id){
   overlay.id = "cekislem-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   const bugun = simdiTarihSaat();
+  // 27 Eyl 2026 düzeltmesi: Alınan bir çek tahsil edildiğinde önceden hiçbir bankaya/kasaya
+  // Giriş kaydı düşmüyordu (para sisteme hiç girmemiş gibi görünüyordu) — artık nereye
+  // alındığı (Kasa/Banka) zorunlu soruluyor.
+  const hedefAlani = (c.tip === "Alınan") ? `
+      <div class="fld"><label>Nereye Alındı?</label>
+        <select id="ci-hedef-tipi" onchange="ciHedefTipiDegisti()">
+          <option value="">— seçin —</option>
+          <option value="Kasa">Kasa (Nakit)</option>
+          <option value="Banka">Banka Hesabına Yatırıldı</option>
+        </select>
+      </div>
+      <div class="fld" id="ci-hedef-banka-fld" style="display:none">
+        <label>Banka / Hesap</label>
+        <select id="ci-hedef-banka-hesap"></select>
+      </div>` : '';
   overlay.innerHTML = `
     <div class="modal-box">
       <h3>${c.tip==='Alınan'?'Tahsilat':'Ödeme'} — ${c.cariAd}</h3>
       <div class="fld"><label>Tutar (kalan: ${paraFormat(c.kalanTutar)})</label><input id="ci-tutar" type="number" min="0" max="${c.kalanTutar}" step="0.01" value="${c.kalanTutar}"></div>
       <div class="fld"><label>Tarih</label><input id="ci-tarih" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Açıklama</label><input id="ci-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+      ${hedefAlani}
       ${(c.tip==='Verilen' && c.bankaHesapId) ? '<div style="font-size:12.5px;color:var(--text2);margin-top:-4px">🏦 Ödenen tutar, çeke bağlı banka hesabından otomatik "Çıkış" olarak düşülecek.</div>' : ''}
       <input type="hidden" id="ci-id" value="${c.id}">
+      <input type="hidden" id="ci-tip" value="${c.tip}">
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('cekislem-modal-overlay').remove()">İptal</button>
         <button class="btn btn-primary" onclick="cekSenetIslemKaydet()">Kaydet</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  if(c.tip === "Alınan") ciHedefBankaSecenekleriYukle();
+}
+
+function ciHedefTipiDegisti(){
+  const tip = document.getElementById("ci-hedef-tipi").value;
+  document.getElementById("ci-hedef-banka-fld").style.display = (tip === "Banka") ? "flex" : "none";
+}
+
+function ciHedefBankaSecenekleriYukle(){
+  cariApiYapi("getBankaYapisi").then(res=>{
+    if(!res.ok) return;
+    const sel = document.getElementById("ci-hedef-banka-hesap");
+    if(!sel) return;
+    sel.innerHTML = res.hesaplar.map(h=>{
+      const banka = res.bankalar.find(b=>b.id===h.bankaId);
+      return `<option value="${h.id}">${banka?banka.ad:''} — ${h.hesapAdi}</option>`;
+    }).join("");
+  }).catch(()=>{});
 }
 
 function cekSenetIslemKaydet(){
   const id = document.getElementById("ci-id").value;
+  const tip = document.getElementById("ci-tip") ? document.getElementById("ci-tip").value : "";
   const tutar = parseFloat(document.getElementById("ci-tutar").value) || 0;
   if(tutar <= 0){ alert("Tutar sıfırdan büyük olmalı"); return; }
   const body = { id, tutar, tarih: document.getElementById("ci-tarih").value, aciklama: document.getElementById("ci-aciklama").value };
+  if(tip === "Alınan"){
+    const hedefTipi = document.getElementById("ci-hedef-tipi").value;
+    if(hedefTipi !== "Kasa" && hedefTipi !== "Banka"){ alert("Tahsil edilen tutarın nereye alındığını (Kasa/Banka) seçin"); return; }
+    body.hedefTipi = hedefTipi;
+    if(hedefTipi === "Banka"){
+      const hedefBankaHesapId = document.getElementById("ci-hedef-banka-hesap").value;
+      if(!hedefBankaHesapId){ alert("Hangi banka hesabına yatırıldığını seçin"); return; }
+      body.hedefBankaHesapId = hedefBankaHesapId;
+    }
+  }
   cariApi("cekSenetIslemYap", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("cekislem-modal-overlay").remove();
@@ -8889,8 +8915,8 @@ function csmSatirlariCiz(){
       hesapHucre = !s.bankaId
         ? '<select disabled><option>Önce banka seçin</option></select>'
         : (hesaplar.length
-          ? `<select onchange="_csmSatirlar[${i}].bankaHesapId=this.value"><option value="">— hesap seçin (opsiyonel) —</option>${hesaplar.map(h=>`<option value="${htmlKacis(h.id)}"${h.id===s.bankaHesapId?' selected':''}>${htmlKacis(h.hesapAdi)}</option>`).join("")}</select>`
-          : '<select disabled><option>Bu bankada tanımlı hesap yok</option></select>');
+          ? `<select onchange="_csmSatirlar[${i}].bankaHesapId=this.value"><option value="">— hesap seçin (zorunlu) —</option>${hesaplar.map(h=>`<option value="${htmlKacis(h.id)}"${h.id===s.bankaHesapId?' selected':''}>${htmlKacis(h.hesapAdi)}</option>`).join("")}</select>`
+          : '<select disabled><option>⚠️ Bu bankada tanımlı hesap yok — önce ekleyin</option></select>');
     } else {
       bankaHucre = `<input type="text" list="csm-banka-liste" value="${htmlKacis(s.bankaAdi)}" placeholder="Banka" oninput="_csmSatirlar[${i}].bankaAdi=this.value">`;
       hesapHucre = "";
@@ -9094,6 +9120,9 @@ function cekSenetKaydet(){
     if(tutar <= 0){ alert(no+"Tutar sıfırdan büyük olmalı"); return; }
     if(!s.vade){ alert(no+"Vade tarihi gerekli"); return; }
     if(tip==="Verilen" && !s.bankaId){ alert(no+"Verilen çek/senette banka, tanımlı bankalardan seçilmeli"); return; }
+    // 27 Eyl 2026 düzeltmesi: hesap seçimi önceden opsiyoneldi — boş bırakılırsa çek ödendiğinde
+    // hiçbir banka hesabından düşmüyordu, banka bakiyesi gerçek durumu yansıtmıyordu.
+    if(tip==="Verilen" && s.bankaId && !s.bankaHesapId){ alert(no+"Verilen çek/senette, ödendiğinde hangi hesaptan düşüleceği (Hesap) seçilmeli. Hesap yoksa önce Finans > Banka Tanımlamaları'ndan ekleyin."); return; }
     if(yaprakli(s) && !s.yaprakId){ alert(no+"Çek numarası çek koçanından (boş yapraklardan) seçilmeli. Yaprak yoksa '📒 Çek Koçanı Tanımla' ile ekleyin."); return; }
   }
   const yaprakSay = {};
