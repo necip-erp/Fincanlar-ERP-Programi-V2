@@ -5825,7 +5825,8 @@ function getMuhasebeRaporu(body) {
       toplam += tutar;
       satirlar.push({ id: String(row[0]), tarih: hucreTarihStr(row[1]), cariAd: String(row[3] || ""), cariKodu: cariKoduMap[String(row[2] || "")] || "",
         tutar: tutar, odemeTipi: String(row[5] || ""), aciklama: String(row[6] || ""),
-        projeKodu: metinOku_(row[21]), faturaTipi: metinOku_(row[22]) });
+        projeKodu: metinOku_(row[21]), faturaTipi: metinOku_(row[22]),
+        islemTuru: String(row[11] || "") ? "Siparişten Faturalandı" : "Direkt Fatura" });
     }
     satirlar.sort((a, b) => a.tarih < b.tarih ? 1 : -1);
     return { ok: true, tip: tip, satirlar: satirlar, toplam: toplam };
@@ -6157,6 +6158,7 @@ function getMuhasebeRaporu(body) {
     const sData = sSheet.getDataRange().getValues();
     const cariKoduMap = cariKoduHaritasiOlustur(ss);
     const satisBelgeTipi = {}, satisTarih = {}, satisCariAd = {}, satisCariKodu = {}, satisFaturaNo = {}, satisOdemeTipi = {}, satisSiparisNo = {};
+    const satisKaynakSip = {}; // fatura id -> kaynak sipariş id (boşsa DİREKT fatura)
     for (let i = 1; i < sData.length; i++) {
       const id = String(sData[i][0] || "");
       if (!id) continue;
@@ -6167,6 +6169,7 @@ function getMuhasebeRaporu(body) {
       satisFaturaNo[id] = String(sData[i][16] || ""); // EFATURA_NO (varsa)
       satisOdemeTipi[id] = String(sData[i][5] || "");
       satisSiparisNo[id] = String(sData[i][15] || ""); // SIPARIS_NO
+      satisKaynakSip[id] = String(sData[i][11] || ""); // KAYNAK_SIPARIS_ID
     }
 
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
@@ -6192,12 +6195,19 @@ function getMuhasebeRaporu(body) {
     // görülebilsin diye) — FATURALANAN_MIKTAR alanına göre. Filtre boşsa (tüm ürünler)
     // bu liste boş kalır, sadece aggregate tablo gösterilir (çok kalabalık olmasın diye).
     const siparisDetaylari = [];
+    // İşlem türü: Fatura bir siparişten mi (KAYNAK_SIPARIS_ID dolu) yoksa direkt mi kesilmiş?
+    function satisIslemTuru_(id) {
+      const b = satisBelgeTipi[id];
+      if (b === "Sipariş") return "Direkt Sipariş";
+      if (b === "Teklif") return "Teklif";
+      return satisKaynakSip[id] ? "Siparişten Faturalandı" : "Direkt Fatura";
+    }
     // Ürün Bazlı Hareket Raporu: her hareket (Giriş YA DA Çıkış) ayrı satır olarak da döner (28 Eyl 2026).
     const hareketDetaylari = [];
-    function hareketDetayEkle(yon, kaynak, belgeId, tarih, urunAdi, stokKodu, birim, miktar, birimFiyat, tutar, cariKodu, cariAd) {
+    function hareketDetayEkle(yon, kaynak, belgeId, tarih, urunAdi, stokKodu, birim, miktar, birimFiyat, tutar, cariKodu, cariAd, islemTuru) {
       if (!eslesiyorMu(urunAdi, stokKodu)) return;
       hareketDetaylari.push({ yon: yon, kaynak: kaynak, belgeId: belgeId, tarih: tarih, urunAdi: urunAdi, stokKodu: stokKodu || "",
-        birim: birim || "", miktar: miktar, birimFiyat: birimFiyat, tutar: tutar, cariKodu: cariKodu || "", cariAd: cariAd || "" });
+        birim: birim || "", miktar: miktar, birimFiyat: birimFiyat, tutar: tutar, cariKodu: cariKodu || "", cariAd: cariAd || "", islemTuru: islemTuru || "" });
     }
     // Ürün Bazlı Fatura Raporu da (Sipariş raporuyla aynı biçimde) bir stok seçilince kalem kalem döner.
     const faturaDetaylari = [];
@@ -6217,13 +6227,14 @@ function getMuhasebeRaporu(body) {
       const stokKodu = String(row[10] || "");
       urunEkle(urunAdi, stokKodu, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
       if (tip === "urunBazliHareket") {
-        hareketDetayEkle("Çıkış", "Satış Faturası", satisId, tarih, urunAdi, stokKodu, String(row[4] || ""), parseFloat(row[3]) || 0, parseFloat(row[5]) || 0, parseFloat(row[6]) || 0, satisCariKodu[satisId], satisCariAd[satisId]);
+        hareketDetayEkle("Çıkış", "Satış Faturası", satisId, tarih, urunAdi, stokKodu, String(row[4] || ""), parseFloat(row[3]) || 0, parseFloat(row[5]) || 0, parseFloat(row[6]) || 0, satisCariKodu[satisId], satisCariAd[satisId], satisIslemTuru_(satisId));
       }
       if (tip === "urunBazliFatura" && stokKoduFiltre && eslesiyorMu(urunAdi, stokKodu)) {
         const fMiktar = parseFloat(row[3]) || 0, fTutar = parseFloat(row[6]) || 0;
         faturaDetaylari.push({
           satisId: satisId, tarih: tarih, faturaNo: satisFaturaNo[satisId] || "", cariAd: satisCariAd[satisId] || "", cariKodu: satisCariKodu[satisId] || "",
           odemeTipi: satisOdemeTipi[satisId] || "", urunAdi: urunAdi, stokKodu: stokKodu, birim: String(row[4] || ""),
+          islemTuru: satisIslemTuru_(satisId), kaynakSiparisNo: satisSiparisNo[satisKaynakSip[satisId]] || "",
           miktar: fMiktar, birimFiyat: parseFloat(row[5]) || 0, iskontoYuzde: parseFloat(row[7]) || 0, kdvOrani: parseFloat(row[8]) || 0, tutar: fTutar,
         });
       }
@@ -6242,6 +6253,7 @@ function getMuhasebeRaporu(body) {
           urunAdi: urunAdi, stokKodu: stokKodu, birim: String(row[4] || ""),
           miktar: miktar, faturalananMiktar: faturalananMiktar, kalanMiktar: kalanMiktar,
           tutar: tutarToplam, faturalananTutar: faturalananTutar, kalanTutar: kalanTutar,
+          islemTuru: "Direkt Sipariş",
           durum: kalanMiktar > 0.0001 ? (faturalananMiktar > 0.0001 ? "Kısmen Faturalandı" : "Bekliyor") : "Faturalandı",
         });
       }
@@ -7703,6 +7715,20 @@ function getStokHareketListesi(body) {
       if (!data[i][0]) continue;
       sonuc.push(stokHareketSatiriNesneYap(data[i]));
     }
+    // Satış Faturası hareketlerine işlem türü ekle: fatura bir siparişten mi (KAYNAK_SIPARIS_ID dolu)
+    // yoksa direkt mi kesilmiş? (belgeNo = satış ID'si)
+    try {
+      const sSheetIT = getOrCreateSheet(ss, SHEETS.satislar,
+        ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+      const sDataIT = sSheetIT.getDataRange().getValues();
+      const kaynakHarita = {};
+      for (let j = 1; j < sDataIT.length; j++) { if (sDataIT[j][0]) kaynakHarita[String(sDataIT[j][0])] = String(sDataIT[j][11] || ""); }
+      sonuc.forEach(h => {
+        if (h.belgeTipi === "Satış Faturası" && h.belgeNo && kaynakHarita.hasOwnProperty(h.belgeNo)) {
+          h.islemTuru = kaynakHarita[h.belgeNo] ? "Siparişten Faturalandı" : "Direkt Fatura";
+        }
+      });
+    } catch (e) { /* işlem türü opsiyonel bilgi; hata raporu bozmasın */ }
     return sonuc;
   });
 

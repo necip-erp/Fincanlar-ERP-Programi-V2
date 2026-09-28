@@ -10123,10 +10123,10 @@ function mrHareketDetayHTML(detaylar){
             <td>${!g?`<span class="hk-borc">${mik}</span>`:''}</td>
             <td style="text-align:right">${paraFormat(d.birimFiyat)}</td>
             <td style="text-align:right" class="${g?'hk-alacak':'hk-borc'}">${paraFormat(d.tutar)}</td>
-            <td>${htmlKacis(d.cariKodu||'—')}</td><td>${htmlKacis(d.cariAd||'—')}</td>
+            <td>${htmlKacis(d.cariKodu||'—')}</td><td>${htmlKacis(d.cariAd||'—')}</td><td>${mrIslemTuruRozet(d)}</td>
           </tr>`;}).join("")}
       </tbody>
-      <tfoot><tr><td><b>Toplam</b></td><td></td><td></td><td><b>${miktarFormat(top(giris,'miktar'))}</b></td><td><b>${miktarFormat(top(cikis,'miktar'))}</b></td><td></td><td></td><td></td><td></td></tr></tfoot>
+      <tfoot><tr><td><b>Toplam</b></td><td></td><td></td><td><b>${miktarFormat(top(giris,'miktar'))}</b></td><td><b>${miktarFormat(top(cikis,'miktar'))}</b></td><td></td><td></td><td></td><td></td><td></td></tr></tfoot>
     </table>`;
 }
 
@@ -10193,6 +10193,14 @@ function mrSiparisRaporuHTML(res){
 }
 
 // Her rapor tipi için sütun tanımları — sıralama VE Excel'e Aktar bunları ortak kullanır.
+// İşlem türü rozeti: Direkt Fatura / Siparişten Faturalandı / Direkt Sipariş (raporlarda kaynağı gösterir)
+function mrIslemTuruRozet(d){
+  const t = d.islemTuru || d.kaynak || "";
+  if(!t) return "—";
+  const renk = t==="Direkt Fatura" ? ["#1d4d33","#d9efe3"] : (t==="Siparişten Faturalandı" ? ["#6b3a06","#fde6c8"] : (t==="Direkt Sipariş" ? ["#1f3a5f","#dbe7f7"] : ["var(--text2)","var(--bg3)"]));
+  const ek = (t==="Siparişten Faturalandı" && d.kaynakSiparisNo) ? ' <span style="color:var(--text3);font-size:10.5px">('+htmlKacis(d.kaynakSiparisNo)+')</span>' : "";
+  return '<span style="font-size:11px;font-weight:700;color:'+renk[0]+';background:'+renk[1]+';padding:2px 8px;border-radius:20px;white-space:nowrap">'+htmlKacis(t)+'</span>'+ek;
+}
 const MR_KOLONLAR = {
   vadesiGecenler: [
     { anahtar:"cariKodu", baslik:"Cari Kodu", al:h=>(h.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
@@ -10255,6 +10263,7 @@ const MR_KOLONLAR = {
     { anahtar:"iskontoYuzde", baslik:"İskonto", al:d=>parseFloat(d.iskontoYuzde)||0 },
     { anahtar:"tutar", baslik:"Fatura Tutarı", al:d=>parseFloat(d.tutar)||0 },
     { anahtar:"odemeTipi", baslik:"Ödeme Tipi", al:d=>(d.odemeTipi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
+    { anahtar:"islemTuru", baslik:"İşlem Türü", al:d=>(d.islemTuru||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
   ],
   hareketDetay: [
     { anahtar:"tarih", baslik:"Tarih", al:d=>d.tarih||"" },
@@ -10266,6 +10275,7 @@ const MR_KOLONLAR = {
     { anahtar:"tutar", baslik:"Toplam Fiyat", al:d=>parseFloat(d.tutar)||0 },
     { anahtar:"cariKodu", baslik:"Cari Kod", al:d=>(d.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
     { anahtar:"cariAd", baslik:"Cari İsim", al:d=>(d.cariAd||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
+    { anahtar:"islemTuru", baslik:"İşlem Türü", al:d=>((d.islemTuru||d.kaynak)||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
   ],
   siparisRaporu: [
     { anahtar:"tarih", baslik:"Tarih", al:d=>d.tarih||"" },
@@ -10526,16 +10536,18 @@ function mrIcerikCizAsil(tip, res){
     return;
   }
   if(tip === "alisFatura" || tip === "satisFatura"){
-    const kolonlar = MR_KOLONLAR.alisFatura; // aynı sütun şeması ikisinde de kullanılır
+    const satisMi = tip === "satisFatura";
+    // Satış Fatura Raporu'nda ek olarak "İşlem Türü" (Direkt Fatura / Siparişten Faturalandı) gösterilir.
+    const kolonlar = satisMi ? MR_KOLONLAR.alisFatura.concat([MR_KOLONLAR.faturaDetay[MR_KOLONLAR.faturaDetay.length-1]]) : MR_KOLONLAR.alisFatura;
     const satirlar = mrSiraliDiz(res.satirlar, kolonlar);
     el.innerHTML = `
       <table class="rapor-tbl">
         <thead><tr>${mrSiraliBasliklarHTML(kolonlar)}</tr></thead>
         <tbody>
           ${satirlar.map(s=>`
-            <tr><td>${tarihGoster(s.tarih)}</td><td>${s.cariKodu||'—'}</td><td>${s.cariAd}</td><td>${s.odemeTipi}</td><td>${paraFormat(s.tutar)}</td><td>${s.aciklama||''}</td></tr>`).join("")}
+            <tr><td>${tarihGoster(s.tarih)}</td><td>${s.cariKodu||'—'}</td><td>${s.cariAd}</td><td>${s.odemeTipi}</td><td>${paraFormat(s.tutar)}</td><td>${s.aciklama||''}</td>${satisMi?`<td>${mrIslemTuruRozet(s)}</td>`:''}</tr>`).join("")}
         </tbody>
-        <tfoot><tr><td colspan="4"><b>Toplam</b></td><td colspan="2"><b>${paraFormat(res.toplam)}</b></td></tr></tfoot>
+        <tfoot><tr><td colspan="4"><b>Toplam</b></td><td colspan="${satisMi?3:2}"><b>${paraFormat(res.toplam)}</b></td></tr></tfoot>
       </table>`;
   } else if(tip === 'urunBazliHareket' && res.hareketDetaylari && res.hareketDetaylari.length > 0){
     el.innerHTML = mrHareketDetayHTML(res.hareketDetaylari);
@@ -10592,10 +10604,10 @@ function mrFaturaDetayHTML(detaylar){
           <tr style="cursor:pointer" onclick="kayitYeniSekmedeAc('SATIS','${d.satisId}')" title="Fatura kaydını yeni sekmede aç">
             <td>${tarihGoster(d.tarih)}</td><td>${d.faturaNo||'—'}</td><td>${d.cariKodu||'—'}</td><td>${d.cariAd||'—'}</td><td>${d.urunAdi}</td>
             <td>${miktarFormat(d.miktar)} ${d.birim||''}</td><td>${paraFormat(d.birimFiyat)}</td><td>${d.iskontoYuzde ? '%'+miktarFormat(d.iskontoYuzde) : '—'}</td>
-            <td>${paraFormat(d.tutar)}</td><td>${d.odemeTipi||'—'}</td>
+            <td>${paraFormat(d.tutar)}</td><td>${d.odemeTipi||'—'}</td><td>${mrIslemTuruRozet(d)}</td>
           </tr>`).join("")}
       </tbody>
-      <tfoot><tr><td colspan="5"><b>Toplam</b></td><td><b>${miktarFormat(toplamMiktar)}</b></td><td colspan="2"></td><td><b>${paraFormat(toplamTutar)}</b></td><td></td></tr></tfoot>
+      <tfoot><tr><td colspan="5"><b>Toplam</b></td><td><b>${miktarFormat(toplamMiktar)}</b></td><td colspan="2"></td><td><b>${paraFormat(toplamTutar)}</b></td><td></td><td></td></tr></tfoot>
     </table>`;
 }
 
@@ -10624,7 +10636,7 @@ function mrSiparisDetayHTML(detaylar){
       <tbody>
         ${detaylar.map(d=>`
           <tr style="cursor:pointer" onclick="kayitYeniSekmedeAc('SATIS','${d.satisId}')" title="Sipariş kaydını yeni sekmede aç">
-            <td>${tarihGoster(d.tarih)}</td><td>${d.siparisNo||'—'}</td><td>${d.cariKodu||'—'}</td><td>${d.cariAd||'—'}</td><td>${d.urunAdi}</td>
+            <td>${tarihGoster(d.tarih)}</td><td>${d.siparisNo||'—'}<div style="margin-top:2px">${mrIslemTuruRozet({islemTuru:d.islemTuru||'Direkt Sipariş'})}</div></td><td>${d.cariKodu||'—'}</td><td>${d.cariAd||'—'}</td><td>${d.urunAdi}</td>
             <td>${miktarFormat(d.miktar)} ${d.birim||''}</td><td>${miktarFormat(d.faturalananMiktar)}</td><td>${miktarFormat(d.kalanMiktar)}</td>
             <td>${paraFormat(d.tutar)}</td><td>${paraFormat(d.faturalananTutar)}</td><td>${paraFormat(d.kalanTutar)}</td>
             <td><span style="font-size:11.5px;font-weight:700;color:${durumRenk[d.durum]};background:${durumBg[d.durum]};padding:2px 9px;border-radius:20px;white-space:nowrap">${d.durum}</span></td>
@@ -10703,8 +10715,13 @@ function muhasebeRaporuExcelAktar(){
     }
   } else if(tip === "alisFatura" || tip === "satisFatura"){
     dosya = tip==="alisFatura" ? "AlisFaturaRaporu" : "SatisFaturaRaporu"; sayfaAdi = "Fatura";
-    ekle(MR_KOLONLAR.alisFatura, res.satirlar, s=>[tarihGoster(s.tarih), s.cariKodu||"", s.cariAd||"", s.odemeTipi||"", s.tutar, s.aciklama||""]);
-    aoa.push(["", "", "", "TOPLAM", res.toplam, ""]);
+    if(tip==="satisFatura"){
+      ekle(MR_KOLONLAR.alisFatura.concat([MR_KOLONLAR.faturaDetay[MR_KOLONLAR.faturaDetay.length-1]]), res.satirlar, s=>[tarihGoster(s.tarih), s.cariKodu||"", s.cariAd||"", s.odemeTipi||"", s.tutar, s.aciklama||"", s.islemTuru||""]);
+      aoa.push(["", "", "", "TOPLAM", res.toplam, "", ""]);
+    } else {
+      ekle(MR_KOLONLAR.alisFatura, res.satirlar, s=>[tarihGoster(s.tarih), s.cariKodu||"", s.cariAd||"", s.odemeTipi||"", s.tutar, s.aciklama||""]);
+      aoa.push(["", "", "", "TOPLAM", res.toplam, ""]);
+    }
   } else if(tip === "karZarar"){
     dosya = "KarZararRaporu"; sayfaAdi = "Kâr-Zarar";
     ekle(MR_KOLONLAR.karZarar, res.satirlar, s=>[s.stokKodu||"", s.urunAdi||"", s.miktar, s.satisTutari, s.maliyet, s.kar]);
@@ -10720,13 +10737,13 @@ function muhasebeRaporuExcelAktar(){
     }
   } else if(tip === 'urunBazliFatura' && res.faturaDetaylari && res.faturaDetaylari.length > 0){
     dosya = "UrunBazliFaturaRaporu"; sayfaAdi = "Fatura Detay";
-    ekle(MR_KOLONLAR.faturaDetay, res.faturaDetaylari, d=>[tarihGoster(d.tarih), d.faturaNo||"", d.cariKodu||"", d.cariAd||"", d.urunAdi||"", d.miktar, d.birimFiyat, d.iskontoYuzde, d.tutar, d.odemeTipi||""]);
+    ekle(MR_KOLONLAR.faturaDetay, res.faturaDetaylari, d=>[tarihGoster(d.tarih), d.faturaNo||"", d.cariKodu||"", d.cariAd||"", d.urunAdi||"", d.miktar, d.birimFiyat, d.iskontoYuzde, d.tutar, d.odemeTipi||"", (d.islemTuru||"")+(d.kaynakSiparisNo?" ("+d.kaynakSiparisNo+")":"")]);
   } else if(tip === 'urunBazliSiparis' && res.siparisDetaylari && res.siparisDetaylari.length > 0){
     dosya = "UrunBazliSiparisRaporu"; sayfaAdi = "Sipariş Detay";
     ekle(MR_KOLONLAR.siparisDetay, res.siparisDetaylari, d=>[tarihGoster(d.tarih), d.siparisNo||"", d.cariKodu||"", d.cariAd||"", d.urunAdi||"", d.miktar, d.faturalananMiktar, d.kalanMiktar, d.tutar, d.faturalananTutar, d.kalanTutar, d.durum||""]);
   } else if(tip === 'urunBazliHareket' && res.hareketDetaylari && res.hareketDetaylari.length > 0){
     dosya = "UrunBazliHareketRaporu"; sayfaAdi = "Hareket";
-    ekle(MR_KOLONLAR.hareketDetay, res.hareketDetaylari, d=>[tarihGoster(d.tarih), d.stokKodu||"", d.urunAdi||"", d.yon==='Giriş'?d.miktar:"", d.yon==='Çıkış'?d.miktar:"", d.birimFiyat, d.tutar, d.cariKodu||"", d.cariAd||""]);
+    ekle(MR_KOLONLAR.hareketDetay, res.hareketDetaylari, d=>[tarihGoster(d.tarih), d.stokKodu||"", d.urunAdi||"", d.yon==='Giriş'?d.miktar:"", d.yon==='Çıkış'?d.miktar:"", d.birimFiyat, d.tutar, d.cariKodu||"", d.cariAd||"", d.islemTuru||d.kaynak||""]);
   } else if(tip === 'siparisRaporu'){
     dosya = "SiparisRaporu"; sayfaAdi = "Siparişler";
     aoa.push(["Sipariş No","Tarih","Cari Kodu","Cari","Sipariş Durumu","Faturalama","Stok Kodu","Ürün","Miktar","Faturalanan","Bekleyen","Birim Fiyat","Tutar"]);
@@ -13744,7 +13761,7 @@ function stokHareketRaporuCiz(){
           const btn = belgeliMi ? `<button class="btn" style="font-size:11px;padding:4px 8px" onclick="stokHareketBelgeAc('${h.belgeTipi}','${h.belgeNo}')" title="İlgili belgeyi aç">📄 Aç</button>` : "";
           const giris = h.hareketTipi==="Giriş" ? miktarFormat(h.miktar) : "";
           const cikis = h.hareketTipi==="Çıkış" ? miktarFormat(h.miktar) : "";
-          return `<tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td class="hk-alacak">${giris}</td><td class="hk-borc">${cikis}</td><td>${miktarFormat(h.kalan)}</td><td>${h.birim}</td><td>${h.belgeTipi||''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td><td>${btn}</td></tr>`;
+          return `<tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td class="hk-alacak">${giris}</td><td class="hk-borc">${cikis}</td><td>${miktarFormat(h.kalan)}</td><td>${h.birim}</td><td>${h.belgeTipi||''}${h.islemTuru?`<div style="margin-top:2px">${mrIslemTuruRozet({islemTuru:h.islemTuru})}</div>`:''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td><td>${btn}</td></tr>`;
         }).join("")}
       </tbody>
     </table>
@@ -14280,6 +14297,144 @@ if("serviceWorker" in navigator){
     if(!btn) return;
     e.preventDefault();
     btn.click();
+  });
+})();
+</script>
+
+<!-- ══════════════ 28 Eyl 2026: Rapor renk standardı + Alış/Satış sol liste daraltma + Faturayı Gör genişletme + Ctrl+← geri ══════════════ -->
+<style>
+/* ── Rapor renk standardı (seçilebilir tema): boş alan / tablo / başlık artık ayrı renkler ── */
+body{--rp-alan:#eef2f8;--rp-tablo:#ffffff;--rp-th-bg:#dbe7f7;--rp-th-fg:#1f3a5f;--rp-th-bd:#9db8dd;--rp-zebra:#f5f8fc;--rp-foot:#e8eff9}
+body[data-rapor-tema="yesil"]{--rp-alan:#eef6f1;--rp-th-bg:#d3ecdd;--rp-th-fg:#1d4d33;--rp-th-bd:#8fc7a6;--rp-zebra:#f5faf7;--rp-foot:#e3f2e9}
+body[data-rapor-tema="turuncu"]{--rp-alan:#faf3ea;--rp-th-bg:#fde0bd;--rp-th-fg:#6b3a06;--rp-th-bd:#ebb578;--rp-zebra:#fdf8f1;--rp-foot:#fbebd6}
+body[data-rapor-tema="gri"]{--rp-alan:#e9ebef;--rp-th-bg:#3a4252;--rp-th-fg:#ffffff;--rp-th-bd:#1f2530;--rp-zebra:#f4f5f7;--rp-foot:#dfe2e8}
+body[data-rapor-tema="sade"]{--rp-alan:#ffffff;--rp-th-bg:#f1f3f7;--rp-th-fg:#333a47;--rp-th-bd:#c9ced8;--rp-zebra:#fafbfc;--rp-foot:#f1f3f7}
+#mod-rapor,#stok-hareket-rapor-view,#stok-kritik-rapor-view{background:var(--rp-alan)}
+.rapor-tbl{background:var(--rp-tablo);border:1px solid var(--rp-th-bd)}
+.rapor-tbl th{background:var(--rp-th-bg)!important;color:var(--rp-th-fg)!important;border-bottom:2px solid var(--rp-th-bd)!important;padding:8px!important}
+.rapor-tbl th.siralanabilir:hover{color:var(--rp-th-fg)!important;filter:brightness(.95)}
+.rapor-tbl th.siralanabilir.aktif .ok{color:var(--rp-th-fg)!important}
+.rapor-tbl tbody tr:nth-child(even){background:var(--rp-zebra)}
+.rapor-tbl tfoot td{background:var(--rp-foot);border-top:2px solid var(--rp-th-bd)}
+.rapor-tema-kutu{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text2)}
+.rapor-tema-kutu select{padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);font-size:12px}
+
+/* ── Alış / Satış: açılır-kapanır sol liste ── */
+.sol-toggle{display:flex;align-items:center;gap:6px;background:var(--bg3);border:none;border-bottom:1px solid var(--border);padding:7px 14px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;text-align:left;flex-shrink:0}
+.sol-toggle:hover{background:var(--border)}
+.sol-kapali>.cari-list-panel{width:98px;min-width:98px}
+.sol-kapali>.cari-list-panel>*:not(.sol-toggle):not(.belge-tipi-sekmeler){display:none!important}
+.sol-kapali>.cari-list-panel>#satis-edm-filtre-sekmeler{display:none!important}
+.sol-kapali>.cari-list-panel>.belge-tipi-sekmeler{flex-direction:column;padding:10px 8px 0;gap:6px}
+.sol-kapali>.cari-list-panel>.belge-tipi-sekmeler .belge-tab{flex:none;padding:9px 4px}
+.sol-kapali .sol-toggle{justify-content:center;padding:7px 4px}
+@media (max-width:640px){.sol-toggle{display:none}}
+/* Alış'ta fatura görseli paneli açıkken detay panelinin panelin altında kalmaması için */
+@media (min-width:701px){ body.fatura-panel-acik #mod-alis{padding-right:min(640px,92vw)} }
+</style>
+<script>
+(function(){
+  // ═══ 1) Rapor renk teması (seçilebilir, tarayıcıda hatırlanır) ═══
+  const TEMALAR = { mavi:"Klasik Mavi", yesil:"Yeşil", turuncu:"Turuncu", gri:"Koyu Gri", sade:"Sade Beyaz" };
+  window.raporTemaUygula = function(t){
+    if(!TEMALAR[t]) t = "mavi";
+    document.body.setAttribute("data-rapor-tema", t);
+    try{ localStorage.setItem("raporTema", t); }catch(_){}
+    document.querySelectorAll("select.rapor-tema-sec").forEach(s=>{ s.value = t; });
+  };
+  let kayitliTema = "mavi";
+  try{ kayitliTema = localStorage.getItem("raporTema") || "mavi"; }catch(_){}
+  function temaKutusu(){
+    const k = document.createElement("label");
+    k.className = "rapor-tema-kutu";
+    k.innerHTML = '🎨 Rapor Rengi <select class="rapor-tema-sec" onchange="raporTemaUygula(this.value)">' +
+      Object.keys(TEMALAR).map(id=>'<option value="'+id+'">'+TEMALAR[id]+'</option>').join("") + '</select>';
+    return k;
+  }
+  const filtre = document.querySelector("#mod-rapor .rapor-filtre");
+  if(filtre){ const f = document.createElement("div"); f.className = "fld"; f.appendChild(temaKutusu()); filtre.appendChild(f); }
+  const shrBaslik = document.querySelector("#stok-hareket-rapor-view .rapor-baslik");
+  if(shrBaslik){ const k = temaKutusu(); k.style.marginLeft = "14px"; shrBaslik.appendChild(k); }
+  window.raporTemaUygula(kayitliTema);
+
+  // ═══ 2) Alış / Satış sol liste: açılır-kapanır ═══
+  const GORUNUMLER = { alis:["alis-giris-view","alis-iade-view"], satis:["satis-view","satisiade-view"] };
+  const acik = { alis:true, satis:true }; // ilk girişte açık
+  function uygula(mod){
+    GORUNUMLER[mod].forEach(id=>{
+      const v = document.getElementById(id); if(!v) return;
+      v.classList.toggle("sol-kapali", !acik[mod]);
+      const b = v.querySelector(".sol-toggle");
+      if(b){
+        b.querySelector(".sol-toggle-ok").textContent = acik[mod] ? "◀" : "▶";
+        b.querySelector(".sol-toggle-yazi").style.display = acik[mod] ? "" : "none";
+        b.title = acik[mod] ? "Listeyi gizle" : "Listeyi göster";
+      }
+    });
+  }
+  window.solListeAyarla = function(mod, a){ acik[mod] = !!a; uygula(mod); };
+  window.solListeDurum = function(mod){ return !!acik[mod]; };
+  window.solListeToggle = function(mod){ window.solListeAyarla(mod, !acik[mod]); };
+  Object.keys(GORUNUMLER).forEach(mod=>GORUNUMLER[mod].forEach(id=>{
+    const v = document.getElementById(id), p = v && v.querySelector(".cari-list-panel"); if(!p) return;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "sol-toggle";
+    b.innerHTML = '<span class="sol-toggle-ok">◀</span><span class="sol-toggle-yazi">Listeyi gizle</span>';
+    b.onclick = function(){ window.solListeToggle(mod); };
+    p.insertBefore(b, p.firstChild);
+  }));
+  // Seçim ekranına dönülüp tekrar girildiğinde liste yine "açık" başlasın.
+  const oAlisDon = window.alisAnaSecimeDon, oSatisDon = window.satisAnaSecimeDon;
+  if(typeof oAlisDon === "function") window.alisAnaSecimeDon = function(){ window.solListeAyarla("alis", true); return oAlisDon.apply(this, arguments); };
+  if(typeof oSatisDon === "function") window.satisAnaSecimeDon = function(){ window.solListeAyarla("satis", true); return oSatisDon.apply(this, arguments); };
+
+  // ═══ 3) Faturayı Gör: sol liste kapanır, görsel kapanınca önceki hâline (açıksa açık/kapalıysa kapalı) döner ═══
+  let oncekiSol = null;
+  const oPanelAc = window.bfmYanPanelAc, oPanelKapat = window.bfmYanPanelKapat;
+  if(typeof oPanelAc === "function" && typeof oPanelKapat === "function"){
+    window.bfmYanPanelAc = function(){
+      const r = oPanelAc.apply(this, arguments); // içeride (varsa eski paneli) bfmYanPanelKapat çağırır → durum geri yüklenir
+      if(!oncekiSol){ oncekiSol = { alis: acik.alis, satis: acik.satis }; }
+      window.solListeAyarla("alis", false);
+      window.solListeAyarla("satis", false);
+      document.body.classList.add("fatura-panel-acik");
+      return r;
+    };
+    window.bfmYanPanelKapat = function(){
+      const r = oPanelKapat.apply(this, arguments);
+      document.body.classList.remove("fatura-panel-acik");
+      if(oncekiSol){
+        const o = oncekiSol; oncekiSol = null;
+        window.solListeAyarla("alis", o.alis);
+        window.solListeAyarla("satis", o.satis);
+      }
+      return r;
+    };
+  }
+
+  // ═══ 4) Ctrl+← : bir önceki modül ekranına (alt modülden seçim ekranına / bir üst kademeye) dön ═══
+  document.querySelectorAll(".cari-back-btn").forEach(b=>{
+    if(b.style.display === "inline-flex" && !/Ctrl/.test(b.title||"")) b.title = "Geri (Ctrl+←)";
+  });
+  document.addEventListener("keydown", function(e){
+    if(!(e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && e.key === "ArrowLeft")) return;
+    if(!document.body.classList.contains("giris-yapildi")) return;
+    if(typeof onPlanPencereBul_ === "function" && onPlanPencereBul_()) return; // önde pencere varsa arkadaki ekran değişmesin
+    if(typeof _shp !== "undefined" && _shp.acik) return;
+    const a = document.activeElement;
+    if(a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA")){
+      // Yazı alanında Ctrl+← normalde "önceki kelimeye git"tir; sadece imleç en baştaysa (ör. boş arama kutusu) geri dönüş çalışır.
+      let basta = false;
+      try{ basta = (a.selectionStart === 0 && a.selectionEnd === 0); }catch(_){ basta = false; }
+      if(!basta) return;
+    }
+    if(a && a.isContentEditable) return;
+    const mod = document.querySelector(".modview.active"); if(!mod) return;
+    const ustGorunur = n=>{ for(let x = n.parentElement; x && x !== mod; x = x.parentElement){ if(getComputedStyle(x).display === "none") return false; } return true; };
+    const aday = Array.from(mod.querySelectorAll(".cari-back-btn")).find(b=> (b.style.display === "inline-flex" || b.offsetParent !== null) && ustGorunur(b));
+    if(!aday) return;
+    e.preventDefault();
+    aday.click();
   });
 })();
 </script>
