@@ -360,7 +360,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .bfm-2col-sag-govde{flex:1;min-height:0;overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--bg3)}
 .bfm-2col-sag-govde iframe{width:100%;height:100%;border:0;display:block}
 @media (max-width:1100px){ .bfm-2col{flex-direction:column} .modal-box-onay2col{max-height:96vh} .bfm-2col-sol{max-height:40vh} .bfm-2col-sag-govde{height:50vh} }
-.fatura-yan-panel{position:fixed;top:0;right:0;height:100vh;width:640px;max-width:92vw;background:var(--bg2);box-shadow:-10px 0 28px rgba(16,18,30,.18);z-index:60;display:flex;flex-direction:column;padding:14px;animation:fincanPanelIn .16s var(--ease)}
+.fatura-yan-panel{position:fixed;top:0;right:0;height:100vh;width:760px;max-width:92vw;background:var(--bg2);box-shadow:-10px 0 28px rgba(16,18,30,.18);z-index:60;display:flex;flex-direction:column;padding:14px;animation:fincanPanelIn .16s var(--ease)}
 .fatura-yan-panel .fyp-govde{flex:1;min-height:0;overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--bg3)}
 .fatura-yan-panel .fyp-govde iframe{width:100%;height:100%;border:0;display:block}
 .fatura-yan-panel .fyp-ust{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap}
@@ -1124,7 +1124,7 @@ setInterval(topbarSaatGuncelle, 10000);
         </div>
         <button type="button" class="btn" id="mr-kasa-excel-btn" onclick="kasaRaporuExcelAktar()" title="Ekrandaki kasa raporunu Excel dosyası olarak indirir">📊 Excel'e Aktar</button>
       </div>
-      <div id="mr-maliyet-yontemi-alani" style="display:none;max-width:420px;margin-bottom:14px" class="fld">
+      <div id="mr-maliyet-yontemi-alani" style="display:none;max-width:640px;margin-bottom:14px" class="fld mr-blok-fld">
         <label>Maliyet Yöntemi</label>
         <select id="mr-maliyet-yontemi" onchange="muhasebeRaporuYukle()">
           <option value="fifo">FIFO (ilk giren ilk çıkar) — önerilen</option>
@@ -1133,7 +1133,7 @@ setInterval(topbarSaatGuncelle, 10000);
         </select>
         <div style="font-size:11px;color:var(--text3);margin-top:3px;max-width:420px">Bu yöntemler ileride daha da geliştirilecektir; şu an için gerçek alış/giriş geçmişine dayanır (eski "Stok Tanımı &gt; Alış Fiyatı" alanı artık kullanılmıyor).</div>
       </div>
-      <div id="mr-stokkodu-alani" style="display:none;max-width:420px;margin-bottom:14px" class="fld">
+      <div id="mr-stokkodu-alani" style="display:none;max-width:640px;margin-bottom:14px" class="fld mr-blok-fld">
         <label>Stok Kodu veya Ürün Adı ile filtrele (opsiyonel)</label>
         <div style="position:relative">
           <input type="text" id="mr-stokkodu" placeholder="Örn. 120.01.001 veya Seramik..." autocomplete="off"
@@ -6005,7 +6005,7 @@ function alisDetayCiz(res){
       <button class="btn btn-danger" onclick="alisSilOnay('${a.id}')">🗑 Alışı Sil</button>
     </div>
     <table class="hareket-tbl">
-      <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat (Kdv Hariç)</th><th>Kdv%</th><th>Tutar (Kdv Dahil)</th><th></th></tr></thead>
+      <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat<br><span style="font-size:10px;font-weight:600;opacity:.75">(Kdv Hariç)</span></th><th>Kdv%</th><th>Tutar<br><span style="font-size:10px;font-weight:600;opacity:.75">(Kdv Dahil)</span></th><th></th></tr></thead>
       <tbody>
         ${kalemler.map(k=>`
           <tr>
@@ -6745,6 +6745,7 @@ function bfmZoomKontrolHTML(iframeId, etiketId){
     <button type="button" onclick="bfmGorselZoomAyarla('${iframeId}','${etiketId}',-1)" title="Uzaklaştır">🔍−</button>
     <span id="${etiketId}">75%</span>
     <button type="button" onclick="bfmGorselZoomAyarla('${iframeId}','${etiketId}',1)" title="Yakınlaştır">🔍+</button>
+    <button type="button" onclick="bfmSigdir('${iframeId}','${etiketId}')" title="Sayfaya tam sığdır">⤢ Sığdır</button>
   </div>`;
 }
 
@@ -6756,6 +6757,15 @@ function faturaGorsalAc(faturaNo){
   if(!faturaNo) return;
   if(bfmFaturaYandaMi()){ bfmYanPanelAc(faturaNo); }
   else { window.open(faturaGorLinki(faturaNo), "_blank"); }
+}
+// Fatura görselini (A4 ≈ 794×1123 px) panelin GÖVDESİNE tam sığdırır (genişlik ve yükseklik).
+function bfmSigdir(iframeId, etiketId){
+  const ifr = document.getElementById(iframeId); if(!ifr) return;
+  const kutu = ifr.parentElement; if(!kutu) return;
+  const w = Math.max(200, kutu.clientWidth - 6), h = Math.max(200, kutu.clientHeight - 6);
+  let z = Math.min(w/794, h/1123);
+  z = Math.max(0.4, Math.min(1.6, Math.round(z*100)/100));
+  bfmZoomIlkDegerAta(iframeId, etiketId, z);
 }
 function bfmYanPanelAc(faturaNo){
   bfmYanPanelKapat();
@@ -6770,7 +6780,8 @@ function bfmYanPanelAc(faturaNo){
     </div>
     <div class="fyp-govde"><iframe id="fyp-iframe" src="${faturaGorLinki(faturaNo, true)}" title="Fatura görseli"></iframe></div>`;
   document.body.appendChild(panel);
-  bfmZoomIlkDegerAta("fyp-iframe","fyp-zoom-yuzde",0.75);
+  bfmSigdir("fyp-iframe","fyp-zoom-yuzde");
+  setTimeout(()=>bfmSigdir("fyp-iframe","fyp-zoom-yuzde"), 250); // panel animasyonu bitince yeniden ölç
 }
 function bfmYanPanelKapat(){
   const eski = document.getElementById("fatura-yan-panel");
@@ -7271,7 +7282,7 @@ function alisBekleyenOnayModalAc(faturaNo){
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
   f.kalemler.forEach((k,i)=>bfmSatirGuncelle(i));
   bfmOnerileriGuncelle(); // _stokTanimListe önceden yüklenmişse öneriler hemen görünsün
-  if(yanda && f.faturaNo) bfmZoomIlkDegerAta("bfm-onay-iframe","bfm-onay-zoom-yuzde",0.75);
+  if(yanda && f.faturaNo) bfmSigdir("bfm-onay-iframe","bfm-onay-zoom-yuzde");
 }
 
 // Bir bfm kalem satırının <tr> HTML'ini üretir. Normal kalemler eski davranışıyla aynı
@@ -9755,15 +9766,6 @@ function raporYukle(){
         <div class="finans-kart"><div class="lbl">Tahsilat (${res.tahsilat.sayi} adet)</div><div class="num">${paraFormat(res.tahsilat.toplam)}</div></div>
         <div class="finans-kart"><div class="lbl">Ödeme (${res.odeme.sayi} adet)</div><div class="num">${paraFormat(res.odeme.toplam)}</div></div>
       </div>
-      <div class="rapor-baslik">En Çok Satılan Ürünler</div>
-      ${res.enCokSatilanlar.length === 0 ? '<div class="cari-empty">Bu aralıkta satış kaydı yok.</div>' : `
-      <table class="rapor-tbl">
-        <thead><tr><th>Ürün</th><th>Miktar</th><th>Toplam Tutar</th></tr></thead>
-        <tbody>
-          ${res.enCokSatilanlar.map(u=>`
-            <tr><td>${u.urunAdi}</td><td>${miktarFormat(u.miktar)}</td><td>${paraFormat(u.tutar)}</td></tr>`).join("")}
-        </tbody>
-      </table>`}
     `;
   }).catch(err=>{
     el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
@@ -9803,8 +9805,8 @@ function muhasebeRaporuTipDegisti(){
   document.getElementById("mr-excel-btn").style.display = (tip === "kasaRaporu") ? "none" : "inline-flex";
   _mrSirala = { anahtar: "tarih", yon: "desc" };
   const stokKoduDestekli = ["urunBazliHareket","urunBazliSiparis","urunBazliFatura","karZarar","siparisRaporu"].includes(tip);
-  document.getElementById("mr-stokkodu-alani").style.display = stokKoduDestekli ? "flex" : "none";
-  document.getElementById("mr-maliyet-yontemi-alani").style.display = (tip === "karZarar") ? "flex" : "none";
+  document.getElementById("mr-stokkodu-alani").style.display = stokKoduDestekli ? "block" : "none";
+  document.getElementById("mr-maliyet-yontemi-alani").style.display = (tip === "karZarar") ? "block" : "none";
   const cariRaporuMu = (tip === "cariHareketTopluRaporu" || tip === "borcAlacakRaporu");
   document.getElementById("mr-cari-filtre-alani").style.display = cariRaporuMu ? "block" : "none";
   if(cariRaporuMu) mrCariSecimOneriGoster();
@@ -14303,21 +14305,31 @@ if("serviceWorker" in navigator){
 
 <!-- ══════════════ 28 Eyl 2026: Rapor renk standardı + Alış/Satış sol liste daraltma + Faturayı Gör genişletme + Ctrl+← geri ══════════════ -->
 <style>
-/* ── Rapor renk standardı (seçilebilir tema): boş alan / tablo / başlık artık ayrı renkler ── */
-body{--rp-alan:#eef2f8;--rp-tablo:#ffffff;--rp-th-bg:#dbe7f7;--rp-th-fg:#1f3a5f;--rp-th-bd:#9db8dd;--rp-zebra:#f5f8fc;--rp-foot:#e8eff9}
-body[data-rapor-tema="yesil"]{--rp-alan:#eef6f1;--rp-th-bg:#d3ecdd;--rp-th-fg:#1d4d33;--rp-th-bd:#8fc7a6;--rp-zebra:#f5faf7;--rp-foot:#e3f2e9}
-body[data-rapor-tema="turuncu"]{--rp-alan:#faf3ea;--rp-th-bg:#fde0bd;--rp-th-fg:#6b3a06;--rp-th-bd:#ebb578;--rp-zebra:#fdf8f1;--rp-foot:#fbebd6}
-body[data-rapor-tema="gri"]{--rp-alan:#e9ebef;--rp-th-bg:#3a4252;--rp-th-fg:#ffffff;--rp-th-bd:#1f2530;--rp-zebra:#f4f5f7;--rp-foot:#dfe2e8}
-body[data-rapor-tema="sade"]{--rp-alan:#ffffff;--rp-th-bg:#f1f3f7;--rp-th-fg:#333a47;--rp-th-bd:#c9ced8;--rp-zebra:#fafbfc;--rp-foot:#f1f3f7}
+/* ── Rapor renkleri (ayrıntılı, seçilebilir): fon / başlık / satır / zebra / üzerine gelince ── */
+body{--rp-alan:#eef2f8;--rp-th-bg:#dbe7f7;--rp-th-fg:#1f3a5f;--rp-th-bd:#9db8dd;--rp-satir:#ffffff;--rp-satir2:#f3f7fc;--rp-hover:#fff3c4;--rp-foot:#e8eff9}
 #mod-rapor,#stok-hareket-rapor-view,#stok-kritik-rapor-view{background:var(--rp-alan)}
-.rapor-tbl{background:var(--rp-tablo);border:1px solid var(--rp-th-bd)}
+.rapor-tbl{border:1px solid var(--rp-th-bd)}
 .rapor-tbl th{background:var(--rp-th-bg)!important;color:var(--rp-th-fg)!important;border-bottom:2px solid var(--rp-th-bd)!important;padding:8px!important}
-.rapor-tbl th.siralanabilir:hover{color:var(--rp-th-fg)!important;filter:brightness(.95)}
+.rapor-tbl th.siralanabilir:hover{filter:brightness(.95)}
 .rapor-tbl th.siralanabilir.aktif .ok{color:var(--rp-th-fg)!important}
-.rapor-tbl tbody tr:nth-child(even){background:var(--rp-zebra)}
+.rapor-tbl tbody tr{background:var(--rp-satir)}
+body[data-rapor-zebra="1"] .rapor-tbl tbody tr:nth-child(even){background:var(--rp-satir2)}
+.rapor-tbl tbody tr:hover,.rapor-tbl tbody tr:hover td{background:var(--rp-hover)!important}
 .rapor-tbl tfoot td{background:var(--rp-foot);border-top:2px solid var(--rp-th-bd)}
-.rapor-tema-kutu{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text2)}
-.rapor-tema-kutu select{padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);font-size:12px}
+.rapor-renk-btn{border:1px solid var(--border);background:var(--bg2);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer}
+.rapor-renk-btn:hover{background:var(--bg3)}
+.rapor-renk-panel{position:fixed;z-index:200;width:300px;max-width:94vw;background:var(--bg2);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(16,18,30,.22);padding:14px}
+.rapor-renk-panel h4{margin:0 0 10px;font-size:13px}
+.rapor-renk-panel .rr-satir{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:12px;color:var(--text2)}
+.rapor-renk-panel input[type=color]{width:44px;height:28px;padding:0;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer}
+.rapor-renk-panel select{padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);font-size:12px}
+.rapor-renk-onizle{border-collapse:collapse;width:100%;margin:6px 0 10px;font-size:11px;border:1px solid var(--rp-th-bd)}
+.rapor-renk-onizle th{background:var(--rp-th-bg);color:var(--rp-th-fg);padding:4px 6px;text-align:left}
+.rapor-renk-onizle td{padding:4px 6px;background:var(--rp-satir)}
+body[data-rapor-zebra="1"] .rapor-renk-onizle tr:nth-child(even) td{background:var(--rp-satir2)}
+.rapor-renk-onizle tr:hover td{background:var(--rp-hover)}
+.mr-blok-fld{display:block}
+.mr-blok-fld select{width:100%;height:auto;min-height:38px}
 
 /* ── Alış / Satış: açılır-kapanır sol liste ── */
 .sol-toggle{display:flex;align-items:center;gap:6px;background:var(--bg3);border:none;border-bottom:1px solid var(--border);padding:7px 14px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;text-align:left;flex-shrink:0}
@@ -14330,32 +14342,83 @@ body[data-rapor-tema="sade"]{--rp-alan:#ffffff;--rp-th-bg:#f1f3f7;--rp-th-fg:#33
 .sol-kapali .sol-toggle{justify-content:center;padding:7px 4px}
 @media (max-width:640px){.sol-toggle{display:none}}
 /* Alış'ta fatura görseli paneli açıkken detay panelinin panelin altında kalmaması için */
-@media (min-width:701px){ body.fatura-panel-acik #mod-alis{padding-right:min(640px,92vw)} }
+@media (min-width:701px){ body.fatura-panel-acik #mod-alis{padding-right:min(760px,92vw)} }
 </style>
 <script>
 (function(){
-  // ═══ 1) Rapor renk teması (seçilebilir, tarayıcıda hatırlanır) ═══
-  const TEMALAR = { mavi:"Klasik Mavi", yesil:"Yeşil", turuncu:"Turuncu", gri:"Koyu Gri", sade:"Sade Beyaz" };
-  window.raporTemaUygula = function(t){
-    if(!TEMALAR[t]) t = "mavi";
-    document.body.setAttribute("data-rapor-tema", t);
-    try{ localStorage.setItem("raporTema", t); }catch(_){}
-    document.querySelectorAll("select.rapor-tema-sec").forEach(s=>{ s.value = t; });
+  // ═══ 1) Rapor renkleri: hazır temalar + ayrıntılı özelleştirme (tarayıcıda hatırlanır) ═══
+  const HAZIR = {
+    mavi:   { ad:"Klasik Mavi", alan:"#eef2f8", thBg:"#dbe7f7", thFg:"#1f3a5f", satir:"#ffffff", satir2:"#f3f7fc", hover:"#fff3c4" },
+    yesil:  { ad:"Yeşil",       alan:"#eef6f1", thBg:"#d3ecdd", thFg:"#1d4d33", satir:"#ffffff", satir2:"#f1f8f4", hover:"#fff3c4" },
+    turuncu:{ ad:"Turuncu",     alan:"#faf3ea", thBg:"#fde0bd", thFg:"#6b3a06", satir:"#ffffff", satir2:"#fdf6ec", hover:"#dbe7f7" },
+    gri:    { ad:"Koyu Gri",    alan:"#e9ebef", thBg:"#3a4252", thFg:"#ffffff", satir:"#ffffff", satir2:"#f0f1f4", hover:"#fff3c4" },
+    sade:   { ad:"Sade Beyaz",  alan:"#ffffff", thBg:"#f1f3f7", thFg:"#333a47", satir:"#ffffff", satir2:"#fafbfc", hover:"#eaf1fb" }
   };
-  let kayitliTema = "mavi";
-  try{ kayitliTema = localStorage.getItem("raporTema") || "mavi"; }catch(_){}
-  function temaKutusu(){
-    const k = document.createElement("label");
-    k.className = "rapor-tema-kutu";
-    k.innerHTML = '🎨 Rapor Rengi <select class="rapor-tema-sec" onchange="raporTemaUygula(this.value)">' +
-      Object.keys(TEMALAR).map(id=>'<option value="'+id+'">'+TEMALAR[id]+'</option>').join("") + '</select>';
-    return k;
+  let renk = Object.assign({ tema:"mavi", zebra:true }, HAZIR.mavi);
+  try{ const k = JSON.parse(localStorage.getItem("raporRenkAyar")||"null"); if(k && k.alan) renk = Object.assign(renk, k); }catch(_){}
+  function koyulastir(hex, oran){
+    const n = parseInt(hex.slice(1),16); let r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+    r=Math.round(r*oran); g=Math.round(g*oran); b=Math.round(b*oran);
+    return "#"+[r,g,b].map(x=>x.toString(16).padStart(2,"0")).join("");
+  }
+  function renkUygula(){
+    const st = document.body.style;
+    st.setProperty("--rp-alan", renk.alan);
+    st.setProperty("--rp-th-bg", renk.thBg);
+    st.setProperty("--rp-th-fg", renk.thFg);
+    st.setProperty("--rp-th-bd", koyulastir(renk.thBg, .82));
+    st.setProperty("--rp-satir", renk.satir);
+    st.setProperty("--rp-satir2", renk.zebra ? renk.satir2 : renk.satir);
+    st.setProperty("--rp-hover", renk.hover);
+    st.setProperty("--rp-foot", koyulastir(renk.thBg, .97));
+    document.body.setAttribute("data-rapor-zebra", renk.zebra ? "1" : "0");
+    try{ localStorage.setItem("raporRenkAyar", JSON.stringify(renk)); }catch(_){}
+  }
+  window.raporRenkAlanDegistir = function(alan, deger){ renk[alan] = deger; renk.tema = "ozel"; renkUygula(); const t=document.getElementById("rr-tema"); if(t) t.value="ozel"; };
+  window.raporRenkZebraDegistir = function(v){ renk.zebra = (v === "zebra"); renkUygula(); };
+  window.raporRenkTemaSec = function(id){
+    if(!HAZIR[id]) return;
+    renk = Object.assign({}, renk, HAZIR[id], { tema:id });
+    renkUygula(); raporRenkPanelDoldur();
+  };
+  window.raporTemaUygula = window.raporRenkTemaSec; // eski ad
+  function raporRenkPanelDoldur(){
+    const p = document.getElementById("rapor-renk-panel"); if(!p) return;
+    const alan = (ad, anahtar)=>'<div class="rr-satir"><span>'+ad+'</span><input type="color" value="'+renk[anahtar]+'" oninput="raporRenkAlanDegistir(\''+anahtar+'\',this.value)"></div>';
+    p.innerHTML = '<h4>🎨 Rapor Renkleri</h4>'
+      + '<div class="rr-satir"><span>Hazır tema</span><select id="rr-tema" onchange="raporRenkTemaSec(this.value)">'
+      + '<option value="ozel"'+(HAZIR[renk.tema]?'':' selected')+'>Özel</option>'
+      + Object.keys(HAZIR).map(id=>'<option value="'+id+'"'+(renk.tema===id?' selected':'')+'>'+HAZIR[id].ad+'</option>').join("")
+      + '</select></div>'
+      + alan("Fon rengi (boş alan)","alan") + alan("Başlık arka planı","thBg") + alan("Başlık yazısı","thFg")
+      + alan("Satır rengi","satir")
+      + '<div class="rr-satir"><span>Satır düzeni</span><select onchange="raporRenkZebraDegistir(this.value)">'
+      + '<option value="ayni"'+(renk.zebra?'':' selected')+'>Aynı renk</option><option value="zebra"'+(renk.zebra?' selected':'')+'>Zebra (bir açık bir koyu)</option></select></div>'
+      + alan("Zebra 2. satır rengi","satir2") + alan("Üzerine gelince","hover")
+      + '<table class="rapor-renk-onizle"><thead><tr><th>Başlık</th><th>Tutar</th></tr></thead><tbody><tr><td>Satır 1</td><td>100,00</td></tr><tr><td>Satır 2</td><td>250,00</td></tr><tr><td>Satır 3</td><td>75,00</td></tr></tbody></table>'
+      + '<div style="display:flex;justify-content:space-between;gap:8px"><button class="rapor-renk-btn" onclick="raporRenkTemaSec(\'mavi\')">↺ Varsayılan</button><button class="rapor-renk-btn" onclick="raporRenkPanelKapat()">Kapat</button></div>';
+  }
+  window.raporRenkPanelKapat = function(){ const p=document.getElementById("rapor-renk-panel"); if(p) p.remove(); document.removeEventListener("mousedown", disTik, true); };
+  function disTik(e){ const p=document.getElementById("rapor-renk-panel"); if(p && !p.contains(e.target) && !e.target.closest(".rapor-renk-btn")) window.raporRenkPanelKapat(); }
+  window.raporRenkPanelAc = function(btn){
+    if(document.getElementById("rapor-renk-panel")){ window.raporRenkPanelKapat(); return; }
+    const p = document.createElement("div"); p.id = "rapor-renk-panel"; p.className = "rapor-renk-panel";
+    document.body.appendChild(p); raporRenkPanelDoldur();
+    const r = btn.getBoundingClientRect();
+    p.style.top = Math.min(r.bottom + 6, window.innerHeight - p.offsetHeight - 10) + "px";
+    p.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 310)) + "px";
+    document.addEventListener("mousedown", disTik, true);
+  };
+  function renkButonu(){
+    const b = document.createElement("button"); b.type = "button"; b.className = "rapor-renk-btn";
+    b.textContent = "🎨 Rapor Renkleri"; b.onclick = function(){ window.raporRenkPanelAc(b); };
+    return b;
   }
   const filtre = document.querySelector("#mod-rapor .rapor-filtre");
-  if(filtre){ const f = document.createElement("div"); f.className = "fld"; f.appendChild(temaKutusu()); filtre.appendChild(f); }
+  if(filtre){ const f = document.createElement("div"); f.className = "fld"; f.appendChild(renkButonu()); filtre.appendChild(f); }
   const shrBaslik = document.querySelector("#stok-hareket-rapor-view .rapor-baslik");
-  if(shrBaslik){ const k = temaKutusu(); k.style.marginLeft = "14px"; shrBaslik.appendChild(k); }
-  window.raporTemaUygula(kayitliTema);
+  if(shrBaslik){ const b = renkButonu(); b.style.marginLeft = "14px"; shrBaslik.appendChild(b); }
+  renkUygula();
 
   // ═══ 2) Alış / Satış sol liste: açılır-kapanır ═══
   const GORUNUMLER = { alis:["alis-giris-view","alis-iade-view"], satis:["satis-view","satisiade-view"] };

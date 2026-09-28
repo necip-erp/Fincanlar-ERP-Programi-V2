@@ -5653,7 +5653,7 @@ function kasaNakitHamListesiOku(ss) {
     const row = sData[i];
     if (!row[0]) continue;
     const belgeTipi = String(row[8] || "") || "Fatura";
-    if (belgeTipi !== "Fatura" || String(row[5] || "") !== "Nakit") continue;
+    if (belgeTipi !== "Fatura" || !kasaNakitOdemeTipiMi_(row[5])) continue;
     liste.push({ id: String(row[0]), tip: "SATIS", tarih: hucreTarihStr(row[1]), yon: "Giriş", kaynak: "Satış Faturası",
       cariAd: String(row[3] || ""), cariKodu: cariKoduMap[String(row[2] || "")] || "", tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
   }
@@ -5664,7 +5664,7 @@ function kasaNakitHamListesiOku(ss) {
   for (let i = 1; i < aData.length; i++) {
     const row = aData[i];
     if (!row[0]) continue;
-    if (String(row[5] || "") !== "Nakit") continue;
+    if (!kasaNakitOdemeTipiMi_(row[5])) continue;
     liste.push({ id: String(row[0]), tip: "ALIS", tarih: hucreTarihStr(row[1]), yon: "Çıkış", kaynak: "Alış Faturası",
       cariAd: String(row[3] || ""), cariKodu: cariKoduMap[String(row[2] || "")] || "", tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
   }
@@ -5697,7 +5697,33 @@ function kasaNakitHamListesiOku(ss) {
       cariAd: gosterilecekAd, cariKodu: hedefTipi === "Cari" ? (cariKoduMap[String(row[2] || "")] || "") : "", tutar: parseFloat(row[4]) || 0, aciklama: String(row[6] || "") });
   }
 
+  // Alınan çek "Kasa"ya (elden/nakit) tahsil edildiyse Nakit Giriş sayılır (açıklamada "[Kasa]" etiketi var).
+  try {
+    const cSheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
+    const cData = cSheet.getDataRange().getValues();
+    const cekBilgi = {};
+    for (let i = 1; i < cData.length; i++) if (cData[i][0]) cekBilgi[String(cData[i][0])] = { cariAd: String(cData[i][3] || ""), cariId: String(cData[i][2] || "") };
+    const chSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
+    const chData = chSheet.getDataRange().getValues();
+    for (let i = 1; i < chData.length; i++) {
+      const row = chData[i];
+      if (!row[0]) continue;
+      if (String(row[3] || "") !== "Tahsilat") continue;
+      const ack = String(row[5] || "");
+      if (ack.indexOf("[Kasa]") === -1) continue;
+      const cb = cekBilgi[String(row[1] || "")] || { cariAd: "", cariId: "" };
+      liste.push({ id: String(row[1] || ""), tip: "CEKTAHSIL", tarih: hucreTarihStr(row[2]), yon: "Giriş", kaynak: "Çek/Senet Tahsilatı (Kasa)",
+        cariAd: cb.cariAd, cariKodu: cariKoduMap[cb.cariId] || "", tutar: parseFloat(row[4]) || 0, aciklama: ack });
+    }
+  } catch (e) { /* çek verisi okunamazsa kasa raporunun geri kalanı bozulmasın */ }
+
   return liste;
+}
+
+// Kasa raporunda "nakit" sayılan ödeme tipleri: "Nakit" ve (Alış ekranındaki / eski kayıtlardaki) "Peşin".
+function kasaNakitOdemeTipiMi_(deger) {
+  const t = String(deger || "").trim().toLocaleLowerCase("tr");
+  return t === "nakit" || t === "peşin" || t === "pesin";
 }
 
 // Ham kasa listesini bir tarih aralığına göre süzüp toplar (sayfa erişimi yok, bellek içi).
@@ -5732,7 +5758,7 @@ function birGunOncesi(gunStr) {
 }
 
 function getMuhasebeRaporu(body) {
-  return cacheOkuVeyaHesapla("muhasebeRaporu_" + JSON.stringify(body), 45, function () {
+  return cacheOkuVeyaHesapla("muhasebeRaporu_v2_" + JSON.stringify(body), 45, function () {
   const tip = String(body.tip || "");
   const baslangic = String(body.baslangic || "");
   const bitis = String(body.bitis || "");
