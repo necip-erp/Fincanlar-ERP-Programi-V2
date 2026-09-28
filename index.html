@@ -3100,19 +3100,21 @@ function rehberAc(tip, callback){
       }).catch(err=>{ if(!onbVar) rehberHataGoster(err.message); });
     }
   } else {
-    if(_stokTanimYuklendi && _stokTanimListe.length){ rehberVeriGeldi(_stokTanimListe); }
-    else {
-      const onb = onbellekOku("stokTanimListesi", ONBELLEK_MAX_YAS);
-      const onbVar = !!(onb && onb.length);
-      if(onbVar) rehberVeriGeldi(onb);
-      cariApi("getStokTanimListesi").then(res=>{
-        if(res.ok){
-          _stokTanimListe=res.kalemler; _stokTanimYuklendi=true; onbellekYaz("stokTanimListesi", res.kalemler);
-          if(onbVar) rehberVeriGuncelle_(durum, res.kalemler); else rehberVeriGeldi(res.kalemler);
-        }
-        else if(!onbVar) rehberHataGoster(res.hata || "Stok listesi alınamadı");
-      }).catch(err=>{ if(!onbVar) rehberHataGoster(err.message); });
-    }
+    // ★ (28 Eyl 2026) Bellekte liste olsa bile her açılışta arkadan taze liste çekilir: eskiden bellekteki
+    // liste hiç yenilenmediği için, sayfa açıkken (BFM onayı/Alış ile) oluşan yeni stok kartları
+    // F2 Stok Rehberi'nde sayfa yenilenene kadar görünmüyordu.
+    const bellekte = _stokTanimYuklendi && _stokTanimListe.length;
+    const onb = bellekte ? null : onbellekOku("stokTanimListesi", ONBELLEK_MAX_YAS);
+    const onbVar = !!(bellekte || (onb && onb.length));
+    if(bellekte) rehberVeriGeldi(_stokTanimListe);
+    else if(onbVar) rehberVeriGeldi(onb);
+    cariApi("getStokTanimListesi").then(res=>{
+      if(res.ok){
+        _stokTanimListe=res.kalemler; _stokTanimYuklendi=true; onbellekYaz("stokTanimListesi", res.kalemler);
+        if(onbVar) rehberVeriGuncelle_(durum, res.kalemler); else rehberVeriGeldi(res.kalemler);
+      }
+      else if(!onbVar) rehberHataGoster(res.hata || "Stok listesi alınamadı");
+    }).catch(err=>{ if(!onbVar) rehberHataGoster(err.message); });
   }
 }
 
@@ -7755,6 +7757,8 @@ function alisBekleyenOnayla(faturaNo){
     // Bekleyen listeden kaybolsun, ama listeyi hemen render etmeye gerek yok — kullanıcı
     // gerekli düzenlemeler için doğrudan yeni oluşan Alış kaydının içinde kalsın.
     _alisBekleyenListe = _alisBekleyenListe.filter(x => x.faturaNo !== faturaNo);
+    // Onayla otomatik yeni stok kartı açılmış olabilir → bellekteki stok listesini tazele (F2 rehberi vb.)
+    cariApi("getStokTanimListesi").then(r=>{ if(r && r.ok){ _stokTanimListe=r.kalemler; _stokTanimYuklendi=true; onbellekYaz("stokTanimListesi", r.kalemler); } }).catch(()=>{});
     if(cariId) cariListesiYukle();
     alisAltModulAc("giris");
     alisAc(res.alisId);
