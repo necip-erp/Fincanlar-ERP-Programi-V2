@@ -530,6 +530,7 @@ body.giris-yapildi #login-ekran{display:none}
     <input id="global-ara" placeholder="Ürün ara (kod, isim, ebat)..." oninput="globalAraDegisti(this.value)">
   </div>
   <button class="homebtn" id="home-btn" onclick="gitAnaSayfa()" title="Ana Sayfa (Ctrl + sayı satırında 1'in solundaki tuş)">← Ana Sayfa <span class="kisayol-ipucu">Ctrl+"</span></button>
+  <button class="homebtn" id="yenile-btn" style="display:inline-block;margin-left:8px" onclick="sayfayiYenile()" title="Sayfayı yenile (önbelleği temizleyip en güncel sürümü yükler)">⟳ Yenile <span class="kisayol-ipucu" id="yenile-ipucu">Alt+R</span></button>
   <div id="modul-switcher-wrap" style="position:relative">
     <button class="homebtn" id="modul-switcher-btn" onclick="modulSwitcherAcKapat(event)" title="Başka bir modülü sekme olarak aç">⇄ Modül</button>
     <div id="modul-switcher-liste" class="modul-switcher-liste" style="display:none"></div>
@@ -867,6 +868,8 @@ setInterval(topbarSaatGuncelle, 10000);
           <option value="">Hepsi</option>
           <option value="Müşteri">Müşteri</option>
           <option value="Tedarikçi">Tedarikçi</option>
+          <option value="Personel">Personel</option>
+          <option value="__pasif">⏸ Pasif Cariler</option>
         </select>
       </div>
       <div class="cari-items" id="cari-items"><div class="cari-empty">Yükleniyor...</div></div>
@@ -2341,11 +2344,15 @@ function kisayollariAl(){
       if(kayitli._stokHareket === undefined) kayitli._stokHareket = "Ctrl+A";
       if(kayitli._sekmeKapat === undefined) kayitli._sekmeKapat = "Ctrl+W";
       if(kayitli._kaydet === undefined) kayitli._kaydet = "Ctrl+S";
+      if(kayitli._yeniKayit === undefined) kayitli._yeniKayit = "Ctrl+Y";
+      if(kayitli._yenile === undefined) kayitli._yenile = "Alt+R";
+      if(kayitli._solListe === undefined) kayitli._solListe = "Alt+L";
+      if(kayitli._modulGeri === undefined) kayitli._modulGeri = "Ctrl+ArrowLeft";
       return kayitli;
     }
   }catch(e){}
   // Varsayılanlar: Alt+Shift+1..8 modüller, Esc geri, Ctrl+PageUp/PageDown sekme gezinme
-  const varsayilan = { _geri: "Escape", _sekmeIleri: "Ctrl+PageDown", _sekmeGeri: "Ctrl+PageUp", _stokHareket: "Ctrl+A", _sekmeKapat: "Ctrl+W", _kaydet: "Ctrl+S" };
+  const varsayilan = { _geri: "Escape", _sekmeIleri: "Ctrl+PageDown", _sekmeGeri: "Ctrl+PageUp", _stokHareket: "Ctrl+A", _sekmeKapat: "Ctrl+W", _kaydet: "Ctrl+S", _yeniKayit: "Ctrl+Y", _yenile: "Alt+R", _solListe: "Alt+L", _modulGeri: "Ctrl+ArrowLeft" };
   MODULLER.filter(m=>m.id!=="ayarlar").forEach((m,i)=>{ varsayilan[m.id] = "Alt+Shift+"+(i+1); });
   return varsayilan;
 }
@@ -2732,6 +2739,9 @@ function faturaGorLinki(faturaNo, kompakt){
 
 let _cariYuklendi = false;
 let _cariListe = [];
+// Pasife alınmış cariler (aktif === false) F1 Rehberi'nde ve Alış/Satış/Tahsilat... arama kutularında çıkmaz;
+// _cariListe ise TAM liste kalır (eski belgelerdeki cari adı/kodu çözümlenebilsin diye).
+function cariAktifler(){ return (_cariListe || []).filter(c => c.aktif !== false); }
 let _cariSecili = null;
 
 // Backend'de beklenmeyen bir istisna (bug, null erişimi vb.) fırlarsa, en dıştaki genel
@@ -3068,6 +3078,7 @@ function rehberAc(tip, callback){
         <span style="display:flex;gap:8px;align-items:center;flex-shrink:0;font-size:12.5px;color:var(--text2)">
           <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="alici" checked onchange="rehberCariTipiDegisti(this.value)"> Alıcı</label>
           <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="satici" onchange="rehberCariTipiDegisti(this.value)"> Satıcı</label>
+          <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="personel" onchange="rehberCariTipiDegisti(this.value)"> Personel</label>
           <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="hepsi" onchange="rehberCariTipiDegisti(this.value)"> Hepsi</label>
         </span>` : '';
   overlay.innerHTML = `
@@ -3189,8 +3200,10 @@ function rehberStokZenginlestir_(liste){
 function _rehberCariTipiUygula(satirlar){
   if(_rehberState.tip !== 'cari') return satirlar;
   const f = _rehberState.cariTipiFiltre || 'alici';
+  satirlar = satirlar.filter(c=>c.aktif !== false); // pasif cariler F1 Rehberi'nde çıkmaz (Cari modülünde "Pasif Cariler" filtresinden çağrılır)
   if(f === 'hepsi') return satirlar;
   if(f === 'satici') return satirlar.filter(c=>c.tip==='Tedarikçi');
+  if(f === 'personel') return satirlar.filter(c=>c.tip==='Personel');
   return satirlar.filter(c=>c.tip!=='Tedarikçi' && c.tip!=='Personel');
 }
 function rehberCariTipiDegisti(deger){
@@ -3550,7 +3563,7 @@ function cariListesiYukle(){
   const onbellek = onbellekOku("cariListesi", ONBELLEK_MAX_YAS);
   if(onbellek){
     _cariListe = onbellek.sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
-    cariListesiCiz(_cariListe);
+    cariAramaFiltrele(_cariAramaSorgu || "");
     if(typeof cvirmanCariSelectDoldur === "function") cvirmanCariSelectDoldur();
     if(typeof edmOnekCariSelectDoldur === "function") edmOnekCariSelectDoldur();
   } else {
@@ -3560,7 +3573,7 @@ function cariListesiYukle(){
     if(!res.ok){ document.getElementById("cari-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _cariListe = res.cariler.sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
     onbellekYaz("cariListesi", res.cariler);
-    cariListesiCiz(_cariListe);
+    cariAramaFiltrele(_cariAramaSorgu || "");
     if(typeof cvirmanCariSelectDoldur === "function") cvirmanCariSelectDoldur();
     if(typeof edmOnekCariSelectDoldur === "function") edmOnekCariSelectDoldur();
     if(_cariListe.length === 0){
@@ -3595,7 +3608,7 @@ function cariListesiCiz(liste){
         <span class="cari-item-ad">${metinVurgula(c.ad, q)}</span>
         <span class="cari-item-bakiye ${bakiyeSinifi(c.bakiye)}">${paraFormat(c.bakiye)}</span>
       </div>
-      <span class="cari-item-tip">${c.tip}${c.cariKodu?' · '+metinVurgula(c.cariKodu, q):''}${c.telefon?' · '+metinVurgula(c.telefon, q):''}${(c.krediLimiti>0 && c.bakiye>c.krediLimiti)?' · <span class="hk-borc">⚠️ Limit aşıldı</span>':''}</span>
+      <span class="cari-item-tip">${c.tip}${c.cariKodu?' · '+metinVurgula(c.cariKodu, q):''}${c.telefon?' · '+metinVurgula(c.telefon, q):''}${(c.krediLimiti>0 && c.bakiye>c.krediLimiti)?' · <span class="hk-borc">⚠️ Limit aşıldı</span>':''}${c.aktif===false?' · <b style="color:var(--text3)">⏸ PASİF</b>':''}</span>
     </div>`).join("") + (liste.length > _cariRenderLimit
       ? `<div class="liste-daha-fazla" onclick="cariDahaFazlaGoster()">+ ${liste.length - _cariRenderLimit} kayıt daha göster</div>`
       : "");
@@ -3610,9 +3623,11 @@ function cariAramaFiltrele(deger){
   _cariRenderLimit = 80; // yeni bir arama = baştan say
   _cariAramaSorgu = deger.trim();
   const d = _cariAramaSorgu.replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
-  let filtreli = !d ? _cariListe : _cariListe.filter(c =>
+  const pasifGorunum = _cariTipFiltre === "__pasif";
+  const tabanListe = _cariListe.filter(c => pasifGorunum ? c.aktif === false : c.aktif !== false); // pasifler yalnız "Pasif Cariler" filtresinde
+  let filtreli = !d ? tabanListe : tabanListe.filter(c =>
     esnekEslesirMi(c.ad, d) || (c.telefon||"").includes(d) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(d) || (c.adres||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(d));
-  if(_cariTipFiltre) filtreli = filtreli.filter(c => c.tip === _cariTipFiltre);
+  if(_cariTipFiltre && !pasifGorunum) filtreli = filtreli.filter(c => c.tip === _cariTipFiltre);
   if(_cariSiraAlan) filtreli = dizisiSirala(filtreli, _cariSiraAlan, _cariSiraYon);
   cariListesiCiz(filtreli);
 }
@@ -3648,7 +3663,7 @@ function cariDetayCiz(res){
     <div class="cari-detail-head">
       <div>
         <h2>${c.ad}</h2>
-        <span class="tip-badge">${c.tip}${c.cariKodu?' · '+c.cariKodu:''}</span>
+        <span class="tip-badge">${c.tip}${c.cariKodu?' · '+c.cariKodu:''}</span>${c.aktif===false?' <span class="tip-badge" style="background:var(--red-l);color:var(--red)">⏸ PASİF</span>':''}
       </div>
       <div class="cari-bakiye-box">
         <div class="num ${bakiyeSinifi(bakiye)}">${paraFormat(bakiye)}</div>
@@ -3683,8 +3698,10 @@ function cariDetayCiz(res){
 
     <div class="btnrow">
       <button class="btn" onclick="cariModalAc('${c.id}')">✏️ Düzenle</button>
+      <button class="btn" onclick="cariAktifDegistir('${c.id}', ${c.aktif===false})" title="${c.aktif===false?'Cariyi tekrar aktif eder; F1 Rehberi ve arama kutularında yeniden çıkar':'Cariyi silmeden pasife alır; F1 Rehberi ve arama kutularında çıkmaz, hareketleri korunur'}">${c.aktif===false?'▶ Aktif Et':'⏸ Pasife Al'}</button>
       <button class="btn btn-danger" onclick="cariSilOnay('${c.id}')">🗑 Cariyi Sil</button>
       <button type="button" class="rapor-renk-btn" onclick="raporRenkPanelAc(this)">🎨 Renkler</button>
+      <button type="button" class="btn" onclick="cariHareketExcelAktar()">📊 Hareketleri Excel'e Aktar</button>
     </div>
 
     <div class="fld" style="max-width:220px;margin:10px 0 6px">
@@ -3694,6 +3711,7 @@ function cariDetayCiz(res){
     <div id="hk-tablo-yeri"></div>
   `;
   _cariGuncelHareketler = hareketler;
+  _cariGuncelKart = c; _cariGuncelBakiye = bakiye;
   _cariGuncelId = c.id;
   _hkSiralamaKolon = null; _hkSiralamaYon = "asc"; // yeni cari açılınca varsayılan Tarih artan sıraya dön
   _hkProjeFiltre = "";
@@ -3758,6 +3776,7 @@ const HK_SUTUNLAR = {
 };
 let _cariGuncelHareketler = [];
 let _cariGuncelId = null;
+let _cariGuncelKart = null, _cariGuncelBakiye = 0;
 // Sütun başlığına tıklayınca artan/azalan sıralama — orijinal (backend'den gelen) sıra her
 // zaman Tarih artan olduğu için, hiç tıklanmamışken/cari değiştiğinde bu sıfırlanır.
 let _hkSiralamaKolon = null, _hkSiralamaYon = "asc";
@@ -3966,7 +3985,7 @@ function hareketSil(hareketId, cariId){
 }
 
 function cariSilOnay(id){
-  if(!confirm("Bu cariyi silmek istediğinize emin misiniz? (Hareketi olan cariler silinemez)")) return;
+  if(!confirm("Bu cariyi silmek istediğinize emin misiniz?\n\nHareketi/belgesi olan cariler silinemez — onları 'Pasife Al' ile kullanım dışı bırakabilirsiniz.")) return;
   cariApi("silCari", {id}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     cariListeyeDon();
@@ -3974,6 +3993,61 @@ function cariSilOnay(id){
     _cariSecili = null;
     cariListesiYukle();
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// Cariyi pasife alır / tekrar aktif eder (kayıt silinmez). Pasif cari F1 Rehberi'nde ve arama kutularında çıkmaz;
+// Cari modülünde sol listedeki "⏸ Pasif Cariler" filtresinden çağrılıp buradan tekrar aktif edilebilir.
+function cariAktifDegistir(id, aktifYap){
+  const c = (_cariListe||[]).find(x=>x.id===id) || _cariGuncelKart || {};
+  if(!aktifYap && !confirm((c.ad||"Bu cari")+" pasife alınsın mı?\n\nF1 Rehberi ve arama kutularında çıkmaz; hareketleri korunur, istediğiniz zaman tekrar aktif edebilirsiniz.")) return;
+  cariApi("setCariAktif", {id, aktif: !!aktifYap}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    const k = (_cariListe||[]).find(x=>x.id===id); if(k) k.aktif = !!aktifYap;
+    try{ onbellekYaz("cariListesi", _cariListe); }catch(_){}
+    cariAramaFiltrele(_cariAramaSorgu || "");
+    cariAc(id); // detayı taze çiz (rozet + buton yazısı güncellensin)
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// Cari hareket ekranındaki tabloyu (o an görünen sütun sırası, sıralama ve proje filtresiyle) Excel'e aktarır.
+function cariHareketExcelAktar(){
+  if(!_cariGuncelKart){ alert("Önce bir cari seçin."); return; }
+  if(typeof XLSX === "undefined"){ alert("Excel kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin."); return; }
+  const sira = hkSutunSirasiAl();
+  let liste = hkGosterilecekHareketleriAl();
+  if(_hkSiralamaKolon){
+    liste = liste.slice().sort((a,b)=>{
+      const av = HK_SUTUNLAR[_hkSiralamaKolon].sortDeger(a), bv = HK_SUTUNLAR[_hkSiralamaKolon].sortDeger(b);
+      const cmp = av < bv ? -1 : (av > bv ? 1 : 0);
+      return _hkSiralamaYon === "asc" ? cmp : -cmp;
+    });
+  }
+  const deger = {
+    tarih: h => tarihGoster(h.tarih),
+    borc: h => h.tip==="Borç" ? (parseFloat(h.tutar)||0) : "",
+    alacak: h => h.tip==="Alacak" ? (parseFloat(h.tutar)||0) : "",
+    vade: h => h.vade ? tarihGoster(h.vade) : "",
+    aciklama: h => h.aciklama ? hkAciklamaGoster(h.aciklama) : "",
+    projeKodu: h => h.projeKodu || "",
+    bakiye: h => parseFloat(h.bakiyeSonrasi)||0,
+  };
+  const c = _cariGuncelKart;
+  const aoa = [
+    ["Cari", c.ad, "", "Cari Kodu", c.cariKodu||""],
+    ["Kredi Limiti", c.krediLimiti>0 ? c.krediLimiti : "Limitsiz", "", "Güncel Bakiye", _cariGuncelBakiye],
+    [],
+    sira.map(k=>HK_SUTUNLAR[k].baslik),
+  ];
+  liste.forEach(h=>aoa.push(sira.map(k=>deger[k](h))));
+  const topB = liste.filter(h=>h.tip==="Borç").reduce((t,h)=>t+(parseFloat(h.tutar)||0),0);
+  const topA = liste.filter(h=>h.tip==="Alacak").reduce((t,h)=>t+(parseFloat(h.tutar)||0),0);
+  aoa.push(sira.map(k=>k==="tarih"?"TOPLAM":(k==="borc"?topB:(k==="alacak"?topA:""))));
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = sira.map(k=>({wch: k==="aciklama"?46 : (k==="tarih"||k==="vade")?12 : 16}));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Cari Hareket");
+  const dosyaAdi = "CariHareket_" + String(c.ad||"cari").replace(/[\\/:*?"<>|]+/g,"").trim().replace(/\s+/g,"_").slice(0,40);
+  XLSX.writeFile(wb, dosyaAdi + ".xlsx");
 }
 
 // Yeni Cari Ekle formundaki İl seçimi için 81 il (plaka koduna göre sıralı).
@@ -5209,7 +5283,7 @@ function smCariOneriGoster(){
   if(!kutu) return;
   const q = (document.getElementById("sm-cari-arama").value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
-  const eslesenler = (_cariListe || []).filter(c =>
+  const eslesenler = cariAktifler().filter(c =>
     (c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
@@ -5731,7 +5805,7 @@ function stimCariOneriGoster(){
   if(!kutu) return;
   const q = (document.getElementById("stim-cari-arama").value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
-  const eslesenler = (_cariListe || []).filter(c =>
+  const eslesenler = cariAktifler().filter(c =>
     (c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
@@ -6175,7 +6249,7 @@ function amCariOneriGoster(){
   if(!kutu) return;
   const q = (document.getElementById("am-cari-arama").value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
-  const eslesenler = (_cariListe || []).filter(c =>
+  const eslesenler = cariAktifler().filter(c =>
     (c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
@@ -6571,7 +6645,7 @@ function aimCariOneriGoster(){
   if(!kutu) return;
   const q = (document.getElementById("aim-cari-arama").value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
-  const eslesenler = (_cariListe || []).filter(c =>
+  const eslesenler = cariAktifler().filter(c =>
     (c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
@@ -6999,8 +7073,8 @@ function edmOnekCariSelectDoldur(){
   if(!selEl) return;
   // ★ (21 Eyl 2026) Önek → TEDARİKÇİ eşleştirmesi olduğu için sadece Satıcı (Tedarikçi) carileri listelenir; cari kodu da yazılır.
   // (Hiç satıcı yoksa boş kalmasın diye tüm cariler gösterilir.)
-  const saticilar = _cariListe.filter(c=>c.tip === "Tedarikçi");
-  const liste = (saticilar.length ? saticilar : _cariListe).slice().sort((a,b)=>String(a.ad||"").localeCompare(String(b.ad||""), "tr"));
+  const saticilar = cariAktifler().filter(c=>c.tip === "Tedarikçi");
+  const liste = (saticilar.length ? saticilar : cariAktifler()).slice().sort((a,b)=>String(a.ad||"").localeCompare(String(b.ad||""), "tr"));
   selEl.innerHTML = '<option value="">— satıcı cari seçin —</option>' + liste.map(c=>`<option value="${c.id}">${c.cariKodu ? c.cariKodu+" — " : ""}${c.ad}</option>`).join("");
 }
 
@@ -7673,7 +7747,7 @@ function bfmCariOneriGoster(){
   if(!kutu) return;
   const q = (document.getElementById("bfm-cari-arama").value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
-  const eslesenler = (_cariListe || []).filter(c =>
+  const eslesenler = cariAktifler().filter(c =>
     (c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
@@ -7978,7 +8052,7 @@ function tmCariOneriGoster(){
   if(!kutu) return;
   const q = (document.getElementById("tm-cari-arama").value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
-  const eslesenler = (_cariListe || []).filter(c =>
+  const eslesenler = cariAktifler().filter(c =>
     (c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
@@ -8372,7 +8446,7 @@ function omCariOneriGoster(){
   if(!kutu) return;
   const q = (document.getElementById("om-cari-arama").value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
-  const eslesenler = (_cariListe || []).filter(c =>
+  const eslesenler = cariAktifler().filter(c =>
     (c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
@@ -8805,7 +8879,7 @@ function cekciroCariAramaDegisti(deger){
   const kutu = document.getElementById("cekciro-cari-oneri");
   const q = (deger||"").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(!kutu || q.length<1){ if(kutu) kutu.style.display="none"; return; }
-  const eslesenler = (_cariListe||[]).filter(c=>(c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)).slice(0,8);
+  const eslesenler = cariAktifler().filter(c=>(c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)).slice(0,8);
   if(eslesenler.length===0){ kutu.style.display="none"; return; }
   kutu.innerHTML = eslesenler.map((c,i)=>`<div class="fiyat-gecmis-satir" onclick="cekciroCariSec(${i})" data-oneri-idx="${i}"><span>${c.ad}</span></div>`).join("");
   kutu.dataset.eslesenler = JSON.stringify(eslesenler);
@@ -9203,7 +9277,7 @@ function csmCariOneriGoster(){
   if(!kutu) return;
   const q = (document.getElementById("csm-cari-arama").value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
-  const eslesenler = (_cariListe || []).filter(c =>
+  const eslesenler = cariAktifler().filter(c =>
     (c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
@@ -10804,7 +10878,7 @@ function cvCariOneriGoster(which){
   if(!kutu) return;
   const q = (document.getElementById("cvirman-" + which + "-arama").value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
-  const eslesenler = (_cariListe || []).filter(c =>
+  const eslesenler = cariAktifler().filter(c =>
     (c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
@@ -12859,6 +12933,16 @@ function ayarlarListesiCiz(){
        <span style="flex:1">📊 Stok hareket penceresi (Alış/Satış)</span>
        <input readonly class="ayarlar-kisayol-input" data-modid="_stokHareket" value="${_ayarlarTaslak._stokHareket || ''}" onclick="kisayolYakala(this,'_stokHareket')" style="width:160px;text-align:center;cursor:pointer">
      </div>`,
+    ...[
+      ["_yeniKayit","➕ Yeni kayıt (açık ekrandaki + düğmesi)","Tahsilat, Ödeme, Cari, Stok, Alış, Satış... ekranlarında yeni kayıt açar"],
+      ["_yenile","⟳ Sayfayı yenile (üstteki Yenile düğmesi)","Önbelleği temizleyip sayfayı yeniden yükler"],
+      ["_solListe","◀ Soldaki listeyi gizle / göster (Cari, Alış, Satış)","Açık modülün sol listesini daraltır/açar"],
+      ["_modulGeri","← Bir önceki ekrana dön (alt modülden seçim ekranına)","Geri düğmesi olan ekranlarda bir kademe geri gider"],
+    ].map(([anahtar, etiket, ipucu])=>`
+       <div class="satis-kalem-satir" style="justify-content:space-between">
+         <span style="flex:1" title="${ipucu}">${etiket}</span>
+         <input readonly class="ayarlar-kisayol-input" data-modid="${anahtar}" value="${_ayarlarTaslak[anahtar] || ''}" onclick="kisayolYakala(this,'${anahtar}')" style="width:160px;text-align:center;cursor:pointer">
+       </div>`),
     ...MODULLER.filter(m=>m.id!=="ayarlar").map(m=>`
        <div class="satis-kalem-satir" style="justify-content:space-between">
          <span style="flex:1">${m.ic} ${m.lbl}</span>
@@ -12876,8 +12960,14 @@ function kisayolYakala(inputEl, modId){
     e.stopPropagation();
     if(["Control","Alt","Shift"].includes(e.key)) return; // sadece değiştirici tuşa basıldıysa bekle
     const metin = kisayolMetni(e);
-    _ayarlarTaslak[modId] = metin;
     document.removeEventListener("keydown", dinle, true);
+    const cakisan = Object.keys(_ayarlarTaslak).find(k=>k!==modId && _ayarlarTaslak[k]===metin);
+    if(cakisan){
+      const ad = (MODULLER.find(m=>m.id===cakisan)||{}).lbl || cakisan.replace(/^_/,"");
+      alert("“"+metin+"” zaten başka bir işleme atanmış ("+ad+"). Farklı bir tuş seçin.");
+    } else {
+      _ayarlarTaslak[modId] = metin;
+    }
     ayarlarListesiCiz();
   }
   document.addEventListener("keydown", dinle, true);
@@ -12885,6 +12975,7 @@ function kisayolYakala(inputEl, modId){
 
 function kisayollariKaydet(){
   localStorage.setItem("fincanlar_kisayollar", JSON.stringify(_ayarlarTaslak));
+  if(typeof kisayolIpuclariniYenile === "function") kisayolIpuclariniYenile();
   alert("Kısayollar kaydedildi.");
 }
 
@@ -12892,6 +12983,7 @@ function kisayollariVarsayilanaDondur(){
   localStorage.removeItem("fincanlar_kisayollar");
   _ayarlarTaslak = Object.assign({}, kisayollariAl());
   ayarlarListesiCiz();
+  if(typeof kisayolIpuclariniYenile === "function") kisayolIpuclariniYenile();
 }
 
 // ── Sekme genişliği: --sekme-genislik CSS değişkenini uygular, localStorage'da
@@ -14290,12 +14382,12 @@ if("serviceWorker" in navigator){
   yeniKayitDugmeleri().forEach(b=>{
     b.title = (b.title ? b.title + " " : "") + "(Ctrl+Y)";
     const ip = document.createElement("span");
-    ip.className = "kisayol-ipucu"; ip.textContent = "Ctrl+Y";
+    ip.className = "kisayol-ipucu"; ip.textContent = kisayollariAl()._yeniKayit || "Ctrl+Y";
     b.insertAdjacentElement("afterend", ip);
     b._ctrlyIpucu = ip;
   });
   document.addEventListener("keydown", function(e){
-    if(!e.ctrlKey || e.altKey || e.shiftKey || e.metaKey || (e.key !== "y" && e.key !== "Y")) return;
+    if(e.metaKey || kisayolMetni(e) !== (kisayollariAl()._yeniKayit || "Ctrl+Y")) return; // Ayarlar > Kısayol Tuşları'ndan değiştirilebilir
     if(!girisYapildi() || pencereOnde()) return; // pencere açıkken Ctrl+Y normal "yinele" olarak kalır
     const btn = yeniKayitDugmeleri().find(b=> b.offsetParent !== null && !b.disabled);
     if(!btn) return;
@@ -14441,12 +14533,12 @@ table.hareket-tbl tbody tr:hover,table.hareket-tbl tbody tr:hover td,table.rehbe
   renkUygula();
 
   // ═══ 2) Alış / Satış sol liste: açılır-kapanır ═══
-  const GORUNUMLER = { alis:["alis-giris-view","alis-iade-view"], satis:["satis-view","satisiade-view"] };
-  const acik = { alis:true, satis:true }; // ilk girişte açık
+  const GORUNUMLER = { alis:["alis-giris-view","alis-iade-view"], satis:["satis-view","satisiade-view"], cari:["mod-cari"] };
+  const acik = { alis:true, satis:true, cari:true }; // ilk girişte açık
   function uygula(mod){
     GORUNUMLER[mod].forEach(id=>{
       const v = document.getElementById(id); if(!v) return;
-      v.classList.toggle("sol-kapali", !acik[mod]);
+      v.classList.toggle("sol-kapali", !acik[mod] && window.innerWidth > 640); // dar ekranda (telefon) liste zaten tam ekran, daraltılmaz
       const b = v.querySelector(".sol-toggle");
       if(b){
         b.querySelector(".sol-toggle-ok").textContent = acik[mod] ? "◀" : "▶";
@@ -14500,7 +14592,7 @@ table.hareket-tbl tbody tr:hover,table.hareket-tbl tbody tr:hover td,table.rehbe
     if(b.style.display === "inline-flex" && !/Ctrl/.test(b.title||"")) b.title = "Geri (Ctrl+←)";
   });
   document.addEventListener("keydown", function(e){
-    if(!(e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && e.key === "ArrowLeft")) return;
+    if(e.metaKey || kisayolMetni(e) !== (kisayollariAl()._modulGeri || "Ctrl+ArrowLeft")) return; // Ayarlar'dan değiştirilebilir
     if(!document.body.classList.contains("giris-yapildi")) return;
     if(typeof onPlanPencereBul_ === "function" && onPlanPencereBul_()) return; // önde pencere varsa arkadaki ekran değişmesin
     if(typeof _shp !== "undefined" && _shp.acik) return;
@@ -14522,5 +14614,44 @@ table.hareket-tbl tbody tr:hover,table.hareket-tbl tbody tr:hover td,table.rehbe
 })();
 </script>
 
+<script>
+// ═══ 29 Eyl 2026: Sayfayı yenile düğmesi + düzenlenebilir kısayollar (yenile, sol liste gizle/göster) ═══
+(function(){
+  const girisYapildi = ()=> document.body.classList.contains("giris-yapildi");
+  window.kisayolIpuclariniYenile = function(){
+    const k = kisayollariAl();
+    const yn = document.getElementById("yenile-ipucu"); if(yn) yn.textContent = k._yenile || "";
+    document.querySelectorAll(".cari-add-btn + .kisayol-ipucu").forEach(el=>{ el.textContent = k._yeniKayit || "Ctrl+Y"; });
+    document.querySelectorAll(".sol-toggle").forEach(b=>{ b.title = (b.title||"").replace(/\s*\(.*\)$/,"") + (k._solListe ? " ("+k._solListe+")" : ""); });
+  };
+  window.sayfayiYenile = function(){
+    const onde = typeof onPlanPencereBul_ === "function" && onPlanPencereBul_();
+    const sekmeSayisi = (typeof _acikSekmeler !== "undefined") ? _acikSekmeler.length : 0;
+    if((onde || sekmeSayisi > 1) && !confirm("Sayfa yenilenecek: açık pencere ve sekmelerdeki kaydedilmemiş girişler kaybolur. Devam edilsin mi?")) return;
+    try{ Object.keys(localStorage).filter(k=>k.indexOf("fincanlar_onbellek_")===0).forEach(k=>localStorage.removeItem(k)); }catch(_){}
+    let bitti = false; const bitir = ()=>{ if(bitti) return; bitti = true; location.reload(); };
+    try{
+      const isler = [];
+      if(window.caches && caches.keys) isler.push(caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))));
+      Promise.all(isler).then(bitir, bitir);
+      setTimeout(bitir, 1500);
+    }catch(_){ bitir(); }
+  };
+  document.addEventListener("keydown", function(e){
+    if(!girisYapildi() || e.metaKey) return;
+    const k = kisayollariAl(), m = kisayolMetni(e);
+    const yazi = ["INPUT","TEXTAREA","SELECT"].indexOf(e.target.tagName) >= 0 || e.target.isContentEditable;
+    if(yazi && !e.ctrlKey && !e.altKey) return; // düz tuş atanmışsa yazarken devreye girmesin
+    if(k._yenile && m === k._yenile){ e.preventDefault(); window.sayfayiYenile(); return; }
+    if(k._solListe && m === k._solListe){
+      const v = document.querySelector(".modview.active"); if(!v) return;
+      const mod = v.id === "mod-cari" ? "cari" : (v.id === "mod-alis" ? "alis" : (v.id === "mod-satis" ? "satis" : null));
+      if(!mod || typeof solListeToggle !== "function") return;
+      e.preventDefault(); solListeToggle(mod);
+    }
+  }, true);
+  kisayolIpuclariniYenile();
+})();
+</script>
 </body>
 </html>

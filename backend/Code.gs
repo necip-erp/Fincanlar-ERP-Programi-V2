@@ -117,7 +117,7 @@ const CACHE_PARCA_ISARET_ = "@@PARCALI@@:";
 // Bir anahtar temizlenince, ona BAĞLI türetilmiş sonuçların önbelleği de temizlenir.
 const CACHE_BAGIMLI_ = {
   stokTanimListesi: ["bekleyenAlisFaturalari"],
-  cariListesi_v3: ["bekleyenAlisFaturalari"],
+  cariListesi_v4: ["bekleyenAlisFaturalari"],
   alisListesi: ["bekleyenAlisFaturalari"],
 };
 
@@ -390,7 +390,10 @@ function ensureCariPlasiyerColonu_orj_(sheet) {
 // Davranış aynı; sadece Cari sayfası açılışında (liste/detay/kayıt) daha az servis çağrısı.
 // IL/ILCE (15,16. kolonlar): cari adres bilgisine il/ilçe eklendi (Yeni Cari Ekle formu).
 function ensureCariEkKolonlariHepsi(sheet) {
-  const beklenen = ["CARI_KODU", "ISKONTO_ORANI", "KREDI_LIMITI", "E_FATURA", "E_ARSIV", "PLASIYER_ID", "IL", "ILCE"];
+  const beklenen = ["CARI_KODU", "ISKONTO_ORANI", "KREDI_LIMITI", "E_FATURA", "E_ARSIV", "PLASIYER_ID", "IL", "ILCE", "AKTIF"];
+  // AKTIF (17. kolon, 29 Eyl 2026): "Hayır" = pasif cari (F1 rehberinde/arama kutularında çıkmaz); boş/"Evet" = aktif.
+  const gerekenKolon = 8 + beklenen.length;
+  if (sheet.getMaxColumns() < gerekenKolon) sheet.insertColumnsAfter(sheet.getMaxColumns(), gerekenKolon - sheet.getMaxColumns());
   const mevcut = sheet.getRange(1, 9, 1, beklenen.length).getValues()[0];
   let degisti = false;
   const yeni = beklenen.map((ad, i) => {
@@ -1001,6 +1004,7 @@ function handleRequest(e) {
       case "getCariDetay":   result = getCariDetay(body.cariId); break;
       case "saveCari":       result = saveCari(body); break;
       case "silCari":        result = silCari(body); break;
+      case "setCariAktif":   result = setCariAktif(body); break;
       case "cariHareketEkle": result = cariHareketEkle(body); break;
       case "cariHareketSil":  result = cariHareketSil(body); break;
       case "getSatisListesi": result = getSatisListesi(); break;
@@ -1168,7 +1172,7 @@ function handleRequest(e) {
 // Bakiye = toplam BORÇ - toplam ALACAK (pozitifse cari bize borçlu, negatifse biz ona borçluyuz).
 function getCariListesi() {
   try {
-    return cacheOkuVeyaHesapla("cariListesi_v3", 180, function () {
+    return cacheOkuVeyaHesapla("cariListesi_v4", 180, function () {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
     ensureCariEkKolonlariHepsi(hSheet);
@@ -1214,6 +1218,7 @@ function getCariListesi() {
         plasiyerId: String(row[13] || ""),
         il: String(row[14] || ""),
         ilce: String(row[15] || ""),
+        aktif: String(row[16] || "Evet") !== "Hayır",
         bakiye: bakiyeMap[id] || 0,
         sonIslemTarihi: sonIslemMap[id] || "",
       });
@@ -1254,6 +1259,7 @@ function getCariDetay(cariId) {
         plasiyerId: String(hData[i][13] || ""),
         il: String(hData[i][14] || ""),
         ilce: String(hData[i][15] || ""),
+        aktif: String(hData[i][16] || "Evet") !== "Hayır",
       };
       break;
     }
@@ -1351,28 +1357,72 @@ function saveCari(body) {
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);
 
-  cacheTemizle(["cariListesi_v3"]);
+  cacheTemizle(["cariListesi_v4"]);
   return { ok: true, id: id };
 }
 
-// body: { id } — sadece hiç hareketi olmayan cari silinebilir (güvenlik için)
+// Bir sayfada, BAŞLIK ADIYLA bulunan kolonlardan biri verilen değere eşit satır var mı? (sayfa yoksa false)
+// Hareket gören cari / stok kartı silinemesin diye kullanılır — kolon konumuna değil başlığa bakar.
+function sayfadaDegerVarMi_(ss, sayfaAdi, baslikAdlari, deger) {
+  const sh = ss.getSheetByName(sayfaAdi);
+  if (!sh || sh.getLastRow() < 2 || !deger) return false;
+  const baslik = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  const hedef = String(deger);
+  for (let b = 0; b < baslikAdlari.length; b++) {
+    const k = baslik.indexOf(baslikAdlari[b]);
+    if (k < 0) continue;
+    const vals = sh.getRange(2, k + 1, sh.getLastRow() - 1, 1).getValues();
+    for (let i = 0; i < vals.length; i++) if (String(vals[i][0]) === hedef) return true;
+  }
+  return false;
+}
+
+// Cariye ait HERHANGİ bir kayıt (cari hareketi, sipariş/teklif/fatura, iade, tahsilat, ödeme, çek/senet, virman) var mı?
+function cariKullanildiMi_(ss, cariId) {
+  const kontroller = [
+    [SHEETS.cariHareketler, ["CARI_ID"]], [SHEETS.satislar, ["CARI_ID"]], [SHEETS.alislar, ["CARI_ID"]],
+    [SHEETS.alisIadeler, ["CARI_ID"]], [SHEETS.satisIadeler, ["CARI_ID"]], [SHEETS.tahsilatlar, ["CARI_ID"]],
+    [SHEETS.odemeler, ["CARI_ID"]], [SHEETS.cekSenetler, ["CARI_ID"]],
+    [SHEETS.cariVirmanlar, ["KAYNAK_CARI_ID", "HEDEF_CARI_ID"]],
+  ];
+  for (let i = 0; i < kontroller.length; i++) {
+    if (sayfadaDegerVarMi_(ss, kontroller[i][0], kontroller[i][1], cariId)) return true;
+  }
+  return false;
+}
+
+// body: { id, aktif: true|false } — cariyi pasife alır / tekrar aktif eder (kayıt silinmez, hareketleri durur).
+function setCariAktif(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
+  ensureCariEkKolonlariHepsi(sheet);
+  const ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+  for (let i = 1; i < ids.length; i++) {
+    if (String(ids[i][0]) === id) {
+      sheet.getRange(i + 1, 17).setValue(body.aktif === false || body.aktif === "false" ? "Hayır" : "Evet");
+      cacheTemizle(["cariListesi_v4"]);
+      return { ok: true, aktif: !(body.aktif === false || body.aktif === "false") };
+    }
+  }
+  return { ok: false, hata: "Cari bulunamadı" };
+}
+
+// body: { id } — sadece HİÇ işlemi/belgesi olmayan cari silinebilir; hareket gören cari pasife alınabilir.
 function silCari(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
-  const hkData = hkSheet.getDataRange().getValues();
-  for (let i = 1; i < hkData.length; i++) {
-    if (String(hkData[i][1]) === id) {
-      return { ok: false, hata: "Bu cariye ait hareketler var, önce onları silin veya cariyi silmeyin" };
-    }
+  if (cariKullanildiMi_(ss, id)) {
+    return { ok: false, hata: "Bu cariye ait hareket/belge (sipariş, fatura, tahsilat, ödeme, çek vb.) var, silinemez. Kullanmayacaksanız cariyi PASİFE alabilirsiniz." };
   }
 
   const sheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH"]);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["cariListesi_v3"]); return { ok: true }; }
+    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["cariListesi_v4"]); return { ok: true }; }
   }
   return { ok: false, hata: "Cari bulunamadı" };
 }
@@ -1396,7 +1446,7 @@ function cariHareketEkle(body) {
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), String(body.vade || ""), String(body.projeKodu || "").trim()], [9]);
 
   kdBacakNotu_({ k: "cari", tip: tip, kaynak: SHEETS.cariHareketler, kid: id, tutar: tutar, tarih: tarih, ek: cariId });
-  cacheTemizle(["cariListesi_v3"]); // bakiye değişti, liste önbelleği bayatladı
+  cacheTemizle(["cariListesi_v4"]); // bakiye değişti, liste önbelleği bayatladı
   return { ok: true, id: id };
 }
 
@@ -1524,7 +1574,7 @@ function saveCariVirman(body) {
   metinliSatirEkle_(sheet, [id, tarih, kaynakId, kaynakAd, hedefId, hedefAd, tutar, notu,
     Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"), kaynakHareket.id, hedefHareket.id, String(body.projeKodu || "").trim(), String(body.virmanTipi || "").trim()], [12, 13]);
 
-  cacheTemizle(["cariListesi_v3"]);
+  cacheTemizle(["cariListesi_v4"]);
   return { ok: true, id: id };
 }
 
@@ -1579,7 +1629,7 @@ function cariVirmanSil(body) {
       if (row[9]) cariHareketSil({ id: String(row[9]) });
       if (row[10]) cariHareketSil({ id: String(row[10]) });
       sheet.deleteRow(i + 1);
-      cacheTemizle(["cariListesi_v3"]);
+      cacheTemizle(["cariListesi_v4"]);
       return { ok: true };
     }
   }
@@ -1606,7 +1656,7 @@ function cariHareketSil(body) {
   const sheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["cariListesi_v3"]); return { ok: true }; }
+    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["cariListesi_v4"]); return { ok: true }; }
   }
   return { ok: false, hata: "Hareket bulunamadı" };
 }
@@ -2509,7 +2559,7 @@ function silSatis(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("SATIS:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v3"]);
+        cacheTemizle(["cariListesi_v4"]);
         break;
       }
     }
@@ -2975,7 +3025,7 @@ function silAlis(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("ALIS:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v3"]);
+        cacheTemizle(["cariListesi_v4"]);
         break;
       }
     }
@@ -3025,7 +3075,7 @@ function tumAlislariSilVeSifirla(body) {
       const sonuc = silAlis({ id: id });
       if (sonuc.ok) silinen++;
     });
-    cacheTemizle(["alisListesi", "stokHareketListesi", "cariListesi_v3"]);
+    cacheTemizle(["alisListesi", "stokHareketListesi", "cariListesi_v4"]);
     return { ok: true, silinen: silinen, toplam: idler.length, yedekEki: damga };
   }
   // Kuru çalıştırma: sadece bilgi ver, hiçbir şey silme.
@@ -3084,7 +3134,7 @@ function updateAlis(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === eskiCariId && String(hkData[i][5] || "").indexOf("ALIS:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v3"]);
+        cacheTemizle(["cariListesi_v4"]);
         break;
       }
     }
@@ -3351,7 +3401,7 @@ function silAlisIade(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("ALISIADE:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v3"]);
+        cacheTemizle(["cariListesi_v4"]);
         break;
       }
     }
@@ -3555,7 +3605,7 @@ function silSatisIade(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("SATISIADE:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v3"]);
+        cacheTemizle(["cariListesi_v4"]);
         break;
       }
     }
@@ -3722,7 +3772,7 @@ function silTahsilat(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("TAHSILAT:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v3"]);
+        cacheTemizle(["cariListesi_v4"]);
         break;
       }
     }
@@ -4027,7 +4077,7 @@ function silOdeme(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("ODEME:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v3"]);
+        cacheTemizle(["cariListesi_v4"]);
         break;
       }
     }
@@ -4540,7 +4590,7 @@ function cekSenetHareketGeriAl(body) {
       for (let i = hkData.length - 1; i >= 1; i--) {
         if (String(hkData[i][1]) === ciroCariId && String(hkData[i][5] || "").indexOf("CEKCIRO:" + id) === 0) {
           hkSheet.deleteRow(i + 1);
-          cacheTemizle(["cariListesi_v3"]);
+          cacheTemizle(["cariListesi_v4"]);
           break;
         }
       }
@@ -4711,7 +4761,7 @@ function silCekSenet(body) {
     for (let i = hkData.length - 1; i >= 1; i--) {
       if (String(hkData[i][1]) === cariId && String(hkData[i][5] || "").indexOf("CEK:" + id) === 0) {
         hkSheet.deleteRow(i + 1);
-        cacheTemizle(["cariListesi_v3"]);
+        cacheTemizle(["cariListesi_v4"]);
         break;
       }
     }
@@ -7087,7 +7137,16 @@ function silStokTanim(body) {
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][0]) === id) { sheet.deleteRow(i+1); cacheTemizle(["stokTanimListesi"]); return { ok: true }; }
+    if (String(data[i][0]) === id) {
+      // Hareket gören stok kartı silinemez: stok hareketi veya herhangi bir belge kaleminde bu stok kodu/ID varsa engelle.
+      const kod = String(data[i][1] || "");
+      const kullanildi =
+        sayfadaDegerVarMi_(ss, SHEETS.stokHareketleri, ["STOK_TANIM_ID"], id) ||
+        [SHEETS.stokHareketleri, SHEETS.satisKalemleri, SHEETS.alisKalemleri, SHEETS.alisIadeKalemleri, SHEETS.satisIadeKalemleri]
+          .some(function (sayfa) { return sayfadaDegerVarMi_(ss, sayfa, ["STOK_KODU"], kod); });
+      if (kullanildi) return { ok: false, hata: "Bu stok kartında hareket/belge kaydı var (" + kod + "), silinemez." };
+      sheet.deleteRow(i+1); cacheTemizle(["stokTanimListesi"]); return { ok: true };
+    }
   }
   return { ok: false, hata: "Kayıt bulunamadı" };
 }
@@ -7442,7 +7501,7 @@ function cariHareketGecmisiDoldur() {
     eklenen++;
   }
 
-  cacheTemizle(["cariListesi_v3"]);
+  cacheTemizle(["cariListesi_v4"]);
   return { ok: true, eklenenHareketSayisi: eklenen };
 }
 

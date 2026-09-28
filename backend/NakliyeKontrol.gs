@@ -133,7 +133,7 @@ function nakliyeSorunluFaturalariSil(body) {
   const disSh = SpreadsheetApp.openById(DIS_FIYAT_SHEET_ID).getSheetByName(DIS_FIYAT_SHEET_ADI);
   silinecekSatirlar.sort((a, b2) => b2 - a).forEach(s => disSh.deleteRow(s));
 
-  cacheTemizle(["bekleyenAlisFaturalari", "alisListesi", "cariListesi_v3", "stokTanimListesi", "stokGuncelMiktarHaritasi",
+  cacheTemizle(["bekleyenAlisFaturalari", "alisListesi", "cariListesi_v4", "stokTanimListesi", "stokGuncelMiktarHaritasi",
                 "stokHareketListesi", "stokPanelSnapshot", "silinenlerListesi", "bugunOzet", "finansOzet", "nakliyeSupheliAlislar"]);
   return sonuc;
 }
