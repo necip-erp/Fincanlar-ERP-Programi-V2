@@ -5920,7 +5920,8 @@ function getMuhasebeRaporu(body) {
       const id = String(sData[i][0] || "");
       if (!id) continue;
       satisBelgeTipi[id] = String(sData[i][8] || "") || "Fatura";
-      satisTarih[id] = String(sData[i][1] || "");
+      // Tarih hücresi Sheets'te Date olarak tutulabilir; String(Date) "Mon Sep 28..." verip aralık filtresini bozuyordu.
+      satisTarih[id] = hucreTarihStr(sData[i][1]);
     }
 
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
@@ -5981,7 +5982,7 @@ function getMuhasebeRaporu(body) {
       const anahtar = urunAdi + "||" + stokKodu;
       if (!hareketlerByAnahtar[anahtar]) hareketlerByAnahtar[anahtar] = [];
       hareketlerByAnahtar[anahtar].push({
-        tarih: String(row[1] || "").slice(0, 10), hareketTipi, miktar,
+        tarih: hucreTarihStr(row[1]).slice(0, 10), hareketTipi, miktar,
         birimMaliyet: hareketTipi === "Giriş" ? (parseFloat(row[12]) || 0) : null,
         belgeTipi, belgeNo: String(row[11] || ""),
       });
