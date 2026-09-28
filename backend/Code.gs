@@ -6098,6 +6098,56 @@ function getMuhasebeRaporu(body) {
     };
   }
 
+  // 28 Eyl 2026: Sipariş Raporu — TÜM siparişler (tarih aralığında), her sipariş tek satır;
+  // kalemler her siparişin içinde (frontend'de ok ile açılır). stokKodu doluysa sadece o stoğu
+  // içeren siparişler/kalemler gelir.
+  if (tip === "siparisRaporu") {
+    const stokKoduFiltre = String(body.stokKodu || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
+    const norm = t => String(t || "").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
+    const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+    ensureSatisBelgeTipiColonu(sSheet);
+    const sData = sSheet.getDataRange().getValues();
+    const cariKoduMap = cariKoduHaritasiOlustur(ss);
+    const siparisler = {};
+    for (let i = 1; i < sData.length; i++) {
+      const row = sData[i];
+      const id = String(row[0] || "");
+      if (!id) continue;
+      if ((String(row[8] || "") || "Fatura") !== "Sipariş") continue;
+      const tarih = hucreTarihStr(row[1]);
+      if (!araligaDahilMi(tarih)) continue;
+      siparisler[id] = { satisId: id, tarih: tarih, siparisNo: String(row[15] || ""), cariKodu: cariKoduMap[String(row[2] || "")] || "",
+        cariAd: String(row[3] || ""), toplamTutar: parseFloat(row[4]) || 0, siparisDurumu: String(row[12] || ""), kalemler: [] };
+    }
+    const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
+      ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
+    const kData = kSheet.getDataRange().getValues();
+    for (let i = 1; i < kData.length; i++) {
+      const row = kData[i];
+      const sp = siparisler[String(row[1] || "")];
+      if (!sp) continue;
+      const urunAdi = String(row[2] || "");
+      const stokKodu = String(row[10] || "");
+      if (stokKoduFiltre && !norm(stokKodu).includes(stokKoduFiltre) && !norm(urunAdi).includes(stokKoduFiltre)) continue;
+      const miktar = parseFloat(row[3]) || 0;
+      const tutar = parseFloat(row[6]) || 0;
+      const faturalananMiktar = Math.min(miktar, parseFloat(row[9]) || 0);
+      const kalanMiktar = Math.max(0, miktar - faturalananMiktar);
+      const faturalananTutar = miktar > 0 ? tutar * (faturalananMiktar / miktar) : 0;
+      sp.kalemler.push({ stokKodu: stokKodu, urunAdi: urunAdi, birim: String(row[4] || ""), miktar: miktar,
+        birimFiyat: parseFloat(row[5]) || 0, tutar: tutar, faturalananMiktar: faturalananMiktar, kalanMiktar: kalanMiktar,
+        faturalananTutar: faturalananTutar, kalanTutar: Math.max(0, tutar - faturalananTutar) });
+    }
+    const satirlar = Object.values(siparisler).filter(sp => !stokKoduFiltre || sp.kalemler.length > 0).map(sp => {
+      const m = sp.kalemler.reduce((t, k) => t + k.miktar, 0), f = sp.kalemler.reduce((t, k) => t + k.faturalananMiktar, 0);
+      sp.kalemSayisi = sp.kalemler.length;
+      sp.durum = sp.kalemler.length === 0 ? "Bekliyor" : (f <= 0.0001 ? "Bekliyor" : (f >= m - 0.0001 ? "Faturalandı" : "Kısmen Faturalandı"));
+      return sp;
+    }).sort((a, b) => (a.tarih < b.tarih ? 1 : (a.tarih > b.tarih ? -1 : 0)));
+    return { ok: true, tip: tip, satirlar: satirlar, toplam: satirlar.reduce((t, s) => t + s.toplamTutar, 0) };
+  }
+
   if (tip === "urunBazliHareket" || tip === "urunBazliSiparis" || tip === "urunBazliFatura") {
     // Kullanıcı stok kodu yazarak da (kısmi eşleşme, büyük/küçük harf duyarsız) filtreleyebilsin.
     const stokKoduFiltre = String(body.stokKodu || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
@@ -6142,6 +6192,13 @@ function getMuhasebeRaporu(body) {
     // görülebilsin diye) — FATURALANAN_MIKTAR alanına göre. Filtre boşsa (tüm ürünler)
     // bu liste boş kalır, sadece aggregate tablo gösterilir (çok kalabalık olmasın diye).
     const siparisDetaylari = [];
+    // Ürün Bazlı Hareket Raporu: her hareket (Giriş YA DA Çıkış) ayrı satır olarak da döner (28 Eyl 2026).
+    const hareketDetaylari = [];
+    function hareketDetayEkle(yon, kaynak, belgeId, tarih, urunAdi, stokKodu, birim, miktar, birimFiyat, tutar, cariKodu, cariAd) {
+      if (!eslesiyorMu(urunAdi, stokKodu)) return;
+      hareketDetaylari.push({ yon: yon, kaynak: kaynak, belgeId: belgeId, tarih: tarih, urunAdi: urunAdi, stokKodu: stokKodu || "",
+        birim: birim || "", miktar: miktar, birimFiyat: birimFiyat, tutar: tutar, cariKodu: cariKodu || "", cariAd: cariAd || "" });
+    }
     // Ürün Bazlı Fatura Raporu da (Sipariş raporuyla aynı biçimde) bir stok seçilince kalem kalem döner.
     const faturaDetaylari = [];
     for (let i = 1; i < kData.length; i++) {
@@ -6159,6 +6216,9 @@ function getMuhasebeRaporu(body) {
       if (tip === "urunBazliHareket" && belgeTipi !== "Fatura") continue;
       const stokKodu = String(row[10] || "");
       urunEkle(urunAdi, stokKodu, parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
+      if (tip === "urunBazliHareket") {
+        hareketDetayEkle("Çıkış", "Satış Faturası", satisId, tarih, urunAdi, stokKodu, String(row[4] || ""), parseFloat(row[3]) || 0, parseFloat(row[5]) || 0, parseFloat(row[6]) || 0, satisCariKodu[satisId], satisCariAd[satisId]);
+      }
       if (tip === "urunBazliFatura" && stokKoduFiltre && eslesiyorMu(urunAdi, stokKodu)) {
         const fMiktar = parseFloat(row[3]) || 0, fTutar = parseFloat(row[6]) || 0;
         faturaDetaylari.push({
@@ -6195,10 +6255,14 @@ function getMuhasebeRaporu(body) {
       const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
         ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
       const aData = aSheet.getDataRange().getValues();
-      const alisTarih = {};
+      const alisTarih = {}, alisCariAd = {}, alisCariKodu = {};
       for (let i = 1; i < aData.length; i++) {
         const id = String(aData[i][0] || "");
-        if (id) alisTarih[id] = hucreTarihStr(aData[i][1]);
+        if (id) {
+          alisTarih[id] = hucreTarihStr(aData[i][1]);
+          alisCariAd[id] = String(aData[i][3] || "");
+          alisCariKodu[id] = cariKoduMap[String(aData[i][2] || "")] || "";
+        }
       }
       const akSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
         ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
@@ -6213,16 +6277,21 @@ function getMuhasebeRaporu(body) {
         const urunAdi = String(row[2] || "");
         if (!urunAdi) continue;
         urunEkle(urunAdi, String(row[7] || ""), parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "giris");
+        hareketDetayEkle("Giriş", "Alış Faturası", alisId, tarih, urunAdi, String(row[7] || ""), String(row[4] || ""), parseFloat(row[3]) || 0, parseFloat(row[5]) || 0, parseFloat(row[6]) || 0, alisCariKodu[alisId], alisCariAd[alisId]);
       }
 
       // Alış İadeleri: tedarikçiye geri verilen mal, girişten düşülür (çıkış olarak sayılır).
       const iaSheet = getOrCreateSheet(ss, SHEETS.alisIadeler,
         ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
       const iaData = iaSheet.getDataRange().getValues();
-      const iadeTarih = {};
+      const iadeTarih = {}, iadeCariAd = {}, iadeCariKodu = {};
       for (let i = 1; i < iaData.length; i++) {
         const id = String(iaData[i][0] || "");
-        if (id) iadeTarih[id] = hucreTarihStr(iaData[i][1]);
+        if (id) {
+          iadeTarih[id] = hucreTarihStr(iaData[i][1]);
+          iadeCariAd[id] = String(iaData[i][3] || "");
+          iadeCariKodu[id] = cariKoduMap[String(iaData[i][2] || "")] || "";
+        }
       }
       const ikSheet = getOrCreateSheet(ss, SHEETS.alisIadeKalemleri,
         ["ID","IADE_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR"]);
@@ -6236,6 +6305,7 @@ function getMuhasebeRaporu(body) {
         if (!urunAdi) continue;
         // Bu sayfada STOK_KODU sütunu yok — ürün adıyla eşleştirilir (bkz. yorum yukarıda).
         urunEkle(urunAdi, "", parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "cikis");
+        hareketDetayEkle("Çıkış", "Alış İadesi", iadeId, tarih, urunAdi, "", String(row[4] || ""), parseFloat(row[3]) || 0, parseFloat(row[5]) || 0, parseFloat(row[6]) || 0, iadeCariKodu[iadeId], iadeCariAd[iadeId]);
       }
 
       // Satış İadeleri: müşteriden geri gelen mal, çıkıştan düşülür (giriş olarak sayılır).
@@ -6243,10 +6313,14 @@ function getMuhasebeRaporu(body) {
       const siSheet = getOrCreateSheet(ss, SHEETS.satisIadeler,
         ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
       const siData = siSheet.getDataRange().getValues();
-      const satisIadeTarih = {};
+      const satisIadeTarih = {}, satisIadeCariAd = {}, satisIadeCariKodu = {};
       for (let i = 1; i < siData.length; i++) {
         const id = String(siData[i][0] || "");
-        if (id) satisIadeTarih[id] = hucreTarihStr(siData[i][1]);
+        if (id) {
+          satisIadeTarih[id] = hucreTarihStr(siData[i][1]);
+          satisIadeCariAd[id] = String(siData[i][3] || "");
+          satisIadeCariKodu[id] = cariKoduMap[String(siData[i][2] || "")] || "";
+        }
       }
       const sikSheet = getOrCreateSheet(ss, SHEETS.satisIadeKalemleri,
         ["ID","IADE_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
@@ -6259,11 +6333,16 @@ function getMuhasebeRaporu(body) {
         const urunAdi = String(row[2] || "");
         if (!urunAdi) continue;
         urunEkle(urunAdi, String(row[7] || ""), parseFloat(row[3]) || 0, parseFloat(row[6]) || 0, "giris");
+        hareketDetayEkle("Giriş", "Satış İadesi", iadeId, tarih, urunAdi, String(row[7] || ""), String(row[4] || ""), parseFloat(row[3]) || 0, parseFloat(row[5]) || 0, parseFloat(row[6]) || 0, satisIadeCariKodu[iadeId], satisIadeCariAd[iadeId]);
       }
     }
 
     const satirlar = Object.values(urunMap).sort((a, b) => b.tutar - a.tutar);
     const sonuc = { ok: true, tip: tip, satirlar: satirlar, toplam: satirlar.reduce((t, s) => t + s.tutar, 0) };
+    if (tip === "urunBazliHareket") {
+      hareketDetaylari.sort((a, b) => (a.tarih < b.tarih ? 1 : (a.tarih > b.tarih ? -1 : 0)));
+      sonuc.hareketDetaylari = hareketDetaylari;
+    }
     if (tip === "urunBazliSiparis" && stokKoduFiltre) sonuc.siparisDetaylari = siparisDetaylari;
     if (tip === "urunBazliFatura" && stokKoduFiltre) sonuc.faturaDetaylari = faturaDetaylari;
     // GEÇİCİ TEŞHİS: rapor beklenmedik şekilde boş geldiğinde ham veri sayılarını görmek için.
