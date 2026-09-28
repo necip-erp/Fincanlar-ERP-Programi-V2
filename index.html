@@ -3677,12 +3677,14 @@ function cariDetayCiz(res){
       <div class="cari-info-item"><div class="k">Adres</div><div class="v">${c.adres||"—"}</div></div>
       <div class="cari-info-item"><div class="k">İl / İlçe</div><div class="v">${[c.il,c.ilce].filter(Boolean).join(" / ")||"—"}</div></div>
       <div class="cari-info-item"><div class="k">Vergi No</div><div class="v">${c.vergiNo||"—"}</div></div>
+      <div class="cari-info-item cari-limit-item"><div class="k">Kredi Limiti</div><div class="v">${c.krediLimiti>0 ? paraFormat(c.krediLimiti) + `<div class="cari-limit-kalan ${bakiye>c.krediLimiti?'hk-borc':'hk-alacak'}">${bakiye>c.krediLimiti ? 'Limit aşıldı: '+paraFormat(bakiye-c.krediLimiti) : 'Kalan: '+paraFormat(c.krediLimiti-Math.max(bakiye,0))}</div>` : "Limitsiz"}</div></div>
       <div class="cari-info-item"><div class="k">Not</div><div class="v">${c.not||"—"}</div></div>
     </div>
 
     <div class="btnrow">
       <button class="btn" onclick="cariModalAc('${c.id}')">✏️ Düzenle</button>
       <button class="btn btn-danger" onclick="cariSilOnay('${c.id}')">🗑 Cariyi Sil</button>
+      <button type="button" class="rapor-renk-btn" onclick="raporRenkPanelAc(this)">🎨 Renkler</button>
     </div>
 
     <div class="fld" style="max-width:220px;margin:10px 0 6px">
@@ -14343,6 +14345,24 @@ body[data-rapor-zebra="1"] .rapor-renk-onizle tr:nth-child(even) td{background:v
 @media (max-width:640px){.sol-toggle{display:none}}
 /* Alış'ta fatura görseli paneli açıkken detay panelinin panelin altında kalmaması için */
 @media (min-width:701px){ body.fatura-panel-acik #mod-alis{padding-right:min(760px,92vw)} }
+</style>
+<style>
+/* ── 29 Eyl 2026: Rapor renk düzeni TÜM modüllere (cari hareket, Alış/Satış/Tahsilat/Ödeme/Çek detayları, rehberler) ──
+   Tek kaynak: body --rp-* değişkenleri ("🎨 Rapor Renkleri/Renkler" paneli). Fon, başlık, satır, zebra, hover aynı. */
+.cari-detail-panel{background:var(--rp-alan)}
+.cari-info-item{background:var(--rp-satir);border:1px solid var(--rp-th-bd)}
+.cari-info-item .k{color:var(--rp-th-fg);opacity:.75;font-weight:700}
+.cari-limit-kalan{font-size:11px;font-weight:700;margin-top:2px}
+.islemler-panel{background:var(--rp-satir);border:1px solid var(--rp-th-bd)}
+.cari-detail-head .tip-badge{background:var(--rp-th-bg);color:var(--rp-th-fg)}
+table.hareket-tbl,table.rehber-tbl,table.shp-tablo,.hk-tablo{border:1px solid var(--rp-th-bd)}
+table.hareket-tbl th,table.rehber-tbl th,table.shp-tablo th,.hk-tablo th{background:var(--rp-th-bg)!important;color:var(--rp-th-fg)!important;border-bottom:2px solid var(--rp-th-bd)!important;border-right-color:var(--rp-th-bd)!important}
+table.hareket-tbl td,table.rehber-tbl td,table.shp-tablo td,.hk-tablo td{border-bottom-color:var(--rp-th-bd);border-right-color:var(--rp-th-bd)}
+table.hareket-tbl tbody tr,table.rehber-tbl tbody tr,table.shp-tablo tbody tr,.hk-tablo tbody tr{background:var(--rp-satir)}
+body[data-rapor-zebra="1"] table.hareket-tbl tbody tr:nth-child(even),body[data-rapor-zebra="1"] table.rehber-tbl tbody tr:nth-child(even),body[data-rapor-zebra="1"] table.shp-tablo tbody tr:nth-child(even),body[data-rapor-zebra="1"] .hk-tablo tbody tr:nth-child(even){background:var(--rp-satir2)}
+table.hareket-tbl tbody tr:hover,table.hareket-tbl tbody tr:hover td,table.rehber-tbl tbody tr:hover td,table.rehber-tbl tr.rehber-aktif td,table.shp-tablo tbody tr:hover td,.hk-tablo tbody tr:hover td{background:var(--rp-hover)!important}
+.son-islem-tbl-wrap{background:var(--rp-satir);border-color:var(--rp-th-bd)}
+.son-islem-tbl-wrap thead th{background:var(--rp-th-bg)!important}
 </style>
 <script>
 (function(){
