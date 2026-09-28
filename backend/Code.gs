@@ -5720,10 +5720,9 @@ function kasaNakitHamListesiOku(ss) {
   return liste;
 }
 
-// Kasa raporunda "nakit" sayılan ödeme tipleri: "Nakit" ve (Alış ekranındaki / eski kayıtlardaki) "Peşin".
+// Kasa raporunda YALNIZCA ödeme tipi "Nakit" olan işlemler görünür ("Peşin" nakit sayılmaz).
 function kasaNakitOdemeTipiMi_(deger) {
-  const t = String(deger || "").trim().toLocaleLowerCase("tr");
-  return t === "nakit" || t === "peşin" || t === "pesin";
+  return String(deger || "").trim().toLocaleLowerCase("tr") === "nakit";
 }
 
 // Ham kasa listesini bir tarih aralığına göre süzüp toplar (sayfa erişimi yok, bellek içi).
@@ -5758,7 +5757,7 @@ function birGunOncesi(gunStr) {
 }
 
 function getMuhasebeRaporu(body) {
-  return cacheOkuVeyaHesapla("muhasebeRaporu_v2_" + JSON.stringify(body), 45, function () {
+  return cacheOkuVeyaHesapla("muhasebeRaporu_v3_" + JSON.stringify(body), 45, function () {
   const tip = String(body.tip || "");
   const baslangic = String(body.baslangic || "");
   const bitis = String(body.bitis || "");
