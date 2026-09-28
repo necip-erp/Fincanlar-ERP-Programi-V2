@@ -7111,6 +7111,52 @@ function bfmOnekOnerisiKullan(cariId, cariAd){
   if(aramaEl) aramaEl.value = cariAd;
 }
 
+// Stok kodu "44" ile başlayan (Termalkim Yapı Kimyasalları) kalemlerin nakliye/palet payını
+// torba başına sabit 17,75 TL ile override eder. Bu override sırasında her 44 kaleminden
+// "çekilen" fark (FATURAFIYAT'tan gelen eski payı × miktarı − 17,75 × miktarı) faturadaki
+// DİĞER (44 olmayan) kalemlere, onların kendi orijinal nakliye payı ağırlığına (hiçbirinde
+// yoksa miktarına) göre orantılı olarak eklenir. Önceden bu fark hiçbir kaleme yansımadan
+// kayboluyordu (27 Eyl 2026, CNY2026000002671: 44 kodlu kalem 259,60 (iskontolu fatura
+// fiyatı) + 17,75 (sabit torba nakliyesi) = 277,35 TL olmalıydı, bu kısım zaten doğruydu;
+// ama faturadaki eski nakliye/palet payının 44 kaleminden çekilen fazlalık kısmı diğer
+// kalemlere YANSIMIYORDU). Fatura üzerinde stok kodu değiştirilip tekrar tekrar çağrılabilir
+// — her kalemin ORİJİNAL (hiç override edilmemiş) payı k._nakliyeOrijinal'de bir kez
+// yakalanır, sonraki her çağrıda diğer kalemlerin payı önce orijinaline sıfırlanıp fark
+// yeniden dağıtılır (kümülatif çifte ekleme/kayıp olmasın diye).
+function bfm44NakliyeYenidenDagit(f){
+  if(!f || !f.kalemler) return;
+  const TERMALKIM_TORBA_NAKLIYE = 17.75;
+  f.kalemler.forEach(k => {
+    if (k._nakliyeOrijinal === undefined) k._nakliyeOrijinal = k.nakliyePayi || 0;
+  });
+  const kirk4 = f.kalemler.filter(k => String(k.stokKodu||"").trim().indexOf("44") === 0);
+  const digerler = f.kalemler.filter(k => String(k.stokKodu||"").trim().indexOf("44") !== 0);
+  // Diğer kalemlerin payını her seferinde orijinaline sıfırla (önceki bir dağıtımdan kalma
+  // ek payı temizlensin), sonra (varsa) 44 kalemlerinden çekilen farkı yeniden ekle.
+  digerler.forEach(k => { k.nakliyePayi = k._nakliyeOrijinal || 0; k._nakliyeYenidenDagitildi = false; k._nakliyeOverride = false; });
+  if (kirk4.length === 0) return; // fatura hiç 44 kalemi içermiyorsa yapacak bir şey yok
+
+  let eskiToplam = 0, yeniToplam = 0;
+  kirk4.forEach(k => {
+    eskiToplam += (k._nakliyeOrijinal || 0) * (k.miktar || 0);
+    k._nakliyeOverride = true;
+    k.nakliyePayi = TERMALKIM_TORBA_NAKLIYE;
+    yeniToplam += TERMALKIM_TORBA_NAKLIYE * (k.miktar || 0);
+  });
+  const fark = eskiToplam - yeniToplam; // pozitifse diğer kalemlere dağıtılacak fazlalık nakliye+palet tutarı
+  if (Math.abs(fark) < 0.0001 || digerler.length === 0) return;
+
+  const nakliyeliDigerler = digerler.filter(k => (k._nakliyeOrijinal||0) > 0 && (k.miktar||0) > 0);
+  const hedefListe = nakliyeliDigerler.length ? nakliyeliDigerler : digerler.filter(k => (k.miktar||0) > 0);
+  const toplamMiktarHedef = hedefListe.reduce((s,k)=>s+(k.miktar||0),0);
+  if (toplamMiktarHedef <= 0) return;
+  const ekBirim = fark / toplamMiktarHedef;
+  hedefListe.forEach(k => {
+    k.nakliyePayi = Math.round(((k.nakliyePayi||0) + ekBirim) * 10000) / 10000;
+    k._nakliyeYenidenDagitildi = true;
+  });
+}
+
 function alisBekleyenOnayModalAc(faturaNo){
   const f = _alisBekleyenListe.find(x=>x.faturaNo===faturaNo);
   if(!f) return;
@@ -7124,18 +7170,12 @@ function alisBekleyenOnayModalAc(faturaNo){
   const parcalar = String(f.tarih||"").split("/");
   if(parcalar.length===3) tarihISO = `${parcalar[2]}-${parcalar[1]}-${parcalar[0]}`;
   // Stok kodu "44" ile başlayan ürünler (Termalkim Yapı Kimyasalları): nakliye maliyeti
-  // torba başına sabit 17,75 TL (+KDV, KDV faturanın genel toplamı hesaplanırken zaten
-  // ekleniyor) ve bu ürünlerde palet maliyeti YOK — FATURAFIYAT kaynağından gelen (genelde
-  // palet bazlı dağıtılmış) nakliye payı bu ürünler için burada sabit tutarla override
-  // edilir; faturadaki DİĞER kalemlerin nakliye payı olduğu gibi kalır (27 Eyl 2026).
-  const TERMALKIM_TORBA_NAKLIYE = 17.75;
-  f.kalemler.forEach(k => {
-    const kod = String(k.stokKodu || "").trim();
-    if (kod.indexOf("44") === 0 && (k.nakliyePayi || 0) !== TERMALKIM_TORBA_NAKLIYE) {
-      k._nakliyeOverride = true;
-      k.nakliyePayi = TERMALKIM_TORBA_NAKLIYE;
-    }
-  });
+  // torba başına sabit 17,75 TL (+KDV) ve bu ürünlerde palet maliyeti YOK. FATURAFIYAT
+  // kaynağından gelen (genelde m²/miktar bazlı dağıtılmış) nakliye+palet payı override
+  // edilirken çekilen fark, faturadaki DİĞER kalemlere yeniden dağıtılır (bkz.
+  // bfm44NakliyeYenidenDagit, 27 Eyl 2026 — CNY2026000002671'de bu fark hiçbir kaleme
+  // yansımadan kayboluyordu).
+  bfm44NakliyeYenidenDagit(f);
   const yeniStokSayisi = f.kalemler.filter(k=>k.stokVarMi===false && k.stokKodu).length;
   const yanda = bfmFaturaYandaMi();
   overlay.innerHTML = `
@@ -7536,13 +7576,24 @@ function bfmKdvSupheliMi(kdvOrani){
 function bfmSatirGuncelle(i){
   const f = window._bfmAktifFatura;
   if(!f || !f.kalemler[i]) return;
-  // Stok kodu "44" ile başlayan ürünler (Termalkim): nakliye payı burada da (kullanıcı stok
-  // kodunu SONRADAN seçtiyse/değiştirdiyse de) sabit torba fiyatına göre güncellenir.
-  const TERMALKIM_TORBA_NAKLIYE = 17.75;
-  if(String(f.kalemler[i].stokKodu||"").trim().indexOf("44")===0 && (f.kalemler[i].nakliyePayi||0) !== TERMALKIM_TORBA_NAKLIYE){
-    f.kalemler[i]._nakliyeOverride = true;
-    f.kalemler[i].nakliyePayi = TERMALKIM_TORBA_NAKLIYE;
-  }
+  // Stok kodu SONRADAN "44" ile başlayacak/başlamayacak şekilde değişmiş olabilir (Termalkim
+  // override + diğer kalemlere yeniden dağıtım tüm faturayı etkiler) → önce faturanın
+  // TAMAMI için nakliye paylarını baştan hesapla (bkz. bfm44NakliyeYenidenDagit), sonra
+  // TÜM satırların görünümünü yenile (sadece bu satırı değil — diğer kalemlerin payı da
+  // değişmiş olabilir).
+  bfm44NakliyeYenidenDagit(f);
+  f.kalemler.forEach((_,idx) => bfmSatirGorseliYenile(idx));
+  bfmGenelToplamGuncelle();
+}
+
+// bfmSatirGuncelle'nin DOM güncelleme kısmı: k.nakliyePayi ZATEN hesaplanmış kabul edilip
+// (bfm44NakliyeYenidenDagit tarafından) sadece i. satırın "Aktarılacak" fiyatı ve Tutar
+// hücresi yeniden çizilir. Ayrı fonksiyona alındı ki bfmSatirGuncelle tek bir satır
+// değiştiğinde TÜM satırları (fatura genelindeki yeniden dağıtım nedeniyle) tekrar tekrar
+// bfm44NakliyeYenidenDagit çağırmadan yenileyebilsin.
+function bfmSatirGorseliYenile(i){
+  const f = window._bfmAktifFatura;
+  if(!f || !f.kalemler[i]) return;
   const kdvOrani = parseFloat((document.getElementById(`bfm-kdv-${i}`)||{}).value) || 0;
   const nakliyePayi = f.kalemler[i].nakliyePayi || 0;
   const miktar = parseFloat((document.getElementById(`bfm-miktar-${i}`)||{}).value) || 0;
@@ -7559,14 +7610,20 @@ function bfmSatirGuncelle(i){
     const bicim = (x)=> Number(x).toLocaleString("tr-TR", {minimumFractionDigits:2, maximumFractionDigits:4}) + "\u00A0₺";
     const nakliyeEtiket = f.kalemler[i]._nakliyeOverride
       ? `title="Alış'a aktarılacak birim fiyat: iskontolu fatura fiyatı ${bicim(netBirimFiyat - nakliyePayi)} + Termalkim torba nakliyesi (sabit, palet maliyeti yok) ${bicim(nakliyePayi)}"`
-      : `title="Alış'a aktarılacak birim fiyat: iskontolu fatura fiyatı ${bicim(netBirimFiyat - nakliyePayi)} + nakliye/palet payı ${bicim(nakliyePayi)}"`;
+      : (f.kalemler[i]._nakliyeYenidenDagitildi
+          ? `title="Alış'a aktarılacak birim fiyat: iskontolu fatura fiyatı ${bicim(netBirimFiyat - nakliyePayi)} + nakliye/palet payı ${bicim(nakliyePayi)} (44 kodlu kalem(ler)den yeniden dağıtılan fazlalık dahil)"`
+          : `title="Alış'a aktarılacak birim fiyat: iskontolu fatura fiyatı ${bicim(netBirimFiyat - nakliyePayi)} + nakliye/palet payı ${bicim(nakliyePayi)}"`);
+    const rozet = f.kalemler[i]._nakliyeOverride
+      ? ` <span style="font-size:9px;color:var(--accent)" title="Bu ürün için nakliye payı, torba başına sabit tutarla otomatik güncellendi (palet maliyeti uygulanmaz)">🚚 sabit</span>`
+      : (f.kalemler[i]._nakliyeYenidenDagitildi
+          ? ` <span style="font-size:9px;color:var(--accent)" title="44 kodlu kalem(ler)in sabit torba nakliyesine çevrilmesinden çekilen fazlalık nakliye/palet payı bu kaleme yeniden dağıtıldı">🚚 +pay</span>`
+          : ``);
     aktarEl.innerHTML = nakliyePayi > 0
-      ? `<span style="color:var(--text3)">/</span> <b style="color:#b45309" ${nakliyeEtiket}>${bicim(netBirimFiyat)}</b>${f.kalemler[i]._nakliyeOverride ? ` <span style="font-size:9px;color:var(--accent)" title="Bu ürün için nakliye payı, torba başına sabit tutarla otomatik güncellendi (palet maliyeti uygulanmaz)">🚚 sabit</span>` : ``}`
+      ? `<span style="color:var(--text3)">/</span> <b style="color:#b45309" ${nakliyeEtiket}>${bicim(netBirimFiyat)}</b>${rozet}`
       : "";
   }
   const hucre = document.getElementById(`bfm-tutar-${i}`);
   if(hucre) hucre.innerHTML = paraFormat(tutarKdvDahil) + (nakliyePayi>0 ? ` <span style="font-size:9px;color:var(--amber)" title="Nakliye/palet payı dahil: ${paraFormat(nakliyePayi)}/birim">+N</span>` : "");
-  bfmGenelToplamGuncelle();
 }
 function bfmGenelToplamGuncelle(){
   const f = window._bfmAktifFatura;
@@ -8779,6 +8836,7 @@ function cekSenetIslemModalAc(id){
   overlay.innerHTML = `
     <div class="modal-box">
       <h3>${c.tip==='Alınan'?'Tahsilat':'Ödeme'} — ${c.cariAd}</h3>
+      ${c.vade ? `<div class="fld"><label>Vade</label><input value="${tarihGoster(c.vade)}${c.gecikmis?' ⚠️ vadesi geçmiş':''}" disabled></div>` : ``}
       <div class="fld"><label>Tutar (kalan: ${paraFormat(c.kalanTutar)})</label><input id="ci-tutar" type="number" min="0" max="${c.kalanTutar}" step="0.01" value="${c.kalanTutar}"></div>
       <div class="fld"><label>Tarih</label><input id="ci-tarih" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Açıklama</label><input id="ci-aciklama" type="text" placeholder="İsteğe bağlı"></div>
@@ -9494,6 +9552,15 @@ function bankaHesapSecimDoldur(){
   }).catch(()=>{});
 }
 
+// Tarih başlığına tıklanınca artan/azalan sıralamayı değiştirebilmek için son yüklenen
+// sonuç (backend'den geldiği haliyle, kronolojik ARTAN — bakiye buna göre hesaplı) ve
+// mevcut görüntüleme yönü burada tutuluyor (27 Eyl 2026 kullanıcı isteği). Sıralama sadece
+// GÖRÜNTÜLEME sırasını değiştirir — her satırın kendi (backend'de zaten hesaplanmış) Bakiye
+// değeri olduğu gibi kalır, sadece diziliş ters çevrilir.
+let _bhhSonHareketler = null;
+let _bhhSonToplam = 0;
+let _bhhSiralamaArtan = true;
+
 function bankaHesapHareketleriYukle(){
   const el = document.getElementById("bhh-alani");
   const bankaHesapId = document.getElementById("bhh-hesap-secim") ? document.getElementById("bhh-hesap-secim").value : "";
@@ -9501,30 +9568,48 @@ function bankaHesapHareketleriYukle(){
   cariApi("getBankaHesapHareketleri", {bankaHesapId}).then(res=>{
     if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     if(res.hareketler.length===0){ el.innerHTML = '<div class="cari-empty">Kayıtlı hareket yok.</div>'; return; }
-    el.innerHTML = `
-      <div class="finans-kart ${res.toplam>=0?'pos':'neg'}" style="max-width:260px;margin-bottom:10px"><div class="lbl">Net Bakiye</div><div class="num">${paraFormat(res.toplam)}</div></div>
-      <table class="hareket-tbl">
-        <thead><tr><th>Tarih</th><th>Tip</th><th>Tutar</th><th>Bakiye</th><th>Açıklama</th></tr></thead>
-        <tbody>
-          ${res.hareketler.map(h=>{
-            const giris = h.tip==='Giriş';
-            const grupEsleme = /\[Toplu Ödeme: (grp_\d+)\]/.exec(h.aciklama||"");
-            const aciklamaGosterim = grupEsleme
-              ? htmlKacis(h.aciklama).replace(/\[Toplu Ödeme: grp_\d+\]/, `<span style="cursor:pointer;text-decoration:underline" onclick="topluOdemeGrubuGoster('${grupEsleme[1]}')" title="Birlikte ödenen diğer çek/senetleri gör">📦 Toplu Ödeme</span>`)
-              : htmlKacis(h.aciklama);
-            return `
-            <tr>
-              <td>${tarihGoster(h.tarih)}</td>
-              <td><span class="${giris?'hk-alacak':'hk-borc'}">${h.tip}</span></td>
-              <td style="text-align:right" class="${giris?'hk-alacak':'hk-borc'}">${giris?'+':'-'}${paraFormat(h.tutar)}</td>
-              <td style="text-align:right">${paraFormat(h.bakiye)}</td>
-              <td>${aciklamaGosterim}</td>
-            </tr>`;}).join("")}
-        </tbody>
-      </table>`;
+    _bhhSonHareketler = res.hareketler;
+    _bhhSonToplam = res.toplam;
+    _bhhSiralamaArtan = true; // her yeni yüklemede varsayılan (eskiden yeniye) sıraya dön
+    bankaHesapHareketleriCiz();
   }).catch(err=>{
     el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
+}
+
+function bhhSiralamaDegistir(){
+  if(!_bhhSonHareketler) return;
+  _bhhSiralamaArtan = !_bhhSiralamaArtan;
+  bankaHesapHareketleriCiz();
+}
+
+function bankaHesapHareketleriCiz(){
+  const el = document.getElementById("bhh-alani");
+  if(!el || !_bhhSonHareketler) return;
+  const liste = _bhhSiralamaArtan ? _bhhSonHareketler : _bhhSonHareketler.slice().reverse();
+  el.innerHTML = `
+    <div class="finans-kart ${_bhhSonToplam>=0?'pos':'neg'}" style="max-width:260px;margin-bottom:10px"><div class="lbl">Net Bakiye</div><div class="num">${paraFormat(_bhhSonToplam)}</div></div>
+    <table class="hareket-tbl">
+      <thead><tr>
+        <th style="cursor:pointer;user-select:none" onclick="bhhSiralamaDegistir()" title="Tarihe göre artan/azalan sırala">Tarih ${_bhhSiralamaArtan ? '▲' : '▼'}</th>
+        <th>Tip</th><th>Tutar</th><th>Bakiye</th><th>Açıklama</th></tr></thead>
+      <tbody>
+        ${liste.map(h=>{
+          const giris = h.tip==='Giriş';
+          const grupEsleme = /\[Toplu Ödeme: (grp_\d+)\]/.exec(h.aciklama||"");
+          const aciklamaGosterim = grupEsleme
+            ? htmlKacis(h.aciklama).replace(/\[Toplu Ödeme: grp_\d+\]/, `<span style="cursor:pointer;text-decoration:underline" onclick="topluOdemeGrubuGoster('${grupEsleme[1]}')" title="Birlikte ödenen diğer çek/senetleri gör">📦 Toplu Ödeme</span>`)
+            : htmlKacis(h.aciklama);
+          return `
+          <tr>
+            <td>${tarihGoster(h.tarih)}</td>
+            <td><span class="${giris?'hk-alacak':'hk-borc'}">${h.tip}</span></td>
+            <td style="text-align:right" class="${giris?'hk-alacak':'hk-borc'}">${giris?'+':'-'}${paraFormat(h.tutar)}</td>
+            <td style="text-align:right">${paraFormat(h.bakiye)}</td>
+            <td>${aciklamaGosterim}</td>
+          </tr>`;}).join("")}
+      </tbody>
+    </table>`;
 }
 
 // ── POS Hareketleri (Kredi Kartı ile yapılan Satış/Tahsilat/Ödeme kayıtlarının döküldüğü defter) ──
@@ -9581,7 +9666,10 @@ function posBankaAktarModalAc(){
       <div class="fld"><label>Banka Hesabı</label>
         <select id="pba-banka"><option value="">— Seçiniz —</option></select>
       </div>
-      <div class="fld"><label>Tutar</label><input id="pba-tutar" type="number" min="0" step="0.01" placeholder="0,00"></div>
+      <div class="fld"><label>Tutar (POS'ta biriken brüt tutar)</label><input id="pba-tutar" type="number" min="0" step="0.01" placeholder="0,00" oninput="pbaNetGuncelle()"></div>
+      <div class="fld"><label>Banka Komisyonu / Masrafı (ops.)</label><input id="pba-masraf" type="number" min="0" step="0.01" placeholder="0,00" oninput="pbaNetGuncelle()"></div>
+      <div class="fld"><label>Bankaya Yatacak Net Tutar</label><input id="pba-net" value="" disabled></div>
+      <div style="font-size:12px;color:var(--text3);margin:-4px 0 8px">Komisyon girilirse POS hesabından brüt tutar düşer, bankaya net tutar girer, komisyon otomatik "Banka Masrafları &gt; POS Masrafı" gideri olarak kaydedilir.</div>
       <div class="fld"><label>Tarih</label><input id="pba-tarih" type="datetime-local" value="${simdiTarihSaat()}"></div>
       <div class="fld"><label>Açıklama</label><input id="pba-aciklama" type="text" placeholder="İsteğe bağlı"></div>
       <div class="modal-actions">
@@ -9601,6 +9689,13 @@ function posBankaAktarModalAc(){
   }).catch(()=>{});
 }
 
+function pbaNetGuncelle(){
+  const t = parseFloat(document.getElementById("pba-tutar").value) || 0;
+  const m = parseFloat(document.getElementById("pba-masraf").value) || 0;
+  const el = document.getElementById("pba-net");
+  if(el) el.value = t > 0 ? paraFormat(Math.max(0, t - m)) : "";
+}
+
 function posBankaAktarKaydet(){
   const posHesapId = document.getElementById("pba-pos").value;
   const bankaHesapId = document.getElementById("pba-banka").value;
@@ -9608,8 +9703,10 @@ function posBankaAktarKaydet(){
   if(!bankaHesapId){ alert("Lütfen banka hesabı seçin"); return; }
   const tutar = parseFloat(document.getElementById("pba-tutar").value) || 0;
   if(tutar <= 0){ alert("Tutar sıfırdan büyük olmalı"); return; }
+  const masrafTutari = parseFloat(document.getElementById("pba-masraf").value) || 0;
+  if(masrafTutari < 0 || masrafTutari >= tutar){ alert("Komisyon/masraf, tutardan küçük olmalı"); return; }
   const body = {
-    posHesapId, bankaHesapId, tutar,
+    posHesapId, bankaHesapId, tutar, masrafTutari,
     tarih: document.getElementById("pba-tarih").value,
     aciklama: document.getElementById("pba-aciklama").value,
   };

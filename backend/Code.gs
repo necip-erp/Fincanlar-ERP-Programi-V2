@@ -9132,14 +9132,28 @@ function getPosBankaAktarimListesi(posHesapId) {
   return { ok: true, aktarimlar: sonuc };
 }
 
-// body: { posHesapId, bankaHesapId, tutar, tarih, aciklama }
+// body: { posHesapId, bankaHesapId, tutar, tarih, aciklama, masrafTutari (ops.) }
+// ★ EKLENDİ (27 Eyl 2026, kullanıcı isteği: "çekilen posları pos hesabından vadesiz hesaba
+// işleme noktasında... banka masraflarını nasıl işleyeceğim"): banka genelde POS tahsilatını
+// hesaba geçirirken bir komisyon keser — bankaya yatan tutar, POS hesabında biriken tutardan
+// küçüktür. Bu YÜZDEN artık isteğe bağlı bir "masrafTutari" (komisyon) alanı var: POS
+// hesabından yine TAM tutar (aktarımdan önce POS'ta biriken tam alacak) düşülür, bankaya
+// SADECE net (tutar − masrafTutari) tutar "Giriş" yazılır, ve fark otomatik olarak mevcut
+// "Banka Masrafları > POS Masrafı" gider grubuna (bkz. ensureBankaMasrafTanimlari_) bir
+// Ödeme/Gider kaydı olarak işlenir — bu kayıt banka hesabından AYRICA para çekmez (komisyon
+// zaten net tutara yansıtılarak "ödenmiş" sayılır), sadece Gider/Kar-Zarar raporlarında
+// görünmesi için tutulur. masrafTutari gönderilmezse (veya 0 ise) davranış eskisiyle birebir
+// aynıdır (tam tutar hem POS'tan düşer hem bankaya yatar).
 function savePosBankaAktarim(body) {
   const posHesapId = String(body.posHesapId || "").trim();
   const bankaHesapId = String(body.bankaHesapId || "").trim();
   const tutar = parseFloat(body.tutar) || 0;
+  const masrafTutari = Math.max(0, parseFloat(body.masrafTutari) || 0);
   if (!posHesapId) return { ok: false, hata: "POS hesabı seçimi gerekli" };
   if (!bankaHesapId) return { ok: false, hata: "Banka hesabı seçimi gerekli" };
   if (tutar <= 0) return { ok: false, hata: "Tutar sıfırdan büyük olmalı" };
+  if (masrafTutari >= tutar) return { ok: false, hata: "Komisyon/masraf tutarı, aktarılan tutardan küçük olmalı" };
+  const netTutar = tutar - masrafTutari;
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = getOrCreateSheet(ss, SHEETS.posBankaAktarimlari, POS_BANKA_AKTARIM_BASLIKLAR);
@@ -9150,9 +9164,25 @@ function savePosBankaAktarim(body) {
   sheet.appendRow([id, posHesapId, bankaHesapId, tarih, tutar, String(body.aciklama || ""), kayitTarihi]);
 
   posHareketEkle(posHesapId, tarih, "Alacak", tutar, aciklama);
-  bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", tutar, aciklama);
+  bankaHesapHareketEkle(bankaHesapId, tarih, "Giriş", netTutar,
+    aciklama + (masrafTutari > 0 ? (" (₺" + masrafTutari.toFixed(2) + " POS komisyonu düşülmüş net tutar)") : ""));
 
-  return { ok: true, id: id };
+  if (masrafTutari > 0) {
+    const masrafKurulum = ensureBankaMasrafTanimlari_();
+    if (masrafKurulum.ok) {
+      const altListe = getBasitTanimListesi("giderAltGrup");
+      const posMasrafi = altListe.ok ? altListe.kalemler.find(k => k.ad === "POS Masrafı" && k.ustId === masrafKurulum.ustId) : null;
+      if (posMasrafi) {
+        saveOdeme({
+          hedefTipi: "Gider", hedefId: posMasrafi.id, tutar: masrafTutari, tarih: tarih,
+          yontem: "Diğer",
+          aciklama: "POS'tan bankaya aktarım komisyonu (" + id + ")" + (body.aciklama ? " - " + body.aciklama : ""),
+        });
+      }
+    }
+  }
+
+  return { ok: true, id: id, netTutar: netTutar };
 }
 
 // body: { id }
@@ -9171,6 +9201,17 @@ function silPosBankaAktarim(body) {
 
   posHareketSilByAciklamaOnPrefix("POSAKTARIM:" + id);
   bankaHesapHareketSilByAciklamaOnPrefix("POSAKTARIM:" + id);
+  // Aktarımla birlikte otomatik oluşan POS komisyonu gider kaydı (varsa) da silinir.
+  try {
+    const oSheet = getOrCreateSheet(ss, SHEETS.odemeler, ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI"]);
+    const oData = oSheet.getDataRange().getValues();
+    for (let i = oData.length - 1; i >= 1; i--) {
+      if (String(oData[i][10] || "") === "Gider" && String(oData[i][6] || "").indexOf("POS'tan bankaya aktarım komisyonu (" + id + ")") === 0) {
+        silOdeme({ id: String(oData[i][0]) });
+        break;
+      }
+    }
+  } catch (e) { /* gider kaydı silinemezse aktarım silme yine başarılı sayılır */ }
   return { ok: true };
 }
 
