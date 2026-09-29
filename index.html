@@ -2159,10 +2159,16 @@ function kayitSekmesindeAc(modulId, ikon, etiket, kimlik, acFonksiyonu){
     _kayitSekmeVeri[sekmeId].etiket = etiket;
     _kayitSekmeVeri[sekmeId].ac = acFonksiyonu;
   }
-  kayitSekmesiniGoster(sekmeId);
+  kayitSekmesiniGoster(sekmeId, true);
 }
 
-function kayitSekmesiniGoster(sekmeId){
+// ★ (29 Eyl 2026) Açık kayıt sekmesine geri dönünce kayıt yeniden yüklenip ekran sıfırlanmasın:
+// modülde o an zaten bu sekmenin kaydı görünüyorsa ac() tekrar çalıştırılmaz. Kaydı gösteren
+// sekme, modülde başka bir kayıt/liste açılınca ya da sekme kapanınca geçersiz sayılır (aşağıdaki
+// sarmalayıcılar + sekmeKapat). Kullanıcı bir kayda tıklayarak AÇIYORSA (zorla=true) her zaman tazelenir.
+let _kayitSekmeGosterilen = {};   // modulId -> o an modülde görünen kayıt sekmesinin id'si
+let _kayitAcCalisiyor = false;    // ac() içindeki dahili çağrılar işareti bozmasın
+function kayitSekmesiniGoster(sekmeId, zorla){
   const veri = _kayitSekmeVeri[sekmeId];
   if(!veri) return;
   if(typeof kayitDefteriEkranDurumuKaydet_ === "function") kayitDefteriEkranDurumuKaydet_();
@@ -2177,7 +2183,12 @@ function kayitSekmesiniGoster(sekmeId){
   document.title = veri.ikon + " " + veri.etiket + " · Fincanlar ERP";
   modulSwitcherKapat();
   _aktifSekme = sekmeId;
-  try{ veri.ac(); }catch(hata){ console.error("Kayıt sekmesi açılırken hata (" + sekmeId + "):", hata); }
+  if(zorla || _kayitSekmeGosterilen[veri.modulId] !== sekmeId){
+    _kayitAcCalisiyor = true;
+    try{ veri.ac(); }catch(hata){ console.error("Kayıt sekmesi açılırken hata (" + sekmeId + "):", hata); }
+    finally{ _kayitAcCalisiyor = false; }
+    _kayitSekmeGosterilen[veri.modulId] = sekmeId;
+  }
   sekmeSeridiCiz();
 }
 
@@ -2202,7 +2213,7 @@ function sekmeSeridiCiz(){
     const m = MODULLER.find(x=>x.id===id);
     if(!m) return "";
     return `<div class="sekme${id===_aktifSekme?" aktif":""}" onclick="modulAc('${id}')" onmousedown="if(event.button===1){event.preventDefault();}" onauxclick="if(event.button===1){event.preventDefault(); sekmeKapat('${id}');}">
-      <span>${m.ic} ${m.lbl}</span>
+      <span>${m.ic} ${(id==="cari" && window._cariSekmeEtiket) ? htmlKacis(window._cariSekmeEtiket) : m.lbl}</span>
       <span class="sekme-kapat" onclick="event.stopPropagation(); sekmeKapat('${id}')">✕</span>
     </div>`;
   }).join("");
@@ -2216,6 +2227,7 @@ function sekmeSeridiCiz(){
 function sekmeKapat(id){
   _acikSekmeler = _acikSekmeler.filter(x=>x!==id);
   delete _kayitSekmeVeri[id];
+  Object.keys(_kayitSekmeGosterilen).forEach(m=>{ if(_kayitSekmeGosterilen[m] === id) delete _kayitSekmeGosterilen[m]; });
   if(_aktifSekme === id){
     const kalan = _acikSekmeler[_acikSekmeler.length-1];
     if(kalan) sekmeyeGit(kalan); else gitAnaSayfa();
@@ -3175,7 +3187,7 @@ function rehberSiralaSecimden(idxStr){
 }
 
 function rehberAc(tip, callback){
-  _rehberState = { tip, satirlar:[], filtreli:[], siraAlan:null, siraYon:1, aktifIdx:-1, callback, cariTipiFiltre:'alici' };
+  _rehberState = { tip, satirlar:[], filtreli:[], siraAlan:null, siraYon:1, aktifIdx:-1, callback, cariTipiFiltre:'hepsi' };
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "rehber-modal-overlay";
@@ -3183,10 +3195,10 @@ function rehberAc(tip, callback){
   const baslik = tip==='cari' ? 'Cari Rehberi' : 'Stok Rehberi';
   const cariTipiFiltreHTML = tip==='cari' ? `
         <span style="display:flex;gap:8px;align-items:center;flex-shrink:0;font-size:12.5px;color:var(--text2)">
-          <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="alici" checked onchange="rehberCariTipiDegisti(this.value)"> Alıcı</label>
+          <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="alici" onchange="rehberCariTipiDegisti(this.value)"> Alıcı</label>
           <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="satici" onchange="rehberCariTipiDegisti(this.value)"> Satıcı</label>
           <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="personel" onchange="rehberCariTipiDegisti(this.value)"> Personel</label>
-          <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="hepsi" onchange="rehberCariTipiDegisti(this.value)"> Hepsi</label>
+          <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="hepsi" checked onchange="rehberCariTipiDegisti(this.value)"> Hepsi</label>
         </span>` : '';
   overlay.innerHTML = `
     <div class="rehber-box" ${tip==='stok' ? 'style="max-width:1100px"' : ''} onclick="event.stopPropagation()">
@@ -3306,7 +3318,7 @@ function rehberStokZenginlestir_(liste){
 // geri kalan tüm cariler (Müşteri/Bağımsız/tipsiz) Alıcı sayılır.
 function _rehberCariTipiUygula(satirlar){
   if(_rehberState.tip !== 'cari') return satirlar;
-  const f = _rehberState.cariTipiFiltre || 'alici';
+  const f = _rehberState.cariTipiFiltre || 'hepsi';
   satirlar = satirlar.filter(c=>c.aktif !== false); // pasif cariler F1 Rehberi'nde çıkmaz (Cari modülünde "Pasif Cariler" filtresinden çağrılır)
   if(f === 'hepsi') return satirlar;
   if(f === 'satici') return satirlar.filter(c=>c.tip==='Tedarikçi');
@@ -3352,7 +3364,7 @@ function rehberFiltrele(deger){
   let filtreli = _rehberCariTipiUygula(_rehberState.satirlar);
   if(q){
     filtreli = filtreli.filter(k=>{
-      if(tip==='cari') return esnekEslesirMi(k.ad, q) || (k.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (k.telefon||"").includes(q);
+      if(tip==='cari') return esnekEslesirMi(k.ad, q) || (k.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (k.telefon||"").includes(q) || esnekEslesirMi(k.adres, q);
       return (k.stokAdi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (k.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
              (k.markaKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (k.barkod||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q);
     });
@@ -3535,16 +3547,9 @@ function esnekEslesirMi(hedef, sorgu){
   const hKelimeler = h.split(/\s+/).filter(Boolean);
   const qKelimeler = q.split(/\s+/).filter(Boolean);
   if(qKelimeler.length === 0) return true;
-  let hIdx = 0;
-  for(const qk of qKelimeler){
-    let bulundu = false;
-    while(hIdx < hKelimeler.length){
-      if(hKelimeler[hIdx].startsWith(qk)){ bulundu = true; hIdx++; break; }
-      hIdx++;
-    }
-    if(!bulundu) return false;
-  }
-  return true;
+  // ★ (29 Eyl 2026) "İçinde geçen" araması: sorgudaki HER kelime, hedef metnin herhangi bir yerinde
+  // (kelimenin başı olması ve sıra şartı olmadan) geçiyorsa eşleşir. Ör. "yıl" → "Ali Kayıl" da gelir.
+  return qKelimeler.every(qk => h.includes(qk));
 }
 
 function htmlKacis(metin){
@@ -3733,7 +3738,7 @@ function cariAramaFiltrele(deger){
   const pasifGorunum = _cariTipFiltre === "__pasif";
   const tabanListe = _cariListe.filter(c => pasifGorunum ? c.aktif === false : c.aktif !== false); // pasifler yalnız "Pasif Cariler" filtresinde
   let filtreli = !d ? tabanListe : tabanListe.filter(c =>
-    esnekEslesirMi(c.ad, d) || (c.telefon||"").includes(d) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(d) || (c.adres||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(d));
+    esnekEslesirMi(c.ad, d) || (c.telefon||"").includes(d) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(d) || esnekEslesirMi(c.adres, d));
   if(_cariTipFiltre && !pasifGorunum) filtreli = filtreli.filter(c => c.tip === _cariTipFiltre);
   if(_cariSiraAlan) filtreli = dizisiSirala(filtreli, _cariSiraAlan, _cariSiraYon);
   cariListesiCiz(filtreli);
@@ -3799,6 +3804,8 @@ function cariDetayCiz(res){
       <div class="cari-info-item"><div class="k">Adres</div><div class="v">${c.adres||"—"}</div></div>
       <div class="cari-info-item"><div class="k">İl / İlçe</div><div class="v">${[c.il,c.ilce].filter(Boolean).join(" / ")||"—"}</div></div>
       <div class="cari-info-item"><div class="k">Vergi No</div><div class="v">${c.vergiNo||"—"}</div></div>
+      <div class="cari-info-item"><div class="k">E-Fatura</div><div class="v" style="font-weight:800;color:${c.eFatura==='Evet'?'#15803d':'#b91c1c'}">${c.eFatura==='Evet'?'Evet (mükellef)':'Hayır'}</div></div>
+      <div class="cari-info-item"><div class="k">E-Arşiv</div><div class="v" style="font-weight:800;color:${c.eArsiv==='Evet'?'#15803d':'#b91c1c'}">${c.eArsiv==='Evet'?'Evet (mükellef)':'Hayır'}</div></div>
       <div class="cari-info-item cari-limit-item"><div class="k">Kredi Limiti</div><div class="v">${c.krediLimiti>0 ? paraFormat(c.krediLimiti) + `<div class="cari-limit-kalan ${bakiye>c.krediLimiti?'hk-borc':'hk-alacak'}">${bakiye>c.krediLimiti ? 'Limit aşıldı: '+paraFormat(bakiye-c.krediLimiti) : 'Kalan: '+paraFormat(c.krediLimiti-Math.max(bakiye,0))}</div>` : "Limitsiz"}</div></div>
       <div class="cari-info-item"><div class="k">Not</div><div class="v">${c.not||"—"}</div></div>
     </div>
@@ -4610,7 +4617,7 @@ function satisDetayCiz(res){
       <label style="text-transform:none;font-size:12px;color:var(--text2)">Sipariş Durumu</label>
       <div style="font-size:12px;color:var(--text3)">Fatura kesildiği için otomatik hesaplanıyor (yukarıda görünen durum) — elle değiştirilemez.</div>
     </div>` : '')}
-    ${s.siparisNo ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Sipariş No</div><div class="v">${s.siparisNo}</div></div></div>` : ""}
+    ${(s.siparisNo || (s.belgeTipi||"Fatura")==="Fatura") ? `<div class="cari-info-grid">${s.siparisNo ? `<div class="cari-info-item"><div class="k">Sipariş No</div><div class="v">${s.siparisNo}</div></div>` : ""}${(s.belgeTipi||"Fatura")==="Fatura" ? `<div class="cari-info-item"><div class="k">Fatura No</div><div class="v">${s.efaturaNo || "—"}</div></div>` : ""}</div>` : ""}
     ${s.efaturaNo ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">E-Fatura No</div><div class="v">${s.efaturaNo}</div></div>${s.efaturaDurum ? `<div class="cari-info-item"><div class="k">Portal Durumu</div><div class="v">${s.efaturaDurum}</div></div>` : ""}</div>` : ""}
     ${s.kaynakSiparisId ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Kaynak</div><div class="v">Sipariş'ten aktarıldı</div></div></div>` : ""}
     ${s.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${s.aciklama}</div></div></div>` : ""}
@@ -5058,6 +5065,7 @@ function belgeFormuHTMLOlustur(s, kalemler, t, c){
       </table>
       <table style="border-collapse:collapse;align-self:flex-start">
         ${tip === "Sipariş" ? `<tr><td style="padding:2px 10px 2px 0;color:#555">SİPARİŞ NO</td><td>: <b>${s.siparisNo||'—'}</b></td></tr>` : ""}
+        ${(tip === "Fatura" && s.efaturaNo) ? `<tr><td style="padding:2px 10px 2px 0;color:#555">FATURA NO</td><td>: <b>${s.efaturaNo}</b></td></tr>` : ""}
         <tr><td style="padding:2px 10px 2px 0;color:#555">${tip.toUpperCase()} TARİHİ</td><td>: ${tarihGoster(s.tarih)}</td></tr>
         <tr><td style="padding:2px 10px 2px 0;color:#555">VADE GÜNÜ</td><td>: ${s.vade?tarihGoster(s.vade):'—'}</td></tr>
         <tr><td style="padding:2px 10px 2px 0;color:#555">ÖDEME TİPİ</td><td>: ${s.odemeTipi||'—'}</td></tr>
@@ -5151,6 +5159,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         <span id="sm-siparis-no-badge" style="display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">
           # <span id="sm-siparis-no-metin">${s && s.siparisNo ? s.siparisNo : '—'}</span>
         </span>
+        <span id="sm-fatura-no-badge" title="Fatura numarası" style="display:${(s && s.efaturaNo)?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Fatura No: <span id="sm-fatura-no-metin">${s && s.efaturaNo ? s.efaturaNo : '—'}</span></span>
         <input type="hidden" id="sm-siparis-no-deger" value="${s && s.siparisNo ? s.siparisNo : ''}">
         <span id="sm-proje-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Proje: —</span>
         <span id="sm-faturatipi-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Tip: —</span>
@@ -14651,6 +14660,7 @@ table.hareket-tbl tbody tr:hover,table.hareket-tbl tbody tr:hover td,table.rehbe
       if(b){
         b.querySelector(".sol-toggle-ok").textContent = acik[mod] ? "◀" : "▶";
         b.querySelector(".sol-toggle-yazi").style.display = acik[mod] ? "" : "none";
+        const ksy = b.querySelector(".sol-toggle-kisayol"); if(ksy) ksy.style.display = acik[mod] ? "" : "none";
         b.title = acik[mod] ? "Listeyi gizle" : "Listeyi göster";
       }
     });
@@ -14662,7 +14672,7 @@ table.hareket-tbl tbody tr:hover,table.hareket-tbl tbody tr:hover td,table.rehbe
     const v = document.getElementById(id), p = v && v.querySelector(".cari-list-panel"); if(!p) return;
     const b = document.createElement("button");
     b.type = "button"; b.className = "sol-toggle";
-    b.innerHTML = '<span class="sol-toggle-ok">◀</span><span class="sol-toggle-yazi">Listeyi gizle</span>';
+    b.innerHTML = '<span class="sol-toggle-ok">◀</span><span class="sol-toggle-yazi">Listeyi gizle</span><span class="kisayol-ipucu sol-toggle-kisayol">'+((typeof kisayollariAl==="function" && kisayollariAl()._solListe) || "Alt+L")+'</span>';
     b.onclick = function(){ window.solListeToggle(mod); };
     p.insertBefore(b, p.firstChild);
   }));
@@ -14731,6 +14741,7 @@ table.hareket-tbl tbody tr:hover,table.hareket-tbl tbody tr:hover td,table.rehbe
     const yn = document.getElementById("yenile-ipucu"); if(yn) yn.textContent = k._yenile || "";
     const vy = document.getElementById("veri-yenile-ipucu"); if(vy) vy.textContent = k._veriYenile || "";
     document.querySelectorAll(".cari-add-btn + .kisayol-ipucu").forEach(el=>{ el.textContent = k._yeniKayit || "Ctrl+Y"; });
+    document.querySelectorAll(".sol-toggle-kisayol").forEach(el=>{ el.textContent = k._solListe || "Alt+L"; });
     document.querySelectorAll(".sol-toggle").forEach(b=>{ b.title = (b.title||"").replace(/\s*\(.*\)$/,"") + (k._solListe ? " ("+k._solListe+")" : ""); });
   };
   window.sayfayiYenile = function(){
@@ -14882,6 +14893,112 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
   function anaGorunumSinifi(){ document.body.classList.toggle("ana-sayfada", !!home && home.style.display !== "none"); }
   if(home){ new MutationObserver(anaGorunumSinifi).observe(home, {attributes:true, attributeFilter:["style"]}); anaGorunumSinifi(); }
   ahUygula(false);
+})();
+
+// ── ★ Kayıt sekmesi işareti: modülde başka bir kayıt/liste açılırsa "bu sekmenin kaydı görünüyor" işareti silinir ──
+(function(){
+  const MOD = {
+    satisAc:"satis", satisIadeAc:"satis", satisListeyeDon:"satis", satisIadeListeyeDon:"satis", satisAltModulAc:"satis", satisAnaSecimeDon:"satis",
+    alisAc:"alis", alisIadeAc:"alis", alisListeyeDon:"alis", alisIadeListeyeDon:"alis", alisAltModulAc:"alis", alisAnaSecimeDon:"alis",
+    tahsilatAc:"tahsilat", tahsilatListeyeDon:"tahsilat",
+    odemeAc:"odeme", odemeListeyeDon:"odeme",
+    cekSenetAc:"ceksenet", cekSenetListeyeDon:"ceksenet",
+    cariAc:"cari", cariListeyeDon:"cari"
+  };
+  Object.keys(MOD).forEach(ad=>{
+    const orijinal = window[ad];
+    if(typeof orijinal !== "function") return;
+    window[ad] = function(){
+      if(!_kayitAcCalisiyor) delete _kayitSekmeGosterilen[MOD[ad]];
+      return orijinal.apply(this, arguments);
+    };
+  });
+})();
+
+// ── ★ 29 Eyl 2026: Cari açıkken (1) üst sekmede cari kodu + adı, (2) veri girişi olunca otomatik yenileme ──
+(function(){
+  window._cariSekmeEtiket = "";
+  function kisalt(t){ t = String(t||""); return t.length > 34 ? t.slice(0,33) + "…" : t; }
+  function baslikTazele(){
+    try{
+      const et = window._cariSekmeEtiket;
+      const kv = _kayitSekmeVeri[_aktifSekme];
+      const cariAktif = _aktifSekme === "cari" || (kv && kv.modulId === "cari");
+      if(cariAktif){
+        const baslikEl = document.getElementById("sayfa-baslik");
+        const metin = et ? ("👥 " + et) : "👥 Cari";
+        if(baslikEl) baslikEl.textContent = metin;
+        document.title = metin + " · Fincanlar ERP";
+      }
+      sekmeSeridiCiz();
+    }catch(e){}
+  }
+  const oDetayCiz = window.cariDetayCiz;
+  if(typeof oDetayCiz === "function"){
+    window.cariDetayCiz = function(res){
+      const r = oDetayCiz.apply(this, arguments);
+      try{
+        const c = res && res.cari;
+        if(c){
+          window._cariSekmeEtiket = kisalt((c.cariKodu ? c.cariKodu + " · " : "") + c.ad);
+          Object.keys(_kayitSekmeVeri).forEach(sid=>{
+            if(_kayitSekmeVeri[sid].kimlik === "CARI:" + c.id) _kayitSekmeVeri[sid].etiket = window._cariSekmeEtiket;
+          });
+          baslikTazele();
+        }
+      }catch(e){}
+      return r;
+    };
+  }
+  const oListeyeDon = window.cariListeyeDon;
+  if(typeof oListeyeDon === "function"){
+    window.cariListeyeDon = function(){
+      const r = oListeyeDon.apply(this, arguments);
+      window._cariSekmeEtiket = "";
+      baslikTazele();
+      return r;
+    };
+  }
+
+  // Otomatik yenileme: Cari detayı açıkken herhangi bir kayıt/veri girişi (tahsilat, ödeme, satış, alış, çek,
+  // virman, cari düzenleme vb.) başarıyla kaydedilince cari kartı ve hareketleri kendiliğinden tazelenir.
+  let zamanlayici = null, sonYenileme = 0, yenileniyor = false;
+  function cariAcikMi(){
+    const m = document.getElementById("mod-cari");
+    return !!(m && m.classList.contains("active") && m.classList.contains("detay-acik") && typeof _cariSecili !== "undefined" && _cariSecili);
+  }
+  function yenile(){
+    if(yenileniyor || !cariAcikMi()) return;
+    const id = _cariSecili;
+    yenileniyor = true;
+    const panel = document.getElementById("cari-detail-panel");
+    const kaydirma = panel ? panel.scrollTop : 0;
+    const acikSip = (typeof _cariSiparislerAcik !== "undefined") ? _cariSiparislerAcik : false;
+    const oGetir = window.__cariApiOrijinal || cariApi;
+    oGetir("getCariDetay", {cariId:id}).then(res=>{
+      if(res && res.ok && _cariSecili === id && cariAcikMi()){
+        cariDetayCiz(res);
+        if(panel) panel.scrollTop = kaydirma;
+        if(typeof cariListesiCiz === "function" && typeof _cariSonGosterilenListe !== "undefined") cariListesiCiz(_cariSonGosterilenListe || _cariListe);
+      }
+    }).catch(()=>{}).finally(()=>{ yenileniyor = false; sonYenileme = Date.now(); });
+  }
+  function yenilemeIstegi(){
+    if(!cariAcikMi()) return;
+    clearTimeout(zamanlayici);
+    zamanlayici = setTimeout(yenile, 700);
+  }
+  const oCariApi = cariApi;
+  window.__cariApiOrijinal = oCariApi;
+  cariApi = function(action){
+    const p = oCariApi.apply(this, arguments);
+    try{
+      if(!CARI_API_YAZMA_DEGIL_.test(String(action)) && p && typeof p.then === "function" && !yenileniyor && (Date.now() - sonYenileme) > 1500){
+        p.then(res=>{ if(res && res.ok) yenilemeIstegi(); }).catch(()=>{});
+      }
+    }catch(e){}
+    return p;
+  };
 })();
 </script>
 </body>
