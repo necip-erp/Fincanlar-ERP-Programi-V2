@@ -146,6 +146,11 @@ body.desen-acik{
 .hizli-erisim-satir .cikar{font-size:12px;color:var(--text3);opacity:0;padding:2px 4px;border-radius:5px;flex-shrink:0}
 .hizli-erisim-satir:hover .cikar{opacity:.7}
 .hizli-erisim-satir .cikar:hover{background:var(--red-l,#fee2e2);color:var(--red,#dc2626);opacity:1}
+.he-grup{font-size:10.5px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin:10px 2px 5px;display:flex;justify-content:space-between}
+.he-grup span{font-weight:700}
+.hizli-erisim-satir .he-durum{font-size:11px;color:var(--blue);font-weight:700;flex-shrink:0}
+.hizli-erisim-satir.he-ekli{background:var(--green-l);border-color:var(--green)}
+.hizli-erisim-satir.he-ekli .he-durum{color:var(--green)}
 .hizli-erisim-bos, .son-islem-bos{font-size:11.5px;color:var(--text3);padding:6px 2px}
 .son-islem-satir{display:flex;align-items:flex-start;gap:8px;padding:7px 9px;margin-bottom:5px;background:var(--bg2);border:1px solid var(--border);border-radius:9px}
 .son-islem-satir .ic{font-size:14px;flex-shrink:0;margin-top:1px}
@@ -530,7 +535,8 @@ body.giris-yapildi #login-ekran{display:none}
     <input id="global-ara" placeholder="Ürün ara (kod, isim, ebat)..." oninput="globalAraDegisti(this.value)">
   </div>
   <button class="homebtn" id="home-btn" onclick="gitAnaSayfa()" title="Ana Sayfa (Ctrl + sayı satırında 1'in solundaki tuş)">← Ana Sayfa <span class="kisayol-ipucu">Ctrl+"</span></button>
-  <button class="homebtn" id="yenile-btn" style="display:inline-block;margin-left:8px" onclick="sayfayiYenile()" title="Sayfayı yenile (önbelleği temizleyip en güncel sürümü yükler)">⟳ Yenile <span class="kisayol-ipucu" id="yenile-ipucu">Alt+R</span></button>
+  <button class="homebtn" id="veri-yenile-btn" style="display:inline-block;margin-left:8px" onclick="verileriYenile()" title="Verileri yenile: sayfa yeniden yüklenmez, açık sekmeler ve pencereler kapanmaz">↻ Verileri Yenile <span class="kisayol-ipucu" id="veri-yenile-ipucu">Alt+V</span></button>
+  <button class="homebtn" id="yenile-btn" style="display:inline-block;margin-left:6px" onclick="sayfayiYenile()" title="Sayfayı tamamen yeniden yükler (açık sekmeler kapanır, en güncel sürüm alınır)">⟳ Sayfayı Yenile <span class="kisayol-ipucu" id="yenile-ipucu">Alt+R</span></button>
   <div id="modul-switcher-wrap" style="position:relative">
     <button class="homebtn" id="modul-switcher-btn" onclick="modulSwitcherAcKapat(event)" title="Başka bir modülü sekme olarak aç">⇄ Modül</button>
     <div id="modul-switcher-liste" class="modul-switcher-liste" style="display:none"></div>
@@ -1570,8 +1576,8 @@ function modgridCiz(){
     // ★ (21 Eyl 2026) Ctrl+1…Ctrl+9: Ana Sayfa'daki GÖRÜNEN sıraya göre modül kısayolu (sıra değişince numara da değişir).
     const kisayolNo = sira < 9 ? `<span class="modtile-no" title="Kısayol: Ctrl+${sira+1}">Ctrl+${sira+1}</span>` : "";
     const renkli = m.renk && m.renk !== "neutral";
-    const icStil = renkli ? `background:var(--${m.renk}-l);color:var(--${m.renk})` : "";
-    const tileStil = renkli ? `border-top-color:var(--${m.renk})` : "";
+    const icStil = "";
+    const tileStil = renkli ? `--tc:var(--ahm-${m.id}, var(--${m.renk}))` : `--tc:var(--ahm-${m.id}, var(--border))`;
     return `
     <div class="modtile" draggable="true" data-id="${m.id}" style="${tileStil}"
          onclick="modulAcYeniSekme('${m.id}')"
@@ -1729,29 +1735,105 @@ Object.keys(ALT_MODUL_TANIM).forEach(altModgridCiz);
 // Faturalar, Stok-Stok Tanımlama vb.) tek tıkla gitmesini sağlayan, sürükle-bırakla
 // sıralanabilen bir kısayol listesi. Katalogdaki "git" fonksiyonu ilgili modülü
 // açıp gerekiyorsa alt/üçüncü kademeye kadar iniyor (ör. Stok→Tanımlar→Stok Tanımları).
-const HIZLI_ERISIM_KATALOG = [
-  {id:"satis-siparis",  ic:"📦", lbl:"Satış - Sipariş",              git:()=>{modulAc("satis"); satisAltModulAc("Sipariş");}},
-  {id:"satis-fatura",   ic:"🧾", lbl:"Satış - Fatura",               git:()=>{modulAc("satis"); satisAltModulAc("Fatura");}},
-  {id:"satis-teklif",   ic:"📝", lbl:"Satış - Teklif",               git:()=>{modulAc("satis"); satisAltModulAc("Teklif");}},
-  {id:"alis-giris",     ic:"📥", lbl:"Alış - Giriş",                 git:()=>{modulAc("alis"); alisAltModulAc("giris");}},
-  {id:"alis-iade",      ic:"↩️", lbl:"Alış - İade",                  git:()=>{modulAc("alis"); alisAltModulAc("iade");}},
-  {id:"alis-bekleyen",  ic:"📨", lbl:"Alış - Bekleyen Faturalar",     git:()=>{modulAc("alis"); alisAltModulAc("bekleyen");}},
-  {id:"stok-panel",     ic:"📦", lbl:"Stok - Stok Paneli",            git:()=>{modulAc("stok"); stokAltModulAc("panel");}},
-  {id:"stok-tanim",     ic:"🏷️", lbl:"Stok - Stok Tanımlama",        git:()=>{modulAc("stok"); stokAltModulAc("tanimlar"); stokTanimAltAc("tanim");}},
-  {id:"stok-birim",     ic:"📏", lbl:"Stok - Birim Tanımları",        git:()=>{modulAc("stok"); stokAltModulAc("tanimlar"); stokTanimAltAc("birim");}},
-  {id:"stok-ambalaj",   ic:"📦", lbl:"Stok - Ambalaj Tanımları",      git:()=>{modulAc("stok"); stokAltModulAc("tanimlar"); stokTanimAltAc("ambalaj");}},
-  {id:"stok-hareket",   ic:"📈", lbl:"Stok - Stok Hareket Raporu",    git:()=>{modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("hareket");}},
-  {id:"stok-kritik",    ic:"⚠️", lbl:"Stok - Kritik Stok Uyarıları",  git:()=>{modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("kritik");}},
-  {id:"tahsilat",       ic:"💰", lbl:"Tahsilat",                     git:()=>{modulAc("tahsilat");}},
-  {id:"odeme",          ic:"💳", lbl:"Ödeme",                        git:()=>{modulAc("odeme");}},
-  {id:"ceksenet",       ic:"🧾", lbl:"Çek/Senet",                    git:()=>{modulAc("ceksenet");}},
-  {id:"cari",           ic:"👥", lbl:"Cari",                         git:()=>{modulAc("cari");}},
-  {id:"finans",         ic:"📊", lbl:"Finans",                       git:()=>{modulAc("finans");}},
-  {id:"rapor",          ic:"📈", lbl:"Rapor",                        git:()=>{modulAc("rapor");}},
-];
+// ★ (29 Eyl 2026) Katalog artık SADECE modülleri değil, tüm alt ekranları/işlemleri kapsar (Satış/Alış/Stok alt ekranları,
+// stok işlemleri, tanımlar, raporlar, Rapor modülündeki her rapor, Çek/Senet sekmeleri, Finans bölümleri, Ayarlar bölümleri,
+// "Yeni ... ekle" işlemleri). Dinamik üretilir: Rapor listesi ve Ayarlar bölümleri ekrandan okunur, yeni eklenenler kendiliğinden gelir.
+const HIZLI_ERISIM_GRUPLARI = ["Modüller","Satış","Alış","Stok","Cari","Çek/Senet","Finans","Rapor","Yeni Kayıt","Ayarlar"];
+function hizliSlug_(metin){
+  return String(metin||"").trim().toLocaleLowerCase('tr')
+    .replace(/ı/g,'i').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ş/g,'s').replace(/ö/g,'o').replace(/ç/g,'c')
+    .replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+}
+function hizliBolumeGit_(kapsayiciSecici, metin){
+  setTimeout(()=>{
+    const bas = Array.from(document.querySelectorAll(kapsayiciSecici + " .rapor-baslik")).find(e=>(e.textContent||"").indexOf(metin) >= 0);
+    if(bas) bas.scrollIntoView({behavior:"smooth", block:"start"});
+  }, 200);
+}
+function hizliAyarBolumuAc_(anahtar){
+  modulAc("ayarlar");
+  setTimeout(()=>{
+    const panel = Array.from(document.querySelectorAll("#mod-ayarlar > .finans-panel")).find(p=>{
+      const bas = p.querySelector(".rapor-baslik"); if(!bas) return false;
+      const ad = (bas.querySelector(".ayarlar-bolum-metin") || bas).textContent;
+      return "ayarlar-" + hizliSlug_(ad) === anahtar;
+    });
+    if(!panel) return;
+    panel.classList.remove("ayarlar-bolum-kapali");
+    if(panel.dataset.bolumAnahtar) try{ localStorage.setItem(panel.dataset.bolumAnahtar, "acik"); }catch(_){}
+    panel.scrollIntoView({behavior:"smooth", block:"start"});
+  }, 250);
+}
+function hizliErisimKatalogUret(){
+  const L = [];
+  const ekle = (id, grup, ic, lbl, git)=>{ if(!L.some(x=>x.id===id)) L.push({id, grup, ic, lbl, git}); };
+  // Modüller (eski kimlikler korunur: tahsilat, odeme, ceksenet, cari, finans, rapor)
+  const ESKI = ["tahsilat","odeme","ceksenet","cari","finans","rapor"];
+  MODULLER.filter(modulGorunurMu_).forEach(m=>{
+    const alt = {stok:" (seçim ekranı)", alis:" (seçim ekranı)", satis:" (seçim ekranı)"}[m.id] || "";
+    ekle(ESKI.includes(m.id) ? m.id : "mod-"+m.id, "Modüller", m.ic, m.lbl + alt, ()=>{ modulAc(m.id); });
+  });
+  // Satış / Alış
+  ekle("satis-siparis","Satış","📦","Satış - Sipariş",()=>{modulAc("satis"); satisAltModulAc("Sipariş");});
+  ekle("satis-fatura","Satış","🧾","Satış - Fatura",()=>{modulAc("satis"); satisAltModulAc("Fatura");});
+  ekle("satis-teklif","Satış","📝","Satış - Teklif",()=>{modulAc("satis"); satisAltModulAc("Teklif");});
+  ekle("satis-iade","Satış","↩️","Satış - İade",()=>{modulAc("satis"); satisAltModulAc("Iade");});
+  ekle("alis-giris","Alış","📥","Alış - Giriş",()=>{modulAc("alis"); alisAltModulAc("giris");});
+  ekle("alis-iade","Alış","↩️","Alış - İade",()=>{modulAc("alis"); alisAltModulAc("iade");});
+  ekle("alis-bekleyen","Alış","📨","Alış - Bekleyen Faturalar",()=>{modulAc("alis"); alisAltModulAc("bekleyen");});
+  // Stok: panel, işlemler, tanımlar, raporlar
+  ekle("stok-panel","Stok","📦","Stok - Stok Paneli",()=>{modulAc("stok"); stokAltModulAc("panel");});
+  ekle("stok-islemler","Stok","🔄","Stok - İşlemler (seçim)",()=>{modulAc("stok"); stokAltModulAc("islemler");});
+  [["stok-devir","📥","Devir Girişi","giris","Devir"],["stok-duzeltme","🛠️","Stok Düzeltme","toplu","Stok Düzeltme"],
+   ["stok-giris","⬇️","Stok Giriş Hareketi","giris"],["stok-cikis","⬆️","Stok Çıkış Hareketi","cikis"],["stok-toplu","📋","Toplu Stok Hareketi","toplu"]]
+    .forEach(([id,ic,lbl,tip,tur])=>ekle(id,"Stok",ic,"Stok - "+lbl,()=>{modulAc("stok"); stokAltModulAc("islemler"); tur ? stokHareketFormAc(tip,tur) : stokHareketFormAc(tip);}));
+  [["stok-tanim","🏷️","Stok Tanımlama","tanim"],["stok-birim","📏","Birim Tanımları","birim"],["stok-marka","🏭","Marka Tanımları","marka"],
+   ["stok-urungrubu","🗂️","Ürün Grubu Tanımları","urunGrubu"],["stok-alturungrubu","📁","Alt Ürün Grubu Tanımları","altUrunGrubu"],
+   ["stok-ebat","📐","Ebat Tanımları","ebat"],["stok-renk","🎨","Renk Tanımları","renk"],["stok-ambalaj","📦","Ambalaj Tanımları","ambalaj"]]
+    .forEach(([id,ic,lbl,k])=>ekle(id,"Stok",ic,"Stok - "+lbl,()=>{modulAc("stok"); stokAltModulAc("tanimlar"); stokTanimAltAc(k);}));
+  ekle("stok-hareket","Stok","📈","Stok - Stok Hareket Raporu",()=>{modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("hareket");});
+  ekle("stok-siparis-rapor","Stok","🧾","Stok - Stok Bazlı Sipariş Raporu",()=>{modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("siparis");});
+  ekle("stok-kritik","Stok","⚠️","Stok - Kritik Stok Uyarıları",()=>{modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("kritik");});
+  // Cari
+  ekle("cari-pasif","Cari","⏸","Cari - Pasif Cariler",()=>{modulAc("cari"); const sel=document.getElementById("cari-tip-filtre-select"); if(sel) sel.value="__pasif"; cariTipFiltreSecimden("__pasif");});
+  ekle("cari-personel","Cari","🧑‍💼","Cari - Personel",()=>{modulAc("cari"); const sel=document.getElementById("cari-tip-filtre-select"); if(sel) sel.value="Personel"; cariTipFiltreSecimden("Personel");});
+  // Çek/Senet
+  ekle("cek-portfoy","Çek/Senet","🧾","Çek/Senet - Portföydeki Çekler",()=>{modulAc("ceksenet"); cekSenetTipDegistir("Alınan");});
+  ekle("cek-kendi","Çek/Senet","🧾","Çek/Senet - Kendi Çekim",()=>{modulAc("ceksenet"); cekSenetTipDegistir("Verilen");});
+  ekle("cek-kocan","Çek/Senet","📒","Çek/Senet - Çek Koçanları",()=>{modulAc("ceksenet"); cekKocaniModalAc();});
+  // Finans bölümleri
+  ekle("finans-banka-tanim","Finans","🏦","Finans - Banka Tanımlamaları",()=>{modulAc("finans"); hizliBolumeGit_("#mod-finans","Banka Tanımlamaları");});
+  ekle("finans-banka-hareket","Finans","💸","Finans - Banka Hesap Hareketleri",()=>{modulAc("finans"); hizliBolumeGit_("#mod-finans","Banka Hesap Hareketleri");});
+  ekle("finans-pos","Finans","💳","Finans - POS Hareketleri",()=>{modulAc("finans"); hizliBolumeGit_("#mod-finans","POS Hareketleri");});
+  // Rapor modülündeki her rapor (listeden okunur)
+  Array.from(document.querySelectorAll("#mr-tip-secim option")).forEach(o=>{
+    ekle("rapor-"+o.value,"Rapor","📈","Rapor - "+o.textContent.trim(),()=>{
+      modulAc("rapor"); const sel=document.getElementById("mr-tip-secim"); if(sel){ sel.value=o.value; muhasebeRaporuYukle(); }
+    });
+  });
+  // Yeni kayıt işlemleri
+  ekle("yeni-cari","Yeni Kayıt","➕","Yeni Cari Ekle",()=>{modulAc("cari"); cariModalAc();});
+  ekle("yeni-tahsilat","Yeni Kayıt","➕","Yeni Tahsilat",()=>{modulAc("tahsilat"); tahsilatModalAc();});
+  ekle("yeni-odeme","Yeni Kayıt","➕","Yeni Ödeme",()=>{modulAc("odeme"); odemeModalAc();});
+  ekle("yeni-ceksenet","Yeni Kayıt","➕","Yeni Çek/Senet",()=>{modulAc("ceksenet"); cekSenetModalAc();});
+  ekle("yeni-alis","Yeni Kayıt","➕","Yeni Alış Girişi",()=>{modulAc("alis"); alisAltModulAc("giris"); alisModalAc();});
+  ekle("yeni-satis-fatura","Yeni Kayıt","➕","Yeni Satış Faturası",()=>{modulAc("satis"); satisAltModulAc("Fatura"); satisModalAc();});
+  ekle("yeni-satis-siparis","Yeni Kayıt","➕","Yeni Satış Siparişi",()=>{modulAc("satis"); satisAltModulAc("Sipariş"); satisModalAc();});
+  ekle("yeni-stok","Yeni Kayıt","➕","Yeni Stok Kartı",()=>{modulAc("stok"); stokAltModulAc("tanimlar"); stokTanimAltAc("tanim"); stokTanimModalAc();});
+  // Ayarlar bölümleri (ekrandaki başlıklardan)
+  document.querySelectorAll("#mod-ayarlar > .finans-panel").forEach(pn=>{
+    const bas = pn.querySelector(".rapor-baslik"); if(!bas) return;
+    const ad = ((bas.querySelector(".ayarlar-bolum-metin") || bas).textContent || "").trim(); if(!ad) return;
+    const anahtar = "ayarlar-" + hizliSlug_(ad);
+    ekle(anahtar,"Ayarlar","⚙️","Ayarlar - "+ad.replace(/^[^A-Za-zÇĞİÖŞÜçğıöşü0-9]+/,""),()=>hizliAyarBolumuAc_(anahtar));
+  });
+  return L;
+}
+let HIZLI_ERISIM_KATALOG = hizliErisimKatalogUret();
 const HIZLI_ERISIM_VARSAYILAN = ["satis-siparis","satis-fatura","alis-bekleyen","stok-tanim","stok-hareket","tahsilat"];
 
 function hizliErisimSeciliAl(){
+  try{ HIZLI_ERISIM_KATALOG = hizliErisimKatalogUret(); }catch(_){}
   try{
     const kayitli = JSON.parse(localStorage.getItem("fincanlar_hizli_erisim") || "null");
     if(Array.isArray(kayitli)){
@@ -1808,33 +1890,57 @@ function hizliErisimEkle(id){
   if(!sirali.includes(id)) sirali.push(id);
   hizliErisimKaydet(sirali);
   hizliErisimCiz();
-  hizliErisimDuzenleAc(); // modal açıksa listeyi tazele
+  hizliErisimDuzenleListeCiz();
 }
-// "✎ Düzenle" — henüz eklenmemiş katalog öğelerini gösterip tek tıkla eklemeyi sağlayan
-// küçük bir seçim penceresi (mevcut modal-overlay deseniyle aynı).
+// Pencerede bir satıra tıklayınca ekler / çıkarır (pencere ve arama kelimesi açık kalır).
+function hizliErisimAcKapat(id){
+  const sirali = hizliErisimSeciliAl();
+  const i = sirali.indexOf(id);
+  if(i >= 0) sirali.splice(i,1); else sirali.push(id);
+  hizliErisimKaydet(sirali);
+  hizliErisimCiz();
+  hizliErisimDuzenleListeCiz();
+}
+function hizliErisimDuzenleListeCiz(){
+  const kap = document.getElementById("hizli-erisim-duzenle-liste"); if(!kap) return;
+  const q = ((document.getElementById("hizli-erisim-ara")||{}).value || "").toLocaleLowerCase("tr").trim();
+  const seciliKume = new Set(hizliErisimSeciliAl());
+  const kayit = kap.scrollTop;
+  let html = "";
+  HIZLI_ERISIM_GRUPLARI.forEach(g=>{
+    const ogeler = HIZLI_ERISIM_KATALOG.filter(h=>h.grup===g && (!q || (h.lbl+" "+g).toLocaleLowerCase("tr").indexOf(q) >= 0));
+    if(!ogeler.length) return;
+    html += `<div class="he-grup">${g} <span>${ogeler.filter(h=>seciliKume.has(h.id)).length}/${ogeler.length}</span></div>` + ogeler.map(h=>{
+      const ekli = seciliKume.has(h.id);
+      return `<div class="hizli-erisim-satir${ekli?' he-ekli':''}" onclick="hizliErisimAcKapat('${h.id}')" style="cursor:pointer">
+        <span class="ic">${h.ic}</span><span class="lbl">${h.lbl}</span>
+        <span class="he-durum">${ekli ? "✓ Ekli" : "+ Ekle"}</span></div>`;
+    }).join("");
+  });
+  kap.innerHTML = html || `<div class="hizli-erisim-bos">Eşleşen ekran yok.</div>`;
+  kap.scrollTop = kayit;
+}
+// "✎ Düzenle" — tüm modül, alt ekran ve işlemleri gruplu gösteren, aranabilir seçim penceresi.
+// Satıra tıklamak ekler, tekrar tıklamak çıkarır.
 function hizliErisimDuzenleAc(){
   const mevcut = document.getElementById("hizli-erisim-duzenle-overlay");
   if(mevcut) mevcut.remove();
-  const secili = hizliErisimSeciliAl();
-  const eklenebilir = HIZLI_ERISIM_KATALOG.filter(h=>!secili.includes(h.id));
+  HIZLI_ERISIM_KATALOG = hizliErisimKatalogUret();
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "hizli-erisim-duzenle-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   overlay.innerHTML = `
-    <div class="modal-box" style="max-width:380px">
-      <h3 style="margin-top:0">⚡ Hızlı Erişime Ekle</h3>
-      <p style="font-size:12px;color:var(--text3);margin:0 0 12px">Ana sayfada solda görünmesini istediğin ekranı seç. Sıralamayı listede sürükleyerek, çıkarmayı ise ✕ ile yapabilirsin.</p>
-      <div style="max-height:50vh;overflow:auto">
-        ${eklenebilir.length ? eklenebilir.map(h=>`
-          <div class="hizli-erisim-satir" onclick="hizliErisimEkle('${h.id}')" style="cursor:pointer">
-            <span class="ic">${h.ic}</span><span class="lbl">${h.lbl}</span>
-            <span style="font-size:11px;color:var(--accent);font-weight:700">+ Ekle</span>
-          </div>`).join("") : `<div class="hizli-erisim-bos">Kataloğun tamamı zaten listende.</div>`}
-      </div>
+    <div class="modal-box" style="max-width:460px">
+      <h3 style="margin-top:0">⚡ Hızlı Erişim</h3>
+      <p style="font-size:12px;color:var(--text3);margin:0 0 10px">Modüller ve alt ekranların tamamı burada. Satıra tıklayınca Ana Sayfa'daki listeye eklenir, tekrar tıklayınca çıkar. Sıralamayı Ana Sayfa'da sürükleyerek yaparsın.</p>
+      <input id="hizli-erisim-ara" type="search" placeholder="Ara: rapor, stok, tahsilat, banka..." oninput="hizliErisimDuzenleListeCiz()" style="width:100%;margin-bottom:8px">
+      <div id="hizli-erisim-duzenle-liste" style="max-height:52vh;overflow:auto"></div>
       <div class="modal-actions"><button class="btn" onclick="document.getElementById('hizli-erisim-duzenle-overlay').remove()">Kapat</button></div>
     </div>`;
   document.body.appendChild(overlay);
+  hizliErisimDuzenleListeCiz();
+  const ara = document.getElementById("hizli-erisim-ara"); if(ara && window.matchMedia && window.matchMedia("(pointer: fine)").matches) ara.focus();
 }
 hizliErisimCiz();
 
@@ -2346,13 +2452,14 @@ function kisayollariAl(){
       if(kayitli._kaydet === undefined) kayitli._kaydet = "Ctrl+S";
       if(kayitli._yeniKayit === undefined) kayitli._yeniKayit = "Ctrl+Y";
       if(kayitli._yenile === undefined) kayitli._yenile = "Alt+R";
+      if(kayitli._veriYenile === undefined) kayitli._veriYenile = "Alt+V";
       if(kayitli._solListe === undefined) kayitli._solListe = "Alt+L";
       if(kayitli._modulGeri === undefined) kayitli._modulGeri = "Ctrl+ArrowLeft";
       return kayitli;
     }
   }catch(e){}
   // Varsayılanlar: Alt+Shift+1..8 modüller, Esc geri, Ctrl+PageUp/PageDown sekme gezinme
-  const varsayilan = { _geri: "Escape", _sekmeIleri: "Ctrl+PageDown", _sekmeGeri: "Ctrl+PageUp", _stokHareket: "Ctrl+A", _sekmeKapat: "Ctrl+W", _kaydet: "Ctrl+S", _yeniKayit: "Ctrl+Y", _yenile: "Alt+R", _solListe: "Alt+L", _modulGeri: "Ctrl+ArrowLeft" };
+  const varsayilan = { _geri: "Escape", _sekmeIleri: "Ctrl+PageDown", _sekmeGeri: "Ctrl+PageUp", _stokHareket: "Ctrl+A", _sekmeKapat: "Ctrl+W", _kaydet: "Ctrl+S", _yeniKayit: "Ctrl+Y", _yenile: "Alt+R", _veriYenile: "Alt+V", _solListe: "Alt+L", _modulGeri: "Ctrl+ArrowLeft" };
   MODULLER.filter(m=>m.id!=="ayarlar").forEach((m,i)=>{ varsayilan[m.id] = "Alt+Shift+"+(i+1); });
   return varsayilan;
 }
@@ -12935,7 +13042,8 @@ function ayarlarListesiCiz(){
      </div>`,
     ...[
       ["_yeniKayit","➕ Yeni kayıt (açık ekrandaki + düğmesi)","Tahsilat, Ödeme, Cari, Stok, Alış, Satış... ekranlarında yeni kayıt açar"],
-      ["_yenile","⟳ Sayfayı yenile (üstteki Yenile düğmesi)","Önbelleği temizleyip sayfayı yeniden yükler"],
+      ["_veriYenile","↻ Verileri yenile (sayfa ve sekmeler kapanmadan)","Açık sekmeleri ve pencereleri kapatmadan tüm listeleri sunucudan tazeler"],
+      ["_yenile","⟳ Sayfayı yenile (tam yeniden yükleme)","Önbelleği temizleyip sayfayı yeniden yükler; açık sekmeler kapanır"],
       ["_solListe","◀ Soldaki listeyi gizle / göster (Cari, Alış, Satış)","Açık modülün sol listesini daraltır/açar"],
       ["_modulGeri","← Bir önceki ekrana dön (alt modülden seçim ekranına)","Geri düğmesi olan ekranlarda bir kademe geri gider"],
     ].map(([anahtar, etiket, ipucu])=>`
@@ -14621,6 +14729,7 @@ table.hareket-tbl tbody tr:hover,table.hareket-tbl tbody tr:hover td,table.rehbe
   window.kisayolIpuclariniYenile = function(){
     const k = kisayollariAl();
     const yn = document.getElementById("yenile-ipucu"); if(yn) yn.textContent = k._yenile || "";
+    const vy = document.getElementById("veri-yenile-ipucu"); if(vy) vy.textContent = k._veriYenile || "";
     document.querySelectorAll(".cari-add-btn + .kisayol-ipucu").forEach(el=>{ el.textContent = k._yeniKayit || "Ctrl+Y"; });
     document.querySelectorAll(".sol-toggle").forEach(b=>{ b.title = (b.title||"").replace(/\s*\(.*\)$/,"") + (k._solListe ? " ("+k._solListe+")" : ""); });
   };
@@ -14642,6 +14751,7 @@ table.hareket-tbl tbody tr:hover,table.hareket-tbl tbody tr:hover td,table.rehbe
     const k = kisayollariAl(), m = kisayolMetni(e);
     const yazi = ["INPUT","TEXTAREA","SELECT"].indexOf(e.target.tagName) >= 0 || e.target.isContentEditable;
     if(yazi && !e.ctrlKey && !e.altKey) return; // düz tuş atanmışsa yazarken devreye girmesin
+    if(k._veriYenile && m === k._veriYenile){ e.preventDefault(); window.verileriYenile(); return; }
     if(k._yenile && m === k._yenile){ e.preventDefault(); window.sayfayiYenile(); return; }
     if(k._solListe && m === k._solListe){
       const v = document.querySelector(".modview.active"); if(!v) return;
@@ -14651,6 +14761,127 @@ table.hareket-tbl tbody tr:hover,table.hareket-tbl tbody tr:hover td,table.rehbe
     }
   }, true);
   kisayolIpuclariniYenile();
+})();
+</script>
+<style>
+/* ── 29 Eyl 2026: Ana ekran renk teması (Ayarlanabilir: 🎨 Ana Ekran Renkleri). Değişken tanımsızsa mevcut görünüm aynen korunur. ── */
+body.ana-sayfada .main{background:var(--ah-fon,transparent)}
+#home .modtile,#home .hizli-erisim-satir,#home .son-islem-satir,#home .bugun-ozet-kart{background:var(--ah-kart,var(--bg2));border-color:var(--ah-kenar,var(--border))}
+#home .modtile{border-top-color:var(--tc,var(--border))}
+#home .hizli-erisim-satir:hover{background:var(--ah-hover,var(--bg3));border-color:var(--ah-vurgu,var(--accent))}
+#home .modtile .ic{background:color-mix(in srgb,var(--tc,var(--blue)) 14%,var(--ah-kart,#fff));color:var(--tc,var(--blue))}
+#home h1,#home .modtile .lbl,#home .hizli-erisim-satir .lbl,#home .son-islem-satir .baslik,#home .bugun-ozet-kart .deger{color:var(--ah-yazi,var(--text))}
+#home p.sub,#home .modtile .desc,#home .home-yan-baslik,#home .son-islem-satir .alt,#home .son-islem-satir .tarih,#home .bugun-ozet-kart .lbl,#home .hizli-erisim-bos,#home .son-islem-bos{color:var(--ah-yazi2,var(--text3))}
+#home .modtile:hover{border-color:var(--ah-vurgu,transparent);border-top-color:var(--tc,var(--border))}
+body[data-ah-stil="yumusak"] #home .modtile{background:color-mix(in srgb,var(--tc,var(--blue)) 11%,var(--ah-kart,#fff));border-color:color-mix(in srgb,var(--tc,var(--blue)) 30%,transparent);border-top:3px solid var(--tc,var(--border))}
+body[data-ah-stil="yumusak"] #home .modtile .lbl{color:color-mix(in srgb,var(--tc,var(--blue)) 62%,var(--ah-yazi,#000))}
+body[data-ah-stil="yumusak"] #home .modtile .ic{background:color-mix(in srgb,var(--tc,var(--blue)) 22%,var(--ah-kart,#fff))}
+body[data-ah-stil="blok"] #home .modtile{background:var(--tc,#475569);border-color:transparent;color:#fff}
+body[data-ah-stil="blok"] #home .modtile .ic{background:rgba(255,255,255,.22);color:#fff}
+body[data-ah-stil="blok"] #home .modtile .lbl{color:#fff;text-transform:uppercase;letter-spacing:.02em}
+body[data-ah-stil="blok"] #home .modtile .desc{color:rgba(255,255,255,.85)}
+body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.3)}
+#ana-renk-btn{margin-left:12px}
+.ah-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#1f2937;color:#fff;padding:9px 16px;border-radius:10px;font-size:13px;font-weight:600;z-index:400;box-shadow:0 8px 24px rgba(0,0,0,.28)}
+</style>
+<script>
+// ═══ 29 Eyl 2026: (1) Verileri Yenile (sayfa/sekmeler kapanmadan) ve (2) Ana Ekran Renkleri paneli ═══
+(function(){
+  // ── (1) Verileri Yenile: sayfa yeniden yüklenmez; açık sekmeler, açık pencereler ve yazılmakta olan formlar yerinde kalır.
+  //     Tarayıcı önbelleğini temizler, daha önce yüklenmiş tüm listeleri sunucudan tazeler.
+  function bayrak(ad){ try{ return !!eval(ad); }catch(_){ return false; } }
+  function ac(fn){ try{ if(typeof window[fn] === "function") window[fn](); }catch(e){ console.error("Veri yenile ("+fn+"):", e); } }
+  window.verileriYenile = function(){
+    try{ if(typeof onbellekTemizleHepsi_ === "function") onbellekTemizleHepsi_(); if(typeof yapiOnbellekTemizle_ === "function") yapiOnbellekTemizle_(); }catch(_){}
+    const listeler = [
+      ["_cariYuklendi","cariListesiYukle"],["_plasiyerYuklendi","plasiyerListesiYukle"],["_satisYuklendi","satisListesiYukle"],
+      ["_satisIadeYuklendi","satisIadeListesiYukle"],["_alisYuklendi","alisListesiYukle"],["_alisIadeYuklendi","alisIadeListesiYukle"],
+      ["_tahsilatYuklendi","tahsilatListesiYukle"],["_odemeYuklendi","odemeListesiYukle"],["_cekSenetYuklendi","cekSenetListesiYukle"],
+      ["_cvirmanYuklendi","cariVirmanListesiYukle"],["_stokTanimYuklendi","stokTanimListesiYukle"],["_markaYuklendi","markaListesiYukle"],
+    ];
+    listeler.forEach(([bay, fn])=>{ if(bayrak(bay)) ac(fn); });
+    const aktif = document.querySelector(".modview.active");
+    const id = aktif ? aktif.id : "";
+    if(id === "mod-finans") ["finansYukle","bankaHesapHareketleriYukle","posHareketleriYukle"].forEach(ac);
+    if(id === "mod-rapor") ac("muhasebeRaporuYukle");
+    if(id === "mod-silinenler") ac("silinenlerYukle");
+    if(id === "mod-cari"){ try{ if(typeof _cariGuncelId !== "undefined" && _cariGuncelId && typeof cariAc === "function") cariAc(_cariGuncelId); }catch(_){} }
+    ["sonIslemlerYukle","bugunOzetCiz"].forEach(ac);
+    const t = document.createElement("div"); t.className = "ah-toast"; t.textContent = "↻ Veriler yenilendi — açık sekmeler korundu";
+    document.body.appendChild(t); setTimeout(()=>t.remove(), 2200);
+  };
+
+  // ── (2) Ana Ekran Renkleri
+  const PALET = {
+    standart:{ad:"Standart (yeşil/kırmızı/mavi/sarı)", r:null},
+    bakir:  {ad:"Sıcak Bakır", r:{stok:"#b45309",cari:"#92400e",tahsilat:"#4d7c0f",odeme:"#b91c1c",cvirman:"#a16207",ceksenet:"#9a3412",alis:"#7f1d1d",satis:"#65a30d",finans:"#78350f",rapor:"#b5651d",silinenler:"#78716c",kayitdefteri:"#78716c",ayarlar:"#57534e"}},
+    kurumsal:{ad:"Kurumsal Mavi", r:{stok:"#1d4ed8",cari:"#0369a1",tahsilat:"#047857",odeme:"#b91c1c",cvirman:"#4338ca",ceksenet:"#0e7490",alis:"#1e3a8a",satis:"#0f766e",finans:"#1e40af",rapor:"#3730a3",silinenler:"#475569",kayitdefteri:"#475569",ayarlar:"#334155"}},
+    canli:  {ad:"Canlı", r:{stok:"#0d9488",cari:"#d97706",tahsilat:"#0f9d58",odeme:"#e11d3c",cvirman:"#7c3aed",ceksenet:"#c2410c",alis:"#9f1239",satis:"#16a34a",finans:"#1e3a5f",rapor:"#3730a3",silinenler:"#475569",kayitdefteri:"#334155",ayarlar:"#475569"}},
+    pastel: {ad:"Pastel", r:{stok:"#14b8a6",cari:"#f59e0b",tahsilat:"#22c55e",odeme:"#f43f5e",cvirman:"#a78bfa",ceksenet:"#fb923c",alis:"#ec4899",satis:"#4ade80",finans:"#60a5fa",rapor:"#818cf8",silinenler:"#94a3b8",kayitdefteri:"#94a3b8",ayarlar:"#94a3b8"}},
+    koyu:   {ad:"Koyu Zemin için Açık Tonlar", r:{stok:"#2dd4bf",cari:"#fbbf24",tahsilat:"#34d399",odeme:"#fb7185",cvirman:"#a78bfa",ceksenet:"#fb923c",alis:"#f472b6",satis:"#4ade80",finans:"#60a5fa",rapor:"#818cf8",silinenler:"#94a3b8",kayitdefteri:"#94a3b8",ayarlar:"#94a3b8"}},
+    dogal:  {ad:"Doğal Yeşil", r:{stok:"#15803d",cari:"#a16207",tahsilat:"#16a34a",odeme:"#b91c1c",cvirman:"#0f766e",ceksenet:"#b45309",alis:"#92400e",satis:"#4d7c0f",finans:"#166534",rapor:"#0f766e",silinenler:"#6b7280",kayitdefteri:"#6b7280",ayarlar:"#4b5563"}}
+  };
+  const TEMA = {
+    klasik: {ad:"Klasik (mevcut)", fon:"", kart:"", yazi:"", yazi2:"", vurgu:"", kenar:"", stil:"cizgi", palet:"standart"},
+    bakir:  {ad:"Fincanlar Bakır", fon:"#f8f1e7", kart:"#fffdf9", yazi:"#3b2a1a", yazi2:"#8a6d52", vurgu:"#b5651d", kenar:"#e8d9c4", stil:"cizgi", palet:"bakir"},
+    lacivert:{ad:"Kurumsal Lacivert", fon:"#e9eef6", kart:"#ffffff", yazi:"#14213d", yazi2:"#5b6b86", vurgu:"#1e3a8a", kenar:"#cdd8ea", stil:"yumusak", palet:"kurumsal"},
+    yesil:  {ad:"Doğal Yeşil", fon:"#edf5ef", kart:"#ffffff", yazi:"#17331f", yazi2:"#5a7d63", vurgu:"#15803d", kenar:"#cfe3d5", stil:"cizgi", palet:"dogal"},
+    pastel: {ad:"Pastel", fon:"#f6f3fb", kart:"#ffffff", yazi:"#3a3358", yazi2:"#8580a3", vurgu:"#8b5cf6", kenar:"#e6e0f3", stil:"yumusak", palet:"pastel"},
+    canli:  {ad:"Canlı Bloklar", fon:"#eef0f4", kart:"#ffffff", yazi:"#1f2430", yazi2:"#6b7280", vurgu:"#7c3aed", kenar:"#dfe3ea", stil:"blok", palet:"canli"},
+    koyu:   {ad:"Koyu", fon:"#151b28", kart:"#1f2738", yazi:"#e8ecf4", yazi2:"#9aa6bd", vurgu:"#60a5fa", kenar:"#2f3a52", stil:"yumusak", palet:"koyu"}
+  };
+  const ALANLAR = { fon:"--ah-fon", kart:"--ah-kart", yazi:"--ah-yazi", yazi2:"--ah-yazi2", vurgu:"--ah-vurgu", kenar:"--ah-kenar" };
+  const MOD_IDLER = ["stok","cari","tahsilat","odeme","cvirman","ceksenet","alis","satis","finans","rapor","silinenler","kayitdefteri","ayarlar"];
+  let ah = Object.assign({tema:"klasik"}, TEMA.klasik);
+  try{ const k = JSON.parse(localStorage.getItem("fincanlar_ana_renk")||"null"); if(k && typeof k === "object") ah = Object.assign(ah, k); }catch(_){}
+  function ahUygula(kaydet){
+    const st = document.body.style;
+    Object.keys(ALANLAR).forEach(a=>{ if(ah[a]) st.setProperty(ALANLAR[a], ah[a]); else st.removeProperty(ALANLAR[a]); });
+    const pal = (PALET[ah.palet] || PALET.standart).r;
+    MOD_IDLER.forEach(id=>{ if(pal && pal[id]) st.setProperty("--ahm-"+id, pal[id]); else st.removeProperty("--ahm-"+id); });
+    document.body.setAttribute("data-ah-stil", ah.stil || "cizgi");
+    if(kaydet !== false){ try{ localStorage.setItem("fincanlar_ana_renk", JSON.stringify(ah)); }catch(_){} }
+  }
+  window.anaRenkAlanDegistir = function(alan, deger){ ah[alan] = deger; ah.tema = "ozel"; ahUygula(); const t = document.getElementById("ah-tema"); if(t) t.value = "ozel"; };
+  window.anaRenkTemaSec = function(id){ if(!TEMA[id]) return; ah = Object.assign({}, ah, TEMA[id], {tema:id}); ahUygula(); anaRenkPanelDoldur(); };
+  function anaRenkPanelDoldur(){
+    const p = document.getElementById("ana-renk-panel"); if(!p) return;
+    const renk = (ad, a, varsayilan)=>'<div class="rr-satir"><span>'+ad+'</span><input type="color" value="'+(ah[a]||varsayilan)+'" oninput="anaRenkAlanDegistir(\''+a+'\',this.value)"></div>';
+    const sec = (ad, a, secenekler)=>'<div class="rr-satir"><span>'+ad+'</span><select onchange="anaRenkAlanDegistir(\''+a+'\',this.value)">'+secenekler.map(o=>'<option value="'+o[0]+'"'+(ah[a]===o[0]?' selected':'')+'>'+o[1]+'</option>').join("")+'</select></div>';
+    p.innerHTML = '<h4>🎨 Ana Ekran Renkleri</h4>'
+      + '<div class="rr-satir"><span>Hazır tema</span><select id="ah-tema" onchange="anaRenkTemaSec(this.value)">'
+      + '<option value="ozel"'+(TEMA[ah.tema]?'':' selected')+'>Özel</option>'
+      + Object.keys(TEMA).map(id=>'<option value="'+id+'"'+(ah.tema===id?' selected':'')+'>'+TEMA[id].ad+'</option>').join("")
+      + '</select></div>'
+      + sec("Modül kutuları","stil",[["cizgi","Üstte renkli çizgi"],["yumusak","Yumuşak renk dolgu"],["blok","Tam renkli blok"]])
+      + sec("Modül renkleri","palet",Object.keys(PALET).map(k=>[k,PALET[k].ad]))
+      + renk("Sayfa fonu","fon","#f3f4f8") + renk("Kutu / panel rengi","kart","#ffffff")
+      + renk("Yazı rengi","yazi","#1f2430") + renk("İkincil yazı","yazi2","#6b7280")
+      + renk("Vurgu (üzerine gelince)","vurgu","#4338ca") + renk("Kenar çizgisi","kenar","#e2e5ec")
+      + '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:6px"><button class="rapor-renk-btn" onclick="anaRenkTemaSec(\'klasik\')">↺ Klasik\'e dön</button><button class="rapor-renk-btn" onclick="anaRenkPanelKapat()">Kapat</button></div>';
+  }
+  window.anaRenkPanelKapat = function(){ const p = document.getElementById("ana-renk-panel"); if(p) p.remove(); document.removeEventListener("mousedown", disTik, true); };
+  function disTik(e){ const p = document.getElementById("ana-renk-panel"); if(p && !p.contains(e.target) && !e.target.closest("#ana-renk-btn")) window.anaRenkPanelKapat(); }
+  window.anaRenkPanelAc = function(btn){
+    if(document.getElementById("ana-renk-panel")){ window.anaRenkPanelKapat(); return; }
+    const p = document.createElement("div"); p.id = "ana-renk-panel"; p.className = "rapor-renk-panel";
+    document.body.appendChild(p); anaRenkPanelDoldur();
+    const r = btn.getBoundingClientRect();
+    p.style.top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - p.offsetHeight - 10)) + "px";
+    p.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 310)) + "px";
+    document.addEventListener("mousedown", disTik, true);
+  };
+  const greet = document.querySelector("#home .greet-row");
+  if(greet && !document.getElementById("ana-renk-btn")){
+    const b = document.createElement("button"); b.type = "button"; b.id = "ana-renk-btn"; b.className = "rapor-renk-btn";
+    b.textContent = "🎨 Ana Ekran Renkleri"; b.onclick = function(){ window.anaRenkPanelAc(b); };
+    greet.appendChild(b);
+  }
+  // Ana ekran görünürken body'ye sınıf ekle (sayfa fonu sadece Ana Sayfa'da uygulansın)
+  const home = document.getElementById("home");
+  function anaGorunumSinifi(){ document.body.classList.toggle("ana-sayfada", !!home && home.style.display !== "none"); }
+  if(home){ new MutationObserver(anaGorunumSinifi).observe(home, {attributes:true, attributeFilter:["style"]}); anaGorunumSinifi(); }
+  ahUygula(false);
 })();
 </script>
 </body>
