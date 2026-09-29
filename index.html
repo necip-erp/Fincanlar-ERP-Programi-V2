@@ -2949,6 +2949,21 @@ function cariApi(action, params, _tokenYenidenDenendi){
       if(kullanilanToken && kullanilanToken === guncelToken) oturumuSonlandirVeGirisGoster_();
       return res;
     }
+    // ÇOK KULLANICI: sunucu her yanıtla "veri sürümü" (dv) döndürür. Bir OKUMA yanıtında sürüm, bizim
+    // son gördüğümüzden farklıysa başka bir kullanıcı veri değiştirmiştir → yerel liste önbellekleri
+    // temizlenir (sonraki açılış/yenilemede taze veri gelir) ve kullanıcıya küçük bir uyarı gösterilir.
+    if(res && res.dv !== undefined){
+      const yeniDv = String(res.dv);
+      if(window._sonDv_ && window._sonDv_ !== yeniDv && CARI_API_YAZMA_DEGIL_.test(action)){
+        onbellekTemizleHepsi_();
+        const simdi = Date.now();
+        if(!window._dvUyariZamani_ || simdi - window._dvUyariZamani_ > 60000){
+          window._dvUyariZamani_ = simdi;
+          if(typeof toastGoster === "function") toastGoster("Başka bir kullanıcı veri değiştirdi — güncel görmek için Alt+V (Verileri Yenile)");
+        }
+      }
+      window._sonDv_ = yeniDv;
+    }
     // Başarılı bir KAYDETME/SİLME/GÜNCELLEME sonrası liste önbellekleri bayatlar — temizle ki bir
     // sonraki açılış eski (kaydetme öncesi) veriyi göstermesin. Okuma/no-op işlemleri hariç.
     if(res && res.ok && !CARI_API_YAZMA_DEGIL_.test(action)){

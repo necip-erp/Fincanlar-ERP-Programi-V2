@@ -33,7 +33,7 @@ function yeniCalismaYiliOlustur(body) {
   const kaynakYil = String((body && body.kaynakYil) || TEMEL_YIL_);
   if (!kayit[kaynakYil]) return { ok: false, hata: "Kaynak yıl bulunamadı: " + kaynakYil };
 
-  const lock = LockService.getScriptLock();
+  const lock = kilitGetir_();
   lock.waitLock(30000);
   try {
     const kopya = DriveApp.getFileById(kayit[kaynakYil]).makeCopy("Fincanlar ERP - " + yil + " Çalışma Yılı");

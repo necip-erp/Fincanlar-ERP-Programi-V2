@@ -36,6 +36,44 @@ function varsayilanYil_() {
 function aktifYilAyarla_(yil) { _AKTIF_YIL_ = String(yil); }
 function aktifYil_() { return _AKTIF_YIL_ || varsayilanYil_(); }
 function aktifSheetId_() { return yilKayitlari_()[aktifYil_()] || SHEET_ID_TEMEL_; }
+// ── EŞZAMANLILIK ──
+// Kilit: aynı istek içinde iç içe alınabilen (reentrant) sarmalayıcı. İlk alan gerçek Script Lock'u tutar,
+// iç çağrılar sadece sayaç artırır. Böylece handleRequest'in dış (yazma) kilidi ile fonksiyonların kendi
+// iç kilitleri birbirini kilitlemez.
+let _KILIT_GERCEK_ = null;
+let _KILIT_DERINLIK_ = 0;
+function kilitGetir_() {
+  return {
+    waitLock: function (ms) {
+      if (_KILIT_DERINLIK_ === 0) {
+        const k = LockService.getScriptLock();
+        k.waitLock(ms);
+        _KILIT_GERCEK_ = k;
+      }
+      _KILIT_DERINLIK_++;
+    },
+    releaseLock: function () {
+      if (_KILIT_DERINLIK_ <= 0) return;
+      _KILIT_DERINLIK_--;
+      if (_KILIT_DERINLIK_ === 0 && _KILIT_GERCEK_) {
+        const k = _KILIT_GERCEK_; _KILIT_GERCEK_ = null;
+        try { k.releaseLock(); } catch (e) {}
+      }
+    },
+  };
+}
+// İstek başına tek Spreadsheet nesnesi (openById her çağrıda ~100-300 ms; bir istek içinde onlarca kez çağrılıyordu).
+let _SS_ONBELLEK_ = null, _SS_ONBELLEK_ID_ = null;
+function acikSS_() {
+  const id = aktifSheetId_();
+  if (_SS_ONBELLEK_ && _SS_ONBELLEK_ID_ === id) return _SS_ONBELLEK_;
+  _SS_ONBELLEK_ = SpreadsheetApp.openById(id); _SS_ONBELLEK_ID_ = id;
+  return _SS_ONBELLEK_;
+}
+// Veri sürümü: her yazma sonrası cacheTemizle bunu değiştirir. (1) Okuma sırasında araya giren yazma
+// olduysa eski veri önbelleğe YAZILMAZ, (2) istemci sürüm değişimini görüp yerel listelerini tazeler.
+function veriSurumuOku_() { try { return CacheService.getScriptCache().get(cacheYilAnahtari_("__surum")) || "0"; } catch (e) { return "0"; } }
+function veriSurumuArtir_() { try { CacheService.getScriptCache().put(cacheYilAnahtari_("__surum"), String(Date.now()) + Math.floor(Math.random() * 1000), 21600); } catch (e) {} }
 // Önbellek anahtarları yıla göre ayrılır — yıl değişince başka yılın verisi görünmesin.
 function cacheYilAnahtari_(k) { return "y" + aktifYil_() + ":" + k; }
 
@@ -164,6 +202,7 @@ function cacheParcaliOku_(cache, mevcut) {
 function cacheOkuVeyaHesapla(anahtar, saniyeTTL, hesaplaFn) {
   anahtar = cacheYilAnahtari_(anahtar);
   const cache = CacheService.getScriptCache();
+  const surum0 = veriSurumuOku_();
   try {
     const mevcut = cache.get(anahtar);
     if (mevcut) {
@@ -192,6 +231,7 @@ function cacheOkuVeyaHesapla(anahtar, saniyeTTL, hesaplaFn) {
   // Hata sonuçları (ok:false) asla önbelleğe yazılmaz — geçici bir hata kalıcı görünmesin.
   if (sonuc && sonuc.ok === false) return sonuc;
   try {
+    if (veriSurumuOku_() !== surum0) return sonuc; // hesaplanırken başka biri veri değiştirdi → bayat sonucu önbelleğe yazma
     const json = JSON.stringify(sonuc);
     if (json.length < 95000) {
       cache.put(anahtar, json, saniyeTTL);
@@ -217,6 +257,7 @@ function cacheTemizle(anahtarlar) {
       ekle(cacheYilAnahtari_(k));
       (CACHE_BAGIMLI_[k] || []).forEach(function (b) { ekle(cacheYilAnahtari_(b)); });
     });
+    veriSurumuArtir_();
     // removeAll tek çağrıda en fazla 1000 anahtar alır — bölerek gönder.
     for (let i = 0; i < tumu.length; i += 900) {
       CacheService.getScriptCache().removeAll(tumu.slice(i, i + 900));
@@ -248,7 +289,7 @@ function belgeNoAciklamadanCikar_(aciklama) {
 
 function silinenlerKaydet(tip, orijinalId, baslik, cariAd, tutar, veri, belgeNo) {
   try {
-    const ss = SpreadsheetApp.openById(aktifSheetId_());
+    const ss = acikSS_();
     const sheet = getOrCreateSheet(ss, SHEETS.silinenIslemler, SILINEN_BASLIKLAR);
     const id = "sil_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
     sheet.appendRow([id, tip, String(orijinalId || ""), baslik, cariAd || "", tutar || 0,
@@ -259,7 +300,7 @@ function silinenlerKaydet(tip, orijinalId, baslik, cariAd, tutar, veri, belgeNo)
 }
 
 function getSilinenlerListesi() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.silinenIslemler, SILINEN_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   const sonuc = [];
@@ -287,7 +328,7 @@ function silinenVeriOku_(row) {
 // ve yeniden oluşturulan kaydın YENİ ID'sini de yazar — bu sayede "Geri Döndürülenler"
 // bölümünde hangi kaydın ne zaman ve hangi yeni numarayla geri geldiği görülebilir.
 function silinenKaydiKapat_(id, yeniId) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.silinenIslemler, SILINEN_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
@@ -304,7 +345,7 @@ function silinenKaydiKapat_(id, yeniId) {
 // (audit izi). Kullanıcı bir siparişin/kaydın geçmişte silinip sonra geri getirildiğini
 // buradan görebilir. En son geri alınan en üstte.
 function getGeriDondurulenlerListesi() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.silinenIslemler, SILINEN_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   const sonuc = [];
@@ -328,7 +369,7 @@ function silinenGeriAl(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.silinenIslemler, SILINEN_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   let tip = "", veriJson = "", zatenGeriAlinmis = false;
@@ -581,7 +622,7 @@ function sayiBenzeriMi_(deger) {
 function metinliSatirEkle_(sheet, degerler, metinKolonlari) {
   const gerekli = (metinKolonlari || []).some(k => sayiBenzeriMi_(degerler[k - 1]));
   if (!gerekli) { sheet.appendRow(degerler); return; }
-  const lock = LockService.getScriptLock();
+  const lock = kilitGetir_();
   lock.waitLock(10000);
   try {
     const hedef = sheet.getLastRow() + 1;
@@ -642,7 +683,7 @@ const ACIKLAMA_SABLON_VARSAYILAN = {
 
 function aciklamaSablonlariHaritasi() {
   return cacheOkuVeyaHesapla("aciklamaSablonlari", 300, function () {
-    const ss = SpreadsheetApp.openById(aktifSheetId_());
+    const ss = acikSS_();
     const sheet = getOrCreateSheet(ss, SHEETS.aciklamaSablonlari, ["ANAHTAR", "METIN"]);
     const data = sheet.getDataRange().getValues();
     const harita = {};
@@ -679,7 +720,7 @@ function getAciklamaSablonlari() {
 // body: { sablonlar: { anahtar: metin, ... } }
 function saveAciklamaSablonlari(body) {
   const sablonlar = body.sablonlar || {};
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.aciklamaSablonlari, ["ANAHTAR", "METIN"]);
   const data = sheet.getDataRange().getValues();
   Object.keys(sablonlar).forEach(anahtar => {
@@ -714,7 +755,7 @@ function getOrCreateSheet(ss, name, headers) {
   // çalışabilir (race condition). LockService ile bunu seri hale getiriyoruz,
   // ayrıca yine de "zaten mevcut" hatası gelirse sayfayı tekrar arayıp
   // buluyoruz (throw etmek yerine).
-  const lock = LockService.getScriptLock();
+  const lock = kilitGetir_();
   lock.waitLock(10000);
   try {
     sheet = ss.getSheetByName(name); // lock alındıktan sonra tekrar kontrol
@@ -773,7 +814,7 @@ function sha256Hex_(metin) {
 function kullanicilarSheetHazirla_(ss) {
   const sheet = getOrCreateSheet(ss, SHEETS.kullanicilar, KULLANICI_BASLIKLAR);
   if (sheet.getLastRow() < 2) {
-    const lock = LockService.getScriptLock();
+    const lock = kilitGetir_();
     lock.waitLock(10000);
     try {
       if (sheet.getLastRow() < 2) { // lock sonrası tekrar kontrol (yarış durumu)
@@ -809,7 +850,7 @@ function girisYap(body) {
   const parola = String(body.parola || "");
   if (!kullaniciAdi || !parola) return { ok: false, hata: "Kullanıcı adı ve parola gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const { satirlar } = kullaniciSatirlariniOku_(ss);
   const kullanici = satirlar.find(k => k.kullaniciAdi.toLowerCase() === kullaniciAdi.toLowerCase());
 
@@ -850,7 +891,7 @@ function oturumDogrula_(ss, token) {
     const c = CacheService.getScriptCache().get(_ok);
     if (c) return JSON.parse(c);
   } catch (e) {}
-  const _sonuc = oturumDogrulaSayfadan_(ss, token);
+  const _sonuc = oturumDogrulaSayfadan_(ss || acikSS_(), token);
   if (_sonuc) { try { CacheService.getScriptCache().put(_ok, JSON.stringify(_sonuc), 300); } catch (e) {} }
   return _sonuc;
 }
@@ -876,7 +917,7 @@ function oturumDogrulaSayfadan_(ss, token) {
 
 function cikisYap(body) {
   try { CacheService.getScriptCache().remove("otr_" + aktifYil_() + "_" + String(body.token || "")); } catch (e) {}
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const oturumSheet = getOrCreateSheet(ss, SHEETS.oturumlar, OTURUM_BASLIKLAR);
   const data = oturumSheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
@@ -890,7 +931,7 @@ function parolaDegistir(body, oturum) {
   const yeniParola = String(body.yeniParola || "");
   if (!yeniParola || yeniParola.length < 3) return { ok: false, hata: "Yeni parola en az 3 karakter olmalı" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
   const kullanici = satirlar.find(k => k.id === oturum.kullaniciId);
   if (!kullanici) return { ok: false, hata: "Kullanıcı bulunamadı" };
@@ -903,7 +944,7 @@ function parolaDegistir(body, oturum) {
 // ── Aşağıdaki kullaniciXxx fonksiyonları SADECE Admin rolündeki kullanıcı
 // tarafından çağrılabilir; kontrol handleRequest içinde yapılır. ──
 function kullaniciListesiGetir() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const { satirlar } = kullaniciSatirlariniOku_(ss);
   // PAROLA_HASH asla frontend'e gönderilmez.
   return { ok: true, liste: satirlar.map(k => ({ id: k.id, kullaniciAdi: k.kullaniciAdi, rol: k.rol, aktif: k.aktif })) };
@@ -914,7 +955,7 @@ function kullaniciEkle(body) {
   const rol = String(body.rol) === "Admin" ? "Admin" : "Standart";
   if (!kullaniciAdi) return { ok: false, hata: "Kullanıcı adı gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
   if (satirlar.some(k => k.kullaniciAdi.toLowerCase() === kullaniciAdi.toLowerCase())) {
     return { ok: false, hata: "Bu kullanıcı adı zaten kayıtlı" };
@@ -926,7 +967,7 @@ function kullaniciEkle(body) {
 }
 
 function kullaniciDurumGuncelle(body) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
   const kullanici = satirlar.find(k => k.id === String(body.kullaniciId));
   if (!kullanici) return { ok: false, hata: "Kullanıcı bulunamadı" };
@@ -944,7 +985,7 @@ function kullaniciDurumGuncelle(body) {
 
 function kullaniciRolGuncelle(body) {
   const yeniRol = String(body.rol) === "Admin" ? "Admin" : "Standart";
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
   const kullanici = satirlar.find(k => k.id === String(body.kullaniciId));
   if (!kullanici) return { ok: false, hata: "Kullanıcı bulunamadı" };
@@ -961,7 +1002,7 @@ function kullaniciRolGuncelle(body) {
 // butonu kullanır, kullanıcı bir dahaki girişte "Parolamı Değiştir" ile kendine
 // yeni bir parola belirleyebilir.
 function kullaniciParolaSifirla(body) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
   const kullanici = satirlar.find(k => k.id === String(body.kullaniciId));
   if (!kullanici) return { ok: false, hata: "Kullanıcı bulunamadı" };
@@ -970,7 +1011,7 @@ function kullaniciParolaSifirla(body) {
 }
 
 function kullaniciSil(body) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
   const kullanici = satirlar.find(k => k.id === String(body.kullaniciId));
   if (!kullanici) return { ok: false, hata: "Kullanıcı bulunamadı" };
@@ -1000,6 +1041,8 @@ function doPost(e) {
 
 // Bu action'lar oturum/token gerektirmeden çalışır (login ekranı henüz token
 // almadan bunlara ihtiyaç duyar).
+// Veriyi değiştirmeyen işlemler kilit beklemez (istemcideki CARI_API_YAZMA_DEGIL_ ile aynı mantık).
+const YAZMA_DEGIL_ = /^(get|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|nakliyeSorunluFaturalar$)/; // giriş/çıkış/parola oturum satırı yazar → kilitli (satır kayması olmasın)
 const OTURUMSUZ_ACTIONLAR = { girisYap: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
@@ -1025,7 +1068,7 @@ function handleRequest(e) {
     }
     aktifYilAyarla_(istenenYil);
     if (!OTURUMSUZ_ACTIONLAR[action]) {
-      oturum = oturumDogrula_(SpreadsheetApp.openById(aktifSheetId_()), body.token);
+      oturum = oturumDogrula_(null, body.token); // ss gerekirse içeride (önbellek ıskalanınca) açılır
       if (!oturum) {
         return jsonResponse({ ok: false, oturumGecersiz: true, hata: "Oturum bulunamadı veya süresi doldu, lütfen tekrar giriş yapın." });
       }
@@ -1033,6 +1076,16 @@ function handleRequest(e) {
         return jsonResponse({ ok: false, hata: "Bu işlem sadece Admin yetkisiyle yapılabilir." });
       }
     }
+    // ★ EŞZAMANLI KULLANIM: veriyi DEĞİŞTİREN her işlem (kaydet/sil/güncelle...) tek tek sıraya girer.
+    // İki kullanıcı aynı anda yazarsa ikincisi birincinin bitmesini bekler; böylece "satır kayması"
+    // (başkası araya satır silince yanlış satırın silinmesi), aynı ID/numara üretimi ve "stok yeterli mi"
+    // kontrolündeki yarış durumları oluşamaz. Okuma işlemleri kilit beklemez.
+    const yazmaIslemi = !YAZMA_DEGIL_.test(action);
+    if (yazmaIslemi) {
+      try { kilitGetir_().waitLock(30000); }
+      catch (kilitHata) { return jsonResponse({ ok: false, hata: "Sistem şu an başka bir kullanıcının işlemiyle meşgul. Birkaç saniye sonra tekrar deneyin." }); }
+    }
+    try {
     if (KD_ACTIONLAR[action]) kdToplayiciBaslat_(); // Kayıt Defteri: bu işlemde oluşan karşı kayıtları topla
     switch (action) {
       case "girisYap":        result = girisYap(body); break;
@@ -1203,7 +1256,11 @@ function handleRequest(e) {
       const kdBacaklar = KD_TOPLAYICI_; KD_TOPLAYICI_ = null;
       try { kdIsle_(action, body, result, kdBacaklar); } catch (kdHata) { logError(kdHata); }
     }
+    if (result && typeof result === "object" && !Array.isArray(result)) result.dv = veriSurumuOku_(); // istemci: başka kullanıcı veri değiştirdi mi?
     return jsonResponse(result);
+    } finally {
+      if (yazmaIslemi) kilitGetir_().releaseLock();
+    }
   } catch (err) {
     KD_TOPLAYICI_ = null;
     logError(err);
@@ -1218,7 +1275,7 @@ function handleRequest(e) {
 function getCariListesi() {
   try {
     return cacheOkuVeyaHesapla("cariListesi_v4", 180, function () {
-    const ss = SpreadsheetApp.openById(aktifSheetId_());
+    const ss = acikSS_();
     const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
     ensureCariEkKolonlariHepsi(hSheet);
     const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
@@ -1282,7 +1339,7 @@ function getCariListesi() {
 // Tek bir cari hesabın bilgisini + tüm hareket geçmişini (tarihe göre sıralı, kümülatif bakiyeli) döndürür.
 function getCariDetay(cariId) {
   if (!cariId) return { ok: false, hata: "cariId gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
   ensureCariEkKolonlariHepsi(hSheet);
   const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
@@ -1364,7 +1421,7 @@ function saveCari(body) {
   const ad = String(body.ad || "").trim();
   if (!ad) return { ok: false, hata: "Cari adı gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
   ensureCariEkKolonlariHepsi(sheet);
   const data = sheet.getDataRange().getValues();
@@ -1440,7 +1497,7 @@ function cariKullanildiMi_(ss, cariId) {
 function setCariAktif(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
   ensureCariEkKolonlariHepsi(sheet);
   const ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
@@ -1459,7 +1516,7 @@ function silCari(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   if (cariKullanildiMi_(ss, id)) {
     return { ok: false, hata: "Bu cariye ait hareket/belge (sipariş, fatura, tahsilat, ödeme, çek vb.) var, silinemez. Kullanmayacaksanız cariyi PASİFE alabilirsiniz." };
   }
@@ -1481,7 +1538,7 @@ function cariHareketEkle(body) {
   if (tip !== "Borç" && tip !== "Alacak") return { ok: false, hata: "tip Borç veya Alacak olmalı" };
   if (tutar <= 0) return { ok: false, hata: "Tutar sıfırdan büyük olmalı" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
   ensureCariHareketVadeColonu(sheet);
   ensureCariHareketProjeKoduColonu(sheet);
@@ -1500,7 +1557,7 @@ function cariHareketEkle(body) {
 // bu hareket "geciken" olarak görünmeye devam eder — asıl referans cari bakiyesidir,
 // bu yüzden cari bakiyesi 0 veya negatifse (borcu kalmamışsa) o carinin hareketleri listeye dahil edilmez.
 function vadesiGecmisAlacaklar() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const hkSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
   ensureCariHareketVadeColonu(hkSheet);
   const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
@@ -1592,7 +1649,7 @@ function saveCariVirman(body) {
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const notu = String(body.aciklama || "").trim();
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const id = "vir_" + Date.now();
 
   const kaynakHareket = cariHareketEkle({
@@ -1624,7 +1681,7 @@ function saveCariVirman(body) {
 }
 
 function getCariVirmanListesi() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cariVirmanlar, CARI_VIRMAN_BASLIKLAR);
   ensureCariVirmanProjeKoduColonu(sheet);
   ensureCariVirmanVirmanTipiColonu(sheet);
@@ -1657,7 +1714,7 @@ function cariVirmanSil(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cariVirmanlar, CARI_VIRMAN_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -1697,7 +1754,7 @@ function updateCariVirman(body) {
 function cariHareketSil(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -1735,7 +1792,7 @@ const SIPARIS_DURUM_BASLIKLAR = ["SIRA", "AD", "AKTARILABILIR"];
 
 function getSiparisDurumlari() {
   return cacheOkuVeyaHesapla("siparisDurumlari", 300, function () {
-    const ss = SpreadsheetApp.openById(aktifSheetId_());
+    const ss = acikSS_();
     const sheet = getOrCreateSheet(ss, SHEETS.siparisDurumlari, SIPARIS_DURUM_BASLIKLAR);
     let data = sheet.getDataRange().getValues();
     if (data.length < 2) {
@@ -1769,7 +1826,7 @@ function saveSiparisDurumlari(body) {
     adSeti.add(ad);
   }
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.siparisDurumlari, SIPARIS_DURUM_BASLIKLAR);
   sheet.clearContents();
   sheet.appendRow(SIPARIS_DURUM_BASLIKLAR);
@@ -1937,7 +1994,7 @@ function cariKoduHaritasiOlustur(ss) {
 
 function getSatisListesi() {
   return cacheOkuVeyaHesapla("satisListesi", 60, function () {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   ensureSatisBelgeTipiColonu(sSheet);
@@ -2013,7 +2070,7 @@ function getSatisListesi() {
 // Tek bir satışı + ürün kalemlerini döner.
 function getSatisDetay(satisId) {
   if (!satisId) return { ok: false, hata: "satisId gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   ensureSatisBelgeTipiColonu(sSheet);
@@ -2128,7 +2185,7 @@ function saveSatis(body) {
     if (!(parseFloat(k.birimFiyat) >= 0)) return { ok: false, hata: "Kalemlerde birim fiyat geçersiz" };
   }
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const stokHata = kalemlerStokKoduDogrula(ss, kalemler);
   if (stokHata) return { ok: false, hata: stokHata };
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
@@ -2326,7 +2383,7 @@ function siparistenFaturaOlustur(body) {
   const istekKalemleri = Array.isArray(body.kalemler) ? body.kalemler : [];
   if (istekKalemleri.length === 0) return { ok: false, hata: "Aktarılacak en az bir ürün seçmelisiniz" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   ensureSatisBelgeTipiColonu(sSheet);
@@ -2455,7 +2512,7 @@ function siparisDurumGuncelle(body) {
   if (!id) return { ok: false, hata: "id gerekli" };
   if (!getSiparisDurumlari().durumlar.map(d => d.ad).includes(durum)) return { ok: false, hata: "Geçersiz durum" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   ensureSatisBelgeTipiColonu(sSheet);
@@ -2484,7 +2541,7 @@ function getCariSiparisListesi(cariId) {
   // faturaları bulmak için Satislar sayfasını KAYNAK_SIPARIS_ID (12. sütun)
   // üzerinden tarıyoruz — getSatisListesi bu alanı dışarı vermediği için
   // doğrudan sayfadan okunuyor.
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   ensureSatisBelgeTipiColonu(sSheet);
@@ -2521,7 +2578,7 @@ function silSatis(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const data = sSheet.getDataRange().getValues();
@@ -2642,7 +2699,7 @@ function updateSatis(body) {
     if (!(parseFloat(k.birimFiyat) >= 0)) return { ok: false, hata: "Kalemlerde birim fiyat geçersiz" };
   }
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   ensureSatisBelgeTipiColonu(sSheet);
@@ -2778,7 +2835,7 @@ function updateSatis(body) {
 
 function getAlisListesi() {
   return cacheOkuVeyaHesapla("alisListesi", 60, function () {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const data = aSheet.getDataRange().getValues();
@@ -2823,7 +2880,7 @@ function getAlisListesi() {
 
 function getAlisDetay(alisId) {
   if (!alisId) return { ok: false, hata: "alisId gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const kSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
@@ -2917,7 +2974,7 @@ function saveAlis(body) {
     if (!(parseFloat(k.birimFiyat) >= 0)) return { ok: false, hata: "Kalemlerde birim fiyat geçersiz" };
   }
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const kSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
@@ -3014,7 +3071,7 @@ function silAlis(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const data = aSheet.getDataRange().getValues();
@@ -3096,7 +3153,7 @@ function silAlis(body) {
 // şey ters giderse bu yedek sayfalardan elle geri yüklenebilir. body.onay !== true ise
 // hiçbir şey silmeden sadece kaç kayıt etkileneceğini döndürür (kuru çalıştırma).
 function tumAlislariSilVeSifirla(body) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const aData = aSheet.getDataRange().getValues();
@@ -3144,7 +3201,7 @@ function updateAlis(body) {
     if (!(parseFloat(k.birimFiyat) >= 0)) return { ok: false, hata: "Kalemlerde birim fiyat geçersiz" };
   }
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const data = aSheet.getDataRange().getValues();
@@ -3260,7 +3317,7 @@ function updateAlis(body) {
 // ════════════════════════════════════════════════
 
 function getAlisIadeListesi() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const aSheet = getOrCreateSheet(ss, SHEETS.alisIadeler,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const data = aSheet.getDataRange().getValues();
@@ -3284,7 +3341,7 @@ function getAlisIadeListesi() {
 
 function getAlisIadeDetay(iadeId) {
   if (!iadeId) return { ok: false, hata: "iadeId gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const aSheet = getOrCreateSheet(ss, SHEETS.alisIadeler,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const kSheet = getOrCreateSheet(ss, SHEETS.alisIadeKalemleri,
@@ -3330,7 +3387,7 @@ function saveAlisIade(body) {
     if (!(parseFloat(k.birimFiyat) >= 0)) return { ok: false, hata: "Kalemlerde birim fiyat geçersiz" };
   }
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const stokHata = kalemlerStokKoduDogrula(ss, kalemler);
   if (stokHata) return { ok: false, hata: stokHata };
   const aSheet = getOrCreateSheet(ss, SHEETS.alisIadeler,
@@ -3389,7 +3446,7 @@ function silAlisIade(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const aSheet = getOrCreateSheet(ss, SHEETS.alisIadeler,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const data = aSheet.getDataRange().getValues();
@@ -3466,7 +3523,7 @@ function silAlisIade(body) {
 // ════════════════════════════════════════════════
 
 function getSatisIadeListesi() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satisIadeler,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const data = sSheet.getDataRange().getValues();
@@ -3490,7 +3547,7 @@ function getSatisIadeListesi() {
 
 function getSatisIadeDetay(iadeId) {
   if (!iadeId) return { ok: false, hata: "iadeId gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satisIadeler,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const kSheet = getOrCreateSheet(ss, SHEETS.satisIadeKalemleri,
@@ -3535,7 +3592,7 @@ function saveSatisIade(body) {
     if (!(parseFloat(k.birimFiyat) >= 0)) return { ok: false, hata: "Kalemlerde birim fiyat geçersiz" };
   }
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const stokHata = kalemlerStokKoduDogrula(ss, kalemler);
   if (stokHata) return { ok: false, hata: stokHata };
   const sSheet = getOrCreateSheet(ss, SHEETS.satisIadeler,
@@ -3594,7 +3651,7 @@ function silSatisIade(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satisIadeler,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
   const data = sSheet.getDataRange().getValues();
@@ -3687,7 +3744,7 @@ function ensureTahsilatPosColonu_orj_(sheet) {
 
 function getTahsilatListesi() {
   return cacheOkuVeyaHesapla("tahsilatListesi", 60, function () {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const tSheet = getOrCreateSheet(ss, SHEETS.tahsilatlar,
     ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI","POS_HESAP_ID"]);
   ensureTahsilatPosColonu(tSheet);
@@ -3728,7 +3785,7 @@ function saveTahsilat(body) {
   if (yontem === "Kredi Kartı" && !posHesapId) return { ok: false, hata: "Kredi Kartı ile tahsilatta POS hesabı seçimi zorunludur" };
   if (yontem === "Havale/EFT" && !bankaHesapId) return { ok: false, hata: "Havale/EFT ile tahsilatta banka hesabı seçimi zorunludur" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const cSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
     ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU"]);
   const cData = cSheet.getDataRange().getValues();
@@ -3784,7 +3841,7 @@ function silTahsilat(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const tSheet = getOrCreateSheet(ss, SHEETS.tahsilatlar,
     ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI"]);
   const data = tSheet.getDataRange().getValues();
@@ -3881,7 +3938,7 @@ function ensureOdemePosBankaColonlari_orj_(sheet) {
 
 function getOdemeListesi() {
   return cacheOkuVeyaHesapla("odemeListesi", 60, function () {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const oSheet = getOrCreateSheet(ss, SHEETS.odemeler,
     ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI","POS_HESAP_ID","BANKA_HESAP_ID"]);
   ensureOdemePosBankaColonlari(oSheet);
@@ -3965,7 +4022,7 @@ function saveOdeme(body) {
   if (yontem === "Kredi Kartı" && !krediKartiId) return { ok: false, hata: "Kredi Kartı ile ödemede şirket kredi kartı seçimi zorunludur" };
   if (yontem === "Havale/EFT" && !bankaHesapId) return { ok: false, hata: "Havale/EFT ile ödemede banka hesabı seçimi zorunludur" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   let cariId = "", cariAd = "";
   let hedefAltTipi = "", hedefId = "", hedefAd = "";
 
@@ -4086,7 +4143,7 @@ function silOdeme(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const oSheet = getOrCreateSheet(ss, SHEETS.odemeler,
     ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI"]);
   const data = oSheet.getDataRange().getValues();
@@ -4158,7 +4215,7 @@ const CEK_SENET_HAREKET_BASLIKLAR = ["ID","CEK_ID","TARIH","TIP","TUTAR","ACIKLA
 
 function getCekSenetListesi() {
   return cacheOkuVeyaHesapla("cekSenetListesi", 60, function () {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   const bugun = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd");
@@ -4203,7 +4260,7 @@ function getCariCekSenetListesi(cariId) {
 
 function getCekSenetDetay(id) {
   const cekId = String(id || "");
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   let cek = null;
@@ -4273,7 +4330,7 @@ function saveCekSenet(body) {
   if (tutar <= 0) return { ok: false, hata: "Tutar sıfırdan büyük olmalı" };
   if (tip !== "Alınan" && tip !== "Verilen") return { ok: false, hata: "Geçersiz tip" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const cSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
     ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU"]);
   const cData = cSheet.getDataRange().getValues();
@@ -4374,7 +4431,7 @@ function cekYaprakSatirObj_(row) {
 // body: { bankaId?, durum? }
 function getCekYapraklari(body) {
   body = body || {};
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const data = cekYaprakSheet_(ss).getDataRange().getValues();
   const bankaId = String(body.bankaId || ""), durum = String(body.durum || "");
   const liste = [];
@@ -4400,7 +4457,7 @@ function saveCekKocani(body) {
   if (!temiz.length) return { ok: false, hata: "En az bir çek numarası girin" };
   if (temiz.length > 500) return { ok: false, hata: "Tek seferde en fazla 500 çek yaprağı tanımlanabilir" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const bSheet = getOrCreateSheet(ss, SHEETS.bankalar, ["ID","AD"]);
   const bData = bSheet.getDataRange().getValues();
   let bankaAdi = "";
@@ -4408,7 +4465,7 @@ function saveCekKocani(body) {
   if (!bankaAdi) return { ok: false, hata: "Seçilen banka tanımlı değil" };
 
   const sheet = cekYaprakSheet_(ss);
-  const lock = LockService.getScriptLock();
+  const lock = kilitGetir_();
   lock.waitLock(15000);
   try {
     const data = sheet.getDataRange().getValues();
@@ -4434,7 +4491,7 @@ function saveCekKocani(body) {
 function silCekYaprak(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = cekYaprakSheet_(ss);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -4450,7 +4507,7 @@ function silCekYaprak(body) {
 function cekYaprakDurumGuncelle(body) {
   const id = String(body.id || "").trim(), durum = String(body.durum || "");
   if (durum !== "İptal" && durum !== "Boş") return { ok: false, hata: "Geçersiz durum" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = cekYaprakSheet_(ss);
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
@@ -4466,7 +4523,7 @@ function cekYaprakDurumGuncelle(body) {
 // opts: { yaprakId, bankaAdi, seriNo, zorunlu }
 function cekYaprakAyir_(ss, opts, cekId) {
   const sheet = cekYaprakSheet_(ss);
-  const lock = LockService.getScriptLock();
+  const lock = kilitGetir_();
   lock.waitLock(15000);
   try {
     const data = sheet.getDataRange().getValues();
@@ -4546,7 +4603,7 @@ function cekSenetDurumGuncelle(body) {
   if (!id) return { ok: false, hata: "id gerekli" };
   if (durum !== "Karşılıksız" && durum !== "Ciro Edildi") return { ok: false, hata: "Geçersiz durum" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
   ensureCekSenetCiroColonu(sheet);
   const data = sheet.getDataRange().getValues();
@@ -4601,7 +4658,7 @@ function cekSenetHareketGeriAl(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
   const hData = hSheet.getDataRange().getValues();
   let sonHareketRowIdx = -1, sonHareket = null;
@@ -4707,7 +4764,7 @@ function cekSenetGorselYukle(body) {
     return { ok: false, hata: "Görsel yüklenemedi: " + e.message };
   }
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetGorselleri, CEK_GORSEL_BASLIKLAR);
   const dosyaUrl = "https://drive.google.com/uc?export=view&id=" + dosya.getId();
   const yuklemeTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
@@ -4724,7 +4781,7 @@ function cekSenetGorselYukle(body) {
 
 function getCekSenetGorselleri(cekId) {
   if (!cekId) return { ok: false, hata: "cekId gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetGorselleri, CEK_GORSEL_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   const sonuc = [];
@@ -4740,7 +4797,7 @@ function getCekSenetGorselleri(cekId) {
 function silCekSenetGorseli(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetGorselleri, CEK_GORSEL_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -4766,7 +4823,7 @@ function silCekSenet(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
 
@@ -4857,7 +4914,7 @@ function cekSenetIslemYap(body) {
   if (!id) return { ok: false, hata: "id gerekli" };
   if (tutar <= 0) return { ok: false, hata: "Tutar sıfırdan büyük olmalı" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.cekSenetler, CEK_SENET_BASLIKLAR);
   ensureCekSenetBankaHesapColonu(sheet);
   const data = sheet.getDataRange().getValues();
@@ -4960,7 +5017,7 @@ function cekSenetTopluOdemeYap(body) {
 function getTopluOdemeGrubu(topluOdemeNo) {
   const grp = String(topluOdemeNo || "").trim();
   if (!grp) return { ok: false, hata: "Toplu Ödeme No gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
   ensureCekSenetHareketGrupColonu(hSheet);
   const hData = hSheet.getDataRange().getValues();
@@ -5080,7 +5137,7 @@ function edmOnekEslesmeKaydet(ss, onek, cariId, cariAd) {
 
 // Ayarlar ekranındaki yönetim tablosu için: tüm eşleştirmeleri listeler.
 function getEdmOnekEslesmeListesi() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const map = edmOnekEslesmeOku(ss);
   const sonuc = Object.keys(map).sort().map(onek => ({ onek: onek, cariId: map[onek].cariId, cariAd: map[onek].cariAd }));
   return { ok: true, kayitlar: sonuc };
@@ -5092,7 +5149,7 @@ function edmOnekEslesmeManuelKaydet(body) {
   const cariId = String(body.cariId || "").trim();
   if (!onek) return { ok: false, hata: "Önek gerekli" };
   if (!cariId) return { ok: false, hata: "Cari seçilmeli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   edmOnekEslesmeKaydet(ss, onek, cariId, String(body.cariAd || ""));
   cacheTemizle(["bekleyenAlisFaturalari"]);
   return { ok: true };
@@ -5102,7 +5159,7 @@ function edmOnekEslesmeManuelKaydet(body) {
 function edmOnekEslesmeSil(body) {
   const onek = String(body.onek || "").trim().toUpperCase();
   if (!onek) return { ok: false, hata: "onek gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.edmOnekEslesme, EDM_ONEK_ESLESME_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -5195,7 +5252,7 @@ function urunAdindanKodCikar_(urunAdi) {
 
 // Ayarlar ekranındaki yönetim tablosu için: tüm eşleştirmeleri listeler.
 function getTedarikciUrunKoduListesi() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const map = tedarikciUrunKoduEslesmeOku(ss);
   const sonuc = [];
   Object.keys(map).sort().forEach(onek => {
@@ -5214,7 +5271,7 @@ function tedarikciUrunKoduManuelKaydet(body) {
   if (!onek) return { ok: false, hata: "Önek gerekli (ör. GPD)" };
   if (!kod) return { ok: false, hata: "Tedarikçi ürün kodu gerekli" };
   if (!stokKodu) return { ok: false, hata: "Stok kodu gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   tedarikciUrunKoduEslesmeKaydet(ss, onek, kod, stokKodu, String(body.stokAdi || ""), parseFloat(body.listeFiyati) || 0);
   cacheTemizle(["bekleyenAlisFaturalari"]);
   return { ok: true };
@@ -5225,7 +5282,7 @@ function tedarikciUrunKoduSil(body) {
   const onek = String(body.onek || "").trim().toUpperCase();
   const kod = String(body.kod || "").trim().toUpperCase();
   if (!onek || !kod) return { ok: false, hata: "onek ve kod gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.tedarikciUrunKoduEslesme, TEDARIKCI_URUN_KODU_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -5246,7 +5303,7 @@ function tedarikciUrunKoduTopluIceAktar(body) {
   const kayitlar = body.kayitlar || [];
   if (!onek) return { ok: false, hata: "Önek gerekli (ör. GPD)" };
   if (!kayitlar.length) return { ok: false, hata: "Aktarılacak kayıt yok" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   let eklenen = 0, hatali = 0;
   kayitlar.forEach(k => {
     const kod = String(k.kod || "").trim();
@@ -5292,7 +5349,7 @@ function gpdTedarikciKoduIlkYukleme() {
 // ════════════════════════════════════════════════
 function gpdStokKartlariIlkYukleme() {
   const kayitlar = [{"stokKodu": "200519015011", "stokAdi": "GPD TAHARET MUSLUĞU BEYAZ TMS01", "alisFiyati": 650}, {"stokKodu": "200519015012", "stokAdi": "GPD ANKASTRE DUŞ BAŞLIĞI ADS03 (5 FONK)", "alisFiyati": 1300}, {"stokKodu": "200519015031", "stokAdi": "GPD FİLTRELİ ARA MUSLUK -FKM01", "alisFiyati": 430}, {"stokKodu": "200519201405", "stokAdi": "GPD FİLTRELİ ÇAMAŞIR MUSLUĞU CMS03", "alisFiyati": 850}, {"stokKodu": "200520000051", "stokAdi": "GPD MİX NİNO DUŞ BATARYASI DSB05", "alisFiyati": 5200}, {"stokKodu": "200520000751", "stokAdi": "GPD MİX FELİS BANYO BATARYASI -MBB75", "alisFiyati": 6650}, {"stokKodu": "200520001001", "stokAdi": "GPD MİX FREZİA BANYO BATARYASI MBB100", "alisFiyati": 7480}, {"stokKodu": "200520001451", "stokAdi": "GPD DOKTOR/BEDENSEL ENG.DÖNER LAV.BAT.MDL45", "alisFiyati": 5430}, {"stokKodu": "200520001751", "stokAdi": "GPD MİX FELİS LAVABO BATARYASI -MLB75", "alisFiyati": 4330}, {"stokKodu": "200520002044", "stokAdi": "GPD ORBİS LAVABO BAT. LB30", "alisFiyati": 3180}, {"stokKodu": "200520002045", "stokAdi": "GPD ORBİS BANYO BAT. BB30", "alisFiyati": 4250}, {"stokKodu": "200520002046", "stokAdi": "GPD ORBİS TEK GÖVDE EVİYE BAT. TE30", "alisFiyati": 2800}, {"stokKodu": "200520002047", "stokAdi": "GPD ORBİS TEK GÖVDE LAVABO BAT. TL30", "alisFiyati": 2750}, {"stokKodu": "200520002051", "stokAdi": "GPD RİTMO TEK GÖVDE LAVABO BATARYASI MTL85", "alisFiyati": 6330}, {"stokKodu": "200520002451", "stokAdi": "GPD DOKTOR/BEDENSEL ENG.APLİKE LAV.BAT. MAL45", "alisFiyati": 6080}, {"stokKodu": "200520002751", "stokAdi": "GPD MİX FELİS TEK GÖVDE EVİYE BATARYASI -MTE75", "alisFiyati": 4430}, {"stokKodu": "200520010011", "stokAdi": "GPD FOTOSELLİ PİSUVAR BATARYASI SIVA ÜSTÜ FPB01", "alisFiyati": 7800}, {"stokKodu": "200520011001", "stokAdi": "GPD MİX FREZİA LAVABO BATARYASI MLB100", "alisFiyati": 4730}, {"stokKodu": "200520012011", "stokAdi": "MBB70 ESPİNA BANYO BATARYASI GPD", "alisFiyati": 6030}, {"stokKodu": "200520012021", "stokAdi": "MTE70 ESPİNA TEK GÖVDE EVYE BATARYASI GPD", "alisFiyati": 4980}, {"stokKodu": "200520012022", "stokAdi": "GPD MİX ESPİNA ARITMA ÇIKIŞLI EVYE BATARYASI MAR70", "alisFiyati": 7750}, {"stokKodu": "200520012031", "stokAdi": "MTL70 ESPİNA TEK GÖVDE LAVABO BATARYASI GPD", "alisFiyati": 4800}, {"stokKodu": "200520012041", "stokAdi": "GPD MİX ESPİNA LAVABO BATARYASI MLB70", "alisFiyati": 4200}, {"stokKodu": "200520012071", "stokAdi": "GPD MİX ESPİNA SPRALLİ EVYE BATARYASI MES70", "alisFiyati": 6000}, {"stokKodu": "200520012101", "stokAdi": "GPD ESPİNA TAHARET MUSLUĞU TMS70", "alisFiyati": 800}, {"stokKodu": "200520012701", "stokAdi": "GPD MİX ESPİNA ANKASTRE ARA KESME VALFİ -AAK70", "alisFiyati": 1350}, {"stokKodu": "200520012703", "stokAdi": "GPD Bedensel Engelli Lavabo Bataryası MLB45", "alisFiyati": 4680}, {"stokKodu": "200520013051", "stokAdi": "AAK05 GPD MİX NİNO ANKASTRE ARA KESME VALFİ", "alisFiyati": 1280}, {"stokKodu": "200520013151", "stokAdi": "GPD MİX NİNO DÖNER BORULU LAVABO BATARYASI DLB05", "alisFiyati": 5230}, {"stokKodu": "200520013171", "stokAdi": "GPD MİX NİNO DÖNER U BORULU EVYE BATARYASI -UEB05", "alisFiyati": 5400}, {"stokKodu": "200520013172", "stokAdi": "GPD MİX NİNO DÖNER U BORULU EVYE BATARYASI -UEB05-B BAKIR GÖRÜNÜMLÜ", "alisFiyati": 8630}, {"stokKodu": "200520013311", "stokAdi": "GPD FOTOSELLİ SET ÜSTÜ LAVABO BATARYASI FLB07", "alisFiyati": 11300}, {"stokKodu": "200520021001", "stokAdi": "GPD MİX FREZİA TEK GÖVDE EVİYE BATARYASI MTE100", "alisFiyati": 5330}, {"stokKodu": "200520023111", "stokAdi": "ADS07 ANKASTRE DUŞ SETİ (Ø200)", "alisFiyati": 2900}, {"stokKodu": "200520023251", "stokAdi": "GPD TERMOSTATİK BANYO BATARYASI -TBB01", "alisFiyati": 8750}, {"stokKodu": "200520032022", "stokAdi": "GPD TERMOSTATİK BANYO BATARYASI TBB02", "alisFiyati": 7930}, {"stokKodu": "200520032023", "stokAdi": "MTL135 TULİO TEK GÖVDE LAVABO BATARYASI GPD", "alisFiyati": 5430}, {"stokKodu": "200520032024", "stokAdi": "MTE135 TULİO TEK GÖVDE EVİYE BATARYASI GPD", "alisFiyati": 6000}, {"stokKodu": "200520032025", "stokAdi": "MLB135 TULİO LAVABO BATARYASI GPD", "alisFiyati": 4430}, {"stokKodu": "200520042011", "stokAdi": "GPD MİX NİNO BANYO BATARYASI BNB05", "alisFiyati": 7680}, {"stokKodu": "200520042021", "stokAdi": "GPD MİX NİNO EVYE BAT BDB05", "alisFiyati": 5450}, {"stokKodu": "200520042051", "stokAdi": "GPD MİX NİNO DÖNER L BORULU EVYE BAT.LEB05", "alisFiyati": 5380}, {"stokKodu": "200520042101", "stokAdi": "GPD NİNO TAHARET MUSLUĞU TMS05", "alisFiyati": 1000}, {"stokKodu": "200520052021", "stokAdi": "KÜRESEL RAKORLU MUSLUK (ÇELİK KOL)-KRS58", "alisFiyati": 1030}, {"stokKodu": "200520052041", "stokAdi": "ARMATÜR TEMİZLEYİCİ VE PARLATICI-TMZ01", "alisFiyati": 350}, {"stokKodu": "200520052051", "stokAdi": "FİLTRELİ ARA MUSLUK (SERAMİK SALMASTRALI)-FKM03", "alisFiyati": 750}, {"stokKodu": "200520053011", "stokAdi": "MTL55 SOLUS TEK GÖVDE LAVABO BATARYASI GPD", "alisFiyati": 4280}, {"stokKodu": "200520053061", "stokAdi": "MTE55 SOLUS TEK GÖVDE EVİYE BATARYASI GPD", "alisFiyati": 4400}, {"stokKodu": "200520053062", "stokAdi": "GPD MİX SOLUS LAVABO BATARYASI -MLB55", "alisFiyati": 4030}, {"stokKodu": "200520053121", "stokAdi": "ANKASTRE DUŞ BAŞLIĞI (TAVANDAN)-ADS11", "alisFiyati": 2900}, {"stokKodu": "200520053122", "stokAdi": "ANKASTRE DUŞ SETİ-ADS13", "alisFiyati": 3930}, {"stokKodu": "200520053123", "stokAdi": "ANKASTRE KABİN GAGA-GGR04", "alisFiyati": 1150}, {"stokKodu": "200520062011", "stokAdi": "DST26 ASKILI DUŞ SETİ TEK FONKSİYONLU KARE GPD", "alisFiyati": 950}, {"stokKodu": "200520063011", "stokAdi": "GPD MİX ATROS LAVABO BATARYASI -MLB65", "alisFiyati": 4300}, {"stokKodu": "200520063061", "stokAdi": "GPD MİX ATROS TEK GÖVDE EVİYE BATARYASI -MTE65", "alisFiyati": 4400}, {"stokKodu": "200520063141", "stokAdi": "GPD MİX ESPİNA SET ÜSTÜ LAVABO BAT.MSL70", "alisFiyati": 5230}, {"stokKodu": "200520063142", "stokAdi": "GPD ATROS SET ÜSTÜ LAVABO BAT. MSL65", "alisFiyati": 7850}, {"stokKodu": "200520063143", "stokAdi": "GPD ATROS SET ÜSTÜ LAVABO BAT. MSL65-C", "alisFiyati": 7980}, {"stokKodu": "200520072031", "stokAdi": "MTL65 ATROS TEK GÖVDE LAVABO GPD", "alisFiyati": 4250}, {"stokKodu": "200520072032", "stokAdi": "GPD Fotoselli Pisuvar Bataryası (sıva altı) FPB02", "alisFiyati": 7680}, {"stokKodu": "200520082021", "stokAdi": "ESPİNA PENCERE ÖNÜ BATARYASI-MPN70", "alisFiyati": 5880}, {"stokKodu": "200520106393", "stokAdi": "MTK70 ESPİNA TEK DELİKLİ KÜVET BATARYASI", "alisFiyati": 5050}, {"stokKodu": "200520118312", "stokAdi": "GPD MİX FELİS TEK GÖVDE LAVABO BATARYASI -MTL75", "alisFiyati": 4300}, {"stokKodu": "200520119310", "stokAdi": "MİX RİTMO ANKASTRE BANYO BATARYASI -MAB85 - GPD", "alisFiyati": 8430}, {"stokKodu": "200520124985", "stokAdi": "FOTOSELLİ LAVABO BATARYASI FLB11-2 GPD", "alisFiyati": 9230}, {"stokKodu": "200520124986", "stokAdi": "FOTOSELLİ LAVABO BATARYASI FLB10-S (SİYAH) GPD", "alisFiyati": 14430}, {"stokKodu": "200520125339", "stokAdi": "MİX ADRİO APLİKE LAVABO BATARYASI - MAL120", "alisFiyati": 5000}, {"stokKodu": "200520125396", "stokAdi": "ADRİO TEK SU GİRİŞLİ LAVABO BAT. - MTT120", "alisFiyati": 3330}, {"stokKodu": "200520130801", "stokAdi": "PROVİDO TEK LAVABO BATARYASI MLB155-A (ALTIN GÖRÜNÜM)", "alisFiyati": 7830}, {"stokKodu": "200520130803", "stokAdi": "PROVİDO BANYO BATARYASI MBB155-A (ALTIN GÖRÜNÜM)", "alisFiyati": 9350}, {"stokKodu": "200520130806", "stokAdi": "PROVİDO TEK GÖVDE EVİYE BATARYASI MTE155-A (ALTIN GÖRÜNÜM)", "alisFiyati": 9730}, {"stokKodu": "200520130813", "stokAdi": "PROVİDO BANYO BATARYASI MDB155-A (ALTIN GÖRÜNÜM)(TSEN817)", "alisFiyati": 6800}, {"stokKodu": "200520130814", "stokAdi": "PROVİDO SET ÜSTÜ LAVABO BATARYASI MSL155-A (ALTIN GÖRÜNÜM)", "alisFiyati": 9530}, {"stokKodu": "200520131301", "stokAdi": "TAURO LAVABO BATARYASI MLB150", "alisFiyati": 5430}, {"stokKodu": "200520131306", "stokAdi": "TAURO TEK GÖVDE EVİYE BATARYASI MTE150", "alisFiyati": 6750}, {"stokKodu": "200520131801", "stokAdi": "TAURO LAVABO BATARYASI MLB150-A (ALTIN GÖRÜNÜM)", "alisFiyati": 6500}, {"stokKodu": "200520131803", "stokAdi": "TAURO BANYO BATARYASI MBB150-A (ALTIN GÖRÜNÜM)", "alisFiyati": 9000}, {"stokKodu": "200520131804", "stokAdi": "TAURO BANYO BATARYASI MBB150 KROM", "alisFiyati": 7450}, {"stokKodu": "200520131806", "stokAdi": "TAURO EVİYE BATARYASI MTE150-A (ALTIN GÖRÜNÜM)", "alisFiyati": 8230}, {"stokKodu": "200520153031", "stokAdi": "MBB55 SOLUS BANYO BATARYASI GPD", "alisFiyati": 6530}, {"stokKodu": "200520153032", "stokAdi": "GPD SOLUS ANKASTRE DUŞ BATARYASI MAD55", "alisFiyati": 2980}, {"stokKodu": "200520153033", "stokAdi": "GPD ATROS ANKASTRE DUŞ BATARYASI MAD65", "alisFiyati": 3080}, {"stokKodu": "200520163011", "stokAdi": "MİX ATROS LAVABO BATARYASI -MLB65", "alisFiyati": 4300}, {"stokKodu": "200520163031", "stokAdi": "MBB65 ATROS BANYO BATARYASI GPD", "alisFiyati": 7400}, {"stokKodu": "200520163032", "stokAdi": "ATROS SPİRALLİ EVİYE BATARYASI (MES65-C)", "alisFiyati": 7880}, {"stokKodu": "200520163901", "stokAdi": "MİX ATROS ANKASTRE KÜVET BATARYASI MAK67 -GPD", "alisFiyati": 16330}, {"stokKodu": "200520193011", "stokAdi": "MİX RİTMO LAVABO BATARYASI -MLB85  -GPD", "alisFiyati": 5200}, {"stokKodu": "200520193031", "stokAdi": "MİX RİTMO BANYO BATARYASI -MBB85  -GPD", "alisFiyati": 7330}, {"stokKodu": "200520193061", "stokAdi": "MİX RİTMO TEK GÖVDE EVİYE BATARYASI -MTE85  -GPD", "alisFiyati": 6800}, {"stokKodu": "200520200011", "stokAdi": "FOTOSELLİ PİSUAR BATARYASI -FPB02", "alisFiyati": 7680}, {"stokKodu": "200520213011", "stokAdi": "MİX FUEGO LAVABO BATARYASI -MLB105  -GPD", "alisFiyati": 6480}, {"stokKodu": "200520213031", "stokAdi": "MİX FUEGO BANYO BATARYASI -MBB105  -GPD", "alisFiyati": 12980}, {"stokKodu": "200520213061", "stokAdi": "MİX FUEGO TEK GÖVDE EVİYE BATARYASI -MTE105  -GPD", "alisFiyati": 9880}, {"stokKodu": "200520213062", "stokAdi": "FUEGO KABİN BATARYASI-MKB105", "alisFiyati": 7280}, {"stokKodu": "200520253011", "stokAdi": "MİX ADRİO LAVABO BATARYASI MLB120", "alisFiyati": 3480}, {"stokKodu": "200520253021", "stokAdi": "MİX ADRİO DÖNER LAVABO BATARYASI -MDL120", "alisFiyati": 2980}, {"stokKodu": "200520253031", "stokAdi": "MİX ADRİO BANYO BATARYASI -MBB120", "alisFiyati": 5050}, {"stokKodu": "200520253032", "stokAdi": "ADRİO DUŞ BATARYASI MDB120", "alisFiyati": 4130}, {"stokKodu": "200520253061", "stokAdi": "MİX ADRİO TEK GÖVDE EVİYE BATARYASI -MTE120", "alisFiyati": 3580}, {"stokKodu": "200520253121", "stokAdi": "MİX ADRİO TEK GÖVDE LAVABO BATARYASI -MTL120", "alisFiyati": 3430}, {"stokKodu": "200520253131", "stokAdi": "MİX ADRİO APLİKE EVİYE BATARYASI MAE120", "alisFiyati": 5100}, {"stokKodu": "200520254951", "stokAdi": "ADRİO TAHARET BATARYASI-(MTB120)", "alisFiyati": 4600}, {"stokKodu": "200520601904", "stokAdi": "GPD 1/2 MİX ESPİNA ANKASTRE ARA KESME VALFİ ALTIN GÖRÜNÜM (AAK71-A)", "alisFiyati": 2800}, {"stokKodu": "200534323901", "stokAdi": "GPD 1/2 MİX ESPİNA ANKASTRE ARA KESME VALFİ - AAK71", "alisFiyati": 1780}, {"stokKodu": "200535289031", "stokAdi": "MTA160 PEDRA TAM ANKASTR BANYO BATARYASI GPD", "alisFiyati": 9430}, {"stokKodu": "200535289161", "stokAdi": "GPD GİLDO DUŞ BAT. MDB165-S", "alisFiyati": 7400}, {"stokKodu": "200535289951", "stokAdi": "MBB160 PEDRA BANYO BATARYASI GPD", "alisFiyati": 7650}, {"stokKodu": "200535289983", "stokAdi": "TAURO BANYO BATARYASI SİYAH MBB150-O", "alisFiyati": 8650}, {"stokKodu": "200535289984", "stokAdi": "GİLDO BANYO BATARYASI KROM+ROSE GOLD MBB165-K-R", "alisFiyati": 10030}, {"stokKodu": "200535289985", "stokAdi": "GİLDO BANYO BATARYASI MBB165-S SİYAH", "alisFiyati": 8930}, {"stokKodu": "200537318985", "stokAdi": "DUŞ PANELİ ALÜM.SİYAH DSP09", "alisFiyati": 21330}, {"stokKodu": "200538289984", "stokAdi": "MES160-S PEDRA  SPİRALLİ EVİYE BATARYASI KROM GPD", "alisFiyati": 8580}, {"stokKodu": "200538289985", "stokAdi": "ESPİNA SPİRALLİ EVİYE BATARYASI MES71 KROM", "alisFiyati": 6880}, {"stokKodu": "200538322951", "stokAdi": "MTE160 PEDRA TEK GÖVDE EVİYE BATARYASI GPD", "alisFiyati": 5650}, {"stokKodu": "200538322984", "stokAdi": "TAURO TEK GÖVDE EVİYE BAT. SİYAH MTE150-O", "alisFiyati": 8280}, {"stokKodu": "200541289951", "stokAdi": "MLB160 PEDRA LAVABO BATARYASI GPD", "alisFiyati": 4580}, {"stokKodu": "200541289981", "stokAdi": "TAURO LAVABO BATARYASI SİYAH MLB150-O", "alisFiyati": 6500}, {"stokKodu": "200541289982", "stokAdi": "GİLDO LAVABO BATARYASI MTE165-K-R KROM+ROSE GOLD", "alisFiyati": 6150}, {"stokKodu": "200541289983", "stokAdi": "GİLDO LAVABO BATARYASI MLB165-K-R KROM+ROSE GOLD", "alisFiyati": 6000}, {"stokKodu": "200541289984", "stokAdi": "GİLDO TEK GÖVDE EVİYE BATARYASI MTE165-S SİYAH", "alisFiyati": 5500}, {"stokKodu": "200541289985", "stokAdi": "GPD SET ÜSTÜ LAVABO BATARYASI MSL155", "alisFiyati": 7830}, {"stokKodu": "201251074251", "stokAdi": "ÇAMAŞIR MUSLUK REDİKSİYON-RDK07", "alisFiyati": 230}, {"stokKodu": "201252001461", "stokAdi": "SPREY TAHARET SETİ RED-(STS01)", "alisFiyati": 930}, {"stokKodu": "201764028101", "stokAdi": "UZATMA 1 CM -GPD (UZT01)", "alisFiyati": 130}, {"stokKodu": "201764028151", "stokAdi": "GPD UZATMA 1,5CM UZT02", "alisFiyati": 150}, {"stokKodu": "201764028201", "stokAdi": "GPD UZATMA 2 CM UZT03", "alisFiyati": 180}, {"stokKodu": "201764028251", "stokAdi": "GPD UZATMA 2,5CM UZT04", "alisFiyati": 230}, {"stokKodu": "201764028301", "stokAdi": "GPD UZATMA 3CM UZT05", "alisFiyati": 280}, {"stokKodu": "201764028401", "stokAdi": "GPD UZATMA 4CM UZT06", "alisFiyati": 350}, {"stokKodu": "201764028501", "stokAdi": "GPD UZATMA 5cm UZT07", "alisFiyati": 380}, {"stokKodu": "201821000060", "stokAdi": "ASKILI DUŞ SETİ DST37 TEK FONK. -GPD", "alisFiyati": 1100}, {"stokKodu": "201821000062", "stokAdi": "ARBEKA ASKILI DUŞ SETİ (TEK.FONK)-ADS15", "alisFiyati": 3930}, {"stokKodu": "201821000074", "stokAdi": "GPD SÜRGÜLÜ DUŞ SETİ 5FONKS. DST24", "alisFiyati": 8750}, {"stokKodu": "201821000075", "stokAdi": "MBB135 TULİO BANYO BATARYASI GPD", "alisFiyati": 6280}, {"stokKodu": "201821000091", "stokAdi": "AUG01 ANKASTRE ARA KESME UZATMA GRUBU (3 CM)(026)", "alisFiyati": 580}, {"stokKodu": "201821013071", "stokAdi": "SÜRGÜLÜ DUŞ TAKIMI 3 FONKSİYONLU -DST16-GPD-", "alisFiyati": 1430}, {"stokKodu": "201821013072", "stokAdi": "GPD SÜRGÜLÜ DUŞ SETİ (TEK FONKSİYONLU)-DST30", "alisFiyati": 3380}, {"stokKodu": "201821104032", "stokAdi": "DUŞ PANELİ BAMBU -DSP06 (20X150)", "alisFiyati": 25630}, {"stokKodu": "201821203302", "stokAdi": "ANKASTRE DUŞ SETİ (200X200) ADS05 - GPD", "alisFiyati": 3100}, {"stokKodu": "201821203303", "stokAdi": "SAG10-ANKASTRE DUŞ SIVA ALTI GRUBU(RİTMO-FUEGO)", "alisFiyati": 2080}, {"stokKodu": "200520254952", "stokAdi": "MAD65 ATROS ANKASTRE DUŞ BATARYASI (TSEN817)", "alisFiyati": 3080}, {"stokKodu": "2005202549523", "stokAdi": "ADS02 3 FONKSÜYONLU ANKASTRE DUŞ BAŞLIĞI (TSEN1112)", "alisFiyati": 1300}, {"stokKodu": "200520023112", "stokAdi": "ADS05 ANKASTRE DUŞ SETİ (200X200)", "alisFiyati": 3100}, {"stokKodu": "201821013075", "stokAdi": "DST51 ASKILI DUŞ SETİ (5 FONK. )", "alisFiyati": 1030}, {"stokKodu": "201821013076", "stokAdi": "DST26 ASKILI DUŞ SETİ TEK FONK. KARE", "alisFiyati": 950}, {"stokKodu": "200520010012", "stokAdi": "GPD FOTOSELLİ PİSUVAR BATARYASI SIVA ALTI -FPB02", "alisFiyati": 7680}, {"stokKodu": "200520130802", "stokAdi": "PROVİDO TEK LAVABO BATARYASI- MLB155", "alisFiyati": 6380}, {"stokKodu": "200520130807", "stokAdi": "PROVİDO TEK GÖVDE EVİYE BATARYASI MTE155", "alisFiyati": 8130}, {"stokKodu": "200520153034", "stokAdi": "GPD ATROS DUVARDAN ANKASTRE LAVABO BATARYASI-MDA65", "alisFiyati": 8550}, {"stokKodu": "200520163033", "stokAdi": "ATROS SPİRALLİ EVİYE BATARYASI 2 FONKSİYONLU -MES65", "alisFiyati": 7750}, {"stokKodu": "200538322986", "stokAdi": "GPD RETRO TEK GÖVDE EVİYE BATARYASI MTE180-B", "alisFiyati": 13630}, {"stokKodu": "200538322988", "stokAdi": "GPD RETRO TEK GÖVDE LAVABO  BATARYASI MTL180-R", "alisFiyati": 15100}, {"stokKodu": "200538322989", "stokAdi": "GPD RETRO TEK GÖVDE EVİYE  BATARYASI MTE180-R", "alisFiyati": 16200}, {"stokKodu": "201821203304", "stokAdi": "RİTMO TAM ANKASTRE BANYO BATARYASI-MTA85", "alisFiyati": 9080}, {"stokKodu": "200535289032", "stokAdi": "FUEGO TAM ANKASTRE BANYO BATARYASI-MTA105", "alisFiyati": 9330}, {"stokKodu": "201821203305", "stokAdi": "RİTMO ANKASTRE DUŞ BATARYASI-MAD85", "alisFiyati": 3200}, {"stokKodu": "200520130804", "stokAdi": "GPD PROVİDO BANYO BATARYASI-MBB155", "alisFiyati": 7680}, {"stokKodu": "200520062013", "stokAdi": "PUP02-POP-UP ÜNİTESİ (BASMALI NORMAL)-GPD", "alisFiyati": 1330}, {"stokKodu": "200520124987", "stokAdi": "FLB10-2 FOTOSELLİ LAVABO BATARYASI (TSEN15091) (TEK GİRİŞLİ)-GPD", "alisFiyati": 11400}, {"stokKodu": "201821013077", "stokAdi": "DST50-ASKILI DUŞ SETİ (5 FONK.)(TSEN1112)", "alisFiyati": 600}, {"stokKodu": "200538322990", "stokAdi": "GPD RETRO TEK GÖVDE EVİYE BATARYASI-MTE180-A", "alisFiyati": 15380}, {"stokKodu": "200520124988", "stokAdi": "FOTOSELLİ LAVABO BATARYASI (ÇİFT SU GİRİŞLİ)-FLB10-GPD", "alisFiyati": 13150}, {"stokKodu": "200520124989", "stokAdi": "POP-UP ÜNİTESİ (BASMALI-NORMAL/TAŞMA DELİKSİZ)-PUP05-GPD", "alisFiyati": 800}, {"stokKodu": "200520124990", "stokAdi": "DST19-3 KROM KARE YÖNLENDİRİCİLİ DUŞ SETİ (TEK FONKSİYONLU EL DUŞU + 200X200) GPD", "alisFiyati": 4800}, {"stokKodu": "200520124991", "stokAdi": "POP-UP ÜNİTESİ (BASMALI-NORMAL/TAŞMA DELİKSİZ)-PUP05-S-GPD", "alisFiyati": 1050}, {"stokKodu": "200520163902", "stokAdi": "MAK65 ATROS ANKASTRE KÜVET BATARYASI (3 DELİKLİ ) (TSEN817)-GPD", "alisFiyati": 17750}, {"stokKodu": "200538322991", "stokAdi": "MTL180-B GPD RETRO TEK GÖVDE LAVABO BATARYASI (TSEN817)(BAKIR OKSİT)", "alisFiyati": 12700}, {"stokKodu": "200520130805", "stokAdi": "GDV015-FPB02 GÖZ DEVRESİ GRUBU (YENİ FOTOSELLİ)-GPD", "alisFiyati": 7680}, {"stokKodu": "200520153035", "stokAdi": "MDA65-S ATROS DUVARDAN ANKASTRE LAVABO BATARYASI(SİYAH)", "alisFiyati": 10450}, {"stokKodu": "200520153036", "stokAdi": "MKA165-S GİLDO MİX KOMBİNE ANKASTRE BANYO BATARYASI (TSEN817)(SİYAH)", "alisFiyati": 22180}, {"stokKodu": "200520153037", "stokAdi": "ADS25 ANKASTRE DUŞ SETİ (TAVANDAN) (500X500)(TSEN1112)", "alisFiyati": 12200}, {"stokKodu": "200520153038", "stokAdi": "MTE65-BG ATROS TEK GÖVDE EVİYE BATARYASI(BEYAZ GRANİT KAPLAMA)(TSEN817)", "alisFiyati": 6350}, {"stokKodu": "200520153039", "stokAdi": "ADS23-S ANKASTRE DUŞ BAŞLIĞI TAVANDAN 400X400 SİYAH-GPD", "alisFiyati": 9400}, {"stokKodu": "200520153040", "stokAdi": "MCA156 PROVİDO MİX ÇEVİRMELİ ANKASTRE BAŞLIĞI TSEN817-GPD", "alisFiyati": 12050}, {"stokKodu": "201821013080", "stokAdi": "MKB65 ATROS ANKASTRE KABIN BATARYASI (TSEN817)", "alisFiyati": 6480}, {"stokKodu": "200535001655", "stokAdi": "MBB165 GİLDO BANYO BATARYASI GPD", "alisFiyati": 7400}, {"stokKodu": "200535011655", "stokAdi": "MTL165 GİLDO TEK GÖVDE LAVABO BATARYASI GPD", "alisFiyati": 4280}, {"stokKodu": "200535021655", "stokAdi": "MTE165 GİLDO TEK GÖVDE EVİYE BATARYASI GPD", "alisFiyati": 4500}, {"stokKodu": "200535001601", "stokAdi": "MTL160 PEDRA TEK GÖVDE LAVABO BATARYASI", "alisFiyati": 5300}, {"stokKodu": "200538001801", "stokAdi": "MTL180 RETRO TEK GÖVDE LAVABO BATARYASI GPD", "alisFiyati": 9500}, {"stokKodu": "200538011801", "stokAdi": "MTE180 RETRO TEK GÖVDE EVİYE BATARYASI GPD", "alisFiyati": 10380}, {"stokKodu": "200520000651", "stokAdi": "MBR65 ATROS BERBER BATARYASI", "alisFiyati": 5350}, {"stokKodu": "200520000121", "stokAdi": "FLB12 FOTOSELLİ LAVABO BATARYASI (MANUEL ISI KUMANDALI) -GPD", "alisFiyati": 13350}, {"stokKodu": "200538320041", "stokAdi": "AUG04 GPD ANKASTRE BANYO KABİN UZATMA GRUBU", "alisFiyati": 3730}, {"stokKodu": "200538000031", "stokAdi": "AUG03 GPD ANKASTRE BANYO KABİN UZATMA GRUBU", "alisFiyati": 3600}, {"stokKodu": "200538000051", "stokAdi": "AUG05 GPD ANKASTRE KABİN UZATMA GRUBU", "alisFiyati": 2350}, {"stokKodu": "200520012023", "stokAdi": "MAR71 ESPİNA ÇİFT AERATÖRLÜ ARITMA BATARYASI -GPD", "alisFiyati": 8080}, {"stokKodu": "200520013071", "stokAdi": "GGR12 ANKASTRE BATARYA GRUBU (YÖNLENDİRİCİLİ)(KARE)", "alisFiyati": 3380}, {"stokKodu": "200541281901", "stokAdi": "MİX QUADRO LAVABO BATARYASI -SİYAH MLB190-S", "alisFiyati": 6580}, {"stokKodu": "200541291901", "stokAdi": "MİX QUADRO BANYO BATARYASI -SİYAH MBB190-S", "alisFiyati": 14550}, {"stokKodu": "201821013191", "stokAdi": "YÖNLENDİRİCİLİ DUŞ SETİ DST19-3-S -SİYAH", "alisFiyati": 6850}, {"stokKodu": "200538010051", "stokAdi": "KKT05 FOTOSELLİ LAV. BAT. KUMANDA KUTUSU (FLB12) -GPD", "alisFiyati": 13350}, {"stokKodu": "200520050170", "stokAdi": "ANKASTRE TAHARET BATARYASI ATB170 -GPD", "alisFiyati": 2650}, {"stokKodu": "200535000261", "stokAdi": "ŞİBER VANA 2\" SBR26 (TSEN 12288) -GPD", "alisFiyati": 4180}, {"stokKodu": "200538163151", "stokAdi": "MEE65 ATROS ENDÜSTRİYEL EVİYE BATARYASI -GPD", "alisFiyati": 16530}, {"stokKodu": "200520124193", "stokAdi": "DST19-3-S SİYAH KARE YÖNLENDİRİCİLİ DUŞ SETİ (TEK FONKSİYONLU EL DUŞU + 200X200)-DST19-3-S GPD", "alisFiyati": 6850}, {"stokKodu": "201821013019", "stokAdi": "DST19-2 KROM OVAL YÖNLENDİRİCİLİ DUŞ SETİ (Ø200)(3 FONK.) -GPD", "alisFiyati": 4780}, {"stokKodu": "200520040049", "stokAdi": "KRS49 1/2\" KÜRESEL RAKORLU MUSLUK (ÇELİK K.) -GPD", "alisFiyati": 800}, {"stokKodu": "200535219161", "stokAdi": "PEDRA MİX ÇEVİRMELİ ANKASTRE BATARYA MCA161 -GPD", "alisFiyati": 11850}, {"stokKodu": "200535289986", "stokAdi": "GİLDO BANYO BATARYASI  MBB165-S-R", "alisFiyati": 10580}, {"stokKodu": "200535289987", "stokAdi": "MSL165-S-R GİLDO SET ÜSTÜ LAVABO", "alisFiyati": 11030}, {"stokKodu": "200520011601", "stokAdi": "MSL160-S PEDRA SET ÜSTÜ LAVABO BATARYASI SİYAH", "alisFiyati": 10680}, {"stokKodu": "200520010301", "stokAdi": "UMS30 RİOS UZUN MUSLUK GPD", "alisFiyati": 1000}];
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   ensureStokTanimEkColonlari(sheet);
   const data = sheet.getDataRange().getValues();
@@ -5361,7 +5418,7 @@ function getBekleyenAlisFaturalariHesapla_() {
   };
 
   // İşlenmiş (onaylanmış/reddedilmiş) fatura numaralarını oku.
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
   const durumData = durumSheet.getDataRange().getValues();
 
@@ -5389,7 +5446,23 @@ function getBekleyenAlisFaturalariHesapla_() {
     islenmis[fno] = { durum: durum, islemTarihi: String(durumData[i][4] || "") };
   }
   if (sahipsizSatirlar.length) {
-    sahipsizSatirlar.sort((a, b) => b - a).forEach(r => durumSheet.deleteRow(r));
+    // Bu bir OKUMA isteğidir ama satır siler → yazma kilidi altında yap (başkası aynı anda satır ekleyip
+    // silerken indeks kayması olmasın). Kilit alınamazsa temizlik bir sonraki okumaya kalır.
+    const _kl = kilitGetir_();
+    let _klAlindi = false;
+    try { _kl.waitLock(10000); _klAlindi = true; } catch (e) {}
+    if (_klAlindi) {
+      try {
+        // Kilit beklerken satırlar değişmiş olabilir: numaraları taze okuyup yeniden bul.
+        const taze = durumSheet.getDataRange().getValues();
+        const silinecekFnolar = {};
+        sahipsizSatirlar.forEach(r => { const d = durumData[r - 1]; if (d) silinecekFnolar[String(d[0])] = String(d[2] || ""); });
+        for (let i = taze.length - 1; i >= 1; i--) {
+          const f = String(taze[i][0] || "");
+          if (silinecekFnolar.hasOwnProperty(f) && String(taze[i][2] || "") === silinecekFnolar[f] && String(taze[i][1] || "") === "Onaylandı") durumSheet.deleteRow(i + 1);
+        }
+      } finally { _kl.releaseLock(); }
+    }
   }
 
   // Stok kodu StokTanimlari'nda kayıtlı mı diye kontrol için hazır kod seti.
@@ -5501,7 +5574,7 @@ function onaylaAlisFaturasi(body) {
   const faturaNo = String(body.faturaNo || "").trim();
   if (!faturaNo) return { ok: false, hata: "faturaNo gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
   const durumData = durumSheet.getDataRange().getValues();
   for (let i = 1; i < durumData.length; i++) {
@@ -5580,7 +5653,7 @@ function reddetAlisFaturasi(body) {
   const faturaNo = String(body.faturaNo || "").trim();
   if (!faturaNo) return { ok: false, hata: "faturaNo gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
   const durumData = durumSheet.getDataRange().getValues();
   for (let i = 1; i < durumData.length; i++) {
@@ -5602,7 +5675,7 @@ function sifirlaAlisFaturaDurum(body) {
   const faturaNo = String(body.faturaNo || "").trim();
   if (!faturaNo) return { ok: false, hata: "faturaNo gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
   const durumData = durumSheet.getDataRange().getValues();
   for (let i = durumData.length - 1; i >= 1; i--) {
@@ -5645,7 +5718,7 @@ function getBugunOzet() {
 
 function getFinansOzet() {
   return cacheOkuVeyaHesapla("finansOzet", 30, function () {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
 
   function toplamAl(sheetName, headers, kolonIdx) {
     const sheet = getOrCreateSheet(ss, sheetName, headers);
@@ -5702,7 +5775,7 @@ function getRaporOzet(body) {
     return true;
   }
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
 
   function ozetCikar(sheetName, headers, tarihIdx, tutarIdx) {
     const sheet = getOrCreateSheet(ss, sheetName, headers);
@@ -5894,7 +5967,7 @@ function getMuhasebeRaporu(body) {
     if (bitis && gun > bitis) return false;
     return true;
   }
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
 
   if (tip === "kasaRaporu") {
     const mod = String(body.mod || "aralik");
@@ -6638,7 +6711,7 @@ function getMuhasebeRaporu(body) {
 // Tüm banka yapısını (bankalar + hesaplar + pos + kredi kartları) tek seferde döner.
 function getBankaYapisi() {
   return cacheOkuVeyaHesapla("bankaYapisi", 300, function () {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const bSheet = getOrCreateSheet(ss, SHEETS.bankalar, ["ID","AD"]);
   const hSheet = getOrCreateSheet(ss, SHEETS.bankaHesaplari, ["ID","BANKA_ID","HESAP_ADI","IBAN"]);
   const pSheet = getOrCreateSheet(ss, SHEETS.posCihazlari, ["ID","BANKA_ID","POS_ADI","ACIKLAMA"]);
@@ -6669,7 +6742,7 @@ function getBankaYapisi() {
 function saveBanka(body) {
   const ad = String(body.ad || "").trim();
   if (!ad) return { ok: false, hata: "Banka adı gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.bankalar, ["ID","AD"]);
   let id = String(body.id || "").trim();
   if (id) {
@@ -6687,7 +6760,7 @@ function saveBanka(body) {
 function silBanka(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   // Bağlı hesap/pos/kart varsa silmeyi engelle
   const bagli = [SHEETS.bankaHesaplari, SHEETS.posCihazlari, SHEETS.krediKartlari].some(sheetName => {
     const sheet = ss.getSheetByName(sheetName);
@@ -6708,7 +6781,7 @@ function saveBankaHesap(body) {
   const hesapAdi = String(body.hesapAdi || "").trim();
   const bankaId = String(body.bankaId || "").trim();
   if (!hesapAdi || !bankaId) return { ok: false, hata: "Banka ve hesap adı gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.bankaHesaplari, ["ID","BANKA_ID","HESAP_ADI","IBAN"]);
   let id = String(body.id || "").trim();
   const satir = [id || null, bankaId, hesapAdi, String(body.iban || "")];
@@ -6728,7 +6801,7 @@ function saveBankaHesap(body) {
 function silBankaHesap(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.bankaHesaplari, ["ID","BANKA_ID","HESAP_ADI","IBAN"]);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -6741,7 +6814,7 @@ function savePos(body) {
   const posAdi = String(body.posAdi || "").trim();
   const bankaId = String(body.bankaId || "").trim();
   if (!posAdi || !bankaId) return { ok: false, hata: "Banka ve POS adı gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.posCihazlari, ["ID","BANKA_ID","POS_ADI","ACIKLAMA"]);
   let id = String(body.id || "").trim();
   const satir = [id || null, bankaId, posAdi, String(body.aciklama || "")];
@@ -6761,7 +6834,7 @@ function savePos(body) {
 function silPos(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.posCihazlari, ["ID","BANKA_ID","POS_ADI","ACIKLAMA"]);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -6774,7 +6847,7 @@ function saveKrediKarti(body) {
   const kartAdi = String(body.kartAdi || "").trim();
   const bankaId = String(body.bankaId || "").trim();
   if (!kartAdi || !bankaId) return { ok: false, hata: "Banka ve kart adı gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.krediKartlari, ["ID","BANKA_ID","KART_ADI","LIMIT"]);
   let id = String(body.id || "").trim();
   const satir = [id || null, bankaId, kartAdi, parseFloat(body.limit) || 0];
@@ -6794,7 +6867,7 @@ function saveKrediKarti(body) {
 function silKrediKarti(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.krediKartlari, ["ID","BANKA_ID","KART_ADI","LIMIT"]);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -6860,7 +6933,7 @@ function stokTanimSatiriNesneYap(row) {
 // getStokTanimListesi her çağrıldığında tek tek sorgu atmamak için.
 function stokGuncelMiktarHaritasi() {
   return cacheOkuVeyaHesapla("stokGuncelMiktarHaritasi", 60, function () {
-    const ss = SpreadsheetApp.openById(aktifSheetId_());
+    const ss = acikSS_();
     const sheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
     const data = sheet.getDataRange().getValues();
     const harita = {};
@@ -6885,7 +6958,7 @@ function stokGuncelMiktarHaritasi() {
 // Sonuç: { ok, tarih:"YYYY-MM-DD", kodlar:{ "<stokKodu>": [stok, ayrilmis, satilabilir], ... } }
 function getStokPanelSnapshot() {
   return cacheOkuVeyaHesapla("stokPanelSnapshot", 120, function () {
-    const ss = SpreadsheetApp.openById(aktifSheetId_());
+    const ss = acikSS_();
     const sheet = ss.getSheetByName("Stoklar");
     if (!sheet) return { ok: true, tarih: "", kodlar: {} };
     const data = sheet.getDataRange().getValues();
@@ -6930,7 +7003,7 @@ function getStokPanelSnapshot() {
 
 function getStokTanimListesi() {
   return cacheOkuVeyaHesapla("stokTanimListesi", 180, function () {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   ensureStokTanimEkColonlari(sheet);
   const data = sheet.getDataRange().getValues();
@@ -6973,7 +7046,7 @@ function markaKoduIleEslesenMarkaId_(stokKodu) {
 // (elle seçilmiş olabilir) DOKUNULMAZ — kullanıcı isterse zaten dilediği zaman elle değiştirebilir.
 // Stok Tanımları ekranındaki "🏷️ Marka Kodlarını İşle" butonundan tetiklenir.
 function stokTanimMarkaKoduIsleToplu() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   ensureStokTanimEkColonlari(sheet);
   const data = sheet.getDataRange().getValues();
@@ -7002,7 +7075,7 @@ function stokTanimMarkaKoduIsleToplu() {
 function saveStokTanim(body) {
   const stokAdi = String(body.stokAdi || "").trim();
   if (!stokAdi) return { ok: false, hata: "Stok adı gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   ensureStokTanimEkColonlari(sheet);
   const data = sheet.getDataRange().getValues();
@@ -7132,7 +7205,7 @@ function stokKoduDegistir(body) {
   const yeniKod = String(body.yeniKod || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
   if (!yeniKod) return { ok: false, hata: "Yeni stok kodu boş olamaz" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   let satirIdx = -1, eskiKod = "";
@@ -7179,7 +7252,7 @@ function stokKoduDegistir(body) {
 function silStokTanim(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -7206,7 +7279,7 @@ function saveStokTanimTopluce(body) {
   const kayitlar = Array.isArray(body.kayitlar) ? body.kayitlar : [];
   if (kayitlar.length === 0) return { ok: false, hata: "İçe aktarılacak kayıt bulunamadı" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   ensureStokTanimEkColonlari(sheet);
   const data = sheet.getDataRange().getValues();
@@ -7333,7 +7406,7 @@ function stokHareketOtomatikSil(ss, belgeNo) {
 // için henüz satır yoksa geriye dönük olarak oluşturur. Ayarlar/Rapor ekranından elle
 // tetiklenir, tekrar çalıştırılması güvenlidir (zaten işlenmiş belgeler atlanır).
 function stokHareketGecmisiDoldur() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const shSheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
   ensureStokHareketBelgeColonlari(shSheet);
   const shData = shSheet.getDataRange().getValues();
@@ -7460,7 +7533,7 @@ function stokHareketGecmisiDoldur() {
 // bakar, yoksa Satış/Alış/Alış İade'deki mevcut TOPLAM_TUTAR'ı kullanarak ekler.
 // Tekrar çalıştırmak güvenlidir (zaten var olan hareketler atlanır).
 function cariHareketGecmisiDoldur() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const hSheet = getOrCreateSheet(ss, SHEETS.cariHareketler, ["ID","CARI_ID","TARIH","TIP","TUTAR","ACIKLAMA","KAYIT_TARIHI","VADE"]);
   const hData = hSheet.getDataRange().getValues();
   const islenmisSet = {};
@@ -7594,7 +7667,7 @@ function stokHareketTopluEkle(body) {
   if (kayitlar.length === 0) return { ok: false, hata: "Kayıt bulunamadı" };
   const tarih = String(body.tarih || "").trim() || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd");
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
   ensureStokHareketBelgeColonlari(sheet);
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
@@ -7647,7 +7720,7 @@ function stokHareketTopluEkle(body) {
 // yerine SADECE Alış Fiyatı (maliyet) hücresini günceller — diğer alanlar (kod, marka,
 // birim vb.) olduğu gibi korunur.
 function stokTanimMaliyetGuncelle(id, alisFiyati) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
@@ -7696,7 +7769,7 @@ function seriFormatla(prefix, no, basamak) {
 }
 
 function getSeriTanimlari() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR);
   let data = sheet.getDataRange().getValues();
   if (data.length <= 1) {
@@ -7712,7 +7785,7 @@ function getSeriTanimlari() {
     sheet.getRange(2, 1, varsayilanlar.length, SERI_BASLIKLAR.length).setValues(varsayilanlar);
     data = sheet.getDataRange().getValues();
   } else {
-    const lock = LockService.getScriptLock();
+    const lock = kilitGetir_();
     lock.waitLock(10000);
     try {
       // Eski (TUR sütunu olmayan) tablolarda 6. sütun başlığını ekle.
@@ -7779,9 +7852,9 @@ function getSeriTanimlari() {
 function saveSeriTanim(body) {
   const ad = String(body.ad || "").trim();
   if (!ad) return { ok: false, hata: "Seri adı gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR);
-  const lock = LockService.getScriptLock();
+  const lock = kilitGetir_();
   lock.waitLock(10000);
   try {
     const data = sheet.getDataRange().getValues();
@@ -7803,9 +7876,9 @@ function saveSeriTanim(body) {
 function silSeriTanim(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR);
-  const lock = LockService.getScriptLock();
+  const lock = kilitGetir_();
   lock.waitLock(10000);
   try {
     const data = sheet.getDataRange().getValues();
@@ -7822,9 +7895,9 @@ function silSeriTanim(body) {
 function seriSonrakiNoUret(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR);
-  const lock = LockService.getScriptLock();
+  const lock = kilitGetir_();
   lock.waitLock(10000);
   try {
     const data = sheet.getDataRange().getValues();
@@ -7847,7 +7920,7 @@ function seriSonrakiNoUret(body) {
 function silStokHareket(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -7867,7 +7940,7 @@ function getStokHareketListesi(body) {
   const stokTanimId = String(body.stokTanimId || "");
 
   const tumListe = cacheOkuVeyaHesapla("stokHareketListesi", 120, function () {
-    const ss = SpreadsheetApp.openById(aktifSheetId_());
+    const ss = acikSS_();
     const sheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
     ensureStokHareketBelgeColonlari(sheet);
     const data = sheet.getDataRange().getValues();
@@ -7918,7 +7991,7 @@ function getSonIslemler(body) {
   const limit = parseInt((body && body.limit) || 20) || 20;
   const parcaBasi = Math.max(limit, 20);
   return cacheOkuVeyaHesapla("sonIslemler_" + limit, 20, function () {
-    const ss = SpreadsheetApp.openById(aktifSheetId_());
+    const ss = acikSS_();
     const liste = [];
 
     function sonSatirlar(sheet, adet) {
@@ -8044,7 +8117,7 @@ function siraliDizile(liste) {
 
 function getBirimListesi() {
   return cacheOkuVeyaHesapla("birimListesi", 300, function () {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.birimTanimlari, BIRIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   const sonuc = [];
@@ -8060,7 +8133,7 @@ function getBirimListesi() {
 function saveBirim(body) {
   const ad = String(body.ad || "").trim();
   if (!ad) return { ok: false, hata: "Birim adı gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.birimTanimlari, BIRIM_BASLIKLAR);
   let id = String(body.id || "").trim();
   if (id) {
@@ -8085,7 +8158,7 @@ function saveBirim(body) {
 function birimSiraGuncelle(body) {
   const sirali = Array.isArray(body.sirali) ? body.sirali : [];
   if (sirali.length === 0) return { ok: false, hata: "sirali gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.birimTanimlari, BIRIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   sirali.forEach((id, idx) => {
@@ -8100,7 +8173,7 @@ function birimSiraGuncelle(body) {
 function silBirim(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.birimTanimlari, BIRIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -8157,7 +8230,7 @@ function getBasitTanimListesi(tip) {
   const sheetAdi = BASIT_TANIM_SHEET_ADI[tip];
   if (!sheetAdi) return { ok: false, hata: "Geçersiz tanım tipi" };
   return cacheOkuVeyaHesapla(BASIT_TANIM_CACHE_ANAHTARI[tip], 300, function () {
-    const ss = SpreadsheetApp.openById(aktifSheetId_());
+    const ss = acikSS_();
     const sheet = getOrCreateSheet(ss, sheetAdi, BASIT_TANIM_BASLIKLAR);
     ensureBasitTanimKodKolonu(sheet);
     const data = sheet.getDataRange().getValues();
@@ -8185,7 +8258,7 @@ function saveBasitTanim(body) {
   } else {
     kod = ""; // bu tiplerde kod kullanılmaz
   }
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, sheetAdi, BASIT_TANIM_BASLIKLAR);
   ensureBasitTanimKodKolonu(sheet);
   metinKolonuGarantiEt_(sheet, 2); // AD  — "00", "01" gibi adlar sayıya dönüşmesin
@@ -8215,7 +8288,7 @@ function silBasitTanim(body) {
   if (!sheetAdi) return { ok: false, hata: "Geçersiz tanım tipi" };
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, sheetAdi, BASIT_TANIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -8231,7 +8304,7 @@ function basitTanimSiraGuncelle(body) {
   if (!sheetAdi) return { ok: false, hata: "Geçersiz tanım tipi" };
   const sirali = Array.isArray(body.sirali) ? body.sirali : [];
   if (sirali.length === 0) return { ok: false, hata: "sirali gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, sheetAdi, BASIT_TANIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   sirali.forEach((id, idx) => {
@@ -8275,7 +8348,7 @@ const MARKA_BASLIKLAR = ["ID", "KOD", "AD", "SIRA", "RENK"];
 
 function getMarkaListesi() {
   return cacheOkuVeyaHesapla("markaListesi", 300, function () {
-    const ss = SpreadsheetApp.openById(aktifSheetId_());
+    const ss = acikSS_();
     const sheet = getOrCreateSheet(ss, SHEETS.markalar, MARKA_BASLIKLAR);
     ensureMarkaRenkKolonu(sheet);
     const data = sheet.getDataRange().getValues();
@@ -8301,7 +8374,7 @@ function saveMarka(body) {
   const kod = String(body.kod || "").trim().toUpperCase().slice(0, 2);
   if (kod.length !== 2) return { ok: false, hata: "Marka kodu 2 karakter olmalı" };
   const renk = String(body.renk || "").trim();
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.markalar, MARKA_BASLIKLAR);
   ensureMarkaRenkKolonu(sheet);
   metinKolonuGarantiEt_(sheet, 2); // KOD — "01" gibi 2 haneli kodlar sayıya dönüşmesin
@@ -8326,7 +8399,7 @@ function saveMarka(body) {
 function silMarka(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.markalar, MARKA_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -8339,7 +8412,7 @@ function silMarka(body) {
 function markaSiraGuncelle(body) {
   const sirali = Array.isArray(body.sirali) ? body.sirali : [];
   if (sirali.length === 0) return { ok: false, hata: "sirali gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.markalar, MARKA_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   sirali.forEach((id, idx) => {
@@ -8359,7 +8432,7 @@ const PLASIYER_BASLIKLAR = ["ID", "AD", "SIRA", "TELEFON"];
 
 function getPlasiyerListesi() {
   return cacheOkuVeyaHesapla("plasiyerListesi", 300, function () {
-    const ss = SpreadsheetApp.openById(aktifSheetId_());
+    const ss = acikSS_();
     const sheet = getOrCreateSheet(ss, SHEETS.plasiyerler, PLASIYER_BASLIKLAR);
     const data = sheet.getDataRange().getValues();
     const sonuc = [];
@@ -8376,7 +8449,7 @@ function savePlasiyer(body) {
   const ad = String(body.ad || "").trim();
   if (!ad) return { ok: false, hata: "Plasiyer adı gerekli" };
   const telefon = String(body.telefon || "").trim();
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.plasiyerler, PLASIYER_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   let id = String(body.id || "").trim();
@@ -8399,7 +8472,7 @@ function savePlasiyer(body) {
 function silPlasiyer(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.plasiyerler, PLASIYER_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -8412,7 +8485,7 @@ function silPlasiyer(body) {
 function plasiyerSiraGuncelle(body) {
   const sirali = Array.isArray(body.sirali) ? body.sirali : [];
   if (sirali.length === 0) return { ok: false, hata: "sirali gerekli" };
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.plasiyerler, PLASIYER_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   sirali.forEach((id, idx) => {
@@ -8566,7 +8639,7 @@ function edmDurumTurkce_(kod) {
 // dönüyor. Gerçek düzeltmeyi (Cari bakiyeye dokunup dokunmama dahil) uygulayacak AYRI bir
 // fonksiyon henüz eklenmedi; kullanıcı bu önizlemeyi gördükten sonra karar verecek.
 function getAlisKdvGecmisListesi() {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
   const kSheet = getOrCreateSheet(ss, SHEETS.alisKalemleri,
@@ -8800,7 +8873,7 @@ function edmKendiBilgimiAl_(ayar, sessionId) {
 // (EDM_FATURA_SERI, EDM_FATURA_SAYAC_<yıl>) KALICI olarak tutuluyor. Her çağrıda +1
 // artar, asla geriye sarılmaz/tekrar kullanılmaz.
 function edmFaturaNoUret_() {
-  const lock = LockService.getScriptLock();
+  const lock = kilitGetir_();
   lock.waitLock(10000);
   try {
     const p = PropertiesService.getScriptProperties();
@@ -8821,7 +8894,7 @@ function edmFaturaNoUret_() {
 // UUID'sini Satış kaydına geri yazar (ERP ile GİB kaydı arasında numara
 // tutarlılığı için, ve UUID sonraki durum sorgulamalarında anahtar olarak kullanılır).
 function satisEfaturaNoKaydet_(satisId, efaturaNo, uuid, ublXml, gorselVeriJson) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   ensureSatisBelgeTipiColonu(sSheet);
@@ -8841,7 +8914,7 @@ function satisEfaturaNoKaydet_(satisId, efaturaNo, uuid, ublXml, gorselVeriJson)
 // Bir Satış kaydının daha önce EDM'e gönderilmiş olup olmadığını, gönderilmişse
 // hangi EFATURA_NO / EFATURA_UUID / EFATURA_DURUM ile kaydedildiğini döndürür.
 function satisEfaturaBilgisiAl_(satisId) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   ensureSatisBelgeTipiColonu(sSheet);
@@ -8944,7 +9017,7 @@ function edmResmiFaturaHTMLOlustur_(v) {
 // Sorgulanan portal durumunu (GetInvoiceStatus'tan gelen özet metni) Satış
 // kaydına önbelleğe alır — her açılışta tekrar sorgu atmamak için.
 function satisEfaturaDurumKaydet_(rowIndex, durumMetni) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   sSheet.getRange(rowIndex, 19).setValue(durumMetni);
@@ -9215,7 +9288,7 @@ function edmFaturaGonderTest(body) {
 const POS_HAREKET_BASLIKLAR = ["ID", "POS_HESAP_ID", "TARIH", "TIP", "TUTAR", "ACIKLAMA", "KAYIT_TARIHI"];
 
 function posHareketEkle(posHesapId, tarih, tip, tutar, aciklama) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.posHareketleri, POS_HAREKET_BASLIKLAR);
   const id = "ph_" + Date.now();
   sheet.appendRow([id, posHesapId, tarih, tip, tutar, aciklama,
@@ -9227,7 +9300,7 @@ function posHareketEkle(posHesapId, tarih, tip, tutar, aciklama) {
 // NOT: Bir işlem (ör. hedefi "Banka/Kredi Kartı" olan bir Ödeme) aynı öneke sahip
 // birden fazla satır yazmış olabilir — bu yüzden TÜM eşleşen satırlar silinir, ilkinde durulmaz.
 function posHareketSilByAciklamaOnPrefix(prefix) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.posHareketleri, POS_HAREKET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -9237,7 +9310,7 @@ function posHareketSilByAciklamaOnPrefix(prefix) {
 
 // Bir POS hesabının hareket dökümü (borç kayıtları toplamıyla birlikte).
 function getPosHareketleri(posHesapId) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.posHareketleri, POS_HAREKET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   const sonuc = [];
@@ -9267,7 +9340,7 @@ const BANKA_HESAP_HAREKET_BASLIKLAR = ["ID", "BANKA_HESAP_ID", "TARIH", "TIP", "
 
 function bankaHesapHareketEkle(bankaHesapId, tarih, tip, tutar, aciklama) {
   if (!bankaHesapId) return null;
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.bankaHesapHareketleri, BANKA_HESAP_HAREKET_BASLIKLAR);
   const id = "bh_" + Date.now();
   sheet.appendRow([id, bankaHesapId, tarih, tip, tutar, aciklama,
@@ -9278,7 +9351,7 @@ function bankaHesapHareketEkle(bankaHesapId, tarih, tip, tutar, aciklama) {
 
 // NOT: aynı gerekçeyle (bkz. posHareketSilByAciklamaOnPrefix) TÜM eşleşen satırlar silinir.
 function bankaHesapHareketSilByAciklamaOnPrefix(prefix) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.bankaHesapHareketleri, BANKA_HESAP_HAREKET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -9291,7 +9364,7 @@ function bankaHesapHareketSilByAciklamaOnPrefix(prefix) {
 // satır satır hesaplanıp eklenir — "Tüm hesaplar" seçiliyken bile her satır KENDİ hesabının
 // kronolojik bakiyesini taşır (data satırları zaten ekleniş sırasına göre kronolojiktir).
 function getBankaHesapHareketleri(bankaHesapId) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.bankaHesapHareketleri, BANKA_HESAP_HAREKET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   const sonuc = [];
@@ -9329,7 +9402,7 @@ const KREDI_KART_HAREKET_BASLIKLAR = ["ID", "KREDI_KART_ID", "TARIH", "TIP", "TU
 
 function krediKartHareketEkle(krediKartId, tarih, tip, tutar, aciklama) {
   if (!krediKartId) return null;
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.krediKartHareketleri, KREDI_KART_HAREKET_BASLIKLAR);
   const id = "kh_" + Date.now();
   sheet.appendRow([id, krediKartId, tarih, tip, tutar, aciklama,
@@ -9340,7 +9413,7 @@ function krediKartHareketEkle(krediKartId, tarih, tip, tutar, aciklama) {
 
 // NOT: aynı gerekçeyle (bkz. posHareketSilByAciklamaOnPrefix) TÜM eşleşen satırlar silinir.
 function krediKartHareketSilByAciklamaOnPrefix(prefix) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.krediKartHareketleri, KREDI_KART_HAREKET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -9350,7 +9423,7 @@ function krediKartHareketSilByAciklamaOnPrefix(prefix) {
 
 // Bir kredi kartının (veya tüm kartların) hareket dökümü — borç bakiyesi = Borç − Ödeme.
 function getKrediKartHareketleri(krediKartId) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.krediKartHareketleri, KREDI_KART_HAREKET_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   const sonuc = [];
@@ -9381,7 +9454,7 @@ function getKrediKartHareketleri(krediKartId) {
 const POS_BANKA_AKTARIM_BASLIKLAR = ["ID", "POS_HESAP_ID", "BANKA_HESAP_ID", "TARIH", "TUTAR", "ACIKLAMA", "KAYIT_TARIHI"];
 
 function getPosBankaAktarimListesi(posHesapId) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.posBankaAktarimlari, POS_BANKA_AKTARIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   const sonuc = [];
@@ -9422,7 +9495,7 @@ function savePosBankaAktarim(body) {
   if (masrafTutari >= tutar) return { ok: false, hata: "Komisyon/masraf tutarı, aktarılan tutardan küçük olmalı" };
   const netTutar = tutar - masrafTutari;
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.posBankaAktarimlari, POS_BANKA_AKTARIM_BASLIKLAR);
   const id = "pba_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
@@ -9457,7 +9530,7 @@ function silPosBankaAktarim(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.posBankaAktarimlari, POS_BANKA_AKTARIM_BASLIKLAR);
   const data = sheet.getDataRange().getValues();
   let bulundu = false;
@@ -9491,7 +9564,7 @@ function getUrunFiyatGecmisi(urunAdi) {
   const arananUrun = String(urunAdi || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase("tr");
   if (!arananUrun) return { ok: true, gecmis: [] };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,

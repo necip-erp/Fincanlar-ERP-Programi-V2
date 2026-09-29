@@ -13,7 +13,7 @@ function getStokHareketPenceresi(body) {
   const limit = Math.min(Math.max(parseInt(body.limit, 10) || 150, 1), 500);
   if (!kod) return { ok: true, satirlar: [], ozet: shpOzet_([]), yon: yon };
 
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   const oku = (ad) => {
     const s = ss.getSheetByName(ad);
     if (!s || s.getLastRow() < 2) return [];

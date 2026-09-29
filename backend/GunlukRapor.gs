@@ -237,7 +237,7 @@ function grKlasoruGetirVeyaOlustur_() {
 // Ana işlev: verilen gün (yyyy-MM-dd, boşsa bugün) için raporu üretir.
 // istenenBase64=true ise (buton çağrısında) dosyayı base64 olarak da döner.
 function gunlukIslemRaporuOlustur_(gunAnahtari, istenenBase64) {
-  const ss = SpreadsheetApp.openById(aktifSheetId_());
+  const ss = acikSS_();
   gunAnahtari = gunAnahtari || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd");
   const haritalar = grHaritalarOlustur_(ss);
   const kaynaklar = grKaynaklar_();
