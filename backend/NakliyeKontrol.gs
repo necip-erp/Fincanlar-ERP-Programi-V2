@@ -53,7 +53,7 @@ function nkSorunluFaturalariBul_() {
     (gruplar[fno] = gruplar[fno] || []).push({ sat: i + 1, r: veri[i] });
   }
 
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = SpreadsheetApp.openById(aktifSheetId_());
   const durumMap = {};
   const durumData = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR).getDataRange().getValues();
   for (let i = 1; i < durumData.length; i++) {
@@ -110,7 +110,7 @@ function nakliyeSorunluFaturalariSil(body) {
   const sonuc = { ok: true, silinenFatura: 0, silinenAlis: 0, atlanan: [] };
   if (!hedefler.length) return sonuc;
 
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = SpreadsheetApp.openById(aktifSheetId_());
   const silinecekSatirlar = [];
   const durumSilinecek = new Set();
   hedefler.forEach(f => {

@@ -505,6 +505,8 @@ body.giris-yapildi #login-ekran{display:none}
 .login-kutu .fld{margin-bottom:14px}
 .login-kutu .fld label{display:block;font-size:12px;font-weight:700;color:var(--text2);margin-bottom:5px}
 .login-kutu .fld input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg2);font-size:14px;font-family:inherit;box-sizing:border-box}
+.login-kutu .fld select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg2);color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box}
+.login-kutu .fld select:focus{outline:none;border-color:var(--yellow);box-shadow:0 0 0 3px var(--yellow-l)}
 .login-kutu .fld input:focus{outline:none;border-color:var(--yellow);background:var(--bg2);box-shadow:0 0 0 3px var(--yellow-l)}
 .login-kutu button{width:100%;padding:11px;border:none;border-radius:9px;background:var(--blue);color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px}
 .login-kutu button:disabled{opacity:.6;cursor:default}
@@ -518,7 +520,8 @@ body.giris-yapildi #login-ekran{display:none}
   <div class="login-kutu">
     <img src="./fincanlar-logo.png" alt="Fincanlar">
     <h1>Fincanlar ERP — Giriş</h1>
-    <div class="fld"><label>Kullanıcı Adı</label><input id="login-kullanici" type="text" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('login-parola').focus()"></div>
+    <div class="fld"><label>Kullanıcı Adı</label><input id="login-kullanici" type="text" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('login-yil').focus()"></div>
+    <div class="fld"><label>Çalışma Yılı</label><select id="login-yil" onkeydown="if(event.key==='Enter')document.getElementById('login-parola').focus()"><option value="2026">2026</option></select></div>
     <div class="fld"><label>Parola</label><input id="login-parola" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')girisDene()"></div>
     <div class="login-hata" id="login-hata"></div>
     <button id="login-btn" onclick="girisDene()">Giriş Yap</button>
@@ -1514,6 +1517,15 @@ setInterval(topbarSaatGuncelle, 10000);
       </div>
       <div id="kullanici-yonetimi-liste"><div class="cari-empty">Yükleniyor...</div></div>
     </div>
+    <div class="finans-panel" id="calisma-yili-panel" style="display:none">
+      <div class="rapor-baslik" style="margin-top:0">Çalışma Yılları</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Her yıl ayrı bir e-tabloda tutulur; giriş ekranında yıl seçilir. Yeni yıl, mevcut yılın kopyasından üretilir: tüm ayarlar, tanımlar, kullanıcılar ve kurallar aynen gelir; cariler, stok kartları, stok ve tüm hareketler sıfırdan başlar.</p>
+      <div id="calisma-yili-liste" style="margin-bottom:12px;font-size:13px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div class="fld" style="width:140px;margin-bottom:0"><label>Yeni Yıl</label><input id="yeni-yil-deger" type="text" maxlength="4" placeholder="2027"></div>
+        <button class="btn btn-primary" id="yeni-yil-btn" onclick="yeniCalismaYiliGonder()">+ Yeni Çalışma Yılı Oluştur</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2339,7 +2351,10 @@ function uygulamaKullanicisiUyGoster_(){
   try{
     const k = JSON.parse(localStorage.getItem("fincanlar_oturum_kullanici") || "null");
     const el = document.getElementById("kullanici-menu-ad");
-    if(el) el.textContent = k ? k.ad + (k.rol==="Admin" ? " (Admin)" : "") : "";
+    if(el){
+      const y = localStorage.getItem("fincanlar_calisma_yili");
+      el.textContent = k ? k.ad + (k.rol==="Admin" ? " (Admin)" : "") + (y ? " · " + y : "") : "";
+    }
   }catch(e){}
 }
 function kullaniciMenuAcKapat(ev){
@@ -2891,6 +2906,8 @@ function cariApiIstekYap_(url, postGovde){
 
 function cariApi(action, params, _tokenYenidenDenendi){
   const body = Object.assign({action: action}, params || {});
+  // Çalışma yılı: her istek seçili yılın e-tablosuna gider (giriş ekranında seçilir, oturum boyunca sabit).
+  if(!body.yil){ const _y = localStorage.getItem("fincanlar_calisma_yili"); if(_y) body.yil = _y; }
   // "girisYap" dışında her istek son alınan oturum token'ını taşır — backend
   // bunu doğrular, yoksa/süresi dolmuşsa oturumGecersiz:true ile döner.
   if(action !== "girisYap" && !body.token){
@@ -2945,7 +2962,7 @@ function cariApi(action, params, _tokenYenidenDenendi){
   });
 }
 // Veriyi DEĞİŞTİRMEYEN (ya da önbelleği ilgilendirmeyen) işlemler: bunlardan sonra önbellek temizlenmez.
-const CARI_API_YAZMA_DEGIL_ = /^(get|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
+const CARI_API_YAZMA_DEGIL_ = /^(get|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
 // Yapı/tanım verisini değiştiren işlemler (banka, hesap, pos, kart, seri, tanım, marka, plasiyer, birim...).
 const CARI_API_YAPI_ISLEMI_ = /(Banka|Hesap|Pos|KrediKart|Seri|BasitTanim|Marka|Plasiyer|Birim|AciklamaSablon|SiparisDurum|SiraGuncelle)/;
 
@@ -12669,6 +12686,30 @@ function kullaniciYonetimiKontrolEtVeYukle(){
   if(rol !== "Admin"){ panel.style.display = "none"; return; }
   panel.style.display = "";
   kullaniciYonetimiCiz();
+  const yp = document.getElementById("calisma-yili-panel"); if(yp){ yp.style.display = ""; calismaYiliListeCiz_(); }
+}
+function calismaYiliListeCiz_(){
+  const el = document.getElementById("calisma-yili-liste"); if(!el) return;
+  cariApi("calismaYillariGetir", {}).then(res=>{
+    if(!res || !res.ok) return;
+    const aktif = localStorage.getItem("fincanlar_calisma_yili");
+    el.innerHTML = "Mevcut yıllar: " + res.yillar.map(y=>`<b>${y}</b>${y===aktif?" (açık)":""}`).join(", ");
+  });
+}
+function yeniCalismaYiliGonder(){
+  const el = document.getElementById("yeni-yil-deger");
+  const yil = (el.value||"").trim();
+  if(!/^20\d\d$/.test(yil)){ alert("Yıl 4 haneli olmalı (ör. 2027)"); return; }
+  if(!confirm(yil + " çalışma yılı oluşturulsun mu?\n\nAyarlar, tanımlar, kullanıcılar ve kurallar aynen kopyalanır; cariler, stok kartları, stoklar ve tüm hareketler SIFIR başlar. Bu işlem birkaç dakika sürebilir.")) return;
+  const btn = document.getElementById("yeni-yil-btn");
+  btn.disabled = true; btn.textContent = "Oluşturuluyor...";
+  cariApi("yeniCalismaYiliOlustur", {yil}).then(res=>{
+    btn.disabled = false; btn.textContent = "+ Yeni Çalışma Yılı Oluştur";
+    if(!res || !res.ok){ alert((res&&res.hata)||"Oluşturulamadı"); return; }
+    el.value = "";
+    toastGoster(yil + " çalışma yılı hazır — çıkış yapıp girişte yılı seçebilirsiniz");
+    calismaYiliListeCiz_();
+  }).catch(()=>{ btn.disabled = false; btn.textContent = "+ Yeni Çalışma Yılı Oluştur"; alert("Sunucuya ulaşılamadı"); });
 }
 function kullaniciYonetimiCiz(){
   const el = document.getElementById("kullanici-yonetimi-liste");
@@ -14128,8 +14169,18 @@ window.addEventListener("beforeunload", function(e){
      Token yoksa uygulamaAcilisRutini() HİÇ ÇAĞRILMAZ — sadece login formu görünür,
      başarılı girişten sonra bir kez çağrılır. -->
 <script>
+function girisYilListesiYukle_(){
+  const sel = document.getElementById("login-yil"); if(!sel) return;
+  cariApi("calismaYillariGetir", {yil: "-"}).then(res=>{ // yıl istekte kullanılmaz, sadece listeyi alır
+    if(!res || !res.ok || !res.yillar || !res.yillar.length) return;
+    const kayitli = localStorage.getItem("fincanlar_calisma_yili");
+    const secili = (kayitli && res.yillar.indexOf(kayitli) >= 0) ? kayitli : res.varsayilan;
+    sel.innerHTML = res.yillar.map(y=>`<option value="${y}" ${y===secili?"selected":""}>${y}</option>`).join("");
+  }).catch(()=>{});
+}
 function girisEkraniGoster_(hataMesaji){
   document.body.classList.remove("giris-yapildi");
+  girisYilListesiYukle_();
   document.getElementById("login-hata").textContent = hataMesaji || "";
   const kAlan = document.getElementById("login-kullanici");
   if(kAlan && !kAlan.value) kAlan.focus();
@@ -14150,11 +14201,13 @@ function girisDene(){
   if(!kullaniciAdi || !parola){ hataEl.textContent = "Kullanıcı adı ve parola gerekli"; return; }
   hataEl.textContent = "";
   btn.disabled = true; btn.textContent = "Giriş yapılıyor...";
-  cariApi("girisYap", {kullaniciAdi, parola}).then(res=>{
+  const yil = (document.getElementById("login-yil")||{}).value || "";
+  cariApi("girisYap", {kullaniciAdi, parola, yil}).then(res=>{
     btn.disabled = false; btn.textContent = "Giriş Yap";
     if(!res || !res.ok){ hataEl.textContent = (res && res.hata) || "Giriş başarısız"; return; }
     onbellekTemizleHepsi_(); yapiOnbellekTemizle_(); // yeni oturum: önceki kullanıcının önbelleği kalmasın
     localStorage.setItem("fincanlar_oturum_token", res.token);
+    localStorage.setItem("fincanlar_calisma_yili", String(res.yil || yil));
     localStorage.setItem("fincanlar_oturum_kullanici", JSON.stringify({ad: res.kullaniciAdi, rol: res.rol}));
     document.getElementById("login-parola").value = "";
     document.body.classList.add("giris-yapildi");

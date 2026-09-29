@@ -93,7 +93,7 @@ function kdBacakNotu_(b) { if (KD_TOPLAYICI_) KD_TOPLAYICI_.push(b); }
 
 // ── Yardımcılar ──
 function kdSimdi_() { return Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"); }
-function kdYil_() { return parseInt(Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy"), 10); }
+function kdYil_() { return parseInt(aktifYil_(), 10); } // numara öneki çalışma yılına göre (2027 e-tablosu 2027000001'den başlar)
 function kdMetin_(v) { return v === null || v === undefined ? "" : (v instanceof Date ? hucreTarihStr(v) : String(v)); }
 function kdSayi_(v) { return parseFloat(v) || 0; }
 function kdBacakTuru_(k, tip) { return KD_BACAK_MODUL[k] + " " + tip; }
@@ -632,7 +632,7 @@ function kdGeriAlAnahtari_(ss, body) {
 function kdIsle_(action, body, result, bacaklar) {
   const meta = KD_ACTIONLAR[action];
   if (!meta || !result || result.ok === false || result.error) return;
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = SpreadsheetApp.openById(aktifSheetId_());
   if (meta.tur === "hepsiSenkron") { kdKaynagiOlmayanlariSilindiYap_(ss, meta.k); return; }
   const id = String(meta.id(body, result) || "");
   let key = meta.k;
@@ -730,7 +730,7 @@ function kdTumGirisleriUret_(dunya, ctx) {
 }
 
 function kayitDefteriBaslat(body) {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = SpreadsheetApp.openById(aktifSheetId_());
   const sheet = kdSheet_(ss);
   const dunya = kdDunyaOku_(ss);
   const ctx = kdBaglam_(ss);
@@ -774,7 +774,7 @@ function kayitDefteriBaslat(body) {
 // olmayan (Silindi) satırlar hesaplanamadığı için olduğu gibi kalır. Tekrar çalıştırmak güvenlidir. Bittiğinde bayrak
 // konur; getKayitDefteri "duzeltmeGerekli" bayrağını buna göre döner.
 function kayitDefteriTutarKoduDuzelt(body) {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = SpreadsheetApp.openById(aktifSheetId_());
   const sheet = kdSheet_(ss);
   const dunya = kdDunyaOku_(ss);
   const ctx = kdBaglam_(ss);
@@ -817,7 +817,7 @@ function kayitDefteriTutarKoduDuzelt(body) {
 // opts.tumu: bulgu listeleri kısaltılmaz ve her bulguya satır indeksi (_i) + düzeltme notları eklenir (Hataları Temizle için).
 function getKayitDefteriKontrol(opts) {
   opts = opts || {};
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = SpreadsheetApp.openById(aktifSheetId_());
   const sheet = kdSheet_(ss);
   const satirlar = kdTumSatirlar_(sheet);
   const dunya = kdDunyaOku_(ss);
@@ -945,7 +945,7 @@ function kayitDefteriHatalariTemizle(body) {
   const toplam = indeksler.length;
   if (body.onizleme || !toplam) return { ok: true, onizleme: !!body.onizleme, temizlenecek: toplam, sayac: say, nakliyeSupheli: kontrol.ozet.sayac.nakliyeSupheli || 0 };
 
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = SpreadsheetApp.openById(aktifSheetId_());
   const sheet = kdSheet_(ss);
   let silinen = 0;
   kdKilitli_(() => {
@@ -964,7 +964,7 @@ function kayitDefteriHatalariTemizle(body) {
 // body: { sayfa, adet, modul, islem, durum, arama, sorunlu, tarihBas, tarihSon }
 function getKayitDefteri(body) {
   body = body || {};
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const ss = SpreadsheetApp.openById(aktifSheetId_());
   const sheet = kdSheet_(ss);
   const satirlar = kdTumSatirlar_(sheet);
   const adet = Math.min(Math.max(parseInt(body.adet, 10) || 200, 1), 1000);
