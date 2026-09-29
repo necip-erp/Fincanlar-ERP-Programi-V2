@@ -158,7 +158,7 @@ function kdKilitli_(fn) {
 function kdNoAl_(sheet, adet) {
   const yil = kdYil_();
   const props = PropertiesService.getScriptProperties();
-  const anahtar = "KD2_SAYAC_" + yil;
+  const anahtar = "KD2_SAYAC_" + aktifYil_(); // "2026-2" gibi ek çalışma yılları kendi sayacını kullanır
   let son = parseInt(props.getProperty(anahtar) || "0", 10) || 0;
   // Özellik kaybolsa/eskise bile numaralar geri düşmesin: sayfadaki en büyük numarayla karşılaştır.
   const sonSatir = sheet.getLastRow();
@@ -181,7 +181,7 @@ function kdNoAl_(sheet, adet) {
 function kdModulNoAl_(modul, adet, satirlar) {
   const yil = kdYil_();
   const props = PropertiesService.getScriptProperties();
-  const anahtar = "KD2_MODULSAYAC_" + modul + "_" + yil;
+  const anahtar = "KD2_MODULSAYAC_" + modul + "_" + aktifYil_();
   let son = parseInt(props.getProperty(anahtar) || "0", 10) || 0;
   (satirlar || []).forEach(r => {
     if (String(r[KD_MODUL]) !== modul) return;

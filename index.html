@@ -1522,7 +1522,7 @@ setInterval(topbarSaatGuncelle, 10000);
       <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Her yıl ayrı bir e-tabloda tutulur; giriş ekranında yıl seçilir. Yeni yıl, mevcut yılın kopyasından üretilir: tüm ayarlar, tanımlar, kullanıcılar ve kurallar aynen gelir; cariler, stok kartları, stok ve tüm hareketler sıfırdan başlar.</p>
       <div id="calisma-yili-liste" style="margin-bottom:12px;font-size:13px"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
-        <div class="fld" style="width:140px;margin-bottom:0"><label>Yeni Yıl</label><input id="yeni-yil-deger" type="text" maxlength="4" placeholder="2027"></div>
+        <div class="fld" style="width:170px;margin-bottom:0"><label>Yeni Çalışma Yılı</label><input id="yeni-yil-deger" type="text" maxlength="7" placeholder="2027 veya 2026-2"></div>
         <button class="btn btn-primary" id="yeni-yil-btn" onclick="yeniCalismaYiliGonder()">+ Yeni Çalışma Yılı Oluştur</button>
       </div>
     </div>
@@ -12699,7 +12699,7 @@ function calismaYiliListeCiz_(){
 function yeniCalismaYiliGonder(){
   const el = document.getElementById("yeni-yil-deger");
   const yil = (el.value||"").trim();
-  if(!/^20\d\d$/.test(yil)){ alert("Yıl 4 haneli olmalı (ör. 2027)"); return; }
+  if(!/^20\d\d(-\d{1,2})?$/.test(yil)){ alert("Çalışma yılı 2027 ya da 2026-2 biçiminde olmalı"); return; }
   if(!confirm(yil + " çalışma yılı oluşturulsun mu?\n\nAyarlar, tanımlar, kullanıcılar ve kurallar aynen kopyalanır; cariler, stok kartları, stoklar ve tüm hareketler SIFIR başlar. Bu işlem birkaç dakika sürebilir.")) return;
   const btn = document.getElementById("yeni-yil-btn");
   btn.disabled = true; btn.textContent = "Oluşturuluyor...";
