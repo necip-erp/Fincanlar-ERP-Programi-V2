@@ -12703,7 +12703,7 @@ function yeniCalismaYiliGonder(){
   if(!confirm(yil + " çalışma yılı oluşturulsun mu?\n\nAyarlar, tanımlar, kullanıcılar ve kurallar aynen kopyalanır; cariler, stok kartları, stoklar ve tüm hareketler SIFIR başlar. Bu işlem birkaç dakika sürebilir.")) return;
   const btn = document.getElementById("yeni-yil-btn");
   btn.disabled = true; btn.textContent = "Oluşturuluyor...";
-  cariApi("yeniCalismaYiliOlustur", {yil}).then(res=>{
+  cariApi("yeniCalismaYiliOlustur", {yeniYil: yil}).then(res=>{
     btn.disabled = false; btn.textContent = "+ Yeni Çalışma Yılı Oluştur";
     if(!res || !res.ok){ alert((res&&res.hata)||"Oluşturulamadı"); return; }
     el.value = "";

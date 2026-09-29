@@ -24,9 +24,9 @@ function yilAyarSayfalari_() {
   ];
 }
 
-// body: { yil: "2027", kaynakYil?: "2026" } — sadece Admin. Boş, kurallar aynı yeni yıl e-tablosu üretir.
+// body: { yeniYil: "2027", kaynakYil?: "2026" } — sadece Admin. Boş, kurallar aynı yeni yıl e-tablosu üretir.
 function yeniCalismaYiliOlustur(body) {
-  const yil = String((body && body.yil) || "").trim();
+  const yil = String((body && body.yeniYil) || "").trim(); // NOT: body.yil = içinde çalışılan yıl (handleRequest); oluşturulacak yıl ayrı alandan gelir
   if (!/^20\d\d(-\d{1,2})?$/.test(yil)) return { ok: false, hata: "Çalışma yılı 2027 ya da 2026-2 biçiminde olmalı" };
   const kayit = yilKayitlari_();
   if (kayit[yil]) return { ok: false, hata: yil + " çalışma yılı zaten var" };
