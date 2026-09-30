@@ -724,6 +724,7 @@ setInterval(topbarSaatGuncelle, 10000);
           <input id="stoktanim-ara" placeholder="Ürün ara..." oninput="stokTanimAramaFiltrele(this.value)">
           <button class="cari-add-btn" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);width:auto;padding:0 10px;font-size:12px;font-weight:700" onclick="stokTanimIceAktarModalAc()" title="Excel'den içe aktar">📥 İçe Aktar</button>
           <button class="cari-add-btn" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);width:auto;padding:0 10px;font-size:12px;font-weight:700" onclick="stokTanimMarkaKoduIsleUygula()" title="Marka alanı boş olan stok kartlarında, stok kodunun ilk 2 hanesini Marka Tanımlama'daki kodlarla eşleştirip otomatik doldurur">🏷️ Marka Kodlarını İşle</button>
+          <button class="cari-add-btn" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);width:auto;padding:0 10px;font-size:12px;font-weight:700" onclick="stokTanimOlcuBirimIsleUygula()" title="Adında 60X120, 45X45, 42,5X42,5, 20X90 veya 20X120 geçen tüm stok kartlarının birimini m² yapar">📐 m² Ölçülerini İşle</button>
           <button id="stoktanim-eski-aktar-btn" style="display:none;background:var(--bg3);color:var(--text2);border:1px solid var(--border);border-radius:8px;width:auto;padding:0 10px;font-size:12px;font-weight:700;cursor:pointer" class="cari-add-btn" onclick="eskiPanelStokKartlariAktar()" title="Eski stok panelindeki ürünleri stok kartı olarak açar (miktar aktarılmaz). Sadece Admin.">📥 Eski Paneldeki Kartlar</button>
           <button class="cari-add-btn" onclick="stokTanimModalAc()" title="Yeni ürün tanımla">+</button>
         </div>
@@ -13551,6 +13552,20 @@ function stokTanimMarkaKoduIsleUygula(){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
+
+// ★ EKLENDİ (30 Eyl 2026): Stok adında 60X120 / 45X45 / 42,5X42,5 / 20X90 / 20X120 geçen kartların birimini m² yapar.
+function stokTanimOlcuBirimIsleUygula(){
+  cariApi("stokTanimOlcuBirimIsleToplu", {onizleme:true}).then(on=>{
+    if(!on.ok){ alert("Hata: "+(on.hata||"bilinmiyor")); return; }
+    if(!on.degisecek){ alert(`Değiştirilecek kart yok. Bu ölçülerde ${on.eslesen} kart var, hepsi zaten m².`); return; }
+    if(!confirm(`Adında 60X120, 45X45, 42,5X42,5, 20X90 veya 20X120 geçen ${on.eslesen} stok kartı bulundu.\n• ${on.degisecek} kartın birimi m² yapılacak.\n• ${on.zatenM2} kart zaten m².\nDevam edilsin mi?`)) return;
+    cariApi("stokTanimOlcuBirimIsleToplu", {}).then(res=>{
+      if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+      stokTanimListesiYukle();
+      alert(`${res.guncellenen} stok kartının birimi m² yapıldı (çalışma yılı: ${res.yil}).`);
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
 
 // ★ EKLENDİ (30 Eyl 2026): Eski stok panelindeki ürünleri bu çalışma yılında STOK KARTI olarak açar.
 // Miktar aktarılmaz. Önce kaç kart açılacağını gösterir, onay alınca yazar. Kodu zaten olan atlanır.

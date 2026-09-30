@@ -1155,6 +1155,7 @@ function handleRequest(e) {
       case "silStokTanim":        result = silStokTanim(body); break;
       case "stokTanimMarkaKoduIsleToplu": result = stokTanimMarkaKoduIsleToplu(); break;
       case "eskiPanelStokKartlariniAktar": result = eskiPanelStokKartlariniAktar(body); break;
+      case "stokTanimOlcuBirimIsleToplu": result = stokTanimOlcuBirimIsleToplu(body); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
       case "getBirimListesi": result = getBirimListesi(); break;
       case "saveBirim":       result = saveBirim(body); break;
@@ -7071,11 +7072,57 @@ function stokTanimMarkaKoduIsleToplu() {
   return { ok: true, guncellenen: guncellenen };
 }
 
+// ★ EKLENDİ (30 Eyl 2026): Stok adında şu ölçülerden biri geçen kartların birimi m² (kayıtlı değer "m2") olur:
+// 60X120, 45X45, 42,5X42,5, 20X90, 20X120. "X" yerine x, * veya × ve "42,5" yerine "42.5" yazılması fark etmez;
+// "160X120" gibi başka ölçü içinde kalan rakamlar eşleşmez (sayılar tam karşılaştırılır).
+const M2_OLCULER_ = [[60, 120], [45, 45], [42.5, 42.5], [20, 90], [20, 120]];
+function stokAdiM2OlcusuMu_(stokAdi) {
+  const ad = String(stokAdi || "").toUpperCase().replace(/[*×]/g, "X");
+  const re = /(?<![\d.,])(\d{1,3}(?:[.,]\d)?)\s*X\s*(\d{1,3}(?:[.,]\d)?)(?![.,]?\d)/g;
+  let m;
+  while ((m = re.exec(ad)) !== null) {
+    const en = parseFloat(m[1].replace(",", ".")), boy = parseFloat(m[2].replace(",", "."));
+    for (let i = 0; i < M2_OLCULER_.length; i++) {
+      if (Math.abs(en - M2_OLCULER_[i][0]) < 0.01 && Math.abs(boy - M2_OLCULER_[i][1]) < 0.01) return true;
+    }
+  }
+  return false;
+}
+// Çalışılan yıldaki tüm stok kartlarını tarar; adında m² ölçüsü olup birimi zaten m² olmayanları m² yapar.
+// body.onizleme === true → yazmadan sadece sayıları döner.
+function stokTanimOlcuBirimIsleToplu(body) {
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  ensureStokTanimEkColonlari(sheet);
+  const data = sheet.getDataRange().getValues();
+  const birimler = [];
+  let eslesen = 0, zatenM2 = 0, degisecek = 0;
+  for (let i = 1; i < data.length; i++) {
+    let birim = data[i][3];
+    if (data[i][0] && stokAdiM2OlcusuMu_(data[i][2])) {
+      eslesen++;
+      const b = String(birim || "").trim().toLowerCase();
+      if (b === "m2" || b === "m²") zatenM2++;
+      else { birim = "m2"; degisecek++; }
+    }
+    birimler.push([birim]);
+  }
+  if (body && body.onizleme) return { ok: true, onizleme: true, eslesen: eslesen, zatenM2: zatenM2, degisecek: degisecek };
+  if (degisecek > 0) {
+    sheet.getRange(2, 4, birimler.length, 1).setValues(birimler);
+    SpreadsheetApp.flush();
+    cacheTemizle(["stokTanimListesi"]);
+    veriSurumuArtir_();
+  }
+  return { ok: true, eslesen: eslesen, zatenM2: zatenM2, guncellenen: degisecek, yil: aktifYil_() };
+}
+
 // ★ EKLENDİ (30 Eyl 2026): ESKİ STOK PANELİNDEKİ ÜRÜNLERİ STOK KARTI OLARAK AKTAR — SADECE KART.
 // Kaynak: temel yıl e-tablosundaki "Stoklar" sayfasının EN SON tarihli yüklemesi (STOK_KODU, STOK_ADI).
 // Hedef: şu an çalışılan yılın StokTanimlari sayfası (ör. "2026-2"). Miktar/stok hareketi YAZILMAZ
 // (Merkez/Ayrılmış/Satılabilir miktarları aktarılmaz; stok 0'dan başlar). Stok kodu hedefte zaten varsa
-// atlanır (tekrar çalıştırmak güvenli). Marka, stok kodunun ilk 2 hanesinden Marka Tanımlama'ya göre atanır.
+// atlanır (tekrar çalıştırmak güvenli). Marka, stok kodunun ilk 2 hanesinden Marka Tanımlama'ya göre atanır;
+// adında m² ölçüsü (bkz. stokAdiM2OlcusuMu_) geçenlerin birimi m2, diğerlerinin adet olur.
 // body.onizleme === true → hiçbir şey yazmadan kaç kart açılacağını söyler.
 function eskiPanelStokKartlariniAktar(body) {
   const kaynakSS = SpreadsheetApp.openById(SHEET_ID_TEMEL_);
@@ -7126,7 +7173,7 @@ function eskiPanelStokKartlariniAktar(body) {
     if (!ad) { adsiz++; continue; }
     const markaId = markaHaritasi[kodB.slice(0, 2)] || "";
     if (!markaId) markasiz++;
-    yeni.push(["sk_" + t0 + "_" + yeni.length, kod, ad, "adet", 0, "", 0, 0, 0, 0, simdi, String(markaId), "", "", "", "", 0, "", 20, 20]);
+    yeni.push(["sk_" + t0 + "_" + yeni.length, kod, ad, stokAdiM2OlcusuMu_(ad) ? "m2" : "adet", 0, "", 0, 0, 0, 0, simdi, String(markaId), "", "", "", "", 0, "", 20, 20]);
   }
   if (body && body.onizleme) {
     return { ok: true, onizleme: true, kaynakTarih: sonTarih, acilacak: yeni.length, zatenVar: zatenVar, adsiz: adsiz, markasiz: markasiz };
