@@ -6384,7 +6384,7 @@ function alisDetayCiz(res){
       <button class="btn btn-danger" onclick="alisSilOnay('${a.id}')">🗑 Alışı Sil</button>
     </div>
     <table class="hareket-tbl">
-      <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat<br><span style="font-size:10px;font-weight:600;opacity:.75">(Kdv Hariç)</span></th><th>Kdv%</th><th>Tutar<br><span style="font-size:10px;font-weight:600;opacity:.75">(Kdv Dahil)</span></th><th></th></tr></thead>
+      <thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat<br><span style="font-size:10px;font-weight:600;opacity:.75">(Kdv Hariç)</span></th><th>Kdv%</th><th>Tutar<br><span style="font-size:10px;font-weight:600;opacity:.75">(Kdv Dahil)</span></th><th>Satılan Cari</th><th></th></tr></thead>
       <tbody>
         ${kalemler.map(k=>`
           <tr>
@@ -6395,6 +6395,7 @@ function alisDetayCiz(res){
             <td>${fiyatFormat(k.birimFiyat)}</td>
             <td>${k.kdvOrani||0}</td>
             <td>${paraFormat(k.tutar)}</td>
+            <td>${k.satilanCariId ? `<div>🛒 <b>${htmlKacis(k.satilanCariAd||'')}</b></div>${k.satisVar===true ? '<div style="font-size:11px;color:#2e7d32">✔ Bu cariye satış/sipariş girilmiş</div>' : (k.satisVar===false ? '<div style="font-size:11px;color:#c62828;font-weight:700">⚠ Bu cariye bu ürün için satış/sipariş girilmemiş</div>' : '')}` : '—'}</td>
             <td style="white-space:nowrap">${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını sekme olarak aç">📊</button>` : ''}${k.stokKodu ? ` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokTaniminaGitYeniSekmede('${k.stokKodu.replace(/'/g,"\\'")}')" title="Bu ürünün Stok Tanımını sekme olarak aç">📇</button>` : ''}</td>
           </tr>`).join("")}
       </tbody>
@@ -6435,7 +6436,7 @@ function alisModalAc(duzenle){
     ? duzenle.kalemler.map(k=>{
         const isk = parseFloat(k.iskontoYuzde)||0;
         const fiyat = (isk>0 && parseFloat(k.brutFiyat)>0) ? parseFloat(k.brutFiyat) : k.birimFiyat;
-        return {urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:fiyat, iskontoYuzde:isk, stokKodu:k.stokKodu||"", kdvOrani:k.kdvOrani||0, netKilit:k.birimFiyat};
+        return {urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:fiyat, iskontoYuzde:isk, stokKodu:k.stokKodu||"", kdvOrani:k.kdvOrani||0, netKilit:k.birimFiyat, satilanCariId:k.satilanCariId||"", satilanCariAd:k.satilanCariAd||""};
       })
     : [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""}];
   if(!_cariYuklendi) cariListesiYukle();
@@ -6485,7 +6486,7 @@ function alisModalAc(duzenle){
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
       <div class="satis-kalem-basliklar">
         <span class="satis-kalem-stokkodu">Stok Kodu</span><span style="flex:0 0 24px;padding:0"></span>
-        <span style="flex:1">Ürün</span><span style="flex:0 0 68px;padding:0"></span>
+        <span style="flex:1">Ürün</span><span style="flex:0 0 68px;padding:0"></span><span style="flex:0 0 138px;padding:0">Satılan Cari</span>
         <span class="satis-kalem-miktar">Miktar</span><span class="satis-kalem-birim">Birim</span>
         <span class="satis-kalem-fiyat">Birim Fiyat</span><span class="satis-kalem-yuzde">İsk.%</span><span class="satis-kalem-yuzde">Kdv%</span>
         <span style="flex:0 0 22px;padding:0"></span>
@@ -6583,6 +6584,23 @@ function alisKalemEkleUI(){
   alisKalemlerCiz();
 }
 
+// "Satılan Ürün" düğmesi: bu alış kalemi bir cariye satılan ürünün tedariği ise, hangi cariye
+// satıldığı kalemle birlikte faturaya kaydedilir (satış/sipariş sonradan girilmeyi unutulmasın diye).
+function alisKalemSatilanSec(idx){
+  rehberAc('cari', c=>{
+    const k = _yeniAlisKalemleri[idx];
+    if(!k || !c) return;
+    k.satilanCariId = c.id; k.satilanCariAd = c.ad;
+    alisKalemlerCiz();
+  });
+}
+function alisKalemSatilanTemizle(idx){
+  const k = _yeniAlisKalemleri[idx];
+  if(!k) return;
+  k.satilanCariId = ""; k.satilanCariAd = "";
+  alisKalemlerCiz();
+}
+
 function alisKalemSilUI(idx){
   _yeniAlisKalemleri.splice(idx,1);
   alisKalemlerCiz();
@@ -6658,6 +6676,10 @@ function alisKalemlerCiz(){
       <label style="display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text3);flex:0 0 68px;white-space:nowrap" title="Bu kalem bir stok kartına bağlı değil (hizmet/nakliye/masraf gibi) — stoktan düşülmez">
         <input type="checkbox" style="width:auto" ${k.stoksuz?'checked':''} onchange="alisKalemAlanDegisti(${idx},'stoksuz',this.checked); alisKalemlerCiz()">Stoksuz
       </label>
+      <span style="flex:0 0 138px;display:flex;align-items:center;gap:2px">
+        <button type="button" class="btn" style="flex:1;min-width:0;font-size:11px;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${k.satilanCariId?'background:var(--accent);color:#fff;border-color:var(--accent)':''}" title="${k.satilanCariId ? htmlKacis('Satılan cari: '+(k.satilanCariAd||'')+' — değiştirmek için tıkla') : 'Bu kalem bir cariye satılan ürünün tedariği ise tıkla ve hangi cariye satıldığını seç'}" onclick="alisKalemSatilanSec(${idx})">🛒 ${k.satilanCariId ? htmlKacis(k.satilanCariAd||'Seçili') : 'Satılan Ürün'}</button>
+        ${k.satilanCariId ? `<span class="hk-sil" style="flex:0 0 18px;text-align:center" title="Satılan cari bilgisini kaldır" onclick="alisKalemSatilanTemizle(${idx})">✕</span>` : ''}
+      </span>
       <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="alisKalemAlanDegisti(${idx},'miktar',this.value)" onblur="kutuMiktarUyumKontrol('${htmlKacis(k.stokKodu||'')}', this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `alisKalemAlanDegisti(${idx},'birim',this.value)`)}
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="alisKalemAlanDegisti(${idx},'birimFiyat',this.value)">

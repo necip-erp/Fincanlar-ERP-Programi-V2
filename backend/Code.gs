@@ -539,6 +539,35 @@ function ensureAlisKalemBrutIskontoColonlari_orj_(sheet) {
   }
 }
 
+// Alış kaleminin "Satılan Ürün" bilgisi: bu alış kalemi hangi cariye satılan ürünün tedariği?
+// AlisKalemleri 12. kolon SATILAN_CARI_ID, 13. kolon SATILAN_CARI_AD (30 Eyl 2026 isteği).
+function ensureAlisKalemSatilanCariColonlari_orj_(sheet) {
+  const h12 = sheet.getRange(1, 12).getValue();
+  if (String(h12 || "") !== "SATILAN_CARI_ID") {
+    sheet.getRange(1, 12).setValue("SATILAN_CARI_ID").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  const h13 = sheet.getRange(1, 13).getValue();
+  if (String(h13 || "") !== "SATILAN_CARI_AD") {
+    sheet.getRange(1, 13).setValue("SATILAN_CARI_AD").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  metinKolonuGarantiEt_(sheet, 12);
+}
+
+// Kalemlerdeki satilanCariId değerlerini cari listesinden doğrulayıp adıyla birlikte [id, ad] döner.
+function satilanCariCoz_(ss, k, cariAdHaritasi) {
+  const id = String(k.satilanCariId || "").trim();
+  if (!id) return ["", ""];
+  return [id, cariAdHaritasi[id] || String(k.satilanCariAd || "").trim()];
+}
+function cariAdHaritasiOlustur_(ss) {
+  const map = {};
+  const cSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
+    ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH"]);
+  const cData = cSheet.getDataRange().getValues();
+  for (let i = 1; i < cData.length; i++) { const id = String(cData[i][0] || ""); if (id) map[id] = String(cData[i][2] || ""); }
+  return map;
+}
+
 // Alışlar sayfasında belge düzeyi (fatura altı) manuel ek indirim tutarı — Satış
 // modülündeki "Tutar İskontosu" ile aynı fikir, Alış tarafında da istendi.
 function ensureAlisTutarIskontosuColonu_orj_(sheet) {
@@ -2898,6 +2927,7 @@ function getAlisDetay(alisId) {
   ensureAlisKalemStokKoduColonu(kSheet);
   ensureAlisKalemKdvColonu(kSheet);
   ensureAlisKalemBrutIskontoColonlari(kSheet);
+  ensureAlisKalemSatilanCariColonlari(kSheet);
   ensureAlisTutarIskontosuColonu(aSheet);
   ensureAlisProjeKoduColonu(aSheet);
   ensureAlisFaturaTipiColonu(aSheet);
@@ -2944,6 +2974,32 @@ function getAlisDetay(alisId) {
       birimFiyat: birimFiyat, tutar: parseFloat(row[6]) || 0,
       stokKodu: String(row[7] || ""), kdvOrani: parseFloat(row[8]) || 0,
       brutFiyat: parseFloat(row[9]) || birimFiyat, iskontoYuzde: parseFloat(row[10]) || 0,
+      satilanCariId: String(row[11] || ""), satilanCariAd: String(row[12] || ""),
+    });
+  }
+
+  // "Satılan Ürün" kontrolü: kalem bir cariye satılan ürünün tedariği olarak işaretliyse, o cariye
+  // bu stok koduyla girilmiş bir Satış/Sipariş/Fatura (Teklif hariç) var mı? Yoksa detayda uyarı çıkar.
+  if (kalemler.some(k => k.satilanCariId && k.stokKodu)) {
+    const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+      ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+    const sData = sSheet.getDataRange().getValues();
+    const cariSatisIdleri = {}; // satisId -> cariId (Teklif hariç)
+    for (let i = 1; i < sData.length; i++) {
+      if (String(sData[i][8] || "") === "Teklif") continue;
+      cariSatisIdleri[String(sData[i][0] || "")] = String(sData[i][2] || "");
+    }
+    const skSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
+      ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
+    const skData = skSheet.getDataRange().getValues();
+    const satilmis = {}; // cariId|stokKodu -> true
+    for (let i = 1; i < skData.length; i++) {
+      const cid = cariSatisIdleri[String(skData[i][1] || "")];
+      const kod = String(skData[i][10] || "").trim();
+      if (cid && kod) satilmis[cid + "|" + kod] = true;
+    }
+    kalemler.forEach(k => {
+      if (k.satilanCariId && k.stokKodu) k.satisVar = !!satilmis[k.satilanCariId + "|" + String(k.stokKodu).trim()];
     });
   }
   return { ok: true, alis: alis, kalemler: kalemler };
@@ -2992,6 +3048,7 @@ function saveAlis(body) {
   ensureAlisKalemStokKoduColonu(kSheet);
   ensureAlisKalemKdvColonu(kSheet);
   ensureAlisKalemBrutIskontoColonlari(kSheet);
+  ensureAlisKalemSatilanCariColonlari(kSheet);
   ensureAlisTutarIskontosuColonu(aSheet);
   ensureAlisProjeKoduColonu(aSheet);
   ensureAlisFaturaTipiColonu(aSheet);
@@ -3043,6 +3100,7 @@ function saveAlis(body) {
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   metinliSatirEkle_(aSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim()], [10, 11]);
+  const _cariAdHrt = kalemler.some(k => String(k.satilanCariId || "").trim()) ? cariAdHaritasiOlustur_(ss) : {};
   const _kSatirlar = [];
   kalemler.forEach((k, idx) => {
     const kId = "ak_" + Date.now() + "_" + idx;
@@ -3052,7 +3110,7 @@ function saveAlis(body) {
     const brutFiyat = parseFloat(k.brutFiyat) || birimFiyat;
     const iskontoYuzde = parseFloat(k.iskontoYuzde) || 0;
     const kalemTutar = miktar * birimFiyat * (1 + kdvOrani / 100);
-    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, kalemTutar, String(k.stokKodu || "").trim(), kdvOrani, brutFiyat, iskontoYuzde]);
+    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, kalemTutar, String(k.stokKodu || "").trim(), kdvOrani, brutFiyat, iskontoYuzde].concat(satilanCariCoz_(ss, k, _cariAdHrt)));
   });
   kalemSatirlariTopluYaz_(kSheet, _kSatirlar);
 
@@ -3231,6 +3289,7 @@ function updateAlis(body) {
   ensureAlisKalemStokKoduColonu(kSheet);
   ensureAlisKalemKdvColonu(kSheet);
   ensureAlisKalemBrutIskontoColonlari(kSheet);
+  ensureAlisKalemSatilanCariColonlari(kSheet);
   ensureAlisTutarIskontosuColonu(aSheet);
   ensureAlisProjeKoduColonu(aSheet);
   ensureAlisFaturaTipiColonu(aSheet);
@@ -3290,6 +3349,7 @@ function updateAlis(body) {
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = String(data[satirIdx - 1][7] || "");
   metinliSatirYaz_(aSheet, satirIdx, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim()], [10, 11]);
+  const _cariAdHrt = kalemler.some(k => String(k.satilanCariId || "").trim()) ? cariAdHaritasiOlustur_(ss) : {};
   const _kSatirlar = [];
   kalemler.forEach((k, idx) => {
     const kId = "ak_" + Date.now() + "_" + idx;
@@ -3298,7 +3358,7 @@ function updateAlis(body) {
     const kdvOrani = parseFloat(k.kdvOrani) || 0;
     const brutFiyat = parseFloat(k.brutFiyat) || birimFiyat;
     const iskontoYuzde = parseFloat(k.iskontoYuzde) || 0;
-    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat * (1 + kdvOrani / 100), String(k.stokKodu || "").trim(), kdvOrani, brutFiyat, iskontoYuzde]);
+    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat * (1 + kdvOrani / 100), String(k.stokKodu || "").trim(), kdvOrani, brutFiyat, iskontoYuzde].concat(satilanCariCoz_(ss, k, _cariAdHrt)));
   });
   kalemSatirlariTopluYaz_(kSheet, _kSatirlar);
 
@@ -9820,7 +9880,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20260928a";
+const ENSURE_SURUM_ = "20260930a";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}
@@ -9845,6 +9905,7 @@ function ensureAlisKalemStokKoduColonu(sheet) { const k = ensureAnahtar_("ensure
 function ensureAlisIadeKalemStokKoduColonu(sheet) { const k = ensureAnahtar_("ensureAlisIadeKalemStokKoduColonu", sheet); if (ensureYapildiMi_(k)) return; ensureAlisIadeKalemStokKoduColonu_orj_(sheet); ensureIsaretle_(k); }
 function ensureAlisKalemKdvColonu(sheet) { const k = ensureAnahtar_("ensureAlisKalemKdvColonu", sheet); if (ensureYapildiMi_(k)) return; ensureAlisKalemKdvColonu_orj_(sheet); ensureIsaretle_(k); }
 function ensureAlisKalemBrutIskontoColonlari(sheet) { const k = ensureAnahtar_("ensureAlisKalemBrutIskontoColonlari", sheet); if (ensureYapildiMi_(k)) return; ensureAlisKalemBrutIskontoColonlari_orj_(sheet); ensureIsaretle_(k); }
+function ensureAlisKalemSatilanCariColonlari(sheet) { const k = ensureAnahtar_("ensureAlisKalemSatilanCariColonlari", sheet); if (ensureYapildiMi_(k)) return; ensureAlisKalemSatilanCariColonlari_orj_(sheet); ensureIsaretle_(k); }
 function ensureAlisTutarIskontosuColonu(sheet) { const k = ensureAnahtar_("ensureAlisTutarIskontosuColonu", sheet); if (ensureYapildiMi_(k)) return; ensureAlisTutarIskontosuColonu_orj_(sheet); ensureIsaretle_(k); }
 function ensureCariHareketVadeColonu(sheet) { const k = ensureAnahtar_("ensureCariHareketVadeColonu", sheet); if (ensureYapildiMi_(k)) return; ensureCariHareketVadeColonu_orj_(sheet); ensureIsaretle_(k); }
 function ensureCariHareketProjeKoduColonu(sheet) { const k = ensureAnahtar_("ensureCariHareketProjeKoduColonu", sheet); if (ensureYapildiMi_(k)) return; ensureCariHareketProjeKoduColonu_orj_(sheet); ensureIsaretle_(k); }
