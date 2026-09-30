@@ -364,6 +364,9 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .bfm-zoom-ctrl button{padding:2px 8px;font-size:13px;line-height:1;border:1px solid var(--border);border-radius:6px;background:var(--bg3);cursor:pointer}
 .bfm-2col-sag-govde{flex:1;min-height:0;overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--bg3)}
 .bfm-2col-sag-govde iframe{width:100%;height:100%;border:0;display:block}
+#tm-tablo th{font-size:11px;text-transform:uppercase;padding:6px 6px;text-align:left}
+#tm-tablo td{padding:3px 4px}
+#tm-tablo input,#tm-tablo select{font-size:13px;padding:5px 6px}
 #bfm-odak-kutu{position:relative;overflow:hidden}
 #bfm-pan-kat{position:absolute;inset:0;z-index:5;cursor:grab;touch-action:none}
 #bfm-pan-kat.tutuyor{cursor:grabbing}
@@ -1069,7 +1072,7 @@ setInterval(topbarSaatGuncelle, 10000);
       <div id="banka-yapisi-alani"><div class="cari-empty">Yükleniyor...</div></div>
       <div class="rapor-baslik" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <span>Banka Hesap Hareketleri</span>
-        <button class="btn" style="padding:4px 12px;font-size:12.5px" onclick="bankaMasrafEkleAc()">💸 Masraf Ekle</button>
+        <span style="display:flex;gap:6px"><button class="btn" style="padding:4px 12px;font-size:12.5px" onclick="bankaMasrafEkleAc()">💸 Masraf Ekle</button><button class="btn btn-primary" style="padding:4px 12px;font-size:12.5px" onclick="topluMasrafAc()">🧾 Toplu Masraf İşle</button></span>
       </div>
       <div class="fld" style="max-width:320px"><label>Hesap</label>
         <select id="bhh-hesap-secim" onchange="bankaHesapHareketleriYukle()"><option value="">— Tüm hesaplar —</option></select>
@@ -9084,6 +9087,157 @@ function bankaMasrafEkleAc(){
       odemeModalAc(null, { hedefTipi: "Gider", bankaHesapId, giderUstId });
     });
   }).catch(()=>{ odemeModalAc(null, { hedefTipi: "Gider", bankaHesapId }); });
+}
+
+// ── Toplu Masraf İşle (30 Eyl 2026) ──
+// Üstte banka hesabı, altta satırlar: Tarih · Açıklama · Masraf Kalemi · Tutar. "İşleme Al" her satırı, tek tek
+// girilen masrafla AYNI yoldan (saveOdeme: Hedef=Gider, Yöntem=Havale/EFT) kaydeder: tutar seçili banka hesabından
+// Çıkış olarak düşer, Banka Hesap Hareketleri'nde satırın tarihinde görünür, Ödeme listesi ve Kayıt Defteri'ne işlenir.
+let _tmSatirSayac = 0;
+let _tmVarsayilanGiderUstId = "";
+function topluMasrafAc(){
+  const eski = document.getElementById("toplu-masraf-overlay"); if(eski) eski.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "toplu-masraf-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay && !window._tmIsleniyor) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:980px">
+      <h3>🧾 Toplu Masraf İşle</h3>
+      <div class="fld" style="max-width:420px"><label>Banka Hesabı (masraflar buradan düşer) *</label>
+        <select id="tm-banka-hesap"><option value="">Yükleniyor...</option></select>
+      </div>
+      <div style="overflow:auto;max-height:52vh;border:1px solid var(--rp-th-bd,var(--border));border-radius:10px;margin-top:8px">
+        <table class="hk-tablo" id="tm-tablo" style="width:100%;font-size:13px">
+          <thead><tr>
+            <th style="width:140px">Tarih</th><th>Açıklama</th><th style="min-width:230px">Masraf Kalemi</th><th style="width:130px">Tutar</th><th style="width:34px"></th>
+          </tr></thead>
+          <tbody id="tm-satirlar"></tbody>
+          <tfoot><tr><td colspan="3" style="text-align:right;font-weight:800">Toplam</td><td id="tm-toplam" style="text-align:right;font-weight:800">0,00 ₺</td><td></td></tr></tfoot>
+        </table>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+        <button type="button" class="btn" onclick="topluMasrafSatirEkle()">+ Satır Ekle</button>
+        <span id="tm-durum" style="font-size:12px;color:var(--text3)"></span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="tm-iptal" onclick="document.getElementById('toplu-masraf-overlay').remove()">Kapat</button>
+        <button class="btn btn-primary" id="tm-kaydet" onclick="topluMasrafIslemeAl()">İşleme Al</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const secili = document.getElementById("bhh-hesap-secim") ? document.getElementById("bhh-hesap-secim").value : "";
+  Promise.all([
+    cariApiYapi("getBankaYapisi"),
+    cariApi("ensureBankaMasrafTanimlari").catch(()=>null),
+    cariApiYapi("getBasitTanimListesi", {tip:"giderUstGrup"}),
+    cariApiYapi("getBasitTanimListesi", {tip:"giderAltGrup"})
+  ]).then(([yapi, ens, ust, alt])=>{
+    if(ust && ust.ok){ _tanimListeCache.giderUstGrup = ust.kalemler; _tanimListeYuklendi.giderUstGrup = true; }
+    if(alt && alt.ok){ _tanimListeCache.giderAltGrup = alt.kalemler; _tanimListeYuklendi.giderAltGrup = true; }
+    _tmVarsayilanGiderUstId = ens && ens.ok ? (ens.ustId || "") : "";
+    const sel = document.getElementById("tm-banka-hesap"); if(!sel) return;
+    if(yapi && yapi.ok){
+      sel.innerHTML = '<option value="">— Banka hesabı seçin —</option>' + yapi.hesaplar.map(h=>{
+        const b = yapi.bankalar.find(x=>x.id===h.bankaId);
+        return `<option value="${h.id}">${b?b.ad:''} — ${h.hesapAdi}</option>`;
+      }).join("");
+      sel.value = secili || "";
+    } else sel.innerHTML = '<option value="">Banka hesapları alınamadı</option>';
+    _tmSatirSayac = 0;
+    document.getElementById("tm-satirlar").innerHTML = "";
+    for(let i=0;i<5;i++) topluMasrafSatirEkle(true);
+    topluMasrafToplamGuncelle();
+  }).catch(err=>{ const d = document.getElementById("tm-durum"); if(d) d.textContent = "Bağlantı hatası: "+err.message; });
+}
+function topluMasrafKalemSecenekleri_(seciliDeger){
+  const ust = _tanimListeCache.giderUstGrup || [], alt = _tanimListeCache.giderAltGrup || [];
+  let h = '<option value="">— Masraf kalemi seçin —</option>';
+  ust.forEach(u=>{
+    const altlar = alt.filter(a=>a.ustId===u.id);
+    h += `<optgroup label="${htmlKacis(u.ad)}"><option value="${u.id}" ${seciliDeger===u.id?'selected':''}>${htmlKacis(u.ad)} (genel)</option>` +
+      altlar.map(a=>`<option value="${a.id}" ${seciliDeger===a.id?'selected':''}>${htmlKacis(u.ad)} › ${htmlKacis(a.ad)}</option>`).join("") + `</optgroup>`;
+  });
+  return h;
+}
+function topluMasrafSatirEkle(sessiz){
+  const tb = document.getElementById("tm-satirlar"); if(!tb) return;
+  const son = tb.lastElementChild;
+  const oncekiTarih = son ? son.querySelector(".tm-tarih").value : new Date().toISOString().slice(0,10);
+  const oncekiKalem = son ? son.querySelector(".tm-kalem").value : _tmVarsayilanGiderUstId;
+  const id = ++_tmSatirSayac;
+  const tr = document.createElement("tr");
+  tr.dataset.tm = id;
+  tr.innerHTML = `
+    <td><input type="date" class="tm-tarih" value="${oncekiTarih}" style="width:100%"></td>
+    <td><input type="text" class="tm-aciklama" placeholder="Açıklama" style="width:100%"></td>
+    <td><select class="tm-kalem" style="width:100%">${topluMasrafKalemSecenekleri_(oncekiKalem)}</select></td>
+    <td><input type="number" class="tm-tutar" min="0" step="0.01" placeholder="0,00" style="width:100%;text-align:right" oninput="topluMasrafToplamGuncelle()" onkeydown="if(event.key==='Enter'){ event.preventDefault(); topluMasrafTutarEnter(this); }"></td>
+    <td style="text-align:center"><span class="hk-sil" title="Satırı sil" onclick="this.closest('tr').remove();topluMasrafToplamGuncelle()">✕</span></td>`;
+  tb.appendChild(tr);
+  if(!sessiz){ const a = tr.querySelector(".tm-aciklama"); if(a) a.focus(); }
+}
+// Tutar kutusunda Enter: son satırdaysa yeni satır açar, değilse sonraki satırın açıklamasına geçer.
+function topluMasrafTutarEnter(inp){
+  const tr = inp.closest("tr"), sonraki = tr.nextElementSibling;
+  if(sonraki){ sonraki.querySelector(".tm-aciklama").focus(); return; }
+  if(parseFloat(inp.value) > 0) topluMasrafSatirEkle(false);
+}
+function topluMasrafToplamGuncelle(){
+  let t = 0;
+  document.querySelectorAll("#tm-satirlar .tm-tutar").forEach(i=>{ t += parseFloat(i.value) || 0; });
+  const el = document.getElementById("tm-toplam"); if(el) el.textContent = paraFormat(t);
+}
+async function topluMasrafIslemeAl(){
+  if(window._tmIsleniyor) return;
+  const hesapId = (document.getElementById("tm-banka-hesap")||{}).value;
+  if(!hesapId){ alert("Önce banka hesabını seçin."); return; }
+  const satirlar = Array.from(document.querySelectorAll("#tm-satirlar tr")).map(tr=>({
+    tr, tarih: tr.querySelector(".tm-tarih").value, aciklama: tr.querySelector(".tm-aciklama").value.trim(),
+    kalem: tr.querySelector(".tm-kalem").value, tutar: parseFloat(tr.querySelector(".tm-tutar").value) || 0
+  })).filter(x=>x.tutar > 0 || x.aciklama);   // tamamen boş satırlar atlanır
+  if(!satirlar.length){ alert("İşlenecek satır yok. En az bir satıra tutar girin."); return; }
+  for(let i=0;i<satirlar.length;i++){
+    const x = satirlar[i], no = i+1;
+    x.tr.style.outline = "";
+    if(!x.tarih){ alert(no+". satır: tarih girin."); x.tr.style.outline="2px solid var(--red)"; return; }
+    if(!x.kalem){ alert(no+". satır: masraf kalemini seçin."); x.tr.style.outline="2px solid var(--red)"; return; }
+    if(!(x.tutar > 0)){ alert(no+". satır: tutar sıfırdan büyük olmalı."); x.tr.style.outline="2px solid var(--red)"; return; }
+  }
+  const toplam = satirlar.reduce((t,x)=>t+x.tutar,0);
+  const hesapAd = document.getElementById("tm-banka-hesap").selectedOptions[0].textContent;
+  if(!confirm(`${satirlar.length} masraf, toplam ${paraFormat(toplam)}, "${hesapAd}" hesabından düşülecek. İşleme alınsın mı?`)) return;
+
+  window._tmIsleniyor = true;
+  const kaydet = document.getElementById("tm-kaydet"), kapat = document.getElementById("tm-iptal"), durum = document.getElementById("tm-durum");
+  kaydet.disabled = true; kapat.disabled = true;
+  let basarili = 0, hatali = 0;
+  for(let i=0;i<satirlar.length;i++){
+    const x = satirlar[i];
+    if(durum) durum.textContent = `İşleniyor: ${i+1} / ${satirlar.length}`;
+    try{
+      const res = await cariApi("saveOdeme", {
+        hedefTipi: "Gider", hedefId: x.kalem, tutar: x.tutar, tarih: x.tarih + "T00:00", yontem: "Havale/EFT",
+        bankaHesapId: hesapId, aciklama: x.aciklama, projeKodu: "", _idEk: "_" + (i+1)
+      });
+      if(res && res.ok){ basarili++; x.tr.remove(); }
+      else { hatali++; x.tr.style.outline = "2px solid var(--red)"; x.tr.title = "Hata: " + ((res && (res.hata||res.error)) || "bilinmiyor"); }
+    }catch(err){
+      hatali++; x.tr.style.outline = "2px solid var(--red)"; x.tr.title = "Bağlantı hatası: " + err.message;
+    }
+  }
+  window._tmIsleniyor = false;
+  kaydet.disabled = false; kapat.disabled = false;
+  topluMasrafToplamGuncelle();
+  // Finans ekranını tazele: banka hareketleri satırların tarihlerinde görünür, bakiye güncellenir.
+  try{ bankaHesapHareketleriYukle(); finansYukle(); if(typeof odemeListesiYukle==="function") odemeListesiYukle(); }catch(e){}
+  if(hatali === 0){
+    if(durum) durum.textContent = "";
+    alert(`${basarili} masraf işleme alındı. Banka Hesap Hareketleri'nde ilgili tarihlerde görünür.`);
+    const o = document.getElementById("toplu-masraf-overlay"); if(o) o.remove();
+  } else {
+    if(durum){ durum.style.color = "var(--red)"; durum.textContent = `${basarili} işlendi, ${hatali} satır hata verdi (kırmızı çerçeveli satırlar ekranda kaldı; üzerine gelince hata görünür).`; }
+  }
 }
 
 // Banka Hesap Hareketleri listesinde bir "📦 Toplu Ödeme" etiketine tıklanınca, aynı oturumda

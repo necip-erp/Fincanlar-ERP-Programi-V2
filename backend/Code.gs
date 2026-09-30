@@ -4163,7 +4163,7 @@ function saveOdeme(body) {
   const oSheet = getOrCreateSheet(ss, SHEETS.odemeler,
     ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI","POS_HESAP_ID","BANKA_HESAP_ID"]);
   ensureOdemePosBankaColonlari(oSheet);
-  const id = "od_" + Date.now();
+  const id = "od_" + Date.now() + String(body._idEk || "").replace(/[^A-Za-z0-9_]/g, ""); // toplu masrafta (Toplu Masraf İşle) aynı ms'de çakışmasın
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   const seriNo = String(body.seriNo || "").trim();
