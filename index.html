@@ -7641,7 +7641,7 @@ function alisBekleyenOnayModalAc(faturaNo){
         ${f.kalemler.some(k=>(k.nakliyePayi||0) > 0)
           ? `<th style="min-width:200px" title="Solda faturadaki birim fiyat (elle düzeltilebilir), sağda Alış'a AKTARILACAK birim fiyat: iskontolar sonrası net fiyat + nakliye/palet payı">Fatura Fiyatı / Aktarılacak</th>`
           : `<th style="width:100px">Birim Fiyat</th>`}<th style="width:80px">İsk.1 %</th><th style="width:80px">İsk.2 %</th>
-        <th style="width:70px">KDV%</th><th style="width:110px">Tutar</th><th style="width:36px"></th>
+        <th style="width:70px">KDV%</th><th style="width:110px">Tutar</th><th style="min-width:150px">Satılan Cari</th><th style="width:36px"></th>
       </tr></thead>
       <tbody id="bfm-kalemler">
         ${f.kalemler.map((k,i)=>bfmKalemSatiriHTML(k,i)).join("")}
@@ -7728,6 +7728,7 @@ function bfmKalemSatiriHTML(k, i){
           <td><input id="bfm-isk2-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto2||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
           <td><input id="bfm-kdv-${i}" type="number" min="0" max="100" step="0.01" value="${k.kdvOrani}" style="width:60px${bfmKdvSupheliMi(k.kdvOrani)?';border-color:var(--red);background:#fdecea':''}" title="${bfmKdvSupheliMi(k.kdvOrani)?'⚠️ FATURAFIYAT kaynağından şüpheli bir KDV oranı geldi (>%'+BFM_KDV_UST_SINIR+'). Muhtemelen bu alana bir tutar yazılmış — faturaya bakıp doğru oranı siz girin.':'FATURAFIYAT kaynağından gelen oran — gerekirse düzeltin'}" oninput="bfmSatirGuncelle(${i})"></td>
           <td id="bfm-tutar-${i}" style="font-weight:600;text-align:right;padding-right:8px"></td>
+          <td style="white-space:nowrap"><div style="display:flex;align-items:center;gap:3px"><button type="button" class="btn" style="font-size:11px;padding:4px 8px;max-width:130px;overflow:hidden;text-overflow:ellipsis;${k.satilanCariId?'background:var(--accent);color:#fff;border-color:var(--accent)':''}" title="${k.satilanCariId ? htmlKacis('Satılan cari: '+(k.satilanCariAd||'')+' — değiştirmek için tıkla') : 'Bu kalem bir cariye satılan ürünün tedariği ise tıkla ve hangi cariye satıldığını seç'}" onclick="bfmSatilanSec(${i})">🛒 ${k.satilanCariId ? htmlKacis(k.satilanCariAd||'Seçili') : 'Satılan Ürün'}</button>${k.satilanCariId ? `<span class="hk-sil" title="Kaldır" onclick="bfmSatilanTemizle(${i})">✕</span>` : ''}</div></td>
           <td style="text-align:center"><button type="button" class="btn btn-danger" style="padding:2px 7px;font-size:12px" onclick="bfmKalemSil(${i})" title="Bu satırı sil">🗑️</button></td>
         </tr>`;
 }
@@ -7735,6 +7736,44 @@ function bfmKalemSatiriHTML(k, i){
 // Ürün Kalemleri tablosundan tek bir satırı siler (ör. faturada gerçekte olmayan/hatalı
 // okunmuş bir kalem). En az 1 kalem kalması istenir — son kalem silinemez, en az bir
 // satır boş bırakılmak yerine fatura Reddedilmelidir.
+// Bekleyen fatura kaleminin "Satılan Ürün" bilgisi: hangi cariye satılan ürünün tedariği.
+// Değer f.kalemler[i] üzerinde tutulur; satır yeniden çizilse/gruplansa da kaybolmaz.
+function bfmSatilanSec(i){
+  rehberAc('cari', c=>{
+    const f = window._bfmAktifFatura;
+    if(!f || !f.kalemler[i] || !c) return;
+    f.kalemler[i].satilanCariId = c.id; f.kalemler[i].satilanCariAd = c.ad;
+    bfmEkrandakiDegerleriKalemeYaz_();
+    bfmKalemlerYenidenCiz();
+  });
+}
+function bfmSatilanTemizle(i){
+  const f = window._bfmAktifFatura;
+  if(!f || !f.kalemler[i]) return;
+  f.kalemler[i].satilanCariId = ""; f.kalemler[i].satilanCariAd = "";
+  bfmEkrandakiDegerleriKalemeYaz_();
+  bfmKalemlerYenidenCiz();
+}
+// Satır yeniden çizilmeden önce kullanıcının ekranda girdiği değerleri kaybetmemek için kalemlere geri yazar.
+function bfmEkrandakiDegerleriKalemeYaz_(){
+  const f = window._bfmAktifFatura;
+  if(!f) return;
+  f.kalemler.forEach((k,i)=>{
+    const g = id => document.getElementById(id);
+    if(g(`bfm-miktar-${i}`)) k.miktar = parseFloat(g(`bfm-miktar-${i}`).value) || 0;
+    if(g(`bfm-fiyat-${i}`)) k.birimFiyat = parseFloat(g(`bfm-fiyat-${i}`).value) || 0;
+    if(g(`bfm-isk1-${i}`)) k.iskonto = parseFloat(g(`bfm-isk1-${i}`).value) || 0;
+    if(g(`bfm-isk2-${i}`)) k.iskonto2 = parseFloat(g(`bfm-isk2-${i}`).value) || 0;
+    if(g(`bfm-kdv-${i}`)) k.kdvOrani = parseFloat(g(`bfm-kdv-${i}`).value) || 0;
+    if(g(`bfm-stokkodu-${i}`)) k.stokKodu = g(`bfm-stokkodu-${i}`).value;
+    if(g(`bfm-stokara-${i}`)) k.stokKoduAdi = g(`bfm-stokara-${i}`).value;
+    if(g(`bfm-birim-${i}`)) k.birim = g(`bfm-birim-${i}`).value;
+    if(g(`bfm-ad-${i}`)) k.urunAdi = g(`bfm-ad-${i}`).value;
+    if(g(`bfm-yenistok-${i}`)) k.yeniStokIsaretli = g(`bfm-yenistok-${i}`).checked;
+    if(g(`bfm-grup-${i}`)) k.grup = g(`bfm-grup-${i}`).value.trim();
+  });
+}
+
 function bfmKalemSil(i){
   const f = window._bfmAktifFatura;
   if(!f || !f.kalemler[i]) return;
@@ -8141,6 +8180,8 @@ function alisBekleyenOnayla(faturaNo){
       kdvOrani: kdvOrani,
       stokKodu: document.getElementById(`bfm-stokkodu-${i}`).value.trim(),
       stokKartiOlustur: yeniStokEl ? yeniStokEl.checked : false,
+      satilanCariId: f.kalemler[i].satilanCariId || "",
+      satilanCariAd: f.kalemler[i].satilanCariAd || "",
     });
   }
   if(kalemler.length === 0){ alert("En az bir kaleme miktar girmelisiniz"); return; }
