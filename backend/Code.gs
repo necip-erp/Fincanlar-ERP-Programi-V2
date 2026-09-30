@@ -7080,7 +7080,7 @@ function stokTanimMarkaKoduIsleToplu() {
   return { ok: true, guncellenen: guncellenen };
 }
 
-// ★ EKLENDİ (30 Eyl 2026): Stok adında şu ölçülerden biri geçen kartların birimi m² (kayıtlı değer "m2") olur:
+// ★ EKLENDİ (30 Eyl 2026): Stok adında şu ölçülerden biri geçen kartların birimi m² olur (Birim Tanımlama'daki yazımıyla, bkz. m2BirimAdi_):
 // 60X120, 45X45, 42,5X42,5, 20X90, 20X120 (ters yazım 120X60 da dahil). "X" yerine x, * veya × ve "42,5" yerine "42.5" yazılması fark etmez;
 // "160X120" gibi başka ölçü içinde kalan rakamlar eşleşmez (sayılar tam karşılaştırılır).
 const M2_OLCULER_ = [[60, 120], [45, 45], [42.5, 42.5], [20, 90], [20, 120]];
@@ -7098,7 +7098,12 @@ function stokAdiM2OlcusuMu_(stokAdi) {
   }
   return false;
 }
-// Çalışılan yıldaki tüm stok kartlarını tarar; adında m² ölçüsü olup birimi zaten m² olmayanları m² yapar.
+// ★ (30 Eyl 2026) Kartlara yazılacak m² birim adı: her zaman üst indisli "m²" (ASCII "m2" DEĞİL — isteğe göre).
+function m2BirimAdi_() {
+  return "m\u00B2";
+}
+// Çalışılan yıldaki tüm stok kartlarını tarar; adında m² ölçüsü olup birimi m² (tanımdaki yazımıyla) olmayanları m² yapar.
+// Daha önce ASCII "m2" yazılmış kartlar da bu sayede "m²"ye düzeltilir.
 // body.onizleme === true → yazmadan sadece sayıları döner.
 function stokTanimOlcuBirimIsleToplu(body) {
   const ss = acikSS_();
@@ -7106,6 +7111,7 @@ function stokTanimOlcuBirimIsleToplu(body) {
   ensureStokTanimEkColonlari(sheet);
   const data = sheet.getDataRange().getValues();
   const birimler = [];
+  const m2Ad = m2BirimAdi_();
   let eslesen = 0, zatenM2 = 0, degisecek = 0;
   const digerSay = {}; // eşleşmeyen kartlarda geçen diğer ölçüler (teşhis için): "30X60" → adet
   for (let i = 1; i < data.length; i++) {
@@ -7120,9 +7126,8 @@ function stokTanimOlcuBirimIsleToplu(body) {
     }
     if (data[i][0] && stokAdiM2OlcusuMu_(data[i][2])) {
       eslesen++;
-      const b = String(birim || "").trim().toLowerCase();
-      if (b === "m2" || b === "m²") zatenM2++;
-      else { birim = "m2"; degisecek++; }
+      if (String(birim || "").trim() === m2Ad) zatenM2++;
+      else { birim = m2Ad; degisecek++; }
     }
     birimler.push([birim]);
   }
@@ -7143,7 +7148,7 @@ function stokTanimOlcuBirimIsleToplu(body) {
 // Hedef: şu an çalışılan yılın StokTanimlari sayfası (ör. "2026-2"). Miktar/stok hareketi YAZILMAZ
 // (Merkez/Ayrılmış/Satılabilir miktarları aktarılmaz; stok 0'dan başlar). Stok kodu hedefte zaten varsa
 // atlanır (tekrar çalıştırmak güvenli). Marka, stok kodunun ilk 2 hanesinden Marka Tanımlama'ya göre atanır;
-// adında m² ölçüsü (bkz. stokAdiM2OlcusuMu_) geçenlerin birimi m2, diğerlerinin adet olur.
+// adında m² ölçüsü (bkz. stokAdiM2OlcusuMu_) geçenlerin birimi m² (tanımdaki yazım), diğerlerinin adet olur.
 // body.onizleme === true → hiçbir şey yazmadan kaç kart açılacağını söyler.
 function eskiPanelStokKartlariniAktar(body) {
   const kaynakSS = SpreadsheetApp.openById(SHEET_ID_TEMEL_);
@@ -7180,6 +7185,7 @@ function eskiPanelStokKartlariniAktar(body) {
 
   const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   const yeni = [];
+  const m2Ad = m2BirimAdi_();
   let zatenVar = 0, adsiz = 0, markasiz = 0;
   const gorulen = {};
   const t0 = Date.now();
@@ -7194,7 +7200,7 @@ function eskiPanelStokKartlariniAktar(body) {
     if (!ad) { adsiz++; continue; }
     const markaId = markaHaritasi[kodB.slice(0, 2)] || "";
     if (!markaId) markasiz++;
-    yeni.push(["sk_" + t0 + "_" + yeni.length, kod, ad, stokAdiM2OlcusuMu_(ad) ? "m2" : "adet", 0, "", 0, 0, 0, 0, simdi, String(markaId), "", "", "", "", 0, "", 20, 20]);
+    yeni.push(["sk_" + t0 + "_" + yeni.length, kod, ad, stokAdiM2OlcusuMu_(ad) ? m2Ad : "adet", 0, "", 0, 0, 0, 0, simdi, String(markaId), "", "", "", "", 0, "", 20, 20]);
   }
   if (body && body.onizleme) {
     return { ok: true, onizleme: true, kaynakTarih: sonTarih, acilacak: yeni.length, zatenVar: zatenVar, adsiz: adsiz, markasiz: markasiz };
