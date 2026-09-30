@@ -7634,14 +7634,14 @@ function alisBekleyenOnayModalAc(faturaNo){
       ${yeniStokSayisi>0 ? `<p style="font-size:12px;color:var(--red);margin:4px 0 8px">⚠️ ${yeniStokSayisi} üründe stok kartı bulunamadı — yanındaki kutuyu işaretli bırakırsan onaylayınca otomatik stok kartı oluşturulur.</p>` : ""}
       <p style="font-size:12px;color:var(--text3);margin:4px 0 8px">Birden fazla kalemi tek stok olarak işlemek istersen (örn. klozet+rezervuar+kapak+iç takım), aynı sayıyı "Grup" kutusuna yaz (1,1,2,2 gibi), sonra "🔗 Grupla" butonuna bas.</p>
       <div style="overflow:auto;max-height:44vh;border:1px solid var(--border);border-radius:10px;margin-top:6px">
-      <table class="hk-tablo"><thead><tr>
-        <th style="width:56px">Grup</th>
-        <th style="min-width:130px">Stok Kodu</th><th style="min-width:200px">Ürün</th>
-        <th style="width:80px">Miktar</th><th style="width:80px">Birim</th>
+      <table class="hk-tablo" id="bfm-tablo"><thead><tr>
+        <th data-kol="grup" style="width:56px">Grup</th>
+        <th data-kol="stok" style="min-width:130px">Stok Kodu</th><th data-kol="urun" style="min-width:200px">Ürün</th>
+        <th data-kol="miktar" style="width:80px">Miktar</th><th data-kol="birim" style="width:80px">Birim</th>
         ${f.kalemler.some(k=>(k.nakliyePayi||0) > 0)
-          ? `<th style="min-width:200px" title="Solda faturadaki birim fiyat (elle düzeltilebilir), sağda Alış'a AKTARILACAK birim fiyat: iskontolar sonrası net fiyat + nakliye/palet payı">Fatura Fiyatı / Aktarılacak</th>`
-          : `<th style="width:100px">Birim Fiyat</th>`}<th style="width:80px">İsk.1 %</th><th style="width:80px">İsk.2 %</th>
-        <th style="width:70px">KDV%</th><th style="width:110px">Tutar</th><th style="min-width:150px">Satılan Cari</th><th style="width:36px"></th>
+          ? `<th data-kol="fiyat" style="min-width:200px" title="Solda faturadaki birim fiyat (elle düzeltilebilir), sağda Alış'a AKTARILACAK birim fiyat: iskontolar sonrası net fiyat + nakliye/palet payı">Fatura Fiyatı / Aktarılacak</th>`
+          : `<th data-kol="fiyat" style="width:100px">Birim Fiyat</th>`}<th data-kol="isk1" style="width:80px">İsk.1 %</th><th data-kol="isk2" style="width:80px">İsk.2 %</th>
+        <th data-kol="kdv" style="width:70px">KDV%</th><th data-kol="tutar" style="width:110px">Tutar</th><th data-kol="satilan" style="min-width:150px">Satılan Cari</th><th data-kol="sil" style="width:36px"></th>
       </tr></thead>
       <tbody id="bfm-kalemler">
         ${f.kalemler.map((k,i)=>bfmKalemSatiriHTML(k,i)).join("")}
@@ -7649,6 +7649,7 @@ function alisBekleyenOnayModalAc(faturaNo){
       </div>
       <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
         <button class="btn" onclick="bfmKalemleriGrupla()">🔗 Grupla</button>
+        <button class="btn" style="font-size:12px" onclick="bfmSutunSirasiSifirla()" title="Sütun başlıklarını sürükleyerek değiştirdiysen varsayılan sıraya döner">↺ Sütun Sırası</button>
         ${!yanda && f.faturaNo ? `<button type="button" class="btn" onclick="faturaGorsalAc('${f.faturaNo}')">📄 Faturayı Gör</button>` : ``}
       </div>
 
@@ -7681,6 +7682,7 @@ function alisBekleyenOnayModalAc(faturaNo){
   document.body.appendChild(overlay);
   window._bfmAktifFatura = f;
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
+  bfmSutunSurukleKur_();
   f.kalemler.forEach((k,i)=>bfmSatirGuncelle(i));
   bfmOnerileriGuncelle(); // _stokTanimListe önceden yüklenmişse öneriler hemen görünsün
   if(yanda && f.faturaNo) bfmSigdir("bfm-onay-iframe","bfm-onay-zoom-yuzde");
@@ -7736,6 +7738,73 @@ function bfmKalemSatiriHTML(k, i){
 // Ürün Kalemleri tablosundan tek bir satırı siler (ör. faturada gerçekte olmayan/hatalı
 // okunmuş bir kalem). En az 1 kalem kalması istenir — son kalem silinemez, en az bir
 // satır boş bırakılmak yerine fatura Reddedilmelidir.
+// ── Bekleyen Fatura onay ekranı: sütun başlıklarını sürükleyerek yer değiştirme ──
+// Sıra localStorage'da saklanır (cihaz/tarayıcı bazında). "Sil" sütunu hep sonda sabit kalır.
+const BFM_SUTUNLAR = ["grup","stok","urun","miktar","birim","fiyat","isk1","isk2","kdv","tutar","satilan"];
+let _bfmDragKol = null;
+function bfmSutunSirasiAl(){
+  try{
+    const k = JSON.parse(localStorage.getItem("bfmSutunSirasi") || "null");
+    if(Array.isArray(k) && k.length===BFM_SUTUNLAR.length && BFM_SUTUNLAR.every(x=>k.includes(x))) return k;
+  }catch(e){}
+  return BFM_SUTUNLAR.slice();
+}
+// rows içindeki hücreleri kaynak sıradan hedef sıraya göre yeniden dizer (input değerleri DOM'da taşındığı için korunur).
+function bfmHucreleriSirala_(rows, kaynak, hedef){
+  rows.forEach(row=>{
+    if(row.cells.length !== kaynak.length) return;
+    const hucre = Array.from(row.cells);
+    hedef.forEach(k=>{ const ix = kaynak.indexOf(k); if(ix>=0) row.appendChild(hucre[ix]); });
+  });
+}
+// tamamenTablo=true: başlık + gövde (sürükleme sonrası, ikisi de aynı sırada); false: yalnızca yeniden çizilen gövde (varsayılan sırada gelir).
+function bfmSutunSirasiUygula_(tamamenTablo){
+  const tbl = document.getElementById("bfm-tablo");
+  if(!tbl) return;
+  const hedef = bfmSutunSirasiAl().concat(["sil"]);
+  const basSatir = tbl.tHead.rows[0];
+  const basSuan = Array.from(basSatir.cells).map(c=>c.dataset.kol);
+  const varsayilan = BFM_SUTUNLAR.concat(["sil"]);
+  if(tamamenTablo){
+    bfmHucreleriSirala_(Array.from(tbl.rows), basSuan, hedef);
+  } else {
+    const govdeSatirlari = Array.from(tbl.tBodies[0].rows);
+    bfmHucreleriSirala_(govdeSatirlari, varsayilan, basSuan);
+  }
+}
+function bfmSutunSurukleKur_(){
+  const tbl = document.getElementById("bfm-tablo");
+  if(!tbl) return;
+  bfmSutunSirasiUygula_(true);
+  Array.from(tbl.tHead.rows[0].cells).forEach(th=>{
+    if(th.dataset.kol === "sil") return;
+    th.draggable = true;
+    th.style.cursor = "grab";
+    th.title = (th.title ? th.title + " · " : "") + "Sürükleyerek sütun yerini değiştirebilirsiniz";
+    th.addEventListener("dragstart", e=>{ _bfmDragKol = th.dataset.kol; try{ e.dataTransfer.setData("text/plain","kolon"); e.dataTransfer.effectAllowed="move"; }catch(x){} });
+    th.addEventListener("dragover", e=>{ if(!_bfmDragKol) return; e.preventDefault(); th.style.outline = "2px dashed var(--accent)"; th.style.outlineOffset = "-2px"; });
+    th.addEventListener("dragleave", ()=>{ th.style.outline = ""; });
+    th.addEventListener("dragend", ()=>{ _bfmDragKol = null; tbl.querySelectorAll("th").forEach(x=>x.style.outline=""); });
+    th.addEventListener("drop", e=>{
+      e.preventDefault(); th.style.outline = "";
+      const hedefKol = th.dataset.kol;
+      if(!_bfmDragKol || _bfmDragKol===hedefKol) { _bfmDragKol = null; return; }
+      const sira = bfmSutunSirasiAl();
+      const kIx = sira.indexOf(_bfmDragKol), hIx = sira.indexOf(hedefKol);
+      _bfmDragKol = null;
+      if(kIx<0 || hIx<0) return;
+      const tasinan = sira.splice(kIx,1)[0];
+      sira.splice(hIx,0,tasinan);
+      try{ localStorage.setItem("bfmSutunSirasi", JSON.stringify(sira)); }catch(x){}
+      bfmSutunSirasiUygula_(true);
+    });
+  });
+}
+function bfmSutunSirasiSifirla(){
+  try{ localStorage.removeItem("bfmSutunSirasi"); }catch(e){}
+  bfmSutunSirasiUygula_(true);
+}
+
 // Bekleyen fatura kaleminin "Satılan Ürün" bilgisi: hangi cariye satılan ürünün tedariği.
 // Değer f.kalemler[i] üzerinde tutulur; satır yeniden çizilse/gruplansa da kaybolmaz.
 function bfmSatilanSec(i){
@@ -7790,6 +7859,7 @@ function bfmKalemlerYenidenCiz(){
   const f = window._bfmAktifFatura;
   if(!f) return;
   document.getElementById("bfm-kalemler").innerHTML = f.kalemler.map((k,i)=>bfmKalemSatiriHTML(k,i)).join("");
+  bfmSutunSirasiUygula_(false);
   f.kalemler.forEach((k,i)=>bfmSatirGuncelle(i));
 }
 
