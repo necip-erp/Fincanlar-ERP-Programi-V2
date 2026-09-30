@@ -1173,7 +1173,7 @@ setInterval(topbarSaatGuncelle, 10000);
       <div style="margin-bottom:14px">
         <!-- 1. satır: Cari seçimi -->
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px">
-          <div class="fld" style="flex:1;min-width:220px;margin-bottom:0;position:relative"><label>Kaynak Cari (bakiyesi azalır)</label>
+          <div class="fld" style="flex:2;min-width:340px;margin-bottom:0;position:relative"><label>Kaynak Cari (bakiyesi azalır)</label>
             <input id="cvirman-kaynak-arama" type="text" placeholder="Cari kodu veya adı ile ara..." autocomplete="off" style="padding-right:34px"
                    oninput="cvCariAramaDegisti('kaynak', this.value)"
                    onfocus="cvCariOneriGoster('kaynak')"
@@ -1181,9 +1181,9 @@ setInterval(topbarSaatGuncelle, 10000);
                    onkeydown="oneriKlavyeYonet(event,'cvirman-kaynak-oneri')">
             <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('cvirman-kaynak').value=c.id; document.getElementById('cvirman-kaynak-arama').value=c.ad+(c.cariKodu?' ('+c.cariKodu+')':''); })">🔍</button>
             <input type="hidden" id="cvirman-kaynak">
-            <div id="cvirman-kaynak-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+            <div id="cvirman-kaynak-oneri" class="fiyat-gecmis-kutu" style="display:none;min-width:min(620px,92vw);max-height:320px;right:auto"></div>
           </div>
-          <div class="fld" style="flex:1;min-width:220px;margin-bottom:0;position:relative"><label>Hedef Cari (bakiyesi artar)</label>
+          <div class="fld" style="flex:2;min-width:340px;margin-bottom:0;position:relative"><label>Hedef Cari (bakiyesi artar)</label>
             <input id="cvirman-hedef-arama" type="text" placeholder="Cari kodu veya adı ile ara..." autocomplete="off" style="padding-right:34px"
                    oninput="cvCariAramaDegisti('hedef', this.value)"
                    onfocus="cvCariOneriGoster('hedef')"
@@ -1191,7 +1191,7 @@ setInterval(topbarSaatGuncelle, 10000);
                    onkeydown="oneriKlavyeYonet(event,'cvirman-hedef-oneri')">
             <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('cvirman-hedef').value=c.id; document.getElementById('cvirman-hedef-arama').value=c.ad+(c.cariKodu?' ('+c.cariKodu+')':''); })">🔍</button>
             <input type="hidden" id="cvirman-hedef">
-            <div id="cvirman-hedef-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+            <div id="cvirman-hedef-oneri" class="fiyat-gecmis-kutu" style="display:none;min-width:min(620px,92vw);max-height:320px;right:auto"></div>
           </div>
         </div>
         <!-- 2. satır: Tutar ve Tarih -->
@@ -3244,6 +3244,7 @@ function rehberAc(tip, callback){
           <option value="" selected disabled>Sırala...</option>
           ${rehberSiralamaSecenekleriHTML(tip)}
         </select>
+        ${tip==='stok' ? '<button type="button" class="btn" style="flex-shrink:0;white-space:nowrap;font-size:12.5px;padding:7px 12px" onclick="rehberStokKartiAc()" title="Aradığın ürünün stok kartı yoksa buradan hemen aç; kaydedince seçili satıra otomatik yazılır">➕ Stok Kartı Aç</button>' : ''}
         <button class="rehber-kapat" onclick="rehberKapat()" title="Kapat">✕</button>
       </div>
       <div class="rehber-tbl-wrap" id="rehber-tbl-wrap"><div class="cari-empty">Yükleniyor...</div></div>
@@ -3385,6 +3386,23 @@ function rehberPanelStokYukle_(durum){
     onbellekYaz("stokPanelSnapshot", _stokPanelSnap);
     if(durum && durum.hamSatirlar) rehberVeriGuncelle_(durum, durum.hamSatirlar);
   }).catch(()=>{});
+}
+
+// ★ EKLENDİ (30 Eyl 2026): Sipariş/fatura girerken F2 Stok Rehberi'nde aranan ürünün kartı yoksa, rehberden
+// çıkmadan yeni stok kartı açılır. Kaydedilince rehber kapanır ve yeni kart, rehberin açıldığı satıra
+// (rehberin normal seçim geri çağrısıyla) otomatik yazılır. Rehber arama kutusundaki yazı, Stok Adı'na önerilir.
+function rehberStokKartiAc(){
+  const durum = _rehberState, cb = durum && durum.callback;
+  const aranan = String((document.getElementById("rehber-ara")||{}).value || "").trim();
+  stokTanimModalAc(null, kayit=>{
+    const yedek = {id:kayit.id, stokKodu:kayit.stokKodu, stokAdi:kayit.stokAdi};
+    const bitir = (s)=>{ rehberKapat(); if(cb) cb(s); };
+    cariApi("getStokTanimListesi").then(res=>{
+      if(res.ok){ _stokTanimListe = res.kalemler; _stokTanimYuklendi = true; onbellekYaz("stokTanimListesi", res.kalemler); }
+      bitir((_stokTanimListe||[]).find(x=>x.id===kayit.id) || yedek);
+    }).catch(()=>bitir(yedek));
+  });
+  if(aranan) setTimeout(()=>{ const e = document.getElementById("st-stokadi"); if(e && !e.value) e.value = aranan; }, 60);
 }
 
 function rehberKapat(){
@@ -4506,6 +4524,122 @@ function satisSonFaturalarGoster(){
 
 let _satisAramaSorgu = "";
 
+
+// ════════════════════════════════════════════════════════════════════════════════════
+// ★ EKLENDİ (30 Eyl 2026): YARIM KALAN SİPARİŞ / TEKLİF / FATURA (TASLAK)
+// Yeni Sipariş/Teklif/Fatura formunda boşluğa tıklanınca (ya da Esc ile kapatılınca) girilenler artık
+// kaybolmaz: bu tarayıcıda saklanır ve ilgili listenin (Fatura/Teklif/Sipariş) en üstünde
+// "🟡 Yarım kalan" olarak görünür. Tıklayınca form kaldığı yerden açılır; kaydedilince ya da
+// ✕ ile silinince taslak kalkar. Sadece YENİ belge formu için (mevcut belgenin düzenlenmesi taslak olmaz).
+// Anlamlı veri yoksa (cari seçilmemiş ve hiçbir kalemde ürün/stok kodu yok) taslak oluşmaz.
+// Not: taslaklar sunucuya değil bu tarayıcıya kaydedilir (başka bilgisayarda görünmez).
+// ════════════════════════════════════════════════════════════════════════════════════
+const SATIS_TASLAK_ANAHTAR_ = "fincanlar_satis_taslaklar_v1";
+let _satisTaslakId = null;
+function satisTaslaklariOku_(){
+  try{ const l = JSON.parse(localStorage.getItem(SATIS_TASLAK_ANAHTAR_) || "[]"); return Array.isArray(l) ? l : []; }catch(e){ return []; }
+}
+function satisTaslaklariYaz_(liste){
+  try{ localStorage.setItem(SATIS_TASLAK_ANAHTAR_, JSON.stringify(liste.slice(0, 50))); }catch(e){}
+}
+function satisTaslakSil_(id){
+  satisTaslaklariYaz_(satisTaslaklariOku_().filter(t=>t.id!==id));
+  satisTaslakListeYenile_();
+}
+function satisTaslakListeYenile_(){
+  if(document.getElementById("satis-items") && typeof satisAramaliListe === "function"){
+    try{ satisListesiCiz(satisAramaliListe()); }catch(e){}
+  }
+}
+function satisFormDurumuAl_(){
+  const v = (id)=> (document.getElementById(id)||{}).value;
+  const c = (id)=> { const e = document.getElementById(id); return e ? !!e.checked : undefined; };
+  return {
+    belgeTipi: v("sm-belgetipi") || _satisAktifBelgeTipi,
+    cariId: v("sm-cari") || "", cariAd: v("sm-cari-arama") || "",
+    tarih: v("sm-tarih") || "", odemeTipi: v("sm-odeme") || "", vade: v("sm-vade") || "",
+    aciklama: v("sm-aciklama") || "", projeKodu: v("sm-proje-kodu") || "", faturaTipi: v("sm-fatura-tipi") || "",
+    siparisDurumu: v("sm-siparis-durumu") || "",
+    dipIskontoYuzde: v("sm-dip-iskonto") || "", tutarIskontosu: v("sm-tutar-iskontosu") || "",
+    tutarIskontoKdvSonra: c("sm-tutar-iskonto-kdv-sonra"), stokIsle: c("sm-stok-isle"), cariIsle: c("sm-cari-isle"),
+    posHesapId: v("sm-kk-hesap") || "", odemeTutari: v("sm-odeme-tutar") || "",
+    kalemler: JSON.parse(JSON.stringify(_yeniSatisKalemleri || []))
+  };
+}
+function satisTaslakAnlamliMi_(d){
+  return !!(d.cariId || (d.kalemler||[]).some(k=>String(k.urunAdi||"").trim() || String(k.stokKodu||"").trim()));
+}
+function satisModalTaslakKapat(){
+  const ov = document.getElementById("satis-modal-overlay");
+  if(!ov) return;
+  try{
+    if(!_satisDuzenleId){
+      const d = satisFormDurumuAl_();
+      if(satisTaslakAnlamliMi_(d)){
+        const liste = satisTaslaklariOku_();
+        d.id = _satisTaslakId || ("td_" + Date.now());
+        d.kayit = new Date().toISOString();
+        const i = liste.findIndex(t=>t.id===d.id);
+        if(i >= 0) liste.splice(i, 1);
+        liste.unshift(d);
+        satisTaslaklariYaz_(liste);
+      } else if(_satisTaslakId){
+        satisTaslaklariYaz_(satisTaslaklariOku_().filter(t=>t.id!==_satisTaslakId)); // içi boşaltılmış taslak kalkar
+      }
+    }
+  }catch(e){ console.warn("Taslak kaydedilemedi", e); }
+  ov.remove();
+  _satisTaslakId = null;
+  satisTaslakListeYenile_();
+}
+function satisTaslakDevamEt(id){
+  const d = satisTaslaklariOku_().find(t=>t.id===id);
+  if(!d) return;
+  satisModalAc(d.cariId || "", d.belgeTipi, null);
+  _satisTaslakId = id;
+  const set = (i, val)=>{ const e = document.getElementById(i); if(e && val !== undefined && val !== null && val !== "") e.value = val; };
+  if(d.cariId){
+    const cari = (_cariListe||[]).find(x=>x.id===d.cariId);
+    if(cari){ try{ smCariSecildi_(cari); }catch(e){} }
+    set("sm-cari", d.cariId); set("sm-cari-arama", d.cariAd);
+  }
+  set("sm-tarih", d.tarih);
+  set("sm-odeme", d.odemeTipi);
+  satisOdemeTipiDegisti();
+  set("sm-vade", d.vade); set("sm-aciklama", d.aciklama); set("sm-proje-kodu", d.projeKodu);
+  set("sm-fatura-tipi", d.faturaTipi); set("sm-siparis-durumu", d.siparisDurumu);
+  set("sm-dip-iskonto", d.dipIskontoYuzde); set("sm-tutar-iskontosu", d.tutarIskontosu);
+  set("sm-odeme-tutar", d.odemeTutari);
+  const ck = (i, val)=>{ const e = document.getElementById(i); if(e && val !== undefined) e.checked = !!val; };
+  ck("sm-tutar-iskonto-kdv-sonra", d.tutarIskontoKdvSonra); ck("sm-stok-isle", d.stokIsle); ck("sm-cari-isle", d.cariIsle);
+  _yeniSatisKalemleri = JSON.parse(JSON.stringify(d.kalemler && d.kalemler.length ? d.kalemler : [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""}]));
+  satisKalemlerCiz();
+  satisToplamGuncelle();
+  if(d.posHesapId) setTimeout(()=>{ const e = document.getElementById("sm-kk-hesap"); if(e) e.value = d.posHesapId; }, 700);
+}
+function satisTaslakSilOnay_(id){
+  if(!confirm("Bu yarım kalan kayıt silinsin mi? Girilen bilgiler geri getirilemez.")) return;
+  satisTaslakSil_(id);
+}
+function satisTaslakListeHTML_(){
+  if(_satisEdmFiltre) return "";
+  const q = _satisAramaSorgu ? _satisAramaSorgu.replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') : "";
+  const liste = satisTaslaklariOku_().filter(t=>t.belgeTipi === _satisAktifBelgeTipi &&
+    (!q || String(t.cariAd||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)));
+  return liste.map(t=>{
+    const n = (t.kalemler||[]).filter(k=>String(k.urunAdi||"").trim() || String(k.stokKodu||"").trim()).length;
+    const ad = String(t.cariAd||"").trim() || "(Cari seçilmedi)";
+    return `
+    <div class="cari-item" style="border-left:3px solid #e0a800" onclick="satisTaslakDevamEt('${t.id}')" title="Tıklayınca kaldığın yerden devam edersin">
+      <div class="cari-item-top">
+        <span class="cari-item-ad">${ad.replace(/</g,"&lt;")}</span>
+        <button type="button" class="btn" style="padding:2px 8px;font-size:12px" onclick="event.stopPropagation();satisTaslakSilOnay_('${t.id}')" title="Yarım kalan kaydı sil">✕ Sil</button>
+      </div>
+      <span class="cari-item-tip"><span class="hk-borc">🟡 Yarım kalan</span> · ${tarihGoster(String(t.kayit||"").slice(0,10))} · ${n} kalem</span>
+    </div>`;
+  }).join("");
+}
+
 function satisListesiCiz(liste){
   const el = document.getElementById("satis-items");
   const sayacEl = document.getElementById("satis-sonuc-sayisi");
@@ -4518,12 +4652,13 @@ function satisListesiCiz(liste){
   // 2. kademe: seçili sıralama kriteri (ortak dizisiSirala yardımcısı, Cari'deki ile aynı)
   if(_satisSiraAlan) filtreliListe = dizisiSirala(filtreliListe, _satisSiraAlan, _satisSiraYon);
   if(sayacEl) sayacEl.textContent = (_satisAramaSorgu || _satisEdmFiltre) ? (filtreliListe.length + " sonuç") : "";
+  const taslakHTML = satisTaslakListeHTML_();
   if(filtreliListe.length === 0){
-    el.innerHTML = aramaBosSonucHTML(_satisAramaSorgu, "satis-ara", 'Bu türde kayıt yok. "+" ile ekleyin.');
+    el.innerHTML = taslakHTML || aramaBosSonucHTML(_satisAramaSorgu, "satis-ara", 'Bu türde kayıt yok. "+" ile ekleyin.');
     return;
   }
   const q = _satisAramaSorgu;
-  el.innerHTML = filtreliListe.map(s=>`
+  el.innerHTML = taslakHTML + filtreliListe.map(s=>`
     <div class="cari-item ${_satisSecili===s.id?'sel':''}" onclick="satisAc('${s.id}')">
       <div class="cari-item-top">
         <span class="cari-item-ad">${metinVurgula(s.cariAd, q)}${s.cariKodu?` <span class="cari-item-kod">(${metinVurgula(s.cariKodu, q)})</span>`:""}</span>
@@ -5194,7 +5329,8 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   overlay.className = "modal-overlay";
   overlay.id = "satis-modal-overlay";
   overlay.classList.add("tema-yesil");
-  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.dataset.escKapat = "satisModalTaslakKapat"; // Esc ile kapatmada da (uyarıyı onaylayınca) taslak kaydedilir
+  overlay.onclick = (e)=>{ if(e.target===overlay) satisModalTaslakKapat(); }; // boşluğa tıklama: bilgiler silinmez, "Yarım kalan" olur
   // s.tarih backend'den "yyyy-MM-dd" veya "yyyy-MM-dd HH:mm" biçiminde gelir (hucreTarihStr);
   // <input type="datetime-local"> ise "yyyy-MM-ddTHH:mm" bekler, bu yüzden boşluk yerine T
   // konur ve saat yoksa 00:00 eklenir.
@@ -5309,7 +5445,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       <div id="sm-toplam" class="satis-toplam-detay"></div>
 
       <div class="modal-actions">
-        <button class="btn" onclick="document.getElementById('satis-modal-overlay').remove()">İptal</button>
+        <button class="btn" onclick="document.getElementById('satis-modal-overlay').remove();_satisTaslakId=null">İptal</button>
         <button class="btn btn-primary" onclick="satisKaydet()">Kaydet</button>
       </div>
     </div>`;
@@ -5792,6 +5928,7 @@ function satisKaydet(){
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("satis-modal-overlay").remove();
     _satisDuzenleId = null;
+    if(_satisTaslakId){ satisTaslakSil_(_satisTaslakId); _satisTaslakId = null; } // kayıt tamamlandı → yarım kalan taslak silinir
     satisBelgeTipiDegistir(body.belgeTipi);
     satisListesiYukle();
     if(cariId) cariListesiYukle(); // cari bakiyesi güncellenmiş olabilir
@@ -11049,8 +11186,8 @@ function cvCariOneriGoster(which){
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
   kutu.innerHTML = eslesenler.map((c,i)=>`
-    <div class="fiyat-gecmis-satir" onclick="cvCariSec('${which}',${i})" data-oneri-idx="${i}">
-      <span>${c.ad}</span><b>${c.cariKodu||''}</b>
+    <div class="fiyat-gecmis-satir" onclick="cvCariSec('${which}',${i})" data-oneri-idx="${i}" style="gap:14px">
+      <b style="flex-shrink:0;min-width:84px;color:var(--accent)">${c.cariKodu||'—'}</b><span style="flex:1;white-space:normal;word-break:break-word">${c.ad}</span>
     </div>`).join("");
   kutu.dataset.eslesenler = JSON.stringify(eslesenler);
   kutu.style.display = "block";
@@ -13557,8 +13694,9 @@ function stokTanimMarkaKoduIsleUygula(){
 function stokTanimOlcuBirimIsleUygula(){
   cariApi("stokTanimOlcuBirimIsleToplu", {onizleme:true}).then(on=>{
     if(!on.ok){ alert("Hata: "+(on.hata||"bilinmiyor")); return; }
-    if(!on.degisecek){ alert(`Değiştirilecek kart yok. Bu ölçülerde ${on.eslesen} kart var, hepsi zaten m².`); return; }
-    if(!confirm(`Adında 60X120, 45X45, 42,5X42,5, 20X90 veya 20X120 geçen ${on.eslesen} stok kartı bulundu.\n• ${on.degisecek} kartın birimi m² yapılacak.\n• ${on.zatenM2} kart zaten m².\nDevam edilsin mi?`)) return;
+    const diger = (on.digerOlculer||[]).length ? `\n\nAdında başka ölçü geçen kartlar (DEĞİŞMEZ): ${on.digerOlculer.join(", ")}` : "";
+    if(!on.degisecek){ alert(`Değiştirilecek kart yok. Toplam ${on.toplamKart} stok kartından ${on.eslesen} tanesinin adında bu ölçüler geçiyor, hepsi zaten m².${diger}`); return; }
+    if(!confirm(`Toplam ${on.toplamKart} stok kartından ${on.eslesen} tanesinin adında 60X120, 45X45, 42,5X42,5, 20X90 veya 20X120 geçiyor.\n• ${on.degisecek} kartın birimi m² yapılacak.\n• ${on.zatenM2} kart zaten m².${diger}\n\nDevam edilsin mi?`)) return;
     cariApi("stokTanimOlcuBirimIsleToplu", {}).then(res=>{
       if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
       stokTanimListesiYukle();

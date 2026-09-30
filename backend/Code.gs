@@ -1654,16 +1654,24 @@ function saveCariVirman(body) {
   const ss = acikSS_();
   const id = "vir_" + Date.now();
 
+  // ★ (30 Eyl 2026) Cari ekstresindeki virman açıklaması: "<karşı carinin kodu> ile Virman İşlemi
+  // Gerçekleştirildi.(not)". Her iki tarafta da KARŞI cari gösterilir: kaynak (alacaklı) satırında alıcının,
+  // hedef (alıcı/borçlu) satırında alacaklının kodu yazar. Kodu olmayan cari için ad yazılır.
+  // Başındaki "VIRMAN:<id> | " işareti silme/düzenlemede eşleştirme için aynen korunur.
+  const kodHaritasi = cariKoduHaritasiOlustur(ss);
+  const hedefKodu = String(kodHaritasi[hedefId] || "").trim() || hedefAd;
+  const kaynakKodu = String(kodHaritasi[kaynakId] || "").trim() || kaynakAd;
+
   const kaynakHareket = cariHareketEkle({
     cariId: kaynakId, tarih: tarih, tip: "Alacak", tutar: tutar,
-    aciklama: "VIRMAN:" + id + " | Cari Virman — " + hedefAd + " hesabına aktarıldı" + (notu ? " (" + notu + ")" : ""),
+    aciklama: "VIRMAN:" + id + " | " + hedefKodu + " ile Virman İşlemi Gerçekleştirildi." + (notu ? "(" + notu + ")" : ""),
     projeKodu: body.projeKodu,
   });
   if (!kaynakHareket.ok) return { ok: false, hata: "Kaynak cari hareketi eklenemedi" };
 
   const hedefHareket = cariHareketEkle({
     cariId: hedefId, tarih: tarih, tip: "Borç", tutar: tutar,
-    aciklama: "VIRMAN:" + id + " | Cari Virman — " + kaynakAd + " hesabından aktarıldı" + (notu ? " (" + notu + ")" : ""),
+    aciklama: "VIRMAN:" + id + " | " + kaynakKodu + " ile Virman İşlemi Gerçekleştirildi." + (notu ? "(" + notu + ")" : ""),
     projeKodu: body.projeKodu,
   });
   if (!hedefHareket.ok) {
@@ -7073,7 +7081,7 @@ function stokTanimMarkaKoduIsleToplu() {
 }
 
 // ★ EKLENDİ (30 Eyl 2026): Stok adında şu ölçülerden biri geçen kartların birimi m² (kayıtlı değer "m2") olur:
-// 60X120, 45X45, 42,5X42,5, 20X90, 20X120. "X" yerine x, * veya × ve "42,5" yerine "42.5" yazılması fark etmez;
+// 60X120, 45X45, 42,5X42,5, 20X90, 20X120 (ters yazım 120X60 da dahil). "X" yerine x, * veya × ve "42,5" yerine "42.5" yazılması fark etmez;
 // "160X120" gibi başka ölçü içinde kalan rakamlar eşleşmez (sayılar tam karşılaştırılır).
 const M2_OLCULER_ = [[60, 120], [45, 45], [42.5, 42.5], [20, 90], [20, 120]];
 function stokAdiM2OlcusuMu_(stokAdi) {
@@ -7083,7 +7091,9 @@ function stokAdiM2OlcusuMu_(stokAdi) {
   while ((m = re.exec(ad)) !== null) {
     const en = parseFloat(m[1].replace(",", ".")), boy = parseFloat(m[2].replace(",", "."));
     for (let i = 0; i < M2_OLCULER_.length; i++) {
-      if (Math.abs(en - M2_OLCULER_[i][0]) < 0.01 && Math.abs(boy - M2_OLCULER_[i][1]) < 0.01) return true;
+      const a = M2_OLCULER_[i][0], b = M2_OLCULER_[i][1];
+      // Ters yazım (120X60, 90X20) aynı ebattır → o da eşleşir.
+      if ((Math.abs(en - a) < 0.01 && Math.abs(boy - b) < 0.01) || (Math.abs(en - b) < 0.01 && Math.abs(boy - a) < 0.01)) return true;
     }
   }
   return false;
@@ -7097,8 +7107,17 @@ function stokTanimOlcuBirimIsleToplu(body) {
   const data = sheet.getDataRange().getValues();
   const birimler = [];
   let eslesen = 0, zatenM2 = 0, degisecek = 0;
+  const digerSay = {}; // eşleşmeyen kartlarda geçen diğer ölçüler (teşhis için): "30X60" → adet
   for (let i = 1; i < data.length; i++) {
     let birim = data[i][3];
+    if (data[i][0] && !stokAdiM2OlcusuMu_(data[i][2])) {
+      const re2 = /(?<![\d.,])(\d{1,3}(?:[.,]\d)?)\s*[X*×]\s*(\d{1,3}(?:[.,]\d)?)(?![.,]?\d)/gi;
+      let mm;
+      while ((mm = re2.exec(String(data[i][2] || ""))) !== null) {
+        const k = mm[1].replace(",", ".") + "X" + mm[2].replace(",", ".");
+        digerSay[k] = (digerSay[k] || 0) + 1;
+      }
+    }
     if (data[i][0] && stokAdiM2OlcusuMu_(data[i][2])) {
       eslesen++;
       const b = String(birim || "").trim().toLowerCase();
@@ -7107,7 +7126,9 @@ function stokTanimOlcuBirimIsleToplu(body) {
     }
     birimler.push([birim]);
   }
-  if (body && body.onizleme) return { ok: true, onizleme: true, eslesen: eslesen, zatenM2: zatenM2, degisecek: degisecek };
+  const diger = Object.keys(digerSay).sort(function (a, b) { return digerSay[b] - digerSay[a]; }).slice(0, 10)
+    .map(function (k) { return k + " (" + digerSay[k] + ")"; });
+  if (body && body.onizleme) return { ok: true, onizleme: true, eslesen: eslesen, zatenM2: zatenM2, degisecek: degisecek, toplamKart: data.length - 1, digerOlculer: diger };
   if (degisecek > 0) {
     sheet.getRange(2, 4, birimler.length, 1).setValues(birimler);
     SpreadsheetApp.flush();
