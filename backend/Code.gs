@@ -1046,7 +1046,7 @@ const YAZMA_DEGIL_ = /^(get|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|ed
 const OTURUMSUZ_ACTIONLAR = { girisYap: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
-  yeniCalismaYiliOlustur: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
+  eskiPanelStokKartlariniAktar: true, yeniCalismaYiliOlustur: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
   getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, kayitDefteriHatalariTemizle: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
 };
@@ -1154,6 +1154,7 @@ function handleRequest(e) {
       case "saveStokTanimTopluce": result = saveStokTanimTopluce(body); break;
       case "silStokTanim":        result = silStokTanim(body); break;
       case "stokTanimMarkaKoduIsleToplu": result = stokTanimMarkaKoduIsleToplu(); break;
+      case "eskiPanelStokKartlariniAktar": result = eskiPanelStokKartlariniAktar(body); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
       case "getBirimListesi": result = getBirimListesi(); break;
       case "saveBirim":       result = saveBirim(body); break;
@@ -7068,6 +7069,75 @@ function stokTanimMarkaKoduIsleToplu() {
   }
   if (guncellenen > 0) cacheTemizle(["stokTanimListesi"]);
   return { ok: true, guncellenen: guncellenen };
+}
+
+// ★ EKLENDİ (30 Eyl 2026): ESKİ STOK PANELİNDEKİ ÜRÜNLERİ STOK KARTI OLARAK AKTAR — SADECE KART.
+// Kaynak: temel yıl e-tablosundaki "Stoklar" sayfasının EN SON tarihli yüklemesi (STOK_KODU, STOK_ADI).
+// Hedef: şu an çalışılan yılın StokTanimlari sayfası (ör. "2026-2"). Miktar/stok hareketi YAZILMAZ
+// (Merkez/Ayrılmış/Satılabilir miktarları aktarılmaz; stok 0'dan başlar). Stok kodu hedefte zaten varsa
+// atlanır (tekrar çalıştırmak güvenli). Marka, stok kodunun ilk 2 hanesinden Marka Tanımlama'ya göre atanır.
+// body.onizleme === true → hiçbir şey yazmadan kaç kart açılacağını söyler.
+function eskiPanelStokKartlariniAktar(body) {
+  const kaynakSS = SpreadsheetApp.openById(SHEET_ID_TEMEL_);
+  const kSheet = kaynakSS.getSheetByName("Stoklar");
+  if (!kSheet) return { ok: false, hata: "Eski panelin 'Stoklar' sayfası bulunamadı" };
+  const kData = kSheet.getDataRange().getValues();
+  if (kData.length < 2) return { ok: false, hata: "'Stoklar' sayfası boş" };
+  const bas = kData[0].map(function (h) { return String(h).toUpperCase().trim(); });
+  const iKod = bas.indexOf("STOK_KODU"), iAd = bas.indexOf("STOK_ADI"), iTar = bas.indexOf("TARIH");
+  if (iKod < 0 || iAd < 0 || iTar < 0) return { ok: false, hata: "'Stoklar' sayfasında STOK_KODU / STOK_ADI / TARIH başlıkları bulunamadı" };
+  const tarihMetni = function (v) {
+    if (v instanceof Date) return Utilities.formatDate(v, "Europe/Istanbul", "yyyy-MM-dd");
+    return String(v || "").split("T")[0].trim();
+  };
+  let sonTarih = "";
+  for (let i = 1; i < kData.length; i++) {
+    const t = tarihMetni(kData[i][iTar]);
+    if (!t || t.indexOf("pasif") !== -1) continue;
+    if (t > sonTarih) sonTarih = t;
+  }
+  if (!sonTarih) return { ok: false, hata: "Geçerli yükleme tarihi bulunamadı" };
+
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  ensureStokTanimEkColonlari(sheet);
+  const mevcut = {};
+  const hData = sheet.getDataRange().getValues();
+  for (let i = 1; i < hData.length; i++) {
+    const k = String(hData[i][1] || "").trim().toUpperCase();
+    if (k) mevcut[k] = true;
+  }
+  const markaHaritasi = {};
+  (getMarkaListesi().markalar || []).forEach(function (m) { if (m.kod) markaHaritasi[m.kod] = m.id; });
+
+  const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+  const yeni = [];
+  let zatenVar = 0, adsiz = 0, markasiz = 0;
+  const gorulen = {};
+  const t0 = Date.now();
+  for (let i = 1; i < kData.length; i++) {
+    if (tarihMetni(kData[i][iTar]) !== sonTarih) continue;
+    const kod = String(kData[i][iKod] === undefined || kData[i][iKod] === null ? "" : kData[i][iKod]).trim();
+    if (!kod) continue;
+    const kodB = kod.toUpperCase();
+    if (gorulen[kodB]) continue; gorulen[kodB] = true;
+    if (mevcut[kodB]) { zatenVar++; continue; }
+    const ad = String(kData[i][iAd] || "").trim();
+    if (!ad) { adsiz++; continue; }
+    const markaId = markaHaritasi[kodB.slice(0, 2)] || "";
+    if (!markaId) markasiz++;
+    yeni.push(["sk_" + t0 + "_" + yeni.length, kod, ad, "adet", 0, "", 0, 0, 0, 0, simdi, String(markaId), "", "", "", "", 0, "", 20, 20]);
+  }
+  if (body && body.onizleme) {
+    return { ok: true, onizleme: true, kaynakTarih: sonTarih, acilacak: yeni.length, zatenVar: zatenVar, adsiz: adsiz, markasiz: markasiz };
+  }
+  if (yeni.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, yeni.length, STOK_TANIM_BASLIKLAR.length).setValues(yeni);
+    SpreadsheetApp.flush();
+    cacheTemizle(["stokTanimListesi"]);
+    veriSurumuArtir_();
+  }
+  return { ok: true, kaynakTarih: sonTarih, eklenen: yeni.length, zatenVar: zatenVar, adsiz: adsiz, markasiz: markasiz, yil: aktifYil_() };
 }
 
 //         alisFiyati, alisIskontosu, kdvAlis, satisFiyati, satisIskontosu, kdvSatis,

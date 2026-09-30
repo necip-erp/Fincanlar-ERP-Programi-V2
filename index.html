@@ -724,6 +724,7 @@ setInterval(topbarSaatGuncelle, 10000);
           <input id="stoktanim-ara" placeholder="Ürün ara..." oninput="stokTanimAramaFiltrele(this.value)">
           <button class="cari-add-btn" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);width:auto;padding:0 10px;font-size:12px;font-weight:700" onclick="stokTanimIceAktarModalAc()" title="Excel'den içe aktar">📥 İçe Aktar</button>
           <button class="cari-add-btn" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);width:auto;padding:0 10px;font-size:12px;font-weight:700" onclick="stokTanimMarkaKoduIsleUygula()" title="Marka alanı boş olan stok kartlarında, stok kodunun ilk 2 hanesini Marka Tanımlama'daki kodlarla eşleştirip otomatik doldurur">🏷️ Marka Kodlarını İşle</button>
+          <button id="stoktanim-eski-aktar-btn" style="display:none;background:var(--bg3);color:var(--text2);border:1px solid var(--border);border-radius:8px;width:auto;padding:0 10px;font-size:12px;font-weight:700;cursor:pointer" class="cari-add-btn" onclick="eskiPanelStokKartlariAktar()" title="Eski stok panelindeki ürünleri stok kartı olarak açar (miktar aktarılmaz). Sadece Admin.">📥 Eski Paneldeki Kartlar</button>
           <button class="cari-add-btn" onclick="stokTanimModalAc()" title="Yeni ürün tanımla">+</button>
         </div>
         <div class="cari-items" id="stoktanim-items"><div class="cari-empty">Yükleniyor...</div></div>
@@ -13294,6 +13295,7 @@ function _stokTanimGuncelAramaTerimiIleCiz(){
   else stokTanimListesiCiz(_stokTanimListe);
 }
 function stokTanimListesiYukle(){
+  try{ const b=document.getElementById("stoktanim-eski-aktar-btn"); if(b) b.style.display = modulGorunurMu_({admin:true}) ? "" : "none"; }catch(e){}
   _stokTanimYuklendi = true;
   const onbellek = onbellekOku("stokTanimListesi", ONBELLEK_MAX_YAS);
   if(onbellek){ _stokTanimListe = onbellek; _stokTanimGuncelAramaTerimiIleCiz(); bfmOnerileriGuncelle(); }
@@ -13546,6 +13548,22 @@ function stokTanimMarkaKoduIsleUygula(){
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     stokTanimListesiYukle();
     alert(res.guncellenen > 0 ? `${res.guncellenen} stok kartına marka otomatik atandı.` : "Eşleşen boş marka bulunamadı (tüm kartlarda marka zaten seçili olabilir ya da kod eşleşmiyor).");
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+
+// ★ EKLENDİ (30 Eyl 2026): Eski stok panelindeki ürünleri bu çalışma yılında STOK KARTI olarak açar.
+// Miktar aktarılmaz. Önce kaç kart açılacağını gösterir, onay alınca yazar. Kodu zaten olan atlanır.
+function eskiPanelStokKartlariAktar(){
+  cariApi("eskiPanelStokKartlariniAktar", {onizleme:true}).then(on=>{
+    if(!on.ok){ alert("Hata: "+(on.hata||"bilinmiyor")); return; }
+    if(!on.acilacak){ alert(`Açılacak yeni kart yok (${on.zatenVar} ürünün kartı zaten var).`); return; }
+    if(!confirm(`Eski paneldeki (${on.kaynakTarih} yüklemesi) ${on.acilacak} ürün, bu çalışma yılında stok kartı olarak açılacak.\n• Miktar aktarılmaz (stok 0).\n• Kartı zaten olan ${on.zatenVar} ürün atlanır.\n• Marka atanamayan: ${on.markasiz}\nDevam edilsin mi?`)) return;
+    cariApi("eskiPanelStokKartlariniAktar", {}).then(res=>{
+      if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+      stokTanimListesiYukle();
+      alert(`${res.eklenen} stok kartı açıldı (çalışma yılı: ${res.yil}). Zaten var olan: ${res.zatenVar}. Marka atanamayan: ${res.markasiz}.`);
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
