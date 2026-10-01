@@ -6328,6 +6328,7 @@ function alisListesiYukle(){
 }
 
 function alisListesiCiz(liste){
+  window._alisGorunen = liste;
   const el = document.getElementById("alis-items");
   if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı alış yok. "+" ile ekleyin.</div>'; return; }
   el.innerHTML = liste.map(a=>`
@@ -6357,7 +6358,7 @@ function alisAc(id){
   }).catch(err=>{
     panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>Bağlantı hatası: '+err.message+'</p></div>';
   });
-  alisListesiCiz(_alisListe);
+  alisAramaFiltrele((document.getElementById("alis-ara")||{}).value||"");
 }
 
 // ★ EKLENDİ: Kullanıcının "mükerrer stok" sorunu nedeniyle istediği, TÜM Alış Faturalarını
@@ -6383,6 +6384,27 @@ function alisTumunuSilOnaySureci(){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
+// Faturalar arası geçiş: soldaki listenin (arama filtresi dahil) görünen sırasına göre önceki/sonraki fatura
+function alisKomsuyaGit(yon){
+  const l = window._alisGorunen || _alisListe || [];
+  const i = l.findIndex(x=>x.id===_alisSecili);
+  const j = i + yon;
+  if(i < 0 || j < 0 || j >= l.length) return;
+  alisAc(l[j].id);
+  setTimeout(()=>{ const s = document.querySelector("#alis-items .cari-item.sel"); if(s) s.scrollIntoView({block:"nearest"}); }, 60);
+}
+function alisGecisCubugu(){
+  const l = window._alisGorunen || _alisListe || [];
+  const i = l.findIndex(x=>x.id===_alisSecili);
+  if(i < 0) return "";
+  const t = x => htmlKacis((x.cariAd||"")+(x.faturaNo?" #"+x.faturaNo:""));
+  return `<div class="alis-gecis">
+    <button class="btn" ${i===0?"disabled":""} onclick="alisKomsuyaGit(-1)" title="${i>0?t(l[i-1]):""}">‹ Önceki fatura</button>
+    <span class="sira">${i+1} / ${l.length}</span>
+    <button class="btn" ${i===l.length-1?"disabled":""} onclick="alisKomsuyaGit(1)" title="${i<l.length-1?t(l[i+1]):""}">Sonraki fatura ›</button>
+  </div>`;
+}
+
 function alisListeyeDon(){
   document.getElementById("mod-alis").classList.remove("detay-acik");
 }
@@ -6399,6 +6421,7 @@ function alisDetayCiz(res){
   const tutarIskontosu = a.tutarIskontosu || 0;
   panel.innerHTML = `
     <button class="cari-back-btn" onclick="alisListeyeDon()">← Listeye dön</button>
+    ${alisGecisCubugu()}
     <div class="cari-detail-head">
       <div>
         <h2>${a.cariAd} ${a.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${a.cariId}')" title="Cari Hareket ekranını sekme olarak aç">🔗 Cariyi Aç</button>` : ''}</h2>
@@ -6427,7 +6450,7 @@ function alisDetayCiz(res){
             <td>${k.birim}</td>
             <td>${fiyatFormat(k.birimFiyat)}</td>
             <td>${k.kdvOrani||0}</td>
-            <td>${paraFormat(k.tutar)}</td>
+            <td class="tutar-hucre">${paraFormat(k.tutar)}</td>
             <td>${k.satilanCariId ? `<div>🛒 <b>${htmlKacis(k.satilanCariAd||'')}</b></div>${k.satisVar===true ? '<div style="font-size:11px;color:#2e7d32">✔ Bu cariye satış/sipariş girilmiş</div>' : (k.satisVar===false ? '<div style="font-size:11px;color:#c62828;font-weight:700">⚠ Bu cariye bu ürün için satış/sipariş girilmemiş</div>' : '')}` : '—'}</td>
             <td style="white-space:nowrap">${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını sekme olarak aç">📊</button>` : ''}${k.stokKodu ? ` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokTaniminaGitYeniSekmede('${k.stokKodu.replace(/'/g,"\\'")}')" title="Bu ürünün Stok Tanımını sekme olarak aç">📇</button>` : ''}</td>
           </tr>`).join("")}
@@ -15367,6 +15390,28 @@ table.hareket-tbl tbody tr:hover,table.hareket-tbl tbody tr:hover td,table.rehbe
 #mod-finans .satis-kalem-satir{background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:8px;padding:6px 10px;margin-bottom:4px}
 #mod-finans #banka-yapisi-alani b{color:var(--rp-th-fg)}
 #mod-finans .fld label{color:var(--rp-th-fg)}
+/* ── 1 Eki 2026: Alış (Giriş/İade/Bekleyen) da Finans'taki rapor renk düzeninde + fatura geçişi ve tutar vurgusu ── */
+#mod-alis{background:var(--rp-alan)}
+#mod-alis .cari-list-panel{background:var(--rp-satir);border-right:1px solid var(--rp-th-bd)}
+#mod-alis .rapor-baslik{background:var(--rp-th-bg);color:var(--rp-th-fg);padding:8px 12px;border-radius:8px;border-left:4px solid var(--rp-th-fg);margin:22px 0 10px;display:flex;align-items:center;gap:10px}
+#mod-alis .cari-item{background:var(--rp-satir);border-bottom:1px solid var(--rp-th-bd)}
+body[data-rapor-zebra="1"] #mod-alis .cari-item:nth-child(even){background:var(--rp-satir2)}
+#mod-alis .cari-item:hover{background:var(--rp-hover)}
+#mod-alis .cari-item.sel{background:var(--rp-th-bg);border-left:6px solid var(--rp-th-fg);box-shadow:inset 0 0 0 1px var(--rp-th-bd)}
+#mod-alis .cari-item.sel .cari-item-ad{font-weight:800;color:var(--rp-th-fg)}
+#mod-alis .cari-item-bakiye{background:var(--rp-th-bg);border:1px solid var(--rp-th-bd);color:var(--red);font-size:13px;font-weight:800;padding:2px 9px;border-radius:7px}
+#mod-alis .cari-item.sel .cari-item-bakiye{background:var(--rp-satir)}
+#mod-alis .cari-detail-head .cari-bakiye-box{background:var(--rp-th-bg);border:1px solid var(--rp-th-bd);border-left:5px solid var(--red);border-radius:10px;padding:8px 18px}
+#mod-alis .cari-bakiye-box .num{font-size:30px;font-weight:900}
+#mod-alis .cari-bakiye-box .lbl{color:var(--rp-th-fg);font-weight:700}
+#mod-alis table.hareket-tbl td.tutar-hucre{font-weight:800;white-space:nowrap;color:var(--red)}
+#mod-alis .fis-toplam-tbl tr.genel td{background:var(--rp-th-bg);color:var(--rp-th-fg);border-top:2px solid var(--rp-th-fg);font-size:17px;padding:9px 10px}
+#mod-alis .fis-toplam-tbl tr.genel td:last-child{color:var(--red);font-size:19px;font-weight:900}
+#mod-alis .belge-tab{background:var(--rp-satir);border:1px solid var(--rp-th-bd);color:var(--rp-th-fg)}
+.alis-gecis{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin:0 0 12px;padding:6px 10px;background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:10px}
+.alis-gecis .sira{font-weight:800;color:var(--rp-th-fg);min-width:70px;text-align:center}
+.alis-gecis .btn{font-weight:700}
+.alis-gecis .btn[disabled]{opacity:.4;cursor:default}
 </style>
 <script>
 (function(){
