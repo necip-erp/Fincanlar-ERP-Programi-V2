@@ -3269,7 +3269,7 @@ function rehberAc(tip, callback){
           <option value="" selected disabled>Sırala...</option>
           ${rehberSiralamaSecenekleriHTML(tip)}
         </select>
-        ${tip==='stok' ? '<button type="button" class="btn" style="flex-shrink:0;white-space:nowrap;font-size:12.5px;padding:7px 12px" onclick="rehberStokKartiAc()" title="Aradığın ürünün stok kartı yoksa buradan hemen aç; kaydedince seçili satıra otomatik yazılır">➕ Stok Kartı Aç</button>' : ''}
+        ${tip==='stok' ? '<button type="button" class="btn" style="flex-shrink:0;white-space:nowrap;font-size:12.5px;padding:7px 12px" onclick="rehberStokKartiAc()" title="Aradığın ürünün stok kartı yoksa buradan hemen aç; kaydedince seçili satıra otomatik yazılır">➕ Stok Kartı Aç</button>' : '<button type="button" class="btn" style="flex-shrink:0;white-space:nowrap;font-size:12.5px;padding:7px 12px" onclick="rehberCariKartiAc()" title="Aradığın carinin kartı yoksa buradan hemen aç; kaydedince seçili alana otomatik yazılır">➕ Cari Kartı Aç</button>'}
         <button class="rehber-kapat" onclick="rehberKapat()" title="Kapat">✕</button>
       </div>
       <div class="rehber-tbl-wrap" id="rehber-tbl-wrap"><div class="cari-empty">Yükleniyor...</div></div>
@@ -3430,6 +3430,18 @@ function rehberStokKartiAc(){
   if(aranan) setTimeout(()=>{ const e = document.getElementById("st-stokadi"); if(e && !e.value) e.value = aranan; }, 60);
 }
 
+// ★ EKLENDİ (1 Eki 2026): F1 Cari Rehberi'nde aranan carinin kartı yoksa rehberden çıkmadan yeni cari kartı açılır
+// (F2'deki "Stok Kartı Aç" gibi). Kaydedilince rehber kapanır; yeni cari, rehberin açıldığı alana (rehberin normal
+// seçim geri çağrısıyla) otomatik yazılır. Alana bağlı değilse yeni carinin kartı açılır.
+function rehberCariKartiAc(){
+  const durum = _rehberState, cb = durum && durum.callback;
+  const aranan = String((document.getElementById("rehber-ara")||{}).value || "").trim();
+  cariModalAc(null, c=>{
+    rehberKapat();
+    if(cb) cb(c); else cariHareketIslemeGit("CARI:" + c.id);
+  }, aranan);
+}
+
 function rehberKapat(){
   const el = document.getElementById("rehber-modal-overlay");
   if(el) el.remove();
@@ -3442,8 +3454,7 @@ function rehberFiltrele(deger){
   if(q){
     filtreli = filtreli.filter(k=>{
       if(tip==='cari') return esnekEslesirMi(k.ad, q) || (k.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (k.telefon||"").includes(q) || esnekEslesirMi(k.adres, q);
-      return (k.stokAdi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (k.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
-             (k.markaKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (k.barkod||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q);
+      return stokEslesirMi(k, q);
     });
   }
   _rehberState.filtreli = filtreli;
@@ -3636,6 +3647,24 @@ function esnekEslesirMi(hedef, sorgu){
   // ★ (29 Eyl 2026) "İçinde geçen" araması: sorgudaki HER kelime, hedef metnin herhangi bir yerinde
   // (kelimenin başı olması ve sıra şartı olmadan) geçiyorsa eşleşir. Ör. "yıl" → "Ali Kayıl" da gelir.
   return qKelimeler.every(qk => h.includes(qk));
+}
+
+
+// ★ (1 Eki 2026) Stok arama: kelime sırasından bağımsız, "içinde geçen" mantığı. "60x120 lola" yazınca
+// "LOLA BEYAZ 60x120 (1,44m²-57,6m²)RECT" bulunur. Ölçü yazımları ("60X120", "60 x 120", "60*120", "60×120")
+// aynı kabul edilir; ad + stok kodu + marka kodu + barkod birlikte aranır.
+function stokAramaNormalize_(t){
+  return esnekNormalize_(t)
+    .replace(/(\d)\s*[x×*]\s*(?=\d)/g, "$1x")   // 60 x 120 / 60*120 / 60×120 → 60x120
+    .replace(/m²/g, "m2")
+    .replace(/\s+/g, " ").trim();
+}
+function stokEslesirMi(s, sorgu){
+  const q = stokAramaNormalize_(sorgu);
+  if(!q) return true;
+  const h = stokAramaNormalize_((s.stokAdi||"")+" "+(s.stokKodu||"")+" "+(s.markaKodu||"")+" "+(s.barkod||""));
+  if(h.includes(q)) return true;
+  return q.split(" ").filter(Boolean).every(k => h.includes(k));
 }
 
 function htmlKacis(metin){
@@ -4270,7 +4299,8 @@ function cariIlDegisti(){
 }
 
 // ── Yeni/Düzenle modal ──
-function cariModalAc(editId){
+function cariModalAc(editId, onKaydedildi, adIpucu){
+  window._cariKaydedildiCB = (!editId && onKaydedildi) ? onKaydedildi : null;
   const duzenle = !!editId;
   const c = duzenle ? _cariListe.find(x=>x.id===editId) : null;
   const overlay = document.createElement("div");
@@ -4348,7 +4378,7 @@ function cariModalAc(editId){
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  setTimeout(()=>document.getElementById("cm-ad").focus(), 50);
+  setTimeout(()=>{ const e = document.getElementById("cm-ad"); if(e){ if(adIpucu && !e.value) e.value = adIpucu; e.focus(); } }, 50);
   // Yeni cari eklerken (düzenleme değil) modal açılır açılmaz, işaretli olan
   // tık (varsayılan: Alıcı) için sıradaki cari numarasını otomatik getir.
   if(!duzenle) cariTuruDegisti(false);
@@ -4411,6 +4441,16 @@ function cariKaydet(id){
   cariApi("saveCari", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("cari-modal-overlay").remove();
+    // ★ (1 Eki 2026) F1 Cari Rehberi / Bekleyen Fatura'dan açılan yeni cari: ekran değişmez, kart ilgili alana seçilir.
+    const cb = window._cariKaydedildiCB; window._cariKaydedildiCB = null;
+    if(cb && !id){
+      const yedek = {id: res.id, ad: body.ad, cariKodu: body.cariKodu, tip: body.tip};
+      cariApi("getCariListesi").then(r=>{
+        if(r && r.ok){ _cariListe = r.cariler; _cariYuklendi = true; onbellekYaz("cariListesi", r.cariler); }
+        cb((_cariListe||[]).find(x=>x.id===res.id) || yedek);
+      }).catch(()=>cb(yedek));
+      return;
+    }
     cariListesiYukle();
     if(id) cariAc(id); else cariAc(res.id);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
@@ -5772,7 +5812,7 @@ function urunOneriGoster(idx){
   if(q.length < 1){ kutu.style.display="none"; return; }
   _urunOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.barkod||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
+      stokEslesirMi(s, q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`
@@ -6223,7 +6263,7 @@ function satisIadeUrunOneriGoster(idx){
   if(q.length<1){ kutu.style.display="none"; return; }
   _stimOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.barkod||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
+      stokEslesirMi(s, q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`
@@ -6757,7 +6797,7 @@ function alisUrunOneriGoster(idx){
   if(q.length < 1){ kutu.style.display="none"; return; }
   _alisUrunOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.barkod||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
+      stokEslesirMi(s, q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`
@@ -7131,7 +7171,7 @@ function alisIadeUrunOneriGoster(idx){
   if(q.length<1){ kutu.style.display="none"; return; }
   _aimOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.barkod||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
+      stokEslesirMi(s, q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`
@@ -7819,13 +7859,17 @@ function alisBekleyenOnayModalAc(faturaNo){
       <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1.6fr;gap:10px;align-items:end">
         <div class="fld" style="position:relative;margin:0">
           <label>Bu fatura hangi cariye işlensin? *</label>
-          <input id="bfm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" value="${f.eslesenCariAd||f.tedarikci||''}" style="padding-right:34px"
+          <input id="bfm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" value="${htmlKacis(bfmCariEtiket_(f.eslesenCariId, f.eslesenCariAd||f.tedarikci||''))}" style="padding-right:34px"
                  oninput="bfmCariAramaDegisti()"
                  onfocus="bfmCariOneriGoster()"
                  onblur="setTimeout(()=>bfmCariOneriKapat(),200)"
                  onkeydown="oneriKlavyeYonet(event,'bfm-cari-oneri')">
           <input type="hidden" id="bfm-cari" value="${f.eslesenCariId||''}">
           <div id="bfm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:3px;font-size:11.5px">
+            <span id="bfm-cari-kod-rozet" style="color:var(--text2)">${bfmCariKodRozetHTML_(f.eslesenCariId)}</span>
+            <button type="button" class="btn" style="font-size:11px;padding:2px 8px;margin-left:auto" onclick="bfmCariKartiAc()" title="Cari kartı yoksa buradan aç; kaydedince bu faturaya otomatik seçilir">➕ Cari Kartı Aç</button>
+          </div>
           ${f.eslesenCariAd ? (f.eslesmeKaynagi === "onek"
             ? `<div style="font-size:11px;color:var(--green);margin-top:3px">✓ Önek "${f.onek}" → ${f.eslesenCariAd} eşleşmesine göre otomatik seçildi.${f.adEslesmesiCariAd ? ` <span style="color:var(--text3)">(Gönderen adı "${f.tedarikci}" ${f.adEslesmesiCariAd} cari'sine eşli — önek eşleşmesi önceliklidir.)</span>` : ``}</div>`
             : `<div style="font-size:11px;color:var(--green);margin-top:3px">✓ Daha önce "${f.tedarikci}" bu cariye işlenmiş, otomatik seçildi.</div>`) : ``}
@@ -8234,7 +8278,7 @@ function bfmStokOneriGoster(i){
   const q = (document.getElementById(`bfm-stokara-${i}`).value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
   const eslesenler = (_stokTanimListe || []).filter(s =>
-    esnekEslesirMi(s.stokAdi, q) || (s.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
+    stokEslesirMi(s, q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
   kutu.innerHTML = eslesenler.map((s,j)=>`
@@ -8486,19 +8530,35 @@ function bfmGenelToplamGuncelle(){
   if(el) el.textContent = paraFormat(toplam);
 }
 
-function bfmCariAramaDegisti(){ document.getElementById("bfm-cari").value = ""; bfmCariOneriGoster(); }
+function bfmCariBul_(id){ return id ? ((_cariListe||[]).find(c=>c.id===id) || cariAktifler().find(c=>c.id===id) || null) : null; }
+function bfmCariEtiket_(id, ad){ const c = bfmCariBul_(id); const kod = c && c.cariKodu; return kod ? (kod+" - "+(ad||c.ad||"")) : (ad||""); }
+function bfmCariKodRozetHTML_(id){
+  const c = bfmCariBul_(id);
+  return c ? `Cari Kodu: <b>${htmlKacis(c.cariKodu||"(kodsuz)")}</b>` : `<span style="color:var(--red)">⚠ Cari seçilmedi</span>`;
+}
+function bfmCariRozetGuncelle_(id){ const el = document.getElementById("bfm-cari-kod-rozet"); if(el) el.innerHTML = bfmCariKodRozetHTML_(id); }
+// Cari kartı yoksa onay ekranından çıkmadan yeni cari kartı açılır; kaydedilince bu faturaya seçilir.
+function bfmCariKartiAc(){
+  const aranan = String((document.getElementById("bfm-cari-arama")||{}).value || "").trim();
+  const f = window._bfmAktifFatura || {};
+  cariModalAc(null, kayit=>{
+    const c = bfmCariBul_(kayit.id) || kayit;
+    document.getElementById("bfm-cari").value = c.id;
+    document.getElementById("bfm-cari-arama").value = bfmCariEtiket_(c.id, c.ad);
+    bfmCariRozetGuncelle_(c.id);
+  }, aranan ? aranan.replace(/^\S+\s-\s/, "") : (f.tedarikci||""));
+}
+function bfmCariAramaDegisti(){ document.getElementById("bfm-cari").value = ""; bfmCariRozetGuncelle_(""); bfmCariOneriGoster(); }
 function bfmCariOneriGoster(){
   const kutu = document.getElementById("bfm-cari-oneri");
   if(!kutu) return;
   const q = (document.getElementById("bfm-cari-arama").value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
-  const eslesenler = cariAktifler().filter(c =>
-    (c.ad||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.cariKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
-  ).slice(0, 8);
+  const eslesenler = cariAktifler().filter(c => esnekEslesirMi((c.cariKodu||"")+" "+(c.ad||""), q)).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
   kutu.innerHTML = eslesenler.map((c,i)=>`
     <div class="fiyat-gecmis-satir" onclick="bfmCariSec(${i})" data-oneri-idx="${i}">
-      <span>${c.ad}</span><b>${c.cariKodu||''}</b>
+      <span><b style="color:var(--blue);margin-right:6px">${htmlKacis(c.cariKodu||'—')}</b>${htmlKacis(c.ad)}</span>
     </div>`).join("");
   kutu.dataset.eslesenler = JSON.stringify(eslesenler);
   kutu.style.display = "block";
@@ -8510,7 +8570,8 @@ function bfmCariSec(i){
   const c = eslesenler[i];
   if(!c) return;
   document.getElementById("bfm-cari").value = c.id;
-  document.getElementById("bfm-cari-arama").value = c.ad;
+  document.getElementById("bfm-cari-arama").value = bfmCariEtiket_(c.id, c.ad);
+  bfmCariRozetGuncelle_(c.id);
   kutu.style.display = "none";
 }
 
@@ -8577,12 +8638,19 @@ function alisBekleyenOnayla(faturaNo){
   }
   const cariId = document.getElementById("bfm-cari").value;
   const serbestAd = document.getElementById("bfm-cari-arama").value.trim();
-  if(!cariId && !serbestAd){ alert("Bu faturayı hangi cariye işleyeceğimizi belirtmelisiniz"); return; }
+  // ★ (1 Eki 2026) İlgili cari kartı yoksa işleme devam edilmez: listeden mevcut bir cari seçilmeli
+  // ya da ➕ ile önce cari kartı açılmalı (serbest adla cari oluşturulmaz).
+  if(!cariId){
+    alert(serbestAd
+      ? `"${serbestAd}" adında seçilmiş bir cari kartı yok.\n\nListeden mevcut bir cari seçin ya da "➕ Cari Kartı Aç" ile önce cari kartını açın. Cari seçilmeden fatura işlenmez.`
+      : "Bu faturayı hangi cariye işleyeceğimizi belirtmelisiniz. Listeden bir cari seçin ya da ➕ Cari Kartı Aç ile yeni cari kartı açın.");
+    const ci = document.getElementById("bfm-cari-arama"); if(ci) ci.focus();
+    return;
+  }
   const tutarIskontosuEl = document.getElementById("bfm-tutar-iskontosu");
   const body = {
     faturaNo,
-    cariId: cariId || undefined,
-    cariAd: !cariId ? serbestAd : undefined,
+    cariId: cariId,
     tedarikci: f.tedarikci || undefined,
     tarih: document.getElementById("bfm-tarih").value,
     odemeTipi: document.getElementById("bfm-odeme").value,
@@ -12074,7 +12142,7 @@ function shpAraDegisti(){
     const q = esnekNormalize_(inp.value);
     if(!q){ kutu.style.display = "none"; return; }
     if(!_stokTanimYuklendi) stokTanimListesiYukle();
-    const eslesen = (_stokTanimListe||[]).filter(s=>esnekNormalize_((s.stokKodu||"")+" "+(s.stokAdi||"")+" "+(s.barkod||"")+" "+(s.markaKodu||"")).includes(q)).slice(0,8);
+    const eslesen = (_stokTanimListe||[]).filter(s=>stokEslesirMi(s, q)).slice(0,8);
     if(!eslesen.length){ kutu.style.display = "none"; return; }
     kutu.innerHTML = eslesen.map((s,i)=>`<div class="fiyat-gecmis-satir" data-oneri-idx="${i}" onclick="shpStokSec(${i})"><span>${htmlKacis(s.stokKodu?s.stokKodu+' · ':'')}${htmlKacis(s.stokAdi||'')}</span><b>${htmlKacis(s.birim1||'adet')}</b></div>`).join("");
     kutu.dataset.eslesenler = JSON.stringify(eslesen);
@@ -14099,7 +14167,7 @@ function stokTanimAramaFiltrele(deger){
   _stokTanimRenderLimit = 80;
   const d = deger.trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   const filtreli = !d ? _stokTanimListe : _stokTanimListe.filter(k =>
-    esnekEslesirMi(k.stokAdi, d) || (k.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(d));
+    stokEslesirMi(k, d));
   stokTanimListesiCiz(filtreli);
 }
 
@@ -14544,7 +14612,7 @@ function stokHareketUrunOneriGoster(mod, idx){
   if(q.length < 1){ kutu.style.display="none"; return; }
   _shOneriTimer = setTimeout(()=>{
     const eslesenler = (_stokTanimListe||[]).filter(s=>
-      (s.stokAdi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.markaKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (s.barkod||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q)
+      stokEslesirMi(s, q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
     kutu.innerHTML = eslesenler.map((s,i)=>`

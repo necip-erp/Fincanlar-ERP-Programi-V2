@@ -5644,6 +5644,8 @@ function getBekleyenAlisFaturalariHesapla_() {
 function onaylaAlisFaturasi(body) {
   const faturaNo = String(body.faturaNo || "").trim();
   if (!faturaNo) return { ok: false, hata: "faturaNo gerekli" };
+  // ★ (1 Eki 2026) İlgili cari kartı seçilmeden bekleyen fatura işlenmez (serbest adla cari oluşturulmaz).
+  if (!String(body.cariId || "").trim()) return { ok: false, hata: "Cari seçilmedi: önce ilgili cari kartını seçin ya da açın." };
 
   const ss = acikSS_();
   const durumSheet = getOrCreateSheet(ss, SHEETS.alisFaturaDurum, ALIS_FATURA_DURUM_BASLIKLAR);
@@ -7029,7 +7031,11 @@ function stokGuncelMiktarHaritasi() {
 // Sonuç: { ok, tarih:"YYYY-MM-DD", kodlar:{ "<stokKodu>": [stok, ayrilmis, satilabilir], ... } }
 function getStokPanelSnapshot() {
   return cacheOkuVeyaHesapla("stokPanelSnapshot", 120, function () {
-    const ss = acikSS_();
+    // ★ DÜZELTME (1 Eki 2026): Eski stok paneli stoğu HER ZAMAN temel yıl (2026) e-tablosundaki "Stoklar" sayfasına
+    // yazar. Yeni çalışma yılı e-tabloları (2026-2, 2027...) temel yılın kopyası olup hareket/kart sayfaları
+    // boşaltıldığı için oradaki "Stoklar" boştur → F2 Stok Rehberi'nde panel stok/ayrılmış/satılabilir "—" geliyordu.
+    // Panel verisi yıldan bağımsız olduğundan her yıl temel yıl e-tablosundan okunur.
+    const ss = (aktifSheetId_() === SHEET_ID_TEMEL_) ? acikSS_() : SpreadsheetApp.openById(SHEET_ID_TEMEL_);
     const sheet = ss.getSheetByName("Stoklar");
     if (!sheet) return { ok: true, tarih: "", kodlar: {} };
     const data = sheet.getDataRange().getValues();
