@@ -2965,7 +2965,7 @@ function cariApi(action, params, _tokenYenidenDenendi){
   // değiştirirken/listeler otomatik yüklenirken tetiklenen "get..." gibi sessiz okuma
   // çağrılarında gösterilmez (23 Eyl 2026: ilk sürümde her çağrıda çıkıyordu, çok sık
   // görünüyordu; artık sadece Kaydet/Sil/Onayla gibi asıl işlemlerde çıkıyor).
-  const _bantGoster = window.islemYapiliyorGoster_ && !CARI_API_YAZMA_DEGIL_.test(action);
+  const _bantGoster = window.islemYapiliyorGoster_ && (!CARI_API_YAZMA_DEGIL_.test(action) || CARI_API_BANT_OKUMA_.test(action));
   if(_bantGoster) window.islemYapiliyorGoster_();
   const _hizT0 = performance.now();
   return cariApiIstekYap_(url, postGovde).catch(err=>{
@@ -3117,6 +3117,9 @@ function hizPaneliIndir(){
   a.download = "hiz-olcumu-" + new Date().toISOString().slice(0,10) + ".csv"; a.click();
 }
 // Veriyi DEĞİŞTİRMEYEN (ya da önbelleği ilgilendirmeyen) işlemler: bunlardan sonra önbellek temizlenmez.
+// ★ (1 Eki 2026) Okuma olsa da yavaş olduğu için "İşlem yapılıyor + geçen süre" bandı gösterilen çağrılar:
+// Bekleyen Alış Faturaları listesi (dış e-tablo + birkaç sayfa okuyor). Başka ekran eklemek için buraya ekle.
+const CARI_API_BANT_OKUMA_ = /^(getBekleyenAlisFaturalari)$/;
 const CARI_API_YAZMA_DEGIL_ = /^(get|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
 // Yapı/tanım verisini değiştiren işlemler (banka, hesap, pos, kart, seri, tanım, marka, plasiyer, birim...).
 const CARI_API_YAPI_ISLEMI_ = /(Banka|Hesap|Pos|KrediKart|Seri|BasitTanim|Marka|Plasiyer|Birim|AciklamaSablon|SiparisDurum|SiraGuncelle)/;
