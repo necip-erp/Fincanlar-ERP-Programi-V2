@@ -1318,6 +1318,18 @@ setInterval(topbarSaatGuncelle, 10000);
       <div id="ayarlar-son-islemler-daha" style="display:none;margin-top:8px"><button class="btn" onclick="ayarlarSonIslemlerDahaFazla()">Daha fazla göster (+100)</button></div>
     </div>
 
+    <div class="finans-panel" data-bolum-anahtar="ayarlar_bolum_hiz_olcumu">
+      <div class="rapor-baslik" style="margin-top:0">⏱ Hız Ölçümü</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Her işlemin kaç saniye sürdüğü ölçülür. <b>Sunucu</b> = Apps Script'in kendi işi, <b>Ağ/başlatma</b> = internet + Apps Script'in uyanma süresi, <b>Kilit bekleme</b> = başka kullanıcının yazma işleminin bitmesini bekleme. Ölçüm bu bilgisayarın tarayıcısında tutulur; sunucuya ek yük bindirmez.</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn" onclick="hizPaneliCiz()">↻ Yenile</button>
+        <button class="btn" onclick="hizPaneliIndir()">⬇ Excel (CSV)</button>
+        <button class="btn" onclick="hizPaneliSifirla()">🗑 Sıfırla</button>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="hiz-rozet-chk" onchange="hizRozetAyarla(this.checked)"> Her işlemde süreyi ekranın sol altında göster</label>
+      </div>
+      <div id="hiz-panel-icerik"></div>
+    </div>
+
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Kısayol Tuşları</div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Bir modülün kutusuna tıkla, sonra klavyede istediğin tuş kombinasyonuna bas — otomatik algılanır. Bir yazı alanındayken (input içinde) kısayollar çalışmaz.<br><b>Ctrl+1 … Ctrl+9</b> sabittir: Ana Sayfa'daki modül kutularının <i>sırasına</i> göre o sıradaki modülü açar (numara kutunun köşesinde yazar; kutuları sürükleyip sırayı değiştirince numaralar da değişir).<br><b>Ctrl + "</b> (sayı satırında 1'in solundaki tuş) her yerden Ana Sayfa'ya gider (açık pencere varsa önce onu kapatır; yarım iş varsa sorar). <b>Ctrl+S</b> açık pencerenin Kaydet düğmesine basar. <b>Ctrl+Y</b> açık ekrandaki "+" (yeni kayıt) düğmesine basar. Ana Sayfa'da ve seçim ekranlarında (Satış/Alış/Stok) <b>ok tuşları</b> kutular arasında gezer, <b>Enter</b> açar.</p>
@@ -2918,7 +2930,12 @@ let _cariSecili = null;
 function cariApiIstekYap_(url, postGovde){
   const secenek = postGovde ? { method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: postGovde } : undefined;
   return fetch(url, secenek).then(r => r.text()).then(txt=>{
-    try{ return JSON.parse(txt); }
+    try{
+      const ayr = JSON.parse(txt);
+      // Yanıt boyutu (hız ölçümü için) — listeye karışmasın diye numaralandırılamaz alan
+      if(ayr && typeof ayr === "object") Object.defineProperty(ayr, "_bayt", {value: txt.length, enumerable:false, configurable:true});
+      return ayr;
+    }
     catch(e){
       const gecersizYanitHatasi = new Error("Sunucudan geçersiz yanıt geldi (geçici bir bağlantı sorunu olabilir)");
       gecersizYanitHatasi.gecersizYanit = true;
@@ -2950,10 +2967,12 @@ function cariApi(action, params, _tokenYenidenDenendi){
   // görünüyordu; artık sadece Kaydet/Sil/Onayla gibi asıl işlemlerde çıkıyor).
   const _bantGoster = window.islemYapiliyorGoster_ && !CARI_API_YAZMA_DEGIL_.test(action);
   if(_bantGoster) window.islemYapiliyorGoster_();
+  const _hizT0 = performance.now();
   return cariApiIstekYap_(url, postGovde).catch(err=>{
     if(!err.gecersizYanit) throw err; // ağ hatası (offline vb.) ise direkt fırlat, tekrar denemenin faydası yok
     return new Promise(resolve=>setTimeout(resolve, 800)).then(()=>cariApiIstekYap_(url, postGovde));
   }).then(res=>{
+    try{ hizOlcumKaydet_(action, performance.now() - _hizT0, res, true); }catch(e){}
     if(res && res.error && res.ok===undefined){
       return { ok:false, hata: res.error };
     }
@@ -2995,9 +3014,107 @@ function cariApi(action, params, _tokenYenidenDenendi){
       if(CARI_API_YAPI_ISLEMI_.test(action)) yapiOnbellekTemizle_();
     }
     return res;
+  }, err=>{
+    try{ hizOlcumKaydet_(action, performance.now() - _hizT0, null, false); }catch(e){}
+    throw err;
   }).finally(()=>{
     if(_bantGoster && window.islemYapiliyorGizle_) window.islemYapiliyorGizle_();
   });
+}
+
+// ══════ HIZ ÖLÇÜMÜ (1 Eki 2026) ══════
+// Her sunucu çağrısının süresi ölçülür: toplam (tıklamadan cevaba) = sunucu (Apps Script içinde) + ağ/başlatma
+// (Apps Script'in soğuk açılışı, internet, yanıtın indirilmesi). Sunucu kırılımı: oturum doğrulama, yazma
+// kilidi bekleme (başka kullanıcının işlemi), asıl işlem. İşlem adına göre özet bu tarayıcıda saklanır
+// (Ayarlar > ⏱ Hız Ölçümü). Hiçbir veri sunucuya yazılmaz; ek yük yoktur.
+const HIZ_OZET_ANAHTAR_ = "fincanlar_hiz_ozet";
+let _hizOzet = null, _hizYavaslar = [], _hizKaydetZamani = 0;
+function hizOzetAl_(){
+  if(_hizOzet) return _hizOzet;
+  try{ const k = JSON.parse(localStorage.getItem(HIZ_OZET_ANAHTAR_) || "null"); _hizOzet = (k && k.ozet) ? k.ozet : {}; _hizYavaslar = (k && k.yavaslar) || []; }
+  catch(e){ _hizOzet = {}; _hizYavaslar = []; }
+  return _hizOzet;
+}
+function hizOlcumKaydet_(action, ms, res, basarili){
+  const oz = hizOzetAl_();
+  const o = oz[action] || (oz[action] = {n:0, top:0, max:0, srv:0, srvN:0, kilit:0, op:0, bayt:0, hata:0, son:0});
+  o.n++; o.top += ms; if(ms > o.max) o.max = ms; o.son = ms;
+  if(!basarili) o.hata++;
+  const sr = res && res._sure;
+  if(sr){ o.srv += sr.t; o.srvN++; o.kilit += sr.k; o.op += sr.i; }
+  if(res && res._bayt) o.bayt += res._bayt;
+  if(ms >= 2500){
+    _hizYavaslar.unshift({z: Date.now(), a: action, ms: Math.round(ms), s: sr ? sr.t : null});
+    if(_hizYavaslar.length > 40) _hizYavaslar.length = 40;
+  }
+  hizRozetiGoster_(action, ms, sr);
+  const simdi = Date.now();
+  if(simdi - _hizKaydetZamani > 5000){
+    _hizKaydetZamani = simdi;
+    try{ localStorage.setItem(HIZ_OZET_ANAHTAR_, JSON.stringify({ozet: oz, yavaslar: _hizYavaslar})); }catch(e){}
+  }
+}
+function hizRozetAcikMi_(){ return localStorage.getItem("fincanlar_hiz_rozet") === "1"; }
+function hizRozetAyarla(acik){
+  try{ localStorage.setItem("fincanlar_hiz_rozet", acik ? "1" : "0"); }catch(e){}
+  if(!acik){ const r = document.getElementById("hiz-rozet"); if(r) r.remove(); }
+}
+function hizRozetiGoster_(action, ms, sr){
+  if(!hizRozetAcikMi_()) return;
+  let r = document.getElementById("hiz-rozet");
+  if(!r){
+    r = document.createElement("div"); r.id = "hiz-rozet";
+    r.style.cssText = "position:fixed;left:10px;bottom:10px;z-index:99999;background:rgba(30,30,30,.88);color:#fff;font:12px/1.35 monospace;padding:5px 9px;border-radius:8px;pointer-events:none;max-width:60vw";
+    document.body.appendChild(r);
+  }
+  const sn = (ms/1000).toFixed(2).replace(".", ",");
+  r.style.background = ms >= 3000 ? "rgba(190,40,40,.92)" : ms >= 1500 ? "rgba(170,120,0,.92)" : "rgba(30,30,30,.88)";
+  r.textContent = "⏱ " + action + " " + sn + " sn" + (sr ? "  (sunucu " + (sr.t/1000).toFixed(2).replace(".", ",") + ")" : "");
+  clearTimeout(r._t); r._t = setTimeout(()=>{ if(r) r.style.opacity = ".55"; }, 4000); r.style.opacity = "1";
+}
+function hizSn_(ms){ return (ms/1000).toFixed(2).replace(".", ","); }
+function hizPaneliCiz(){
+  const kap = document.getElementById("hiz-panel-icerik"); if(!kap) return;
+  const oz = hizOzetAl_();
+  const satirlar = Object.keys(oz).map(a=>{
+    const o = oz[a], ort = o.top/o.n;
+    const srvOrt = o.srvN ? o.srv/o.srvN : null;
+    return {a, n:o.n, ort, max:o.max, toplam:o.top, srvOrt, ag: srvOrt===null ? null : Math.max(0, ort - srvOrt), kilit: o.srvN ? o.kilit/o.srvN : null, op: o.srvN ? o.op/o.srvN : null, kb: o.bayt/o.n/1024, hata:o.hata};
+  }).sort((x,y)=>y.toplam - x.toplam);
+  if(!satirlar.length){ kap.innerHTML = '<div class="cari-empty">Henüz ölçüm yok. Programı kullandıkça burada birikir.</div>'; return; }
+  const renk = (ms)=> ms >= 3000 ? "color:var(--red);font-weight:700" : ms >= 1500 ? "color:#b07a00;font-weight:600" : "";
+  const toplamMs = satirlar.reduce((t,x)=>t+x.toplam,0);
+  kap.innerHTML = `
+    <div style="font-size:12px;color:var(--text3);margin-bottom:6px">Toplam bekleme süresine göre sıralı (en çok vakit alan işlem en üstte). Bu tarayıcıda ${satirlar.reduce((t,x)=>t+x.n,0)} çağrı ölçüldü.</div>
+    <div style="overflow-x:auto"><table class="rapor-tbl" style="width:100%;font-size:12.5px">
+      <thead><tr><th>İşlem</th><th>Sayı</th><th>Ort. (sn)</th><th>En yavaş (sn)</th><th>Sunucu ort.</th><th>Ağ/başlatma ort.</th><th>Kilit bekleme</th><th>Boyut (KB)</th><th>Toplam payı</th></tr></thead>
+      <tbody>${satirlar.map(x=>`<tr>
+        <td>${htmlKacis(x.a)}${x.hata?` <span style="color:var(--red)" title="Hatalı çağrı sayısı">(${x.hata} hata)</span>`:''}</td>
+        <td>${x.n}</td>
+        <td style="${renk(x.ort)}">${hizSn_(x.ort)}</td>
+        <td style="${renk(x.max)}">${hizSn_(x.max)}</td>
+        <td>${x.srvOrt===null?'—':hizSn_(x.srvOrt)}</td>
+        <td>${x.ag===null?'—':hizSn_(x.ag)}</td>
+        <td>${x.kilit===null?'—':hizSn_(x.kilit)}</td>
+        <td>${x.kb.toFixed(1).replace(".", ",")}</td>
+        <td>%${Math.round(100*x.toplam/toplamMs)}</td></tr>`).join("")}</tbody></table></div>
+    ${_hizYavaslar.length ? `<div style="margin-top:12px;font-weight:600;font-size:13px">Son yavaş çağrılar (2,5 sn üstü)</div>
+      <div style="font-size:12px;color:var(--text2);max-height:180px;overflow:auto">${_hizYavaslar.slice(0,20).map(y=>`${new Date(y.z).toLocaleString("tr-TR")} — <b>${htmlKacis(y.a)}</b>: ${hizSn_(y.ms)} sn${y.s!==null?` (sunucu ${hizSn_(y.s)})`:''}`).join("<br>")}</div>` : ''}`;
+}
+function hizPaneliSifirla(){
+  if(!confirm("Hız ölçüm kayıtları (bu tarayıcıdaki) silinsin mi?")) return;
+  _hizOzet = {}; _hizYavaslar = [];
+  try{ localStorage.removeItem(HIZ_OZET_ANAHTAR_); }catch(e){}
+  hizPaneliCiz();
+}
+function hizPaneliIndir(){
+  const oz = hizOzetAl_();
+  const bas = ["İşlem","Sayı","Ort sn","En yavaş sn","Sunucu ort sn","Kilit ort sn","İşlem(sunucu) ort sn","Boyut KB","Hata"];
+  const f = (v)=>String(v).replace(".", ",");
+  const satir = Object.keys(oz).map(a=>{ const o = oz[a]; return [a, o.n, f((o.top/o.n/1000).toFixed(2)), f((o.max/1000).toFixed(2)), o.srvN?f((o.srv/o.srvN/1000).toFixed(2)):"", o.srvN?f((o.kilit/o.srvN/1000).toFixed(2)):"", o.srvN?f((o.op/o.srvN/1000).toFixed(2)):"", f((o.bayt/o.n/1024).toFixed(1)), o.hata].join(";"); });
+  const csv = "\uFEFF" + [bas.join(";")].concat(satir).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv;charset=utf-8"}));
+  a.download = "hiz-olcumu-" + new Date().toISOString().slice(0,10) + ".csv"; a.click();
 }
 // Veriyi DEĞİŞTİRMEYEN (ya da önbelleği ilgilendirmeyen) işlemler: bunlardan sonra önbellek temizlenmez.
 const CARI_API_YAZMA_DEGIL_ = /^(get|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
@@ -12945,6 +13062,8 @@ let _ayarlarTaslak = null; // kaydedilmeden önceki geçici değişiklikler
 
 function ayarlarYukle(){
   _ayarlarTaslak = Object.assign({}, kisayollariAl());
+  hizPaneliCiz();
+  { const hc = document.getElementById("hiz-rozet-chk"); if(hc) hc.checked = hizRozetAcikMi_(); }
   ayarlarSonIslemlerYukle(true);
   ayarlarListesiCiz();
   aciklamaSablonlariYukle();

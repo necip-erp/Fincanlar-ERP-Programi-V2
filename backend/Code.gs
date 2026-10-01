@@ -1081,6 +1081,8 @@ const ADMIN_ACTIONLAR = {
 };
 
 function handleRequest(e) {
+  const _t0 = Date.now(); // ★ (1 Eki 2026) Hız ölçümü: sunucu tarafı süre kırılımı (yanıttaki _sure alanı)
+  let _tOturum = _t0, _tKilit = _t0;
   try {
     const body = e.postData ? JSON.parse(e.postData.contents) : e.parameter;
     const action = body.action;
@@ -1105,6 +1107,7 @@ function handleRequest(e) {
         return jsonResponse({ ok: false, hata: "Bu işlem sadece Admin yetkisiyle yapılabilir." });
       }
     }
+    _tOturum = Date.now();
     // ★ EŞZAMANLI KULLANIM: veriyi DEĞİŞTİREN her işlem (kaydet/sil/güncelle...) tek tek sıraya girer.
     // İki kullanıcı aynı anda yazarsa ikincisi birincinin bitmesini bekler; böylece "satır kayması"
     // (başkası araya satır silince yanlış satırın silinmesi), aynı ID/numara üretimi ve "stok yeterli mi"
@@ -1114,6 +1117,7 @@ function handleRequest(e) {
       try { kilitGetir_().waitLock(30000); }
       catch (kilitHata) { return jsonResponse({ ok: false, hata: "Sistem şu an başka bir kullanıcının işlemiyle meşgul. Birkaç saniye sonra tekrar deneyin." }); }
     }
+    _tKilit = Date.now();
     try {
     if (KD_ACTIONLAR[action]) kdToplayiciBaslat_(); // Kayıt Defteri: bu işlemde oluşan karşı kayıtları topla
     switch (action) {
@@ -1288,7 +1292,12 @@ function handleRequest(e) {
       const kdBacaklar = KD_TOPLAYICI_; KD_TOPLAYICI_ = null;
       try { kdIsle_(action, body, result, kdBacaklar); } catch (kdHata) { logError(kdHata); }
     }
-    if (result && typeof result === "object" && !Array.isArray(result)) result.dv = veriSurumuOku_(); // istemci: başka kullanıcı veri değiştirdi mi?
+    if (result && typeof result === "object" && !Array.isArray(result)) {
+      result.dv = veriSurumuOku_(); // istemci: başka kullanıcı veri değiştirdi mi?
+      const _tSon = Date.now();
+      // Hız ölçümü (ms): t=sunucuda toplam, o=oturum doğrulama, k=yazma kilidi bekleme, i=asıl işlem (+Kayıt Defteri)
+      result._sure = { t: _tSon - _t0, o: _tOturum - _t0, k: _tKilit - _tOturum, i: _tSon - _tKilit };
+    }
     return jsonResponse(result);
     } finally {
       if (yazmaIslemi) kilitGetir_().releaseLock();
