@@ -380,7 +380,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 #bfm-tablo input[id^="bfm-kdv-"]{width:48px!important}
 #bfm-tablo input[id^="bfm-grup-"]{width:36px!important}
 #bfm-tablo select[id^="bfm-birim-"]{max-width:64px}
-#bfm-tablo .bfm-satilan-btn{font-size:10.5px;padding:3px 5px;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#bfm-tablo .bfm-satilan-btn{font-size:10.5px;line-height:1.15;padding:3px 4px;width:58px;max-width:58px;text-align:center;white-space:normal;overflow:hidden;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 @media (max-width:1100px){ .bfm-2col{flex-direction:column} .modal-box-onay2col{max-height:96vh} .bfm-2col-sol{max-height:40vh} .bfm-2col-sag-govde{height:50vh} }
 .fatura-yan-panel{position:fixed;top:0;right:0;height:100vh;width:760px;max-width:92vw;background:var(--bg2);box-shadow:-10px 0 28px rgba(16,18,30,.18);z-index:60;display:flex;flex-direction:column;padding:14px;animation:fincanPanelIn .16s var(--ease)}
 .fatura-yan-panel .fyp-govde{flex:1;min-height:0;overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--bg3)}
@@ -6710,7 +6710,7 @@ function alisKalemlerCiz(){
         <input type="checkbox" style="width:auto" ${k.stoksuz?'checked':''} onchange="alisKalemAlanDegisti(${idx},'stoksuz',this.checked); alisKalemlerCiz()">Stoksuz
       </label>
       <span style="flex:0 0 138px;display:flex;align-items:center;gap:2px">
-        <button type="button" class="btn" style="flex:1;min-width:0;font-size:11px;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${k.satilanCariId?'background:var(--blue);color:#fff;border-color:var(--blue)':''}" title="${k.satilanCariId ? htmlKacis('Satılan cari: '+(k.satilanCariAd||'')+' — değiştirmek için tıkla') : 'Bu kalem bir cariye satılan ürünün tedariği ise tıkla ve hangi cariye satıldığını seç'}" onclick="alisKalemSatilanSec(${idx})">🛒 ${k.satilanCariId ? htmlKacis(k.satilanCariAd||'Seçili') : 'Satılan Ürün'}</button>
+        <button type="button" class="btn" style="flex:1;min-width:0;font-size:11px;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${k.satilanCariId?'background:var(--blue);color:#fff;border-color:var(--blue)':''}" title="${k.satilanCariId ? htmlKacis('Satılan cari: '+(k.satilanCariAd||'')+' — değiştirmek için tıkla') : 'Bu kalem bir cariye satılan ürünün tedariği ise tıkla ve hangi cariye satıldığını seç'}" onclick="alisKalemSatilanSec(${idx})">${k.satilanCariId ? '🛒 '+htmlKacis(k.satilanCariAd||'Seçili') : '🛒 Satılan<br>Ürün'}</button>
         ${k.satilanCariId ? `<span class="hk-sil" style="flex:0 0 18px;text-align:center" title="Satılan cari bilgisini kaldır" onclick="alisKalemSatilanTemizle(${idx})">✕</span>` : ''}
       </span>
       <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="alisKalemAlanDegisti(${idx},'miktar',this.value)" onblur="kutuMiktarUyumKontrol('${htmlKacis(k.stokKodu||'')}', this.value)">
@@ -7275,11 +7275,24 @@ function bfmSigdir(iframeId, etiketId){
   const kirp = (iframeId === "bfm-onay-iframe") ? Math.min(bfmOdakKirpPx_(), 600) : 0; // odak açıkken sayfanın üst kısmı kırpılı
   // Odak açıkken genişliğe göre sığdırılır (ürünler daha büyük görünür, dikey kaydırılır); kapalıyken sayfanın tamamı sığdırılır.
   const odakta = (iframeId === "bfm-onay-iframe") && bfmOdakAcikMi_();
-  let z = odakta ? (w/794) : Math.min(w/794, h/Math.max(400, 1123 - kirp));
-  z = Math.max(0.4, Math.min(1.6, Math.round(z*100)/100));
+  // Sunucu (kompakt görünüm) fatura içeriğinin gerçek boyutunu bildirdiyse ona göre, bildirmediyse A4 (794×1123) varsayımıyla.
+  const ob = window._bfmFaturaBoyut;
+  const W = (ob && ob.w > 300) ? ob.w : 794, H = (ob && ob.h > 200) ? ob.h : 1123;
+  let z = odakta ? (w/W) : Math.min(w/W, h/Math.max(300, H - kirp));
+  z = Math.max(0.4, Math.min(2.0, Math.round(z*100)/100));
   bfmZoomIlkDegerAta(iframeId, etiketId, z);
 }
+window.addEventListener("message", e=>{
+  const d = e && e.data;
+  if(!d || d.tip !== "faturaBoyut" || !(d.w > 0) || !(d.h > 0)) return;
+  const eski = window._bfmFaturaBoyut;
+  if(eski && eski.w === d.w && eski.h === d.h) return;
+  window._bfmFaturaBoyut = {w: d.w, h: d.h};
+  if(document.getElementById("bfm-onay-iframe")) bfmSigdir("bfm-onay-iframe","bfm-onay-zoom-yuzde");
+  if(document.getElementById("fyp-iframe")) bfmSigdir("fyp-iframe","fyp-zoom-yuzde");
+});
 function bfmYanPanelAc(faturaNo){
+  window._bfmFaturaBoyut = null;
   bfmYanPanelKapat();
   const panel = document.createElement("div");
   panel.className = "fatura-yan-panel";
@@ -7753,7 +7766,7 @@ function alisBekleyenOnayModalAc(faturaNo){
         ${f.kalemler.some(k=>(k.nakliyePayi||0) > 0)
           ? `<th data-kol="fiyat" style="min-width:170px" title="Solda faturadaki birim fiyat (elle düzeltilebilir), sağda Alış'a AKTARILACAK birim fiyat: iskontolar sonrası net fiyat + nakliye/palet payı">Fatura Fiyatı / Aktarılacak</th>`
           : `<th data-kol="fiyat" style="width:88px">Birim Fiyat</th>`}<th data-kol="isk1" style="width:58px">İsk.1 %</th><th data-kol="isk2" style="width:58px">İsk.2 %</th>
-        <th data-kol="kdv" style="width:52px">KDV%</th><th data-kol="tutar" style="width:92px">Tutar</th><th data-kol="satilan" style="width:104px">Satılan Cari</th><th data-kol="sil" style="width:30px"></th>
+        <th data-kol="kdv" style="width:52px">KDV%</th><th data-kol="tutar" style="width:92px">Tutar</th><th data-kol="satilan" style="width:72px;line-height:1.15">Satılan<br>Ürün</th><th data-kol="sil" style="width:30px"></th>
       </tr></thead>
       <tbody id="bfm-kalemler">
         ${f.kalemler.map((k,i)=>bfmKalemSatiriHTML(k,i)).join("")}
@@ -7798,7 +7811,7 @@ function alisBekleyenOnayModalAc(faturaNo){
   bfmSutunSurukleKur_();
   f.kalemler.forEach((k,i)=>bfmSatirGuncelle(i));
   bfmOnerileriGuncelle(); // _stokTanimListe önceden yüklenmişse öneriler hemen görünsün
-  if(yanda && f.faturaNo){ bfmPanKur_(); bfmOdakUygula_(); bfmSigdir("bfm-onay-iframe","bfm-onay-zoom-yuzde"); setTimeout(()=>bfmSigdir("bfm-onay-iframe","bfm-onay-zoom-yuzde"), 250); }
+  window._bfmFaturaBoyut = null; if(yanda && f.faturaNo){ bfmPanKur_(); bfmOdakUygula_(); bfmSigdir("bfm-onay-iframe","bfm-onay-zoom-yuzde"); setTimeout(()=>bfmSigdir("bfm-onay-iframe","bfm-onay-zoom-yuzde"), 250); }
 }
 
 // Bir bfm kalem satırının <tr> HTML'ini üretir. Normal kalemler eski davranışıyla aynı
@@ -7844,7 +7857,7 @@ function bfmKalemSatiriHTML(k, i){
           <td><input id="bfm-isk2-${i}" type="number" min="0" max="100" step="0.01" value="${k.iskonto2||0}" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
           <td><input id="bfm-kdv-${i}" type="number" min="0" max="100" step="0.01" value="${k.kdvOrani}" style="width:60px${bfmKdvSupheliMi(k.kdvOrani)?';border-color:var(--red);background:#fdecea':''}" title="${bfmKdvSupheliMi(k.kdvOrani)?'⚠️ FATURAFIYAT kaynağından şüpheli bir KDV oranı geldi (>%'+BFM_KDV_UST_SINIR+'). Muhtemelen bu alana bir tutar yazılmış — faturaya bakıp doğru oranı siz girin.':'FATURAFIYAT kaynağından gelen oran — gerekirse düzeltin'}" oninput="bfmSatirGuncelle(${i})"></td>
           <td id="bfm-tutar-${i}" style="font-weight:600;text-align:right;padding-right:8px"></td>
-          <td style="white-space:nowrap"><div style="display:flex;align-items:center;gap:3px"><button type="button" class="btn bfm-satilan-btn" style="${k.satilanCariId?'background:var(--blue);color:#fff;border-color:var(--blue)':''}" title="${k.satilanCariId ? htmlKacis('Satılan cari: '+(k.satilanCariAd||'')+' — değiştirmek için tıkla') : 'Bu kalem bir cariye satılan ürünün tedariği ise tıkla ve hangi cariye satıldığını seç'}" onclick="bfmSatilanSec(${i})">🛒 ${k.satilanCariId ? htmlKacis(k.satilanCariAd||'Seçili') : 'Satılan Ürün'}</button>${k.satilanCariId ? `<span class="hk-sil" title="Kaldır" onclick="bfmSatilanTemizle(${i})">✕</span>` : ''}</div></td>
+          <td style="white-space:nowrap;width:72px"><div style="display:flex;align-items:center;gap:3px"><button type="button" class="btn bfm-satilan-btn" style="${k.satilanCariId?'background:var(--blue);color:#fff;border-color:var(--blue)':''}" title="${k.satilanCariId ? htmlKacis('Satılan cari: '+(k.satilanCariAd||'')+' — değiştirmek için tıkla') : 'Bu kalem bir cariye satılan ürünün tedariği ise tıkla ve hangi cariye satıldığını seç'}" onclick="bfmSatilanSec(${i})">${k.satilanCariId ? '🛒 '+htmlKacis(k.satilanCariAd||'Seçili') : '🛒 Satılan<br>Ürün'}</button>${k.satilanCariId ? `<span class="hk-sil" title="Kaldır" onclick="bfmSatilanTemizle(${i})">✕</span>` : ''}</div></td>
           <td style="text-align:center"><button type="button" class="btn btn-danger" style="padding:2px 7px;font-size:12px" onclick="bfmKalemSil(${i})" title="Bu satırı sil">🗑️</button></td>
         </tr>`;
 }
@@ -8039,14 +8052,11 @@ function bfmKalemleriGrupla(){
       iskonto: 0, iskonto2: 0,
       kdvOrani: ilk.kdvOrani || 0,
       nakliyePayi: 0,
-      // Gruba İLK dahil edilen kalemin stok kodu birleşik satırın stok kodu olarak gelir (kod yoksa gruptaki
-      // ilk dolu kod); istenirse satırdaki 🔍 Rehber ile başka bir stok seçilebilir.
-      ...(()=>{
-        const kodlu = grupKalemleri.find(x=>String(x.stokKodu||"").trim());
-        if(!kodlu) return { stokKodu: "", stokKoduAdi: "" };
-        const kart = (typeof _stokTanimListe!=="undefined" && _stokTanimListe||[]).find(x=>x.stokKodu===String(kodlu.stokKodu).trim());
-        return { stokKodu: String(kodlu.stokKodu).trim(), stokKoduAdi: kart ? (kart.stokAdi||kodlu.stokKoduAdi||"") : (kodlu.stokKoduAdi||"") };
-      })(),
+      // Stok kodu artık otomatik atanmaz: Grupla sonrası kullanıcıya sorulur (gruptaki kodlardan biri / rehberden / yeni stok kodu).
+      stokKodu: "", stokKoduAdi: "",
+      grupAdaylari: grupKalemleri.filter(x=>String(x.stokKodu||"").trim()).map(x=>({kod:String(x.stokKodu).trim(), ad:x.stokKoduAdi||x.urunAdi||""}))
+        .filter((c,idx,arr)=>arr.findIndex(y=>y.kod===c.kod)===idx),
+      _yeniGrup: true,
       stokVarMi: true, // "yeni stok kartı" kutusu gösterilmesin — mevcut bir stok seçilmesi bekleniyor
       birlesikMi: true,
       satilanCariId: (grupKalemleri.find(x=>x.satilanCariId)||{}).satilanCariId || "",
@@ -8056,6 +8066,61 @@ function bfmKalemleriGrupla(){
   f.kalemler = yeniKalemler;
   bfmKalemlerYenidenCiz();
   bfmGrupGeriAlDugmeGuncelle_();
+  // Yeni oluşan birleşik satırlar için sırayla "hangi stok kodu?" sorulur.
+  const sorulacak = f.kalemler.filter(k=>k._yeniGrup);
+  sorulacak.forEach(k=>{ delete k._yeniGrup; });
+  bfmGrupStokSor_(sorulacak, 0);
+}
+
+// Grupla sonrası: birleşik satır için stok kodu seçtirir — gruptaki kodlardan biri, Stok Rehberi'nden başka bir stok,
+// ya da yeni stok kodu oluşturma. Birden çok grup varsa sırayla sorulur.
+function bfmGrupStokSor_(kalemler, n){
+  if(n >= kalemler.length) return;
+  const f = window._bfmAktifFatura; if(!f) return;
+  const k = kalemler[n];
+  const idx = () => f.kalemler.indexOf(k);
+  if(idx() < 0){ bfmGrupStokSor_(kalemler, n+1); return; }
+  const kartAd = kod => { const c = (typeof _stokTanimListe!=="undefined" && _stokTanimListe||[]).find(x=>x.stokKodu===kod); return c ? (c.stokAdi||"") : ""; };
+  const adaylar = (k.grupAdaylari||[]).map(c=>({kod:c.kod, ad: kartAd(c.kod) || c.ad || "", kartVar: !!kartAd(c.kod) || (typeof _stokTanimListe!=="undefined" && (_stokTanimListe||[]).some(x=>x.stokKodu===c.kod))}));
+  document.getElementById("bfm-grup-sor")?.remove();
+  const kap = document.createElement("div");
+  kap.id = "bfm-grup-sor";
+  kap.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100000;display:flex;align-items:center;justify-content:center";
+  kap.innerHTML = `
+    <div style="background:var(--card,#fff);color:var(--text,#222);border-radius:12px;padding:18px 20px;width:min(560px,94vw);max-height:86vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.35)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:4px">🔗 Birleşik satır için stok kodu</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;word-break:break-word">${htmlKacis(k.urunAdi||"")}</div>
+      ${adaylar.length ? `<div style="font-size:12px;font-weight:600;margin-bottom:6px">Gruptaki stok kodlarından birini seç:</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+          ${adaylar.map((c,j)=>`<button type="button" class="btn" data-j="${j}" style="text-align:left;white-space:normal;padding:8px 10px"><b>${htmlKacis(c.kod)}</b>${c.ad?` — ${htmlKacis(c.ad)}`:""}${c.kartVar?"":` <span style="color:var(--red);font-size:11px">(stok kartı yok)</span>`}</button>`).join("")}
+        </div>` : `<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Gruptaki kalemlerde stok kodu yok.</div>`}
+      <div style="display:flex;flex-wrap:wrap;gap:8px;border-top:1px solid var(--border);padding-top:12px">
+        <button type="button" class="btn" id="bfm-grup-sor-rehber">🔍 Rehberden başka stok seç</button>
+        <button type="button" class="btn" id="bfm-grup-sor-yeni">➕ Yeni stok kodu oluştur</button>
+        <button type="button" class="btn" id="bfm-grup-sor-bos" style="margin-left:auto">Şimdilik boş bırak</button>
+      </div>
+    </div>`;
+  document.body.appendChild(kap);
+  const kapat = ()=>{ kap.remove(); };
+  const sonraki = ()=>{ kapat(); bfmGrupStokSor_(kalemler, n+1); };
+  const kodYaz = (kod, ad)=>{
+    const i = idx(); if(i < 0) return;
+    k.stokKodu = kod; k.stokKoduAdi = ad || "";
+    const kEl = document.getElementById(`bfm-stokkodu-${i}`), aEl = document.getElementById(`bfm-stokara-${i}`);
+    if(kEl) kEl.value = kod; if(aEl) aEl.value = ad || "";
+    bfmSatirGuncelle(i);
+  };
+  kap.querySelectorAll("button[data-j]").forEach(b=>b.onclick = ()=>{ const c = adaylar[+b.dataset.j]; kodYaz(c.kod, c.ad); sonraki(); });
+  kap.querySelector("#bfm-grup-sor-bos").onclick = sonraki;
+  kap.querySelector("#bfm-grup-sor-rehber").onclick = ()=>{
+    kapat();
+    rehberAc("stok", st=>{ if(st) kodYaz(st.stokKodu||"", st.stokAdi||st.ad||""); setTimeout(()=>bfmGrupStokSor_(kalemler, n+1), 0); });
+  };
+  kap.querySelector("#bfm-grup-sor-yeni").onclick = ()=>{
+    kapat();
+    const ipucu = (k.grupAdaylari && k.grupAdaylari[0] && k.grupAdaylari[0].kod) || "";
+    stokTanimModalAc(null, yeni=>{ if(yeni) kodYaz(yeni.stokKodu||"", yeni.stokAdi||""); setTimeout(()=>bfmGrupStokSor_(kalemler, n+1), 0); }, ipucu);
+  };
 }
 
 // "↩ Gruplamayı Geri Al": son Grupla işleminden önceki kalem listesine döner (art arda birden çok kez geri alınabilir).
@@ -14865,10 +14930,23 @@ function girisDene(){
 }
 
 function cikisYapButon(){
-  onbellekTemizleHepsi_(); yapiOnbellekTemizle_();
+  // ÖNCE yerel oturum silinir (çıkış anında ve kesin gerçekleşsin), sunucuya bildirim arka planda gider.
+  // Eski hâl: istek atılıp hemen location.reload() yapılıyordu → istek çoğu zaman iptal oluyor, token localStorage'da
+  // kaldığı için sayfa yenilenince yine içeride açılıyor ("çıkış olmuyor"); ayrıca sunucudaki çıkış kilit kuyruğunda
+  // beklediği için bekleme uzuyordu.
   const token = localStorage.getItem("fincanlar_oturum_token");
-  if(token) cariApi("cikisYap", {token}).catch(()=>{});
-  location.reload();
+  const yil = localStorage.getItem("fincanlar_calisma_yili") || "";
+  try{ onbellekTemizleHepsi_(); yapiOnbellekTemizle_(); }catch(e){}
+  localStorage.removeItem("fincanlar_oturum_token");
+  localStorage.removeItem("fincanlar_oturum_kullanici");
+  try{ girisEkraniGoster_(); }catch(e){}
+  if(token){
+    try{
+      const payload = encodeURIComponent(JSON.stringify({action:"cikisYap", token, yil}));
+      fetch(CARI_API + "?payload=" + payload, {keepalive:true, mode:"no-cors"}).catch(()=>{});
+    }catch(e){}
+  }
+  setTimeout(()=>location.reload(), 150);
 }
 
 function girisAkisiBaslat(){
