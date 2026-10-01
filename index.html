@@ -334,10 +334,13 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
 #mod-ceksenet{flex-direction:row}
 .modal-box-wide{max-width:560px}
 .rehber-box{width:100%;max-width:720px;height:min(600px,85vh);display:flex;flex-direction:column;background:var(--bg2);border-radius:16px;box-shadow:var(--shadow-md);animation:fincanModalIn .18s var(--ease);overflow:hidden}
-.rehber-head{display:flex;align-items:center;gap:10px;padding:16px 18px 12px;border-bottom:1px solid var(--border)}
+.rehber-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;padding:16px 18px 12px;border-bottom:1px solid var(--border)}
+.rehber-head .rehber-yeni-btn{flex-shrink:0;white-space:nowrap;font-size:12.5px;padding:7px 12px;font-weight:600;background:var(--yellow-l,#fff7d6);border:1px solid var(--yellow,#e0a800);border-radius:20px;cursor:pointer;color:var(--text)}
+.rehber-head .rehber-yeni-btn:hover{filter:brightness(.96)}
+.rehber-head .rehber-kapat{margin-left:auto}
 .rehber-head h3{margin:0;font-size:15px;flex-shrink:0}
-.rehber-head input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:20px;background:var(--bg2);font-size:13px;outline:none;transition:border-color var(--t),box-shadow var(--t)}
-.rehber-head input:focus{border-color:var(--yellow);box-shadow:0 0 0 3px var(--yellow-l);background:var(--bg2)}
+.rehber-head input[type=text]{flex:1 1 160px;min-width:140px;padding:8px 12px;border:1px solid var(--border);border-radius:20px;background:var(--bg2);font-size:13px;outline:none;transition:border-color var(--t),box-shadow var(--t)}
+.rehber-head input[type=text]:focus{border-color:var(--yellow);box-shadow:0 0 0 3px var(--yellow-l);background:var(--bg2)}
 .rehber-head select{flex-shrink:0;max-width:190px;padding:8px 10px;border:1px solid var(--border);border-radius:20px;background:var(--bg2);font-size:12.5px;outline:none;cursor:pointer;color:var(--text)}
 .rehber-head select:focus{border-color:var(--yellow);box-shadow:0 0 0 3px var(--yellow-l)}
 .rehber-kapat{background:none;border:none;font-size:18px;color:var(--text3);cursor:pointer;padding:4px;line-height:1;transition:color var(--t)}
@@ -3259,7 +3262,7 @@ function rehberAc(tip, callback){
           <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="hepsi" checked onchange="rehberCariTipiDegisti(this.value)"> Hepsi</label>
         </span>` : '';
   overlay.innerHTML = `
-    <div class="rehber-box" ${tip==='stok' ? 'style="max-width:1100px"' : ''} onclick="event.stopPropagation()">
+    <div class="rehber-box" ${tip==='stok' ? 'style="max-width:1100px"' : 'style="max-width:900px"'} onclick="event.stopPropagation()">
       <div class="rehber-head">
         <h3>${baslik}</h3>
         <input id="rehber-ara" type="text" placeholder="Ara..." autocomplete="off" oninput="rehberFiltrele(this.value)" onkeydown="rehberKlavye(event)">
@@ -3269,7 +3272,7 @@ function rehberAc(tip, callback){
           <option value="" selected disabled>Sırala...</option>
           ${rehberSiralamaSecenekleriHTML(tip)}
         </select>
-        ${tip==='stok' ? '<button type="button" class="btn" style="flex-shrink:0;white-space:nowrap;font-size:12.5px;padding:7px 12px" onclick="rehberStokKartiAc()" title="Aradığın ürünün stok kartı yoksa buradan hemen aç; kaydedince seçili satıra otomatik yazılır">➕ Stok Kartı Aç</button>' : '<button type="button" class="btn" style="flex-shrink:0;white-space:nowrap;font-size:12.5px;padding:7px 12px" onclick="rehberCariKartiAc()" title="Aradığın carinin kartı yoksa buradan hemen aç; kaydedince seçili alana otomatik yazılır">➕ Cari Kartı Aç</button>'}
+        ${tip==='stok' ? '<button type="button" class="rehber-yeni-btn" onclick="rehberStokKartiAc()" title="Aradığın ürünün stok kartı yoksa buradan hemen aç; kaydedince seçili satıra otomatik yazılır">➕ Stok Kartı Aç</button>' : '<button type="button" class="rehber-yeni-btn" onclick="rehberCariKartiAc()" title="Aradığın carinin kartı yoksa buradan hemen aç; kaydedince seçili alana otomatik yazılır">➕ Cari Kartı Aç</button>'}
         <button class="rehber-kapat" onclick="rehberKapat()" title="Kapat">✕</button>
       </div>
       <div class="rehber-tbl-wrap" id="rehber-tbl-wrap"><div class="cari-empty">Yükleniyor...</div></div>
@@ -3277,6 +3280,7 @@ function rehberAc(tip, callback){
     </div>`;
   document.body.appendChild(overlay);
   setTimeout(()=>{ const el = document.getElementById("rehber-ara"); if(el) el.focus(); }, 50);
+  rehberImlecKilidiKur_();
 
   // ★ Bellekte liste yoksa önce tarayıcı önbelleğindeki son liste ANINDA gösterilir (19 Eyl 2026),
   // arkadan taze liste çekilip tablo (aramayı koruyarak) sessizce güncellenir.
@@ -3442,7 +3446,62 @@ function rehberCariKartiAc(){
   }, aranan);
 }
 
+// ★ EKLENDİ (1 Eki 2026): F1/F2 rehberi açıkken imleç (odak) arka sayfalara kaçmasın — Tab/tık/başka bir
+// alana odaklanma durumunda odak rehberin arama kutusuna döner. Rehberin üstüne açılan pencereler (Stok/Cari
+// Kartı Aç vb., DOM'da rehberden SONRA gelen modal) kendi içinde serbest çalışır; kapanınca odak rehbere döner.
+let _rehberOdakKilidi = null;
+function rehberImlecKilidiKur_(){
+  rehberImlecKilidiKaldir_();
+  const rehberdeMi = (t)=>{
+    const ov = document.getElementById("rehber-modal-overlay");
+    if(!ov) return true;
+    if(!t || t === document.body || t === document.documentElement) return false;
+    if(ov.contains(t)) return true;
+    // rehberden sonra açılmış (üstteki) bir modal içindeyse serbest
+    const ustModal = t.closest && t.closest(".modal-overlay");
+    return !!(ustModal && ustModal !== ov && (ov.compareDocumentPosition(ustModal) & Node.DOCUMENT_POSITION_FOLLOWING));
+  };
+  const odakla = ()=>{
+    const ov = document.getElementById("rehber-modal-overlay");
+    if(!ov) return;
+    // Üstte başka bir modal açıksa dokunma
+    const modaller = Array.from(document.querySelectorAll(".modal-overlay")).filter(m=>m!==ov && (ov.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING));
+    if(modaller.length) return;
+    const el = document.getElementById("rehber-ara");
+    if(el) el.focus();
+  };
+  const onFocusIn = (e)=>{ if(!rehberdeMi(e.target)) odakla(); };
+  const onFocusOut = ()=>{ setTimeout(()=>{ if(document.getElementById("rehber-modal-overlay") && !rehberdeMi(document.activeElement)) odakla(); }, 0); };
+  const onKeyDown = (e)=>{
+    if(e.key !== "Tab") return;
+    const ov = document.getElementById("rehber-modal-overlay");
+    if(!ov || !rehberdeMi(document.activeElement) ) return;
+    if(!ov.contains(document.activeElement)) return; // üstteki modalın kendi Tab'ı
+    const odaklanabilir = Array.from(ov.querySelectorAll('input:not([type=hidden]):not([disabled]),select:not([disabled]),button:not([disabled]),[tabindex]:not([tabindex="-1"])')).filter(x=>x.offsetParent!==null);
+    if(!odaklanabilir.length) return;
+    const ilk = odaklanabilir[0], son = odaklanabilir[odaklanabilir.length-1];
+    if(e.shiftKey && document.activeElement === ilk){ e.preventDefault(); son.focus(); }
+    else if(!e.shiftKey && document.activeElement === son){ e.preventDefault(); ilk.focus(); }
+  };
+  document.addEventListener("focusin", onFocusIn, true);
+  document.addEventListener("focusout", onFocusOut, true);
+  document.addEventListener("keydown", onKeyDown, true);
+  // Rehberin üstündeki pencere (Kart Aç) kapanınca odak rehbere dönsün
+  const mo = new MutationObserver(()=>{ if(document.getElementById("rehber-modal-overlay")) setTimeout(()=>{ if(!rehberdeMi(document.activeElement)) odakla(); }, 30); });
+  mo.observe(document.body, {childList:true});
+  _rehberOdakKilidi = { onFocusIn, onFocusOut, onKeyDown, mo };
+}
+function rehberImlecKilidiKaldir_(){
+  const k = _rehberOdakKilidi; if(!k) return;
+  document.removeEventListener("focusin", k.onFocusIn, true);
+  document.removeEventListener("focusout", k.onFocusOut, true);
+  document.removeEventListener("keydown", k.onKeyDown, true);
+  try{ k.mo.disconnect(); }catch(e){}
+  _rehberOdakKilidi = null;
+}
+
 function rehberKapat(){
+  rehberImlecKilidiKaldir_();
   const el = document.getElementById("rehber-modal-overlay");
   if(el) el.remove();
 }
