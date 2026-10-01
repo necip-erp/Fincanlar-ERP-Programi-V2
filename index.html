@@ -7291,6 +7291,15 @@ window.addEventListener("message", e=>{
   if(document.getElementById("bfm-onay-iframe")) bfmSigdir("bfm-onay-iframe","bfm-onay-zoom-yuzde");
   if(document.getElementById("fyp-iframe")) bfmSigdir("fyp-iframe","fyp-zoom-yuzde");
 });
+// Pencere/panel boyutu değişince (ör. sol liste gizlenince) görsel yeniden sığdırılır.
+let _bfmSigdirZamanlayici = null;
+window.addEventListener("resize", ()=>{
+  clearTimeout(_bfmSigdirZamanlayici);
+  _bfmSigdirZamanlayici = setTimeout(()=>{
+    if(document.getElementById("bfm-onay-iframe")) bfmSigdir("bfm-onay-iframe","bfm-onay-zoom-yuzde");
+    if(document.getElementById("fyp-iframe")) bfmSigdir("fyp-iframe","fyp-zoom-yuzde");
+  }, 150);
+});
 function bfmYanPanelAc(faturaNo){
   window._bfmFaturaBoyut = null;
   bfmYanPanelKapat();
