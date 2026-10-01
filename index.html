@@ -6885,6 +6885,7 @@ function alisIadeListesiYukle(){
 }
 
 function alisIadeListesiCiz(liste){
+  window._alisIadeGorunen = liste;
   const el = document.getElementById("alisiade-items");
   if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı iade yok. "+" ile ekleyin.</div>'; return; }
   el.innerHTML = liste.map(a=>`
@@ -6914,7 +6915,28 @@ function alisIadeAc(id){
   }).catch(err=>{
     panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>Bağlantı hatası: '+err.message+'</p></div>';
   });
-  alisIadeListesiCiz(_alisIadeListe);
+  alisIadeAramaFiltrele((document.getElementById("alisiade-ara")||{}).value||"");
+}
+
+// İade: soldaki listenin (arama filtresi dahil) sırasına göre önceki/sonraki iade
+function alisIadeKomsuyaGit(yon){
+  const l = window._alisIadeGorunen || _alisIadeListe || [];
+  const i = l.findIndex(x=>x.id===_alisIadeSecili);
+  const j = i + yon;
+  if(i < 0 || j < 0 || j >= l.length) return;
+  alisIadeAc(l[j].id);
+  setTimeout(()=>{ const e = document.querySelector("#alisiade-items .cari-item.sel"); if(e) e.scrollIntoView({block:"nearest"}); }, 60);
+}
+function alisIadeGecisCubugu(){
+  const l = window._alisIadeGorunen || _alisIadeListe || [];
+  const i = l.findIndex(x=>x.id===_alisIadeSecili);
+  if(i < 0) return "";
+  const t = x => htmlKacis(x.cariAd||"");
+  return `<div class="alis-gecis">
+    <button class="btn" ${i===0?"disabled":""} onclick="alisIadeKomsuyaGit(-1)" title="${i>0?t(l[i-1]):""}">‹ Önceki iade</button>
+    <span class="sira">${i+1} / ${l.length}</span>
+    <button class="btn" ${i===l.length-1?"disabled":""} onclick="alisIadeKomsuyaGit(1)" title="${i<l.length-1?t(l[i+1]):""}">Sonraki iade ›</button>
+  </div>`;
 }
 
 function alisIadeListeyeDon(){
@@ -6926,6 +6948,7 @@ function alisIadeDetayCiz(res){
   const panel = document.getElementById("alisiade-detail-panel");
   panel.innerHTML = `
     <button class="cari-back-btn" onclick="alisIadeListeyeDon()">← Listeye dön</button>
+    ${alisIadeGecisCubugu()}
     <div class="cari-detail-head">
       <div>
         <h2>${a.cariAd}</h2>
@@ -6949,7 +6972,7 @@ function alisIadeDetayCiz(res){
             <td>${miktarFormat(k.miktar)}</td>
             <td>${k.birim}</td>
             <td>${fiyatFormat(k.birimFiyat)}</td>
-            <td>${paraFormat(k.tutar)}</td>
+            <td class="tutar-hucre">${paraFormat(k.tutar)}</td>
           </tr>`).join("")}
       </tbody>
     </table>
@@ -7415,6 +7438,7 @@ function alisBekleyenListesiCiz(){
       f.kalemler.some(k => (k.urunAdi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (k.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q))
     );
   }
+  window._bfmGorunen = liste;
   if(liste.length === 0){ el.innerHTML = `<div class="cari-empty">${_alisBekleyenListe.length===0?'Onay bekleyen fatura yok 🎉':'Aramayla/filtreyle eşleşen fatura yok'}</div>`; return; }
   el.innerHTML = liste.map((f)=>{
     const fi = _alisBekleyenListe.indexOf(f);
@@ -7734,6 +7758,31 @@ function bfm44NakliyeYenidenDagit(f){
   });
 }
 
+// Bekleyen Faturalar: listedeki (arama/firma/durum filtresi dahil) sıraya göre önceki/sonraki faturanın onay penceresi
+function bfmGecisCubugu(fno){
+  const l = window._bfmGorunen || [];
+  const i = l.findIndex(x=>x.faturaNo===fno);
+  if(i < 0 || l.length < 2) return "";
+  const t = x => htmlKacis((bfmFirmaAdi_(x)||"")+" #"+x.faturaNo);
+  return `<div class="alis-gecis">
+    <button type="button" class="btn" ${i===0?"disabled":""} onclick="bfmKomsuyaGit(-1)" title="${i>0?t(l[i-1]):""}">‹ Önceki fatura</button>
+    <span class="sira">${i+1} / ${l.length}</span>
+    <button type="button" class="btn" ${i===l.length-1?"disabled":""} onclick="bfmKomsuyaGit(1)" title="${i<l.length-1?t(l[i+1]):""}">Sonraki fatura ›</button>
+  </div>`;
+}
+function bfmKomsuyaGit(yon){
+  const ov = document.getElementById("bfm-modal-overlay");
+  if(!ov) return;
+  const l = window._bfmGorunen || [];
+  const i = l.findIndex(x=>x.faturaNo===ov.dataset.fno);
+  const j = i + yon;
+  if(i < 0 || j < 0 || j >= l.length) return;
+  if(ov._kirli && !confirm("Bu faturada girdiğin bilgiler kaydedilmedi. Yine de diğer faturaya geçilsin mi?")) return;
+  const hedef = l[j].faturaNo;
+  ov.remove();
+  alisBekleyenOnayModalAc(hedef);
+}
+
 function alisBekleyenOnayModalAc(faturaNo){
   const f = _alisBekleyenListe.find(x=>x.faturaNo===faturaNo);
   if(!f) return;
@@ -7742,6 +7791,9 @@ function alisBekleyenOnayModalAc(faturaNo){
   overlay.className = "modal-overlay";
   overlay.id = "bfm-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.dataset.fno = faturaNo;
+  overlay.addEventListener("input", ()=>{ overlay._kirli = true; });
+  overlay.addEventListener("change", ()=>{ overlay._kirli = true; });
   // FATURA_TARIHI "dd/MM/yyyy" formatında geliyor → date input için yyyy-MM-dd'ye çeviriyoruz.
   let tarihISO = new Date().toISOString().slice(0,10);
   const parcalar = String(f.tarih||"").split("/");
@@ -7759,6 +7811,7 @@ function alisBekleyenOnayModalAc(faturaNo){
   overlay.innerHTML = `
     <div class="modal-box ${yanda ? 'modal-box-onay2col' : 'modal-box-xwide'}">
       <h3>Faturayı Onayla — ${f.faturaNo}</h3>
+      ${bfmGecisCubugu(f.faturaNo)}
       <p style="font-size:12px;color:var(--text3);margin:-6px 0 10px">Kaynak fatura miktar bilgisi içeriyorsa otomatik doldu, boşsa elle girmelisin.</p>
       ${yanda ? `<div class="bfm-2col"><div class="bfm-2col-sol">` : ``}
 
