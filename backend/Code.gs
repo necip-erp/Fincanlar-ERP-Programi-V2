@@ -1075,7 +1075,7 @@ const YAZMA_DEGIL_ = /^(get|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|ed
 const OTURUMSUZ_ACTIONLAR = { girisYap: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
-  eskiPanelStokKartlariniAktar: true, yeniCalismaYiliOlustur: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
+  eskiPanelStokKartlariniAktar: true, eskiYildanEdmOnekAktar: true, yeniCalismaYiliOlustur: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
   getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, kayitDefteriHatalariTemizle: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
 };
@@ -1184,6 +1184,7 @@ function handleRequest(e) {
       case "silStokTanim":        result = silStokTanim(body); break;
       case "stokTanimMarkaKoduIsleToplu": result = stokTanimMarkaKoduIsleToplu(); break;
       case "eskiPanelStokKartlariniAktar": result = eskiPanelStokKartlariniAktar(body); break;
+      case "eskiYildanEdmOnekAktar": result = eskiYildanEdmOnekAktar(body); break;
       case "stokTanimOlcuBirimIsleToplu": result = stokTanimOlcuBirimIsleToplu(body); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
       case "getBirimListesi": result = getBirimListesi(); break;
@@ -7272,6 +7273,89 @@ function eskiPanelStokKartlariniAktar(body) {
     veriSurumuArtir_();
   }
   return { ok: true, kaynakTarih: sonTarih, eklenen: yeni.length, zatenVar: zatenVar, adsiz: adsiz, markasiz: markasiz, yil: aktifYil_() };
+}
+
+// ★ EKLENDİ (1 Eki 2026): TEMEL YIL (2026) E-TABLOSUNDAKİ EDM ÖNEK → TEDARİKÇİ EŞLEŞTİRMELERİNİ VE BU
+// EŞLEŞTİRMELERDEKİ CARİLERİ ÇALIŞMA YILINA AKTAR. Cari kartı olduğu gibi (ID, kod, vergi no, e-fatura/e-arşiv…)
+// kopyalanır; BAKİYE/HAREKET aktarılmaz. Hedefte aynı ID ya da aynı ad varsa cari yeniden açılmaz (ada göre eşleşir),
+// aynı cari kodu başka cariye aitse kod boş bırakılır. Hedefte olan önek ezilmez. body.onizleme → yazmadan sayar.
+function eskiYildanEdmOnekAktar(body) {
+  const hedefId = aktifSheetId_();
+  if (hedefId === SHEET_ID_TEMEL_) return { ok: false, hata: "Çalışma yılı zaten temel yıl; aktarılacak ayrı bir hedef yıl yok" };
+  const kaynakSS = SpreadsheetApp.openById(SHEET_ID_TEMEL_);
+  const kOnekSheet = kaynakSS.getSheetByName(SHEETS.edmOnekEslesme);
+  if (!kOnekSheet) return { ok: false, hata: "Temel yılda EDM önek eşleştirme sayfası bulunamadı" };
+  const kOnekData = kOnekSheet.getDataRange().getValues();
+  const kCariSheet = kaynakSS.getSheetByName(SHEETS.cariHesaplar);
+  if (!kCariSheet) return { ok: false, hata: "Temel yılda cari sayfası bulunamadı" };
+  const kCariData = kCariSheet.getDataRange().getValues();
+  // Türkçe büyük/küçük harf ve aksan farkını yok say (ör. "Termalkim" = "TERMALKIM")
+  const norm = function (v) {
+    return String(v || "").trim().toLocaleLowerCase("tr-TR").replace(/[ıİ]/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c").replace(/\s+/g, " ");
+  };
+  const kayId = {}, kayAd = {};
+  for (let i = 1; i < kCariData.length; i++) {
+    const id = String(kCariData[i][0] || "").trim();
+    if (id) kayId[id] = i;
+    const ad = norm(kCariData[i][2]);
+    if (ad && kayAd[ad] === undefined) kayAd[ad] = i;
+  }
+
+  const ss = acikSS_();
+  const hCariSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
+  ensureCariEkKolonlariHepsi(hCariSheet);
+  const hCariData = hCariSheet.getDataRange().getValues();
+  const hId = {}, hAd = {}, hKod = {};
+  for (let i = 1; i < hCariData.length; i++) {
+    const id = String(hCariData[i][0] || "").trim();
+    if (id) hId[id] = String(hCariData[i][0]);
+    const ad = norm(hCariData[i][2]);
+    if (ad && hAd[ad] === undefined) hAd[ad] = String(hCariData[i][0]);
+    const kod = norm(hCariData[i][8]);
+    if (kod) hKod[kod] = true;
+  }
+  const hOnek = edmOnekEslesmeOku(ss);
+
+  const sutunSayisi = Math.max(17, hCariSheet.getLastColumn());
+  const yeniCariSatirlari = [], yeniCariAdlari = [], yeniOnekler = [];
+  let kaynakOnek = 0, zatenOnek = 0, atlananOnek = 0;
+  const bu = {}; // bu çalışmada eşlenen/açılacak kaynak cari -> hedef ID
+  for (let i = 1; i < kOnekData.length; i++) {
+    const onek = String(kOnekData[i][0] || "").trim().toUpperCase(); // edmOnekEslesmeOku ile aynı anahtar
+    if (!onek) continue;
+    kaynakOnek++;
+    if (hOnek[onek]) { zatenOnek++; continue; }
+    const kId = String(kOnekData[i][1] || "").trim();
+    let kIdx = kId && kayId[kId] !== undefined ? kayId[kId] : kayAd[norm(kOnekData[i][2])];
+    if (kIdx === undefined) { atlananOnek++; continue; }
+    const kRow = kCariData[kIdx];
+    const kCariId = String(kRow[0] || "").trim();
+    let hedefCariId = bu[kCariId] || (hId[kCariId] || hAd[norm(kRow[2])] || "");
+    if (!hedefCariId) {
+      const satir = [];
+      for (let c = 0; c < sutunSayisi; c++) satir.push(kRow[c] === undefined ? "" : kRow[c]);
+      const kod = norm(satir[8]);
+      if (kod && hKod[kod]) satir[8] = ""; // kod çakışması: boş bırak, cari yine açılır
+      else if (kod) hKod[kod] = true;
+      hedefCariId = String(kRow[0]);
+      yeniCariSatirlari.push(satir);
+      yeniCariAdlari.push(String(kRow[2] || ""));
+      hId[kCariId] = hedefCariId;
+    }
+    bu[kCariId] = hedefCariId;
+    yeniOnekler.push({ onek: onek, cariId: hedefCariId, cariAd: String(kRow[2] || "") });
+  }
+  if (body && body.onizleme) {
+    return { ok: true, onizleme: true, kaynakOnek: kaynakOnek, zatenOnek: zatenOnek, eklenecekOnek: yeniOnekler.length, eklenecekCari: yeniCariSatirlari.length, cariAdlari: yeniCariAdlari, atlananOnek: atlananOnek };
+  }
+  if (yeniCariSatirlari.length > 0) {
+    hCariSheet.getRange(hCariSheet.getLastRow() + 1, 1, yeniCariSatirlari.length, sutunSayisi).setValues(yeniCariSatirlari);
+  }
+  yeniOnekler.forEach(function (o) { edmOnekEslesmeKaydet(ss, o.onek, o.cariId, o.cariAd); });
+  SpreadsheetApp.flush();
+  cacheTemizle(["cariListesi_v4", "bekleyenAlisFaturalari"]);
+  veriSurumuArtir_();
+  return { ok: true, eklenenOnek: yeniOnekler.length, eklenenCari: yeniCariSatirlari.length, zatenOnek: zatenOnek, atlananOnek: atlananOnek };
 }
 
 //         alisFiyati, alisIskontosu, kdvAlis, satisFiyati, satisIskontosu, kdvSatis,

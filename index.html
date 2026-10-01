@@ -1441,6 +1441,7 @@ setInterval(topbarSaatGuncelle, 10000);
     </div>
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">EDM Önek → Tedarikçi Eşleştirme</div>
+      <div style="margin:0 0 12px"><button id="edmonek-eski-aktar-btn" class="btn" style="display:none" onclick="eskiYildanEdmOnekAktar()" title="Temel yıl (2026) e-tablosundaki EDM önek eşleştirmelerini ve bu eşleştirmelerdeki carileri bu çalışma yılına aktarır. Sadece Admin.">📥 Eski Yıldan Aktar (Önek + Cariler)</button></div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 14px">
         Bazı EDM e-Fatura numaraları gönderen bilgisini net vermez, sadece bir önek taşır
         (örn. fatura no "CNY2026000123" → önek "CNY" → gerçek tedarikçi "CANYAP"). Burada
@@ -14027,6 +14028,7 @@ function _stokTanimGuncelAramaTerimiIleCiz(){
 }
 function stokTanimListesiYukle(){
   try{ const b=document.getElementById("stoktanim-eski-aktar-btn"); if(b) b.style.display = modulGorunurMu_({admin:true}) ? "" : "none"; }catch(e){}
+  try{ const b=document.getElementById("edmonek-eski-aktar-btn"); if(b) b.style.display = modulGorunurMu_({admin:true}) ? "" : "none"; }catch(e){}
   _stokTanimYuklendi = true;
   const onbellek = onbellekOku("stokTanimListesi", ONBELLEK_MAX_YAS);
   if(onbellek){ _stokTanimListe = onbellek; _stokTanimGuncelAramaTerimiIleCiz(); bfmOnerileriGuncelle(); }
@@ -14309,6 +14311,24 @@ function eskiPanelStokKartlariAktar(){
       if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
       stokTanimListesiYukle();
       alert(`${res.eklenen} stok kartı açıldı (çalışma yılı: ${res.yil}). Zaten var olan: ${res.zatenVar}. Marka atanamayan: ${res.markasiz}.`);
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ★ EKLENDİ (1 Eki 2026): Temel yıl e-tablosundaki EDM önek eşleştirmelerini ve bu eşleştirmelerin carilerini
+// bu çalışma yılına aktarır. Önce önizleme gösterir, onay alınca yazar. Var olan önek/cari atlanır.
+function eskiYildanEdmOnekAktar(){
+  cariApi("eskiYildanEdmOnekAktar", {onizleme:true}).then(on=>{
+    if(!on.ok){ alert("Hata: "+(on.hata||"bilinmiyor")); return; }
+    if(!on.kaynakOnek){ alert("Kaynak yılda aktarılacak EDM önek eşleştirmesi bulunamadı."); return; }
+    if(!on.eklenecekOnek && !on.eklenecekCari){ alert(`Aktarılacak yeni kayıt yok (${on.zatenOnek} önek bu yılda zaten tanımlı).`); return; }
+    const liste = (on.cariAdlari||[]).slice(0,15).join(", ");
+    if(!confirm(`Kaynak yılda ${on.kaynakOnek} önek eşleştirmesi var.\n• Eklenecek önek: ${on.eklenecekOnek} (zaten var: ${on.zatenOnek})\n• Açılacak cari: ${on.eklenecekCari}${liste?" ("+liste+(on.cariAdlari.length>15?", ...":"")+")":""}\n• Bu yılda zaten olan cariler yeniden açılmaz, ada göre eşleştirilir.\n• Cari bakiyesi/hareketi aktarılmaz.\n\nDevam edilsin mi?`)) return;
+    cariApi("eskiYildanEdmOnekAktar", {}).then(res=>{
+      if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+      try{ if(typeof edmOnekEslesmeYukle==="function") edmOnekEslesmeYukle(); }catch(e){}
+      try{ if(typeof cariListesiYukle==="function") cariListesiYukle(); }catch(e){}
+      alert(`${res.eklenenOnek} önek eşleştirmesi ve ${res.eklenenCari} cari aktarıldı.`+(res.atlananOnek?`\nAtlanan (kaynakta cari bulunamadı): ${res.atlananOnek}`:""));
     }).catch(err=>alert("Bağlantı hatası: "+err.message));
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
@@ -15443,6 +15463,10 @@ table.hareket-tbl tbody tr:hover,table.hareket-tbl tbody tr:hover td,table.rehbe
 #mod-finans .satis-kalem-satir{background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:8px;padding:6px 10px;margin-bottom:4px}
 #mod-finans #banka-yapisi-alani b{color:var(--rp-th-fg)}
 #mod-finans .fld label{color:var(--rp-th-fg)}
+/* ── 1 Eki 2026: Alış'ta satırın üzerinde gezerken SARI vurgu ── */
+#mod-alis .cari-item:hover,#mod-alis .cari-item:hover.sel{background:#fff1a8!important}
+#mod-alis table tbody tr:hover,#mod-alis table tbody tr:hover td{background:#fff1a8!important}
+#mod-alis .bfm-kart:hover,#mod-alis .bfm-satir:hover{background:#fff1a8!important}
 /* ── 1 Eki 2026: Alış (Giriş/İade/Bekleyen) da Finans'taki rapor renk düzeninde + fatura geçişi ve tutar vurgusu ── */
 #mod-alis{background:var(--rp-alan)}
 #mod-alis .cari-list-panel{background:var(--rp-satir);border-right:1px solid var(--rp-th-bd)}
