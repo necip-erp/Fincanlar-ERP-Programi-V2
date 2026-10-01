@@ -15476,13 +15476,21 @@ if("serviceWorker" in navigator){
      bir sayaçla takip edilir; sayaç sıfıra dönene kadar bant görünür kalır. -->
 <script>
 (function(){
-  let sayac = 0, gizleZamanlayici = null;
+  let sayac = 0, gizleZamanlayici = null, sureZamanlayici = null, baslangic = 0;
+  const BANT_METNI = "⏳ İşlem yapılıyor, lütfen bekleyin...";
+  // ★ (1 Eki 2026) Bantta geçen süre canlı gösterilir: "⏳ İşlem yapılıyor, lütfen bekleyin... 3,4 sn"
+  function sureYaz(){
+    const b = document.getElementById("islem-yapiliyor-bant"); if(!b) return;
+    const sn = ((performance.now() - baslangic)/1000).toFixed(1).replace(".", ",");
+    b.textContent = BANT_METNI + " " + sn + " sn";
+  }
+  function sureDurdur(){ clearInterval(sureZamanlayici); sureZamanlayici = null; }
   function bantEl(){
     let b = document.getElementById("islem-yapiliyor-bant");
     if(!b){
       b = document.createElement("div");
       b.id = "islem-yapiliyor-bant";
-      b.textContent = "⏳ İşlem yapılıyor, lütfen bekleyin...";
+      b.textContent = BANT_METNI;
       // Sayfa 4 parçaya bölünmüş gibi düşünülürse üst parçanın ORTASINDA (üst-orta) sabit durur.
       b.style.cssText = "position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:99999;background:#ffd60a;color:#000;text-align:center;font-weight:700;font-size:13px;padding:7px 16px;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.25);display:none";
       document.body.appendChild(b);
@@ -15493,10 +15501,12 @@ if("serviceWorker" in navigator){
     sayac++;
     clearTimeout(gizleZamanlayici);
     bantEl().style.display = "block";
+    if(!sureZamanlayici){ baslangic = performance.now(); sureYaz(); sureZamanlayici = setInterval(sureYaz, 100); }
   };
   window.islemYapiliyorGizle_ = function(){
     sayac = Math.max(0, sayac - 1);
     if(sayac === 0){
+      sureYaz(); sureDurdur(); // son süre bantta kalsın (kapanmadan önceki kısa an)
       // Çok kısa isteklerde bandın göz kırpıp kaybolmasını önlemek için ufak bir gecikmeyle gizlenir.
       clearTimeout(gizleZamanlayici);
       gizleZamanlayici = setTimeout(()=>{ const b = document.getElementById("islem-yapiliyor-bant"); if(b) b.style.display = "none"; }, 120);
