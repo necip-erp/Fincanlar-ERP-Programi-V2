@@ -1108,6 +1108,7 @@ setInterval(topbarSaatGuncelle, 10000);
           <option value="alisFatura">Alış Fatura Raporu</option>
           <option value="satisFatura">Satış Fatura Raporu</option>
           <option value="kasaRaporu">Kasa Raporu (Nakit)</option>
+          <option value="zRaporu">Günsonu Z Raporu</option>
           <option value="urunBazliHareket">Ürün Bazlı Hareket Raporu</option>
           <option value="urunBazliSiparis">Ürün Bazlı Sipariş Raporu</option>
           <option value="siparisRaporu">Sipariş Raporu (Tüm Siparişler)</option>
@@ -1142,6 +1143,12 @@ setInterval(topbarSaatGuncelle, 10000);
           <select id="mr-cari-secim" multiple size="5" onchange="muhasebeRaporuYukle()" style="width:100%"></select>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">Ctrl/Cmd tuşuyla birden fazla cari seçebilirsiniz. Hiçbiri seçili değilse filtreye uyan tüm cariler kullanılır.</div>
         </div>
+      </div>
+      <div id="mr-z-alani" style="display:none;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        <div class="fld" style="margin-bottom:0;max-width:180px"><label>Tarih</label><input type="date" id="mr-z-gun" onchange="muhasebeRaporuYukle()"></div>
+        <button type="button" class="btn" onclick="zDuzenPaneliAc()" title="Raporda görünecek kalemleri ve sütunları seçin, sırasını değiştirin">⚙ Düzeni Ayarla</button>
+        <button type="button" class="btn" onclick="zRaporuYazdir()">🖨 Yazdır</button>
+        <button type="button" class="btn" onclick="zRaporuExcelAktar()">📊 Excel'e Aktar</button>
       </div>
       <div id="mr-kasa-mod-alani" style="display:none;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px">
         <div class="fld" style="margin-bottom:0">
@@ -11023,7 +11030,9 @@ function muhasebeRaporuTipDegisti(){
   _mrOncekiTip = tip;
   document.getElementById("mr-kasa-mod-alani").style.display = (tip === "kasaRaporu") ? "flex" : "none";
   // Kasa Raporu kendi Excel butonuna sahip (mr-kasa-mod-alani içinde) — genel buton onunla çakışmasın diye gizlenir.
-  document.getElementById("mr-excel-btn").style.display = (tip === "kasaRaporu") ? "none" : "inline-flex";
+  document.getElementById("mr-excel-btn").style.display = (tip === "kasaRaporu" || tip === "zRaporu") ? "none" : "inline-flex";
+  document.getElementById("mr-z-alani").style.display = (tip === "zRaporu") ? "flex" : "none";
+  if(tip === "zRaporu"){ const zg = document.getElementById("mr-z-gun"); if(!zg.value) zg.value = simdiTarihSaat().slice(0,10); }
   _mrSirala = { anahtar: "tarih", yon: "desc" };
   const stokKoduDestekli = ["urunBazliHareket","urunBazliSiparis","urunBazliFatura","karZarar","siparisRaporu"].includes(tip);
   document.getElementById("mr-stokkodu-alani").style.display = stokKoduDestekli ? "block" : "none";
@@ -11549,6 +11558,203 @@ function mrCariSecimOneriGoster(){
   sel.innerHTML = liste.map(c=>`<option value="${c.id}" ${oncekiSecili.includes(c.id)?'selected':''}>${c.ad}${c.cariKodu?' ('+c.cariKodu+')':''}</option>`).join("");
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// GÜNSONU Z RAPORU — kalem + sütun düzeni kullanıcıya göre ayarlanır (⚙ Düzeni Ayarla),
+// seçimler bu tarayıcıda saklanır. Sunucu her zaman tüm kalem kataloğunu döndürür
+// (getZRaporu); hangi kalemin görüneceği/sırası/sütunlar burada uygulanır.
+// ═══════════════════════════════════════════════════════════════════════════
+const Z_SUTUNLAR = [{id:"bolum", baslik:"Bölüm"}, {id:"ad", baslik:"Kalem"}, {id:"adet", baslik:"Adet"}, {id:"tutar", baslik:"Tutar"}];
+const Z_VARSAYILAN_ACIK = ["satisToplam","satisIade","alisToplam","alisIade","tahsilatToplam","tahsilat:Nakit","tahsilat:Kredi Kartı","odemeToplam","odemeGider","kasaDevir","kasaGiris","kasaCikis","kasaGunSonu"];
+const Z_ADETSIZ = ["kasaDevir","kasaGunSonu"];
+let _zSonSonuc = null;
+let _zTaslak = null;
+let _zSurukle = null;
+
+function zDuzenOku_(){
+  try{ const d = JSON.parse(localStorage.getItem("zRaporDuzeni_v1")||"null"); if(d && Array.isArray(d.kalemler) && Array.isArray(d.sutunlar)) return d; }catch(_){}
+  return null;
+}
+function zDuzenKaydet_(d){ try{ localStorage.setItem("zRaporDuzeni_v1", JSON.stringify(d)); }catch(_){} }
+
+// Kayıtlı düzen + sunucudaki güncel katalog → eksiksiz düzen. Kayıtlı ama bugün katalogda olmayan
+// kalemler SİLİNMEZ (sırası/seçimi korunur); katalogda yeni çıkanlar sona, kapalı olarak eklenir.
+function zDuzenBirlestir_(katalog){
+  const kayit = zDuzenOku_();
+  const kalemler = kayit ? kayit.kalemler.map(k=>({id:k.id, acik:!!k.acik})) : [];
+  katalog.forEach(k=>{
+    if(!kalemler.some(x=>x.id===k.id)) kalemler.push({id:k.id, acik: kayit ? false : Z_VARSAYILAN_ACIK.includes(k.id)});
+  });
+  const sutunlar = [];
+  if(kayit) kayit.sutunlar.forEach(c=>{ if(Z_SUTUNLAR.some(s=>s.id===c.id) && !sutunlar.some(x=>x.id===c.id)) sutunlar.push({id:c.id, acik:!!c.acik}); });
+  Z_SUTUNLAR.forEach(s=>{ if(!sutunlar.some(x=>x.id===s.id)) sutunlar.push({id:s.id, acik:true}); });
+  return {kalemler, sutunlar};
+}
+
+function zGorunenSatirlar_(res){
+  const d = zDuzenBirlestir_(res.katalog);
+  const harita = {}; res.katalog.forEach(k=>{ harita[k.id] = k; });
+  return {
+    satirlar: d.kalemler.filter(x=>x.acik && harita[x.id]).map(x=>harita[x.id]),
+    sutunlar: d.sutunlar.filter(c=>c.acik).map(c=>Z_SUTUNLAR.find(s=>s.id===c.id)),
+  };
+}
+function zHucre_(k, sutunId, hamSayi){
+  if(sutunId === "bolum") return k.bolum;
+  if(sutunId === "ad") return k.ad;
+  if(sutunId === "adet") return Z_ADETSIZ.includes(k.id) ? "" : k.adet;
+  return hamSayi ? k.tutar : paraFormat(k.tutar);
+}
+
+function zRaporuCiz_(res){
+  const el = document.getElementById("mr-icerik");
+  const g = zGorunenSatirlar_(res);
+  if(!g.sutunlar.length){ el.innerHTML = '<div class="cari-empty">Hiçbir sütun seçili değil. "⚙ Düzeni Ayarla" ile en az bir sütun açın.</div>'; return; }
+  if(!g.satirlar.length){ el.innerHTML = '<div class="cari-empty">Z Raporu\'nda gösterilecek kalem seçili değil. "⚙ Düzeni Ayarla" ile kalem ekleyin.</div>'; return; }
+  const sag = id => (id==="adet" || id==="tutar") ? ' style="text-align:right"' : '';
+  el.innerHTML = `
+    <div style="font-weight:700;font-size:15px;margin:4px 0 10px">GÜNSONU Z RAPORU — ${htmlKacis(tarihGoster(res.gun))}</div>
+    <table class="rapor-tbl" id="mr-z-tablo">
+      <thead><tr>${g.sutunlar.map(c=>`<th draggable="true" data-zsutun="${c.id}"${sag(c.id)} title="Sütunu sürükleyerek yerini değiştirebilirsiniz" style="cursor:grab">${c.baslik}</th>`).join("")}</tr></thead>
+      <tbody>${g.satirlar.map(k=>`<tr${k.id==="kasaGunSonu" ? ' style="font-weight:700"' : ''}>${g.sutunlar.map(c=>`<td${sag(c.id)}>${htmlKacis(String(zHucre_(k, c.id, false)))}</td>`).join("")}</tr>`).join("")}</tbody>
+    </table>`;
+  try{ mrRenkUygula(el); }catch(_){}
+  zBaslikSurukleKur_(el);
+}
+
+// Rapor başlığını sürükleyip bırakarak sütun yerini değiştirir ve kaydeder.
+function zBaslikSurukleKur_(kap){
+  let kaynak = "";
+  kap.querySelectorAll("th[data-zsutun]").forEach(th=>{
+    th.addEventListener("dragstart", e=>{ kaynak = th.dataset.zsutun; try{ e.dataTransfer.setData("text/plain", kaynak); }catch(_){} });
+    th.addEventListener("dragover", e=>{ e.preventDefault(); });
+    th.addEventListener("drop", e=>{
+      e.preventDefault();
+      const hedef = th.dataset.zsutun;
+      if(!kaynak || kaynak === hedef || !_zSonSonuc) return;
+      const d = zDuzenBirlestir_(_zSonSonuc.katalog);
+      const kI = d.sutunlar.findIndex(c=>c.id===kaynak), hI = d.sutunlar.findIndex(c=>c.id===hedef);
+      if(kI < 0 || hI < 0) return;
+      const [oge] = d.sutunlar.splice(kI, 1);
+      d.sutunlar.splice(hI, 0, oge);
+      zDuzenKaydet_(d);
+      zRaporuCiz_(_zSonSonuc);
+    });
+  });
+}
+
+// ── ⚙ Düzeni Ayarla paneli ──
+function zDuzenPaneliAc(){
+  if(!_zSonSonuc){ alert("Önce raporu görüntüleyin."); return; }
+  _zTaslak = zDuzenBirlestir_(_zSonSonuc.katalog);
+  zDuzenPaneliKapat();
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay"; ov.id = "z-duzen-overlay";
+  ov.innerHTML = `<div class="modal-box modal-box-wide">
+      <div style="font-weight:700;font-size:16px;margin-bottom:4px">⚙ Z Raporu Düzeni</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Kutuyu işaretleyince kalem/sütun raporda görünür. ▲▼ düğmeleri veya sürükle-bırak ile sırayı değiştirin.</div>
+      <div id="z-duzen-icerik"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="zDuzenVarsayilan()">Varsayılana Dön</button>
+        <button type="button" class="btn" onclick="zDuzenPaneliKapat()">İptal</button>
+        <button type="button" class="btn btn-primary" onclick="zDuzenUygula()">Kaydet</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  zDuzenPaneliCiz_();
+}
+function zDuzenPaneliKapat(){ const o = document.getElementById("z-duzen-overlay"); if(o) o.remove(); }
+
+function zDuzenPaneliCiz_(){
+  const kap = document.getElementById("z-duzen-icerik");
+  if(!kap || !_zTaslak) return;
+  const katIdler = _zSonSonuc.katalog.map(k=>k.id);
+  const ad = {}; _zSonSonuc.katalog.forEach(k=>{ ad[k.id] = k.ad; });
+  const satir = (tur, oge, i, etiket) => `
+    <div class="z-duzen-satir" draggable="true" data-tur="${tur}" data-i="${i}"
+         style="display:flex;align-items:center;gap:8px;padding:5px 6px;border:1px solid var(--border);border-radius:8px;margin-bottom:4px;background:var(--bg2);cursor:grab">
+      <input type="checkbox" ${oge.acik?"checked":""} onchange="zTaslakAcKapa('${tur}',${i},this.checked)">
+      <span style="flex:1;font-size:13px">${htmlKacis(etiket)}</span>
+      <button type="button" class="btn" style="padding:1px 8px" onclick="zTaslakTasi('${tur}',${i},-1)" title="Yukarı">▲</button>
+      <button type="button" class="btn" style="padding:1px 8px" onclick="zTaslakTasi('${tur}',${i},1)" title="Aşağı">▼</button>
+    </div>`;
+  let kalemHtml = "";
+  _zTaslak.kalemler.forEach((o,i)=>{ if(katIdler.includes(o.id)) kalemHtml += satir("kalem", o, i, ad[o.id]); });
+  const sutunHtml = _zTaslak.sutunlar.map((o,i)=>satir("sutun", o, i, Z_SUTUNLAR.find(s=>s.id===o.id).baslik)).join("");
+  kap.innerHTML = `
+    <div style="font-weight:600;margin:6px 0">Sütunlar</div>${sutunHtml}
+    <div style="font-weight:600;margin:12px 0 6px">Kalemler</div>${kalemHtml}`;
+  kap.querySelectorAll(".z-duzen-satir").forEach(s=>{
+    s.addEventListener("dragstart", e=>{ _zSurukle = {tur:s.dataset.tur, i:+s.dataset.i}; try{ e.dataTransfer.setData("text/plain","z"); }catch(_){} });
+    s.addEventListener("dragover", e=>{ e.preventDefault(); });
+    s.addEventListener("drop", e=>{
+      e.preventDefault();
+      if(!_zSurukle || _zSurukle.tur !== s.dataset.tur) return;
+      const dizi = _zTaslak[_zSurukle.tur === "kalem" ? "kalemler" : "sutunlar"];
+      const hedefI = +s.dataset.i;
+      if(_zSurukle.i === hedefI) return;
+      const [oge] = dizi.splice(_zSurukle.i, 1);
+      dizi.splice(hedefI, 0, oge);
+      _zSurukle = null;
+      zDuzenPaneliCiz_();
+    });
+  });
+}
+function zTaslakAcKapa(tur, i, acik){
+  _zTaslak[tur === "kalem" ? "kalemler" : "sutunlar"][i].acik = !!acik;
+}
+// ▲▼: kalemlerde, katalogda bulunmayan (bugün listede görünmeyen) kayıtlar atlanır → görünen komşuyla yer değiştirir.
+function zTaslakTasi(tur, i, yon){
+  const dizi = _zTaslak[tur === "kalem" ? "kalemler" : "sutunlar"];
+  const katIdler = _zSonSonuc.katalog.map(k=>k.id);
+  const gorunur = o => tur === "sutun" || katIdler.includes(o.id);
+  let j = i + yon;
+  while(j >= 0 && j < dizi.length && !gorunur(dizi[j])) j += yon;
+  if(j < 0 || j >= dizi.length) return;
+  const gecici = dizi[i]; dizi[i] = dizi[j]; dizi[j] = gecici;
+  zDuzenPaneliCiz_();
+}
+function zDuzenUygula(){
+  zDuzenKaydet_(_zTaslak);
+  zDuzenPaneliKapat();
+  if(_zSonSonuc) zRaporuCiz_(_zSonSonuc);
+}
+function zDuzenVarsayilan(){
+  try{ localStorage.removeItem("zRaporDuzeni_v1"); }catch(_){}
+  _zTaslak = zDuzenBirlestir_(_zSonSonuc.katalog);
+  zDuzenPaneliCiz_();
+}
+
+// ── Yazdır / Excel ──
+function zRaporuYazdir(){
+  if(!_zSonSonuc){ alert("Önce raporu görüntüleyin."); return; }
+  const g = zGorunenSatirlar_(_zSonSonuc);
+  if(!g.sutunlar.length || !g.satirlar.length){ alert("Yazdırılacak kalem/sütun seçili değil."); return; }
+  const sag = id => (id==="adet" || id==="tutar") ? ' style="text-align:right"' : '';
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Z Raporu ${htmlKacis(_zSonSonuc.gun)}</title>
+    <style>body{font-family:Arial,sans-serif;padding:20px;color:#111}h2{margin:0 0 12px}table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #999;padding:5px 9px;font-size:13px}th{background:#eee;text-align:left}tr.t td{font-weight:700}</style></head><body>
+    <h2>GÜNSONU Z RAPORU — ${htmlKacis(tarihGoster(_zSonSonuc.gun))}</h2>
+    <table><thead><tr>${g.sutunlar.map(c=>`<th${sag(c.id)}>${c.baslik}</th>`).join("")}</tr></thead>
+    <tbody>${g.satirlar.map(k=>`<tr${k.id==="kasaGunSonu"?' class="t"':''}>${g.sutunlar.map(c=>`<td${sag(c.id)}>${htmlKacis(String(zHucre_(k,c.id,false)))}</td>`).join("")}</tr>`).join("")}</tbody></table>
+    </body></html>`;
+  const fr = document.createElement("iframe");
+  fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+  document.body.appendChild(fr);
+  fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+  setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(_){} setTimeout(()=>fr.remove(), 2000); }, 250);
+}
+function zRaporuExcelAktar(){
+  if(!_zSonSonuc){ alert("Önce raporu görüntüleyin."); return; }
+  if(typeof XLSX === "undefined"){ alert("Excel kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin."); return; }
+  const g = zGorunenSatirlar_(_zSonSonuc);
+  if(!g.sutunlar.length || !g.satirlar.length){ alert("Aktarılacak kalem/sütun seçili değil."); return; }
+  const aoa = [g.sutunlar.map(c=>c.baslik)];
+  g.satirlar.forEach(k=>aoa.push(g.sutunlar.map(c=>zHucre_(k, c.id, true))));
+  const ws = XLSX.utils.aoa_to_sheet(aoa), wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Z Raporu");
+  XLSX.writeFile(wb, "ZRaporu_" + _zSonSonuc.gun + ".xlsx");
+}
+
 function muhasebeRaporuYukle(){
   const tip = document.getElementById("mr-tip-secim").value;
   const baslangic = document.getElementById("rapor-baslangic").value;
@@ -11561,6 +11767,16 @@ function muhasebeRaporuYukle(){
       if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
       _mrSonTip = tip; _mrSonSonuc = res;
       mrIcerikCiz(tip, res);
+    }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+    return;
+  }
+
+  if(tip === "zRaporu"){
+    const gunZ = document.getElementById("mr-z-gun").value || simdiTarihSaat().slice(0,10);
+    cariApi("getZRaporu", { gun: gunZ }).then(res=>{
+      if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+      _mrSonTip = tip; _mrSonSonuc = res; _zSonSonuc = res;
+      zRaporuCiz_(res);
     }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
     return;
   }

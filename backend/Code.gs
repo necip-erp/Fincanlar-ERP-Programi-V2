@@ -1207,6 +1207,7 @@ function handleRequest(e) {
       case "getEdmPortalGirisLinki": result = getEdmPortalGirisLinki(); break;
       case "getSonIslemler": result = getSonIslemler(body); break;
       case "gunlukIslemRaporuUret": result = gunlukIslemRaporuUret(body); break;
+      case "getZRaporu": result = zRaporuGetir(body); break;
       case "stokHareketGecmisiDoldur": result = stokHareketGecmisiDoldur(); break;
       case "cariHareketGecmisiDoldur": result = cariHareketGecmisiDoldur(); break;
       case "stokHareketTopluEkle":  result = stokHareketTopluEkle(body); break;
