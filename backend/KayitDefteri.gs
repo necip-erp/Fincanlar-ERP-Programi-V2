@@ -43,8 +43,9 @@ const KD_KAYNAKLAR = {
   virman:    { modul: "Cari Virman", sheet: "cariVirmanlar", prefix: "VIRMAN" },
   cek:       { modul: "Çek/Senet",   sheet: "cekSenetler",   prefix: "CEK", ekPrefix: ["CEKCIRO"] },
   posaktarim:{ modul: "Finans",      sheet: "posBankaAktarimlari", prefix: "POSAKTARIM", banka: true, pos: true },
+  bankatransfer:{ modul: "Finans",   sheet: "bankaTransferleri", prefix: "BANKATRANSFER", banka: true },
 };
-const KD_PREFIX_ANAHTAR = { SATIS: "satis", ALIS: "alis", ALISIADE: "alisiade", SATISIADE: "satisiade", TAHSILAT: "tahsilat", ODEME: "odeme", VIRMAN: "virman", CEK: "cek", CEKCIRO: "cek", POSAKTARIM: "posaktarim" };
+const KD_PREFIX_ANAHTAR = { SATIS: "satis", ALIS: "alis", ALISIADE: "alisiade", SATISIADE: "satisiade", TAHSILAT: "tahsilat", ODEME: "odeme", VIRMAN: "virman", CEK: "cek", CEKCIRO: "cek", POSAKTARIM: "posaktarim", BANKATRANSFER: "bankatransfer" };
 const KD_BACAK_MODUL = { cari: "Cari", stok: "Stok", banka: "Banka", pos: "POS", kart: "Kredi Kartı" };
 const KD_STOK_BELGE_TIPLERI = ["Satış Faturası", "Alış Faturası", "Alış İadesi", "Satış İadesi"];
 
@@ -79,6 +80,8 @@ const KD_ACTIONLAR = {
   cekSenetHareketGeriAl:  { k: "cek", tur: "guncelle", id: (b, r) => b.id },
   savePosBankaAktarim:    { k: "posaktarim", tur: "olustur", id: (b, r) => r.id },
   silPosBankaAktarim:     { k: "posaktarim", tur: "sil",     id: (b, r) => b.id },
+  saveBankaTransfer:      { k: "bankatransfer", tur: "olustur", id: (b, r) => r.id },
+  silBankaTransfer:       { k: "bankatransfer", tur: "sil",     id: (b, r) => b.id },
   silCekSenet:            { k: "cek", tur: "sil",      id: (b, r) => b.id },
   cariHareketEkle:        { k: "cariHareket", tur: "olustur", id: (b, r) => r.id },
   cariHareketSil:         { k: "cariHareket", tur: "sil",     id: (b, r) => b.id },
@@ -277,7 +280,7 @@ function kdAnaTanimla_(key, row) {
   const kk = KD_KAYNAKLAR[key];
   const id = String(row[0]);
   const t = { key: key, id: id, kaynak: SHEETS[kk.sheet], modul: kk.modul, belge: "", cariTek: true, grup: "",
-              cariIdler: key === "virman" ? [row[2], row[4]] : (key === "posaktarim" ? [] : [row[2]]) };
+              cariIdler: key === "virman" ? [row[2], row[4]] : ((key === "posaktarim" || key === "bankatransfer") ? [] : [row[2]]) };
   if (key === "satis") {
     const bt = String(row[8] || "Fatura");
     t.islem = "Satış " + (bt === "Fatura" ? "Faturası" : bt === "Sipariş" ? "Siparişi" : "Teklifi");
@@ -300,6 +303,8 @@ function kdAnaTanimla_(key, row) {
     t.belge = kdMetin_(row[6]);
   } else if (key === "posaktarim") {
     t.islem = "POS → Banka Aktarımı"; t.tarih = kdMetin_(row[3]); t.cari = ""; t.tutar = kdSayi_(row[4]); t.kayit = row[6];
+  } else if (key === "bankatransfer") {
+    t.islem = "Hesaplar Arası Transfer"; t.tarih = kdMetin_(row[3]); t.cari = ""; t.tutar = kdSayi_(row[4]); t.kayit = row[6];
   }
   return t;
 }
@@ -420,6 +425,8 @@ function kdSpecler_(key, row, opts, legs) {
     });
   } else if (key === "posaktarim") {
     e.push({ alt: "", borc: S("banka", "Giriş"), alacak: S("pos", "Alacak") });
+  } else if (key === "bankatransfer") {
+    e.push({ alt: "", borc: S("banka", "Giriş"), alacak: S("banka", "Çıkış") });
   }
   return e;
 }

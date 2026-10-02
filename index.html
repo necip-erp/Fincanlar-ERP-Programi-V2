@@ -1075,12 +1075,18 @@ setInterval(topbarSaatGuncelle, 10000);
       <div id="banka-yapisi-alani"><div class="cari-empty">Yükleniyor...</div></div>
       <div class="rapor-baslik" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <span>Banka Hesap Hareketleri</span>
-        <span style="display:flex;gap:6px"><button class="btn" style="padding:4px 12px;font-size:12.5px" onclick="bankaMasrafEkleAc()">💸 Masraf Ekle</button><button class="btn btn-primary" style="padding:4px 12px;font-size:12.5px" onclick="topluMasrafAc()">🧾 Toplu Masraf İşle</button></span>
+        <span style="display:flex;gap:6px"><button class="btn btn-primary" style="padding:4px 12px;font-size:12.5px" onclick="bankaTransferModalAc()">🔄 Hesaplar Arası Transfer</button><button class="btn" style="padding:4px 12px;font-size:12.5px" onclick="bankaMasrafEkleAc()">💸 Masraf Ekle</button><button class="btn btn-primary" style="padding:4px 12px;font-size:12.5px" onclick="topluMasrafAc()">🧾 Toplu Masraf İşle</button></span>
       </div>
       <div class="fld" style="max-width:320px"><label>Hesap</label>
         <select id="bhh-hesap-secim" onchange="bankaHesapHareketleriYukle()"><option value="">— Tüm hesaplar —</option></select>
       </div>
       <div id="bhh-alani"><div class="cari-empty">Bir hesap seçin veya tüm hareketleri görüntüleyin.</div></div>
+
+      <div class="rapor-baslik" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span>Hesaplar Arası Transferler</span>
+        <button class="btn btn-primary" style="padding:4px 12px;font-size:12.5px" onclick="bankaTransferModalAc()">🔄 Yeni Transfer</button>
+      </div>
+      <div id="bt-alani"><div class="cari-empty">Yükleniyor...</div></div>
 
       <div class="rapor-baslik" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <span>POS Hareketleri (Kredi Kartı Tahsilat/Ödeme)</span>
@@ -1856,6 +1862,7 @@ function hizliErisimKatalogUret(){
   // Finans bölümleri
   ekle("finans-banka-tanim","Finans","🏦","Finans - Banka Tanımlamaları",()=>{modulAc("finans"); hizliBolumeGit_("#mod-finans","Banka Tanımlamaları");});
   ekle("finans-banka-hareket","Finans","💸","Finans - Banka Hesap Hareketleri",()=>{modulAc("finans"); hizliBolumeGit_("#mod-finans","Banka Hesap Hareketleri");});
+  ekle("finans-transfer","Finans","🔄","Finans - Hesaplar Arası Transferler",()=>{modulAc("finans"); hizliBolumeGit_("#mod-finans","Hesaplar Arası Transferler");});
   ekle("finans-pos","Finans","💳","Finans - POS Hareketleri",()=>{modulAc("finans"); hizliBolumeGit_("#mod-finans","POS Hareketleri");});
   // Rapor modülündeki her rapor (listeden okunur)
   Array.from(document.querySelectorAll("#mr-tip-secim option")).forEach(o=>{
@@ -1866,6 +1873,7 @@ function hizliErisimKatalogUret(){
   // Yeni kayıt işlemleri
   ekle("yeni-cari","Yeni Kayıt","➕","Yeni Cari Ekle",()=>{modulAc("cari"); cariModalAc();});
   ekle("yeni-tahsilat","Yeni Kayıt","➕","Yeni Tahsilat",()=>{modulAc("tahsilat"); tahsilatModalAc();});
+  ekle("yeni-banka-transfer","Yeni Kayıt","➕","Yeni Hesaplar Arası Transfer",()=>{modulAc("finans"); bankaTransferModalAc();});
   ekle("yeni-odeme","Yeni Kayıt","➕","Yeni Ödeme",()=>{modulAc("odeme"); odemeModalAc();});
   ekle("yeni-ceksenet","Yeni Kayıt","➕","Yeni Çek/Senet",()=>{modulAc("ceksenet"); cekSenetModalAc();});
   ekle("yeni-alis","Yeni Kayıt","➕","Yeni Alış Girişi",()=>{modulAc("alis"); alisAltModulAc("giris"); alisModalAc();});
@@ -2495,7 +2503,7 @@ modulAc = function(id){
       if(!_tanimListeYuklendi.virmanTipi) tanimListesiYukle("virmanTipi"); else virmanTipiSelectleriTazele();
     }
     if(id === "ceksenet" && !_cekSenetYuklendi){ cekSenetListesiYukle(); }
-    if(id === "finans"){ finansYukle(); if(!_bankaYapisiYuklendi) bankaYapisiYukle(); bankaHesapSecimDoldur(); bankaHesapHareketleriYukle(); posHesapSecimDoldur(); posHareketleriYukle(); }
+    if(id === "finans"){ finansYukle(); if(!_bankaYapisiYuklendi) bankaYapisiYukle(); bankaHesapSecimDoldur(); bankaHesapHareketleriYukle(); bankaTransferListesiYukle(); posHesapSecimDoldur(); posHareketleriYukle(); }
     if(id === "rapor" && !_raporIlkYuklemeYapildi){ _raporIlkYuklemeYapildi = true; tarihAraligiVarsayilaDoldur("rapor-baslangic","rapor-bitis"); raporYukle(); muhasebeRaporuYukle(); }
     if(id === "ayarlar"){ ayarlarYukle(); }
     if(id === "stok" && ilkAcilis){ stokAnaSecimeDon(); }
@@ -10929,6 +10937,158 @@ function posHareketleriYukle(){
   });
 }
 
+// ── Hesaplar Arası Transfer (3 Eki 2026) ──
+// Kendi banka hesapların arasında para aktarımı: kaynak hesaptan Çıkış, hedef hesaba Giriş (cari ile ilgisi yok).
+// İki hareket birlikte yazılır/silinir; Banka Hesap Hareketleri ve Kayıt Defteri'ne işlenir.
+let _btHesaplar = [];   // [{id, etiket}]
+let _btBakiye = {};     // hesapId -> güncel bakiye
+function btHesaplariYukle(){
+  return cariApiYapi("getBankaYapisi").then(res=>{
+    if(!res.ok) return;
+    _btHesaplar = res.hesaplar.map(h=>{
+      const banka = res.bankalar.find(b=>b.id===h.bankaId);
+      return { id: h.id, etiket: (banka ? banka.ad + " — " : "") + h.hesapAdi };
+    });
+  }).catch(()=>{});
+}
+function btEtiket(id){ const h = _btHesaplar.find(x=>x.id===id); return h ? h.etiket : (id||"—"); }
+function btSecenekHtml(){ return '<option value="">— Seçiniz —</option>' + _btHesaplar.map(h=>`<option value="${h.id}">${h.etiket}</option>`).join(""); }
+
+function bankaTransferModalAc(onKaynakId){
+  const eski = document.getElementById("bt-modal-overlay"); if(eski) eski.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "bt-modal-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box modal-box-wide odeme-modal bt-modal">
+      <div class="om-baslik">🔄 Hesaplar Arası Transfer</div>
+      <div class="om-kart">
+        <div class="om-grid">
+          <div class="fld bt-kaynak"><label>Kaynak Hesap (para buradan çıkar)</label>
+            <select id="bt-kaynak" onchange="btOzetGuncelle()"><option value="">Yükleniyor...</option></select>
+            <div class="bt-bakiye" id="bt-kaynak-bakiye"></div>
+          </div>
+          <div class="fld bt-hedef"><label>Hedef Hesap (para buraya girer)</label>
+            <select id="bt-hedef" onchange="btOzetGuncelle()"><option value="">Yükleniyor...</option></select>
+            <div class="bt-bakiye" id="bt-hedef-bakiye"></div>
+          </div>
+          <div class="om-tam" style="text-align:center;margin:-4px 0">
+            <button type="button" class="btn bt-swap" onclick="btYerDegistir()">⇄ Kaynak ile hedefi değiştir</button>
+          </div>
+          <div class="fld om-tutar"><label>Tutar</label><input id="bt-tutar" type="number" min="0" step="0.01" placeholder="0,00" oninput="btOzetGuncelle()"></div>
+          <div class="fld"><label>Tarih</label><input id="bt-tarih" type="datetime-local" value="${simdiTarihSaat()}"></div>
+          <div class="fld om-tam"><label>Açıklama</label><input id="bt-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+          <div class="om-tam bt-ozet" id="bt-ozet" style="display:none"></div>
+        </div>
+      </div>
+      <div class="om-not" style="margin-top:8px">Havale/EFT ücreti varsa ayrıca Banka Hesap Hareketleri'ndeki 💸 Masraf Ekle ile işleyin.</div>
+      <div class="om-aksiyon">
+        <button class="btn" onclick="document.getElementById('bt-modal-overlay').remove()">İptal</button>
+        <button class="btn btn-primary" id="bt-kaydet-btn" onclick="bankaTransferKaydet()">🔄 Transferi Kaydet</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  btHesaplariYukle().then(()=>{
+    const k = document.getElementById("bt-kaynak"), h = document.getElementById("bt-hedef");
+    if(!k || !h) return;
+    k.innerHTML = btSecenekHtml(); h.innerHTML = btSecenekHtml();
+    if(onKaynakId) k.value = onKaynakId;
+    btOzetGuncelle();
+  });
+  // Güncel bakiyeler (her hesabın son hareketindeki bakiye) — seçimin yanında bilgi olarak gösterilir
+  cariApi("getBankaHesapHareketleri", {bankaHesapId:""}).then(res=>{
+    if(!res.ok) return;
+    _btBakiye = {};
+    res.hareketler.forEach(x=>{ if(!(x.bankaHesapId in _btBakiye)) _btBakiye[x.bankaHesapId] = x.bakiye; }); // liste yeniden eskiye → ilk görülen en güncel
+    btOzetGuncelle();
+  }).catch(()=>{});
+}
+
+function btYerDegistir(){
+  const k = document.getElementById("bt-kaynak"), h = document.getElementById("bt-hedef");
+  if(!k || !h) return;
+  const t = k.value; k.value = h.value; h.value = t;
+  btOzetGuncelle();
+}
+
+function btOzetGuncelle(){
+  const k = document.getElementById("bt-kaynak"), h = document.getElementById("bt-hedef");
+  if(!k || !h) return;
+  // Aynı hesap iki tarafta seçilemesin
+  Array.from(k.options).forEach(o=>{ o.disabled = !!o.value && o.value === h.value; });
+  Array.from(h.options).forEach(o=>{ o.disabled = !!o.value && o.value === k.value; });
+  const tutar = parseFloat(document.getElementById("bt-tutar").value) || 0;
+  const kb = (k.value && (k.value in _btBakiye)) ? _btBakiye[k.value] : null;
+  const hb = (h.value && (h.value in _btBakiye)) ? _btBakiye[h.value] : null;
+  document.getElementById("bt-kaynak-bakiye").textContent = kb !== null ? ("Bakiye: " + paraFormat(kb)) : "";
+  document.getElementById("bt-hedef-bakiye").textContent = hb !== null ? ("Bakiye: " + paraFormat(hb)) : "";
+  const ozet = document.getElementById("bt-ozet");
+  if(!k.value || !h.value || tutar <= 0){ ozet.style.display = "none"; return; }
+  const kYeni = kb !== null ? paraFormat(kb - tutar) : "";
+  const hYeni = hb !== null ? paraFormat(hb + tutar) : "";
+  ozet.style.display = "block";
+  ozet.innerHTML = `
+    <div class="bt-ozet-satir bt-cikis"><span>➖ ${btEtiket(k.value)}</span><b>−${paraFormat(tutar)}</b>${kYeni ? `<em>→ ${kYeni}</em>` : ""}</div>
+    <div class="bt-ozet-satir bt-giris"><span>➕ ${btEtiket(h.value)}</span><b>+${paraFormat(tutar)}</b>${hYeni ? `<em>→ ${hYeni}</em>` : ""}</div>
+    ${(kb !== null && kb - tutar < 0) ? '<div class="bt-uyari">⚠ Kaynak hesabın bakiyesi bu tutar için yetersiz görünüyor (eksiye düşer).</div>' : ""}`;
+}
+
+function bankaTransferKaydet(){
+  const kaynak = document.getElementById("bt-kaynak").value;
+  const hedef = document.getElementById("bt-hedef").value;
+  if(!kaynak){ alert("Lütfen kaynak hesabı seçin"); return; }
+  if(!hedef){ alert("Lütfen hedef hesabı seçin"); return; }
+  if(kaynak === hedef){ alert("Kaynak ve hedef hesap aynı olamaz"); return; }
+  const tutar = parseFloat(document.getElementById("bt-tutar").value) || 0;
+  if(tutar <= 0){ alert("Tutar sıfırdan büyük olmalı"); return; }
+  const btn = document.getElementById("bt-kaydet-btn"); if(btn) btn.disabled = true;
+  cariApi("saveBankaTransfer", {
+    kaynakBankaHesapId: kaynak, hedefBankaHesapId: hedef, tutar,
+    tarih: document.getElementById("bt-tarih").value,
+    aciklama: document.getElementById("bt-aciklama").value,
+  }).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); if(btn) btn.disabled = false; return; }
+    const ov = document.getElementById("bt-modal-overlay"); if(ov) ov.remove();
+    bankaHesapHareketleriYukle();
+    bankaTransferListesiYukle();
+  }).catch(err=>{ alert("Bağlantı hatası: "+err.message); if(btn) btn.disabled = false; });
+}
+
+function bankaTransferListesiYukle(){
+  const el = document.getElementById("bt-alani");
+  if(!el) return;
+  Promise.all([btHesaplariYukle(), cariApi("getBankaTransferListesi")]).then(([_, res])=>{
+    if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    if(res.transferler.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı transfer yok. "🔄 Yeni Transfer" ile ekleyin.</div>'; return; }
+    el.innerHTML = `
+      <table class="hareket-tbl bt-tablo">
+        <thead><tr><th>Tarih</th><th>Kaynak</th><th></th><th>Hedef</th><th style="text-align:right">Tutar</th><th>Açıklama</th><th></th></tr></thead>
+        <tbody>
+          ${res.transferler.map(t=>`
+            <tr>
+              <td>${tarihGoster(t.tarih)}</td>
+              <td class="bt-kaynak-hucre">${btEtiket(t.kaynakBankaHesapId)}</td>
+              <td class="bt-ok">➜</td>
+              <td class="bt-hedef-hucre">${btEtiket(t.hedefBankaHesapId)}</td>
+              <td class="tutar-hucre" style="text-align:right">${paraFormat(t.tutar)}</td>
+              <td>${t.aciklama||""}</td>
+              <td><button class="btn" style="padding:3px 9px;font-size:12px" onclick="bankaTransferSilOnay('${t.id}')">🗑</button></td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
+  }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+
+function bankaTransferSilOnay(id){
+  if(!silOnaySor("Hesaplar arası transfer (kaynak çıkışı ve hedef girişi birlikte silinir)")) return;
+  cariApi("silBankaTransfer", {id}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    bankaTransferListesiYukle();
+    bankaHesapHareketleriYukle();
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
 // ── POS'tan Bankaya Aktarım (mutabakat/virman) ──
 // Kredi kartıyla tahsil edilen tutar POS hesabına "Borç" olarak birikir; bu
 // para gerçekten bankaya yattığında burada POS'tan düşülüp banka hesabına işlenir.
@@ -16284,6 +16444,25 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
 .odeme-modal .om-aksiyon .btn{padding:9px 20px;font-size:14px}
 .odeme-modal .btn-primary{font-weight:800}
 @media (max-width:760px){.odeme-modal .om-grid,.odeme-modal .om-gider-satir{grid-template-columns:1fr}}
+
+/* ── 3 Eki 2026: Hesaplar Arası Transfer (Cari Virman / Ödeme ile aynı rapor renk düzeni) ── */
+.bt-modal .bt-kaynak label::before,.bt-modal .bt-hedef label::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.bt-modal .bt-kaynak label::before{background:var(--red)}
+.bt-modal .bt-hedef label::before{background:var(--green)}
+.bt-modal .bt-bakiye{font-size:11.5px;font-weight:700;color:var(--rp-th-fg);opacity:.8;min-height:14px}
+.bt-modal .bt-swap{padding:4px 14px;font-size:12px;font-weight:700;background:var(--rp-th-bg);color:var(--rp-th-fg);border:1px solid var(--rp-th-bd);border-radius:16px}
+.bt-modal .bt-ozet{background:var(--rp-alan);border:1px solid var(--rp-th-bd);border-radius:10px;padding:10px 12px}
+.bt-modal .bt-ozet-satir{display:flex;align-items:center;gap:10px;font-size:13px;padding:3px 0}
+.bt-modal .bt-ozet-satir span{flex:1;min-width:0;color:var(--rp-th-fg);font-weight:600}
+.bt-modal .bt-ozet-satir b{font-size:15px;font-weight:900}
+.bt-modal .bt-ozet-satir em{font-style:normal;font-size:12px;opacity:.75;min-width:110px;text-align:right}
+.bt-modal .bt-cikis b{color:var(--red)}
+.bt-modal .bt-giris b{color:var(--green)}
+.bt-modal .bt-uyari{margin-top:6px;font-size:12px;font-weight:700;color:var(--red)}
+.bt-tablo .bt-ok{color:var(--rp-th-fg);font-weight:900;text-align:center;width:30px}
+.bt-tablo .bt-kaynak-hucre{border-left:4px solid var(--red);font-weight:600}
+.bt-tablo .bt-hedef-hucre{border-left:4px solid var(--green);font-weight:600}
+.bt-tablo td.tutar-hucre{font-weight:800;white-space:nowrap;color:var(--rp-th-fg)}
 </style>
 <script>
 // ═══ 29 Eyl 2026: (1) Verileri Yenile (sayfa/sekmeler kapanmadan) ve (2) Ana Ekran Renkleri paneli ═══

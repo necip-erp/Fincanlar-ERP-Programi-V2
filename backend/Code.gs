@@ -100,6 +100,7 @@ const SHEETS = {
   bankaHesapHareketleri: "BankaHesapHareketleri",
   krediKartHareketleri: "KrediKartHareketleri",
   posBankaAktarimlari: "PosBankaAktarimlari",
+  bankaTransferleri: "BankaTransferleri",
   stokHareketleri: "StokHareketleri",
   seriTanimlari: "SeriTanimlari",
   tedarikciCariEslesme: "TedarikciCariEslesme",
@@ -708,6 +709,7 @@ const ACIKLAMA_SABLON_VARSAYILAN = {
   "cek_verilen": "Verilen Çek/Senet",
   "cek_ciro": "Çek Cirosu",
   "posBankaAktarim": "POS'tan Bankaya Aktarım",
+  "bankaTransfer": "Hesaplar Arası Transfer",
 };
 
 function aciklamaSablonlariHaritasi() {
@@ -1200,6 +1202,9 @@ function handleRequest(e) {
       case "getPosBankaAktarimListesi": result = getPosBankaAktarimListesi(body.posHesapId); break;
       case "savePosBankaAktarim": result = savePosBankaAktarim(body); break;
       case "silPosBankaAktarim": result = silPosBankaAktarim(body); break;
+      case "getBankaTransferListesi": result = getBankaTransferListesi(); break;
+      case "saveBankaTransfer": result = saveBankaTransfer(body); break;
+      case "silBankaTransfer": result = silBankaTransfer(body); break;
       case "getMuhasebeRaporu": result = getMuhasebeRaporu(body); break;
       case "getStokHareketListesi": result = getStokHareketListesi(body); break;
       case "getStokHareketPenceresi": result = getStokHareketPenceresi(body); break;
@@ -9856,6 +9861,96 @@ function silPosBankaAktarim(body) {
       }
     }
   } catch (e) { /* gider kaydı silinemezse aktarım silme yine başarılı sayılır */ }
+  return { ok: true };
+}
+
+// ════════════════════════════════════════════════
+// HESAPLAR ARASI TRANSFER (kendi banka hesapların arası) — 3 Eki 2026
+// Cari ile ilgisi yoktur: kaynak banka hesabına "Çıkış", hedef banka hesabına "Giriş" yazılır
+// (ikisi de BANKATRANSFER:<id> önekiyle işaretlenir → Kayıt Defteri'nde Borç Banka(hedef) / Alacak Banka(kaynak),
+// silinince iki hareket birlikte kalkar). Yazma yarıda kalırsa ilk bacak geri alınır (karşı kaydı olmayan işlem kalmaz).
+// ════════════════════════════════════════════════
+const BANKA_TRANSFER_BASLIKLAR = ["ID", "KAYNAK_BANKA_HESAP_ID", "HEDEF_BANKA_HESAP_ID", "TARIH", "TUTAR", "ACIKLAMA", "KAYIT_TARIHI"];
+
+function bankaHesapAdlariHaritasi_(ss) {
+  const m = {};
+  const sh = ss.getSheetByName(SHEETS.bankaHesaplari);
+  if (!sh) return m;
+  sh.getDataRange().getValues().forEach(function (r, i) { if (i > 0 && r[0]) m[String(r[0])] = String(r[2] || ""); });
+  return m;
+}
+
+function getBankaTransferListesi() {
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.bankaTransferleri, BANKA_TRANSFER_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  const sonuc = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0]) continue;
+    sonuc.push({
+      id: String(row[0]), kaynakBankaHesapId: String(row[1]), hedefBankaHesapId: String(row[2]),
+      tarih: hucreTarihStr(row[3]), tutar: parseFloat(row[4]) || 0,
+      aciklama: String(row[5] || ""), kayitTarihi: hucreTarihStr(row[6]),
+    });
+  }
+  sonuc.reverse();
+  return { ok: true, transferler: sonuc };
+}
+
+// body: { kaynakBankaHesapId, hedefBankaHesapId, tutar, tarih, aciklama }
+function saveBankaTransfer(body) {
+  const kaynakId = String(body.kaynakBankaHesapId || "").trim();
+  const hedefId = String(body.hedefBankaHesapId || "").trim();
+  const tutar = Math.round((parseFloat(body.tutar) || 0) * 100) / 100;
+  if (!kaynakId) return { ok: false, hata: "Kaynak banka hesabı seçimi gerekli" };
+  if (!hedefId) return { ok: false, hata: "Hedef banka hesabı seçimi gerekli" };
+  if (kaynakId === hedefId) return { ok: false, hata: "Kaynak ve hedef hesap aynı olamaz" };
+  if (tutar <= 0) return { ok: false, hata: "Tutar sıfırdan büyük olmalı" };
+
+  const ss = acikSS_();
+  const adlar = bankaHesapAdlariHaritasi_(ss);
+  if (!adlar[kaynakId]) return { ok: false, hata: "Kaynak banka hesabı bulunamadı" };
+  if (!adlar[hedefId]) return { ok: false, hata: "Hedef banka hesabı bulunamadı" };
+
+  const sheet = getOrCreateSheet(ss, SHEETS.bankaTransferleri, BANKA_TRANSFER_BASLIKLAR);
+  const id = "bt_" + Date.now();
+  const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
+  const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+  const not = String(body.aciklama || "").trim();
+  const temel = "BANKATRANSFER:" + id + " | " + aciklamaSablonuAl("bankaTransfer");
+  const cikisAcik = temel + " (→ " + adlar[hedefId] + ")" + (not ? " - " + not : "");
+  const girisAcik = temel + " (← " + adlar[kaynakId] + ")" + (not ? " - " + not : "");
+
+  sheet.appendRow([id, kaynakId, hedefId, tarih, tutar, not, kayitTarihi]);
+  try {
+    bankaHesapHareketEkle(kaynakId, tarih, "Çıkış", tutar, cikisAcik);
+    Utilities.sleep(5); // iki hareketin "bh_<ms>" kimliği çakışmasın
+    bankaHesapHareketEkle(hedefId, tarih, "Giriş", tutar, girisAcik);
+  } catch (e) {
+    try { bankaHesapHareketSilByAciklamaOnPrefix("BANKATRANSFER:" + id); } catch (e2) {}
+    try {
+      const d = sheet.getDataRange().getValues();
+      for (let i = d.length - 1; i >= 1; i--) { if (String(d[i][0]) === id) { sheet.deleteRow(i + 1); break; } }
+    } catch (e3) {}
+    return { ok: false, hata: "Transfer yazılamadı: " + (e && e.message ? e.message : e) };
+  }
+  return { ok: true, id: id };
+}
+
+// body: { id }
+function silBankaTransfer(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.bankaTransferleri, BANKA_TRANSFER_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  let bulundu = false;
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); bulundu = true; break; }
+  }
+  if (!bulundu) return { ok: false, hata: "Transfer bulunamadı" };
+  bankaHesapHareketSilByAciklamaOnPrefix("BANKATRANSFER:" + id);
   return { ok: true };
 }
 
