@@ -1179,6 +1179,7 @@ function handleRequest(e) {
       case "silBankaHesap":   result = silBankaHesap(body); break;
       case "savePos":         result = savePos(body); break;
       case "silPos":          result = silPos(body); break;
+      case "setBankaPasif":   result = setBankaPasif(body); break;
       case "saveKrediKarti":  result = saveKrediKarti(body); break;
       case "silKrediKarti":   result = silKrediKarti(body); break;
       case "getStokTanimListesi": result = getStokTanimListesi(); break;
@@ -6797,13 +6798,16 @@ function getMuhasebeRaporu(body) {
 // ════════════════════════════════════════════════
 
 // Tüm banka yapısını (bankalar + hesaplar + pos + kredi kartları) tek seferde döner.
+// ★ (2 Eki 2026) PASİF desteği: Bankalar 3., Hesap/POS/Kart 5. sütunu "AKTIF" ("PASIF" yazılıysa pasif; boş = aktif).
+// bankalar/hesaplar/pos/krediKartlari YALNIZ aktif olanları döner (tüm seçim listeleri pasifleri otomatik görmez);
+// Banka Tanımlamaları ekranı ve geçmiş hareket seçimi için `tum` alanında pasifler dahil tam liste ("pasif" bayrağıyla) gelir.
 function getBankaYapisi() {
   return cacheOkuVeyaHesapla("bankaYapisi", 300, function () {
   const ss = acikSS_();
-  const bSheet = getOrCreateSheet(ss, SHEETS.bankalar, ["ID","AD"]);
-  const hSheet = getOrCreateSheet(ss, SHEETS.bankaHesaplari, ["ID","BANKA_ID","HESAP_ADI","IBAN"]);
-  const pSheet = getOrCreateSheet(ss, SHEETS.posCihazlari, ["ID","BANKA_ID","POS_ADI","ACIKLAMA"]);
-  const kSheet = getOrCreateSheet(ss, SHEETS.krediKartlari, ["ID","BANKA_ID","KART_ADI","LIMIT"]);
+  const bSheet = getOrCreateSheet(ss, SHEETS.bankalar, ["ID","AD","AKTIF"]);
+  const hSheet = getOrCreateSheet(ss, SHEETS.bankaHesaplari, ["ID","BANKA_ID","HESAP_ADI","IBAN","AKTIF"]);
+  const pSheet = getOrCreateSheet(ss, SHEETS.posCihazlari, ["ID","BANKA_ID","POS_ADI","ACIKLAMA","AKTIF"]);
+  const kSheet = getOrCreateSheet(ss, SHEETS.krediKartlari, ["ID","BANKA_ID","KART_ADI","LIMIT","AKTIF"]);
 
   function satirlariOku(sheet, alanlar) {
     const data = sheet.getDataRange().getValues();
@@ -6817,14 +6821,68 @@ function getBankaYapisi() {
     }
     return sonuc;
   }
+  const pasifMi = v => String(v || "").trim().toUpperCase() === "PASIF";
 
-  const bankalar = satirlariOku(bSheet, ["id","ad"]);
-  const hesaplar = satirlariOku(hSheet, ["id","bankaId","hesapAdi","iban"]).map(h => ({...h, id:String(h.id), bankaId:String(h.bankaId)}));
-  const posListesi = satirlariOku(pSheet, ["id","bankaId","posAdi","aciklama"]).map(p => ({...p, id:String(p.id), bankaId:String(p.bankaId)}));
-  const krediKartlari = satirlariOku(kSheet, ["id","bankaId","kartAdi","limit"]).map(k => ({...k, id:String(k.id), bankaId:String(k.bankaId), limit: parseFloat(k.limit)||0}));
+  const bankalarT = satirlariOku(bSheet, ["id","ad","aktif"]).map(b => ({ id:String(b.id), ad:String(b.ad), pasif: pasifMi(b.aktif) }));
+  const hesaplarT = satirlariOku(hSheet, ["id","bankaId","hesapAdi","iban","aktif"]).map(h => ({ id:String(h.id), bankaId:String(h.bankaId), hesapAdi:h.hesapAdi, iban:h.iban, pasif: pasifMi(h.aktif) }));
+  const posT = satirlariOku(pSheet, ["id","bankaId","posAdi","aciklama","aktif"]).map(p => ({ id:String(p.id), bankaId:String(p.bankaId), posAdi:p.posAdi, aciklama:p.aciklama, pasif: pasifMi(p.aktif) }));
+  const kartT = satirlariOku(kSheet, ["id","bankaId","kartAdi","limit","aktif"]).map(k => ({ id:String(k.id), bankaId:String(k.bankaId), kartAdi:k.kartAdi, limit: parseFloat(k.limit)||0, pasif: pasifMi(k.aktif) }));
 
-  return { ok: true, bankalar: bankalar.map(b=>({id:String(b.id), ad:String(b.ad)})), hesaplar, pos: posListesi, krediKartlari };
+  const pasifBanka = {};
+  bankalarT.forEach(b => { if (b.pasif) pasifBanka[b.id] = true; });
+  const aktifOlan = x => !x.pasif && !pasifBanka[x.bankaId];
+
+  return {
+    ok: true,
+    bankalar: bankalarT.filter(b => !b.pasif).map(b => ({ id:b.id, ad:b.ad })),
+    hesaplar: hesaplarT.filter(aktifOlan),
+    pos: posT.filter(aktifOlan),
+    krediKartlari: kartT.filter(aktifOlan),
+    tum: { bankalar: bankalarT, hesaplar: hesaplarT, pos: posT, krediKartlari: kartT }
+  };
   });
+}
+
+// Bir banka/hesap/POS/kart kimliği herhangi bir hareket/belge sayfasında geçiyor mu? (silmeyi engellemek için)
+function bankaKaydiKullanimda_(ss, id) {
+  const adlar = [SHEETS.bankaHesapHareketleri, SHEETS.posHareketleri, SHEETS.krediKartHareketleri, SHEETS.posBankaAktarimlari,
+    SHEETS.bankaTransferleri, SHEETS.tahsilatlar, SHEETS.odemeler, SHEETS.cekSenetler, SHEETS.cekSenetHareketleri,
+    SHEETS.cekYapraklari, SHEETS.satislar, SHEETS.alislar, SHEETS.alisIadeler, SHEETS.satisIadeler, SHEETS.cariVirmanlar];
+  for (let i = 0; i < adlar.length; i++) {
+    const sh = ss.getSheetByName(adlar[i]);
+    if (!sh || sh.getLastRow() < 2) continue;
+    if (sh.createTextFinder(id).matchEntireCell(true).findNext()) return true;
+  }
+  return false;
+}
+const BANKA_SILME_HATASI_ = "Bu kayıtta işlem (hareket) var, silinemez. Pasife alabilirsiniz (işlem geçmişi korunur, yeni işlemlerde listelenmez).";
+
+// body: { tip: "banka"|"hesap"|"pos"|"kart", id, pasif: true|false }
+function setBankaPasif(body) {
+  const tip = String(body.tip || "").trim();
+  const id = String(body.id || "").trim();
+  const pasif = body.pasif === true || String(body.pasif) === "true";
+  const harita = {
+    banka: { sheet: SHEETS.bankalar, col: 3 },
+    hesap: { sheet: SHEETS.bankaHesaplari, col: 5 },
+    pos:   { sheet: SHEETS.posCihazlari, col: 5 },
+    kart:  { sheet: SHEETS.krediKartlari, col: 5 },
+  };
+  const h = harita[tip];
+  if (!h || !id) return { ok: false, hata: "tip ve id gerekli" };
+  const ss = acikSS_();
+  const sheet = ss.getSheetByName(h.sheet);
+  if (!sheet) return { ok: false, hata: "Kayıt sayfası bulunamadı" };
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) {
+      sheet.getRange(i + 1, h.col).setValue(pasif ? "PASIF" : "");
+      if (String(sheet.getRange(1, h.col).getValue() || "") === "") sheet.getRange(1, h.col).setValue("AKTIF");
+      cacheTemizle(["bankaYapisi"]);
+      return { ok: true };
+    }
+  }
+  return { ok: false, hata: "Kayıt bulunamadı" };
 }
 
 function saveBanka(body) {
@@ -6849,6 +6907,7 @@ function silBanka(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
   const ss = acikSS_();
+  if (bankaKaydiKullanimda_(ss, id)) return { ok: false, hata: BANKA_SILME_HATASI_ };
   // Bağlı hesap/pos/kart varsa silmeyi engelle
   const bagli = [SHEETS.bankaHesaplari, SHEETS.posCihazlari, SHEETS.krediKartlari].some(sheetName => {
     const sheet = ss.getSheetByName(sheetName);
@@ -6856,7 +6915,7 @@ function silBanka(body) {
     const data = sheet.getDataRange().getValues();
     return data.some((row, i) => i > 0 && String(row[1]) === id);
   });
-  if (bagli) return { ok: false, hata: "Bu bankaya bağlı hesap/POS/kredi kartı var, önce onları silin" };
+  if (bagli) return { ok: false, hata: "Bu bankaya bağlı hesap/POS/kredi kartı var, silinemez. Pasife alabilirsiniz." };
   const sheet = getOrCreateSheet(ss, SHEETS.bankalar, ["ID","AD"]);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -6890,6 +6949,7 @@ function silBankaHesap(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
   const ss = acikSS_();
+  if (bankaKaydiKullanimda_(ss, id)) return { ok: false, hata: BANKA_SILME_HATASI_ };
   const sheet = getOrCreateSheet(ss, SHEETS.bankaHesaplari, ["ID","BANKA_ID","HESAP_ADI","IBAN"]);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -6923,6 +6983,7 @@ function silPos(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
   const ss = acikSS_();
+  if (bankaKaydiKullanimda_(ss, id)) return { ok: false, hata: BANKA_SILME_HATASI_ };
   const sheet = getOrCreateSheet(ss, SHEETS.posCihazlari, ["ID","BANKA_ID","POS_ADI","ACIKLAMA"]);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -6956,6 +7017,7 @@ function silKrediKarti(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
   const ss = acikSS_();
+  if (bankaKaydiKullanimda_(ss, id)) return { ok: false, hata: BANKA_SILME_HATASI_ };
   const sheet = getOrCreateSheet(ss, SHEETS.krediKartlari, ["ID","BANKA_ID","KART_ADI","LIMIT"]);
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
@@ -9918,9 +9980,11 @@ function saveBankaTransfer(body) {
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   const not = String(body.aciklama || "").trim();
-  const temel = "BANKATRANSFER:" + id + " | " + aciklamaSablonuAl("bankaTransfer");
-  const cikisAcik = temel + " (→ " + adlar[hedefId] + ")" + (not ? " - " + not : "");
-  const girisAcik = temel + " (← " + adlar[kaynakId] + ")" + (not ? " - " + not : "");
+  // ★ (2 Eki 2026) Açıklama ekrandan otomatik gelir ("YKB ... hesabından Halkbank ... hesabına gönderilen") ve düzenlenebilir;
+  // doluysa aynen yazılır, boşsa eski şablon + (→/← karşı hesap) kullanılır. Baştaki BANKATRANSFER:id öneki silme için sabit.
+  const temel = "BANKATRANSFER:" + id + " | ";
+  const cikisAcik = not ? (temel + not) : (temel + aciklamaSablonuAl("bankaTransfer") + " (→ " + adlar[hedefId] + ")");
+  const girisAcik = not ? (temel + not) : (temel + aciklamaSablonuAl("bankaTransfer") + " (← " + adlar[kaynakId] + ")");
 
   sheet.appendRow([id, kaynakId, hedefId, tarih, tutar, not, kayitTarihi]);
   try {
