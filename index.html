@@ -9188,9 +9188,9 @@ function odemeListesiCiz(liste){
     <div class="cari-item ${_odemeSecili===o.id?'sel':''}" onclick="odemeAc('${o.id}')">
       <div class="cari-item-top">
         <span class="cari-item-ad">${metinVurgula(o.cariAd, q)}${o.cariKodu?` <span class="cari-item-kod">(${metinVurgula(o.cariKodu, q)})</span>`:""}</span>
-        <span class="cari-item-bakiye">${paraFormat(o.tutar)}</span>
+        <span class="cari-item-bakiye od-tutar">${paraFormat(o.tutar)}</span>
       </div>
-      <span class="cari-item-tip">${tarihGoster(o.tarih)} · ${metinVurgula(o.yontem, q)}</span>
+      <span class="cari-item-tip">${tarihGoster(o.tarih)} · <span class="od-yontem">${metinVurgula(o.yontem, q)}</span>${o.hedefTipi && o.hedefTipi!=='Cari' ? ` <span class="od-yontem od-hedef">${o.hedefTipi}</span>` : ""}</span>
     </div>`).join("");
 }
 
@@ -9231,7 +9231,14 @@ function odemeAc(id){
         <div class="lbl">Ödenen</div>
       </div>
     </div>
-    ${o.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${o.aciklama}</div></div></div>` : ""}
+    <div class="cari-info-grid od-bilgi">
+      <div class="cari-info-item"><div class="k">Tarih</div><div class="v">${tarihGoster(o.tarih)}</div></div>
+      <div class="cari-info-item"><div class="k">Yöntem</div><div class="v">${o.yontem||"—"}</div></div>
+      <div class="cari-info-item"><div class="k">Ödeme Hedefi</div><div class="v">${o.hedefTipi||"Cari"}</div></div>
+      ${o.projeKodu ? `<div class="cari-info-item"><div class="k">Proje Kodu</div><div class="v">${o.projeKodu}</div></div>` : ""}
+      ${o.seriNo ? `<div class="cari-info-item"><div class="k">Seri No</div><div class="v">${o.seriNo}</div></div>` : ""}
+      ${o.aciklama ? `<div class="cari-info-item od-tam"><div class="k">Açıklama</div><div class="v">${o.aciklama}</div></div>` : ""}
+    </div>
     <div class="btnrow">
       <button class="btn btn-danger" onclick="odemeSilOnay('${o.id}')">🗑 Ödemeyi Sil</button>
     </div>
@@ -9268,59 +9275,77 @@ function odemeModalAc(onCariId, onSecenekler){
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   const bugun = simdiTarihSaat();
   overlay.innerHTML = `
-    <div class="modal-box">
-      <h3>Yeni Ödeme</h3>
-      <div class="fld"><label>Ödeme Hedefi</label>
-        <select id="om-hedef-tip" onchange="odemeHedefTipDegisti()">
-          <option value="Cari">Cari (Tedarikçi)</option>
-          <option value="Banka">Banka / Kredi Kartı</option>
-          <option value="Gider">Gider</option>
-        </select>
-      </div>
-      <div class="fld" id="om-hedef-cari-fld" style="position:relative"><label>Tedarikçi (Cari)</label>
-        <input id="om-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" style="padding-right:34px"
-               value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
-               oninput="omCariAramaDegisti()"
-               onfocus="omCariOneriGoster()"
-               onblur="setTimeout(()=>omCariOneriKapat(),200)"
-               onkeydown="oneriKlavyeYonet(event,'om-cari-oneri')">
-        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('om-cari').value=c.id; document.getElementById('om-cari-arama').value=c.ad; cariSonrasiOdak_('om'); })">🔍</button>
-        <input type="hidden" id="om-cari" value="${onCariId||''}">
-        <div id="om-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
-      </div>
-      <div class="fld" id="om-hedef-banka-fld" style="display:none"><label>Banka Hesabı / Kredi Kartı</label>
-        <select id="om-hedef-banka"><option value="">— Seçiniz —</option></select>
-      </div>
-      <div style="display:${'none'};gap:12px;margin-bottom:12px;flex-wrap:wrap" id="om-hedef-gider-fld">
-        <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Üst Grup</label>
-          <select id="om-gider-ust" onchange="odemeGiderAltDoldur()"><option value="">— Seçiniz —</option></select>
+    <div class="modal-box modal-box-wide odeme-modal">
+      <div class="om-baslik">💳 Yeni Ödeme</div>
+      <div class="om-kart">
+        <div class="fld om-tam"><label>Ödeme Hedefi</label>
+          <select id="om-hedef-tip" onchange="odemeHedefTipDegisti()" style="display:none">
+            <option value="Cari">Cari (Tedarikçi)</option>
+            <option value="Banka">Banka / Kredi Kartı</option>
+            <option value="Gider">Gider</option>
+          </select>
+          <div class="om-segment" id="om-segment">
+            <button type="button" data-v="Cari" class="aktif" onclick="odemeHedefSec('Cari')">👤 Cari (Tedarikçi)</button>
+            <button type="button" data-v="Banka" onclick="odemeHedefSec('Banka')">🏦 Banka / Kredi Kartı</button>
+            <button type="button" data-v="Gider" onclick="odemeHedefSec('Gider')">🧾 Gider</button>
+          </div>
         </div>
-        <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Alt Grup</label>
-          <select id="om-gider-alt"><option value="">— (isteğe bağlı) —</option></select>
+        <div class="om-grid">
+          <div class="fld om-tam om-hedef" id="om-hedef-cari-fld" style="position:relative"><label>Tedarikçi (Cari)</label>
+            <input id="om-cari-arama" type="text" placeholder="Cari kodu veya adı ile ara..." autocomplete="off" style="padding-right:38px"
+                   value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
+                   oninput="omCariAramaDegisti()"
+                   onfocus="omCariOneriGoster()"
+                   onblur="setTimeout(()=>omCariOneriKapat(),200)"
+                   onkeydown="oneriKlavyeYonet(event,'om-cari-oneri')">
+            <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('om-cari').value=c.id; document.getElementById('om-cari-arama').value=c.ad; cariSonrasiOdak_('om'); })">🔍</button>
+            <input type="hidden" id="om-cari" value="${onCariId||''}">
+            <div id="om-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+          </div>
+          <div class="fld om-tam om-hedef" id="om-hedef-banka-fld" style="display:none"><label>Banka Hesabı / Kredi Kartı</label>
+            <select id="om-hedef-banka"><option value="">— Seçiniz —</option></select>
+          </div>
+          <div class="om-tam om-gider-satir" style="display:none" id="om-hedef-gider-fld">
+            <div class="fld"><label>Üst Grup</label>
+              <select id="om-gider-ust" onchange="odemeGiderAltDoldur()"><option value="">— Seçiniz —</option></select>
+            </div>
+            <div class="fld"><label>Alt Grup</label>
+              <select id="om-gider-alt"><option value="">— (isteğe bağlı) —</option></select>
+            </div>
+          </div>
+          <div class="fld om-tutar"><label>Tutar</label><input id="om-tutar" type="number" min="0" step="0.01" placeholder="0,00"></div>
+          <div class="fld"><label>Tarih</label><input id="om-tarih" type="datetime-local" value="${bugun}"></div>
+          <div class="fld"><label id="om-yontem-label">Yöntem</label>
+            <select id="om-yontem" onchange="odemeYontemDegisti()">
+              <option value="Nakit">Nakit</option>
+              <option value="Havale/EFT">Havale/EFT</option>
+              <option value="Kredi Kartı">Kredi Kartı</option>
+            </select>
+          </div>
+          <div class="fld" id="om-pos-fld" style="display:none"><label>Şirket Kredi Kartı</label>
+            <select id="om-pos"><option value="">— Seçiniz —</option>${krediKartiSecenekleriHtml()}</select>
+          </div>
+          <div class="fld" id="om-banka-fld" style="display:none"><label>Banka / Hesap</label>
+            <select id="om-banka-hesap"></select>
+          </div>
+          <div class="om-not om-tam">Çek ile ödeme için Çek/Senet modülünü kullanın — orada vade takibi de yapılır.</div>
+          <div class="fld om-tam"><label>Açıklama</label><input id="om-aciklama" type="text" placeholder="İsteğe bağlı"></div>
         </div>
       </div>
-      <div class="fld"><label>Tutar</label><input id="om-tutar" type="number" min="0" step="0.01" placeholder="0,00"></div>
-      <div class="fld"><label>Tarih</label><input id="om-tarih" type="datetime-local" value="${bugun}"></div>
-      <div class="fld"><label id="om-yontem-label">Yöntem</label>
-        <select id="om-yontem" onchange="odemeYontemDegisti()">
-          <option value="Nakit">Nakit</option>
-          <option value="Havale/EFT">Havale/EFT</option>
-          <option value="Kredi Kartı">Kredi Kartı</option>
-        </select>
-        <div style="font-size:11px;color:#888;margin-top:3px">Çek ile ödeme için Çek/Senet modülünü kullanın — orada vade takibi de yapılır.</div>
+      <div class="om-akordiyon">
+        <div class="om-akordiyon-baslik" onclick="cvAkordiyonAcKapa(this)">
+          <span class="cv-akordiyon-ok" style="transition:transform var(--t);transform:rotate(90deg)">▶</span> Diğer bilgiler (Proje Kodu, Seri No)
+        </div>
+        <div class="om-akordiyon-govde" style="display:block">
+          <div class="om-grid">
+            <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('om-proje-kodu', '')}</div>
+            <div class="fld"><label>Seri No <span style="font-weight:400;opacity:.7;text-transform:none">(toplu ödeme, opsiyonel)</span></label><input id="om-seri-no" type="text" placeholder="Birden çok çekin ortak takip no'su"></div>
+          </div>
+        </div>
       </div>
-      <div class="fld" id="om-pos-fld" style="display:none"><label>Şirket Kredi Kartı</label>
-        <select id="om-pos"><option value="">— Seçiniz —</option>${krediKartiSecenekleriHtml()}</select>
-      </div>
-      <div class="fld" id="om-banka-fld" style="display:none"><label>Banka / Hesap</label>
-        <select id="om-banka-hesap"></select>
-      </div>
-      <div class="fld"><label>Açıklama</label><input id="om-aciklama" type="text" placeholder="İsteğe bağlı"></div>
-      <div class="fld"><label>Seri No <span style="font-weight:400;color:var(--text3)">(toplu ödemeyi gruplamak için, opsiyonel)</span></label><input id="om-seri-no" type="text" placeholder="Örn. bir kerede verilen birden çok çekin ortak takip no'su"></div>
-      <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('om-proje-kodu', '')}</div>
-      <div class="modal-actions">
+      <div class="om-aksiyon">
         <button class="btn" onclick="document.getElementById('odeme-modal-overlay').remove()">İptal</button>
-        <button class="btn btn-primary" onclick="odemeKaydet()">Kaydet</button>
+        <button class="btn btn-primary" onclick="odemeKaydet()">💸 Ödemeyi Kaydet</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -9349,11 +9374,18 @@ function odemeModalAc(onCariId, onSecenekler){
 }
 
 // "Ödeme Hedefi" seçimine göre Cari / Banka / Gider alanlarını gösterir-gizler.
+function odemeHedefSec(v){
+  const sel = document.getElementById("om-hedef-tip");
+  if(!sel) return;
+  sel.value = v;
+  odemeHedefTipDegisti();
+}
 function odemeHedefTipDegisti(){
   const hedef = document.getElementById("om-hedef-tip").value;
+  document.querySelectorAll("#om-segment button").forEach(b=>b.classList.toggle("aktif", b.dataset.v === hedef));
   document.getElementById("om-hedef-cari-fld").style.display = (hedef === "Cari") ? "flex" : "none";
   document.getElementById("om-hedef-banka-fld").style.display = (hedef === "Banka") ? "flex" : "none";
-  document.getElementById("om-hedef-gider-fld").style.display = (hedef === "Gider") ? "flex" : "none";
+  document.getElementById("om-hedef-gider-fld").style.display = (hedef === "Gider") ? "grid" : "none";
   // Hedef "Banka/Kredi Kartı" olduğunda Yöntem alanı artık paranın NEREYE
   // gittiğini değil, NEREDEN çıktığını (kaynak kasa/hesap) belirtir — karışmasın diye etiketi netleştiriyoruz.
   const yl = document.getElementById("om-yontem-label");
@@ -16215,6 +16247,43 @@ body[data-ah-stil="blok"] #home .modtile .desc{color:rgba(255,255,255,.85)}
 body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.3)}
 #ana-renk-btn{margin-left:12px}
 .ah-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#1f2937;color:#fff;padding:9px 16px;border-radius:10px;font-size:13px;font-weight:600;z-index:400;box-shadow:0 8px 24px rgba(0,0,0,.28)}
+
+/* ── 2 Eki 2026: Ödeme (Yeni Ödeme modalı + liste + detay) rapor renk düzeninde, Cari Virman gibi 2 sütunlu hizalı ızgara ── */
+#mod-odeme{background:var(--rp-alan)}
+#mod-odeme .cari-detail-head{background:var(--rp-th-bg);border-left:4px solid var(--rp-th-fg);border-radius:10px;padding:12px 14px}
+#mod-odeme .cari-detail-head h2{color:var(--rp-th-fg)}
+#mod-odeme .cari-bakiye-box{background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:10px;padding:8px 16px}
+#mod-odeme .cari-bakiye-box .num{font-size:30px;font-weight:900;color:var(--red)}
+#mod-odeme .cari-bakiye-box .lbl{color:var(--rp-th-fg);font-weight:700}
+#mod-odeme .cari-item.sel{background:var(--rp-hover);border-left-color:var(--rp-th-fg)}
+#mod-odeme .od-tutar{font-weight:800;color:var(--red)}
+#mod-odeme .od-yontem{display:inline-block;background:var(--rp-th-bg);color:var(--rp-th-fg);border-radius:10px;padding:0 8px;font-size:11px;font-weight:700}
+#mod-odeme .od-hedef{background:var(--rp-satir);border:1px solid var(--rp-th-bd)}
+#mod-odeme .od-bilgi .od-tam{grid-column:1/-1}
+.odeme-modal{max-width:640px;background:var(--rp-alan,var(--bg2))}
+.odeme-modal .om-baslik{background:var(--rp-th-bg);color:var(--rp-th-fg);padding:9px 14px;border-radius:8px;border-left:4px solid var(--rp-th-fg);font-size:16px;font-weight:800;margin:0 0 12px}
+.odeme-modal .om-kart{background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:12px;padding:14px 16px}
+.odeme-modal .om-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;align-items:start}
+.odeme-modal .om-tam{grid-column:1/-1}
+.odeme-modal .fld{display:flex;flex-direction:column;gap:5px;margin:0;min-width:0}
+.odeme-modal .fld label{color:var(--rp-th-fg);font-weight:700;font-size:11px;letter-spacing:.2px}
+.odeme-modal .fld input,.odeme-modal .fld select{width:100%;box-sizing:border-box;height:38px;padding:8px 12px;font-size:14px}
+.odeme-modal .om-kart>.fld{margin-bottom:14px}
+.odeme-modal .om-tutar input{font-size:18px;font-weight:800;color:var(--red)}
+.odeme-modal .om-hedef{position:relative}
+.odeme-modal .om-hedef .rehber-ac-btn{top:auto;bottom:6px;transform:none;right:6px}
+.odeme-modal .om-gider-satir{display:none;grid-template-columns:1fr 1fr;gap:14px 18px}
+.odeme-modal .om-segment{display:flex;gap:6px;flex-wrap:wrap}
+.odeme-modal .om-segment button{flex:1;min-width:130px;padding:8px 10px;border:1px solid var(--rp-th-bd);background:var(--rp-satir);color:var(--rp-th-fg);border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.odeme-modal .om-segment button.aktif{background:var(--rp-th-bg);border-color:var(--rp-th-fg);box-shadow:0 0 0 2px var(--rp-th-bd) inset}
+.odeme-modal .om-not{font-size:11px;color:var(--rp-th-fg);opacity:.7;margin-top:-6px}
+.odeme-modal .om-akordiyon{background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:10px;margin-top:12px}
+.odeme-modal .om-akordiyon-baslik{background:var(--rp-th-bg);color:var(--rp-th-fg);border-radius:9px;display:flex;align-items:center;gap:6px;padding:8px 12px;cursor:pointer;font-size:13px;font-weight:700;user-select:none}
+.odeme-modal .om-akordiyon-govde{padding:14px 12px}
+.odeme-modal .om-aksiyon{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+.odeme-modal .om-aksiyon .btn{padding:9px 20px;font-size:14px}
+.odeme-modal .btn-primary{font-weight:800}
+@media (max-width:760px){.odeme-modal .om-grid,.odeme-modal .om-gider-satir{grid-template-columns:1fr}}
 </style>
 <script>
 // ═══ 29 Eyl 2026: (1) Verileri Yenile (sayfa/sekmeler kapanmadan) ve (2) Ana Ekran Renkleri paneli ═══
