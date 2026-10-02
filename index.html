@@ -8923,9 +8923,9 @@ function tahsilatListesiCiz(liste){
     <div class="cari-item ${_tahsilatSecili===t.id?'sel':''}" onclick="tahsilatAc('${t.id}')">
       <div class="cari-item-top">
         <span class="cari-item-ad">${metinVurgula(t.cariAd, q)}${t.cariKodu?` <span class="cari-item-kod">(${metinVurgula(t.cariKodu, q)})</span>`:""}</span>
-        <span class="cari-item-bakiye">${paraFormat(t.tutar)}</span>
+        <span class="cari-item-bakiye od-tutar">${paraFormat(t.tutar)}</span>
       </div>
-      <span class="cari-item-tip">${tarihGoster(t.tarih)} · ${metinVurgula(t.yontem, q)}</span>
+      <span class="cari-item-tip">${tarihGoster(t.tarih)} · <span class="od-yontem">${metinVurgula(t.yontem, q)}</span></span>
     </div>`).join("");
 }
 
@@ -8966,7 +8966,12 @@ function tahsilatAc(id){
         <div class="lbl">Tahsil Edilen</div>
       </div>
     </div>
-    ${t.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${t.aciklama}</div></div></div>` : ""}
+    <div class="cari-info-grid od-bilgi">
+      <div class="cari-info-item"><div class="k">Tarih</div><div class="v">${tarihGoster(t.tarih)}</div></div>
+      <div class="cari-info-item"><div class="k">Yöntem</div><div class="v">${t.yontem||"—"}</div></div>
+      ${t.projeKodu ? `<div class="cari-info-item"><div class="k">Proje Kodu</div><div class="v">${t.projeKodu}</div></div>` : ""}
+      ${t.aciklama ? `<div class="cari-info-item od-tam"><div class="k">Açıklama</div><div class="v">${t.aciklama}</div></div>` : ""}
+    </div>
     <div class="btnrow">
       <button class="btn" onclick="tahsilatModalAc(null,'${t.id}')">✏️ Düzenle</button>
       <button class="btn btn-danger" onclick="tahsilatSilOnay('${t.id}')">🗑 Tahsilatı Sil</button>
@@ -9004,41 +9009,54 @@ function tahsilatModalAc(onCariId, editId){
   const bugun = simdiTarihSaat();
   const baslangicCariId = t ? t.cariId : onCariId;
   overlay.innerHTML = `
-    <div class="modal-box">
-      <h3>${t?'Tahsilatı Düzenle':'Yeni Tahsilat'}</h3>
+    <div class="modal-box modal-box-wide odeme-modal tahsilat-modal">
+      <div class="om-baslik">${t?'✏️ Tahsilatı Düzenle':'💰 Yeni Tahsilat'}</div>
       <input type="hidden" id="tm-edit-id" value="${editId||''}">
-      <div class="fld" style="position:relative"><label>Müşteri (Cari) *</label>
-        <input id="tm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" style="padding-right:34px"
-               value="${baslangicCariId ? (_cariListe.find(c=>c.id===baslangicCariId)||{}).ad||'' : ''}"
-               oninput="tmCariAramaDegisti()"
-               onfocus="tmCariOneriGoster()"
-               onblur="setTimeout(()=>tmCariOneriKapat(),200)"
-               onkeydown="oneriKlavyeYonet(event,'tm-cari-oneri')">
-        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('tm-cari').value=c.id; document.getElementById('tm-cari-arama').value=c.ad; cariSonrasiOdak_('tm'); })">🔍</button>
-        <input type="hidden" id="tm-cari" value="${baslangicCariId||''}">
-        <div id="tm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+      <div class="om-kart">
+        <div class="om-grid">
+          <div class="fld om-tam om-hedef" style="position:relative"><label>Müşteri (Cari) *</label>
+            <input id="tm-cari-arama" type="text" placeholder="Cari kodu veya adı ile ara..." autocomplete="off" style="padding-right:38px"
+                   value="${baslangicCariId ? (_cariListe.find(c=>c.id===baslangicCariId)||{}).ad||'' : ''}"
+                   oninput="tmCariAramaDegisti()"
+                   onfocus="tmCariOneriGoster()"
+                   onblur="setTimeout(()=>tmCariOneriKapat(),200)"
+                   onkeydown="oneriKlavyeYonet(event,'tm-cari-oneri')">
+            <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('tm-cari').value=c.id; document.getElementById('tm-cari-arama').value=c.ad; cariSonrasiOdak_('tm'); })">🔍</button>
+            <input type="hidden" id="tm-cari" value="${baslangicCariId||''}">
+            <div id="tm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+          </div>
+          <div class="fld om-tutar"><label>Tutar</label><input id="tm-tutar" type="number" min="0" step="0.01" placeholder="0,00" value="${t?t.tutar:''}"></div>
+          <div class="fld"><label>Tarih</label><input id="tm-tarih" type="datetime-local" value="${datetimeLocalDeger(t?t.tarih:bugun)}"></div>
+          <div class="fld"><label>Yöntem</label>
+            <select id="tm-yontem" onchange="tahsilatYontemDegisti()">
+              <option value="Nakit" ${t&&t.yontem==='Nakit'?'selected':''}>Nakit</option>
+              <option value="Havale/EFT" ${t&&t.yontem==='Havale/EFT'?'selected':''}>Havale/EFT</option>
+              <option value="Kredi Kartı" ${t&&t.yontem==='Kredi Kartı'?'selected':''}>Kredi Kartı</option>
+            </select>
+          </div>
+          <div class="fld" id="tm-pos-fld" style="display:none"><label>POS Hesabı</label>
+            <select id="tm-pos"><option value="">— Seçiniz —</option>${posSecenekleriHtml()}</select>
+          </div>
+          <div class="fld" id="tm-banka-fld" style="display:none"><label>Banka / Hesap</label>
+            <select id="tm-banka-hesap"></select>
+          </div>
+          <div class="om-not om-tam">Çek ile tahsilat için Çek/Senet modülünü kullanın — orada vade takibi de yapılır.</div>
+          <div class="fld om-tam"><label>Açıklama</label><input id="tm-aciklama" type="text" placeholder="İsteğe bağlı" value="${t?(t.aciklama||''):''}"></div>
+        </div>
       </div>
-      <div class="fld"><label>Tutar</label><input id="tm-tutar" type="number" min="0" step="0.01" placeholder="0,00" value="${t?t.tutar:''}"></div>
-      <div class="fld"><label>Tarih</label><input id="tm-tarih" type="datetime-local" value="${datetimeLocalDeger(t?t.tarih:bugun)}"></div>
-      <div class="fld"><label>Yöntem</label>
-        <select id="tm-yontem" onchange="tahsilatYontemDegisti()">
-          <option value="Nakit" ${t&&t.yontem==='Nakit'?'selected':''}>Nakit</option>
-          <option value="Havale/EFT" ${t&&t.yontem==='Havale/EFT'?'selected':''}>Havale/EFT</option>
-          <option value="Kredi Kartı" ${t&&t.yontem==='Kredi Kartı'?'selected':''}>Kredi Kartı</option>
-        </select>
-        <div style="font-size:11px;color:#888;margin-top:3px">Çek ile tahsilat için Çek/Senet modülünü kullanın — orada vade takibi de yapılır.</div>
+      <div class="om-akordiyon">
+        <div class="om-akordiyon-baslik" onclick="cvAkordiyonAcKapa(this)">
+          <span class="cv-akordiyon-ok" style="transition:transform var(--t);transform:rotate(90deg)">▶</span> Diğer bilgiler (Proje Kodu)
+        </div>
+        <div class="om-akordiyon-govde" style="display:block">
+          <div class="om-grid">
+            <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('tm-proje-kodu', t?t.projeKodu:'')}</div>
+          </div>
+        </div>
       </div>
-      <div class="fld" id="tm-pos-fld" style="display:none"><label>POS Hesabı</label>
-        <select id="tm-pos"><option value="">— Seçiniz —</option>${posSecenekleriHtml()}</select>
-      </div>
-      <div class="fld" id="tm-banka-fld" style="display:none"><label>Banka / Hesap</label>
-        <select id="tm-banka-hesap"></select>
-      </div>
-      <div class="fld"><label>Açıklama</label><input id="tm-aciklama" type="text" placeholder="İsteğe bağlı" value="${t?(t.aciklama||''):''}"></div>
-      <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('tm-proje-kodu', t?t.projeKodu:'')}</div>
-      <div class="modal-actions">
+      <div class="om-aksiyon">
         <button class="btn" onclick="document.getElementById('tahsilat-modal-overlay').remove()">İptal</button>
-        <button class="btn btn-primary" onclick="tahsilatKaydet()">Kaydet</button>
+        <button class="btn btn-primary" onclick="tahsilatKaydet()">${t?'💾 Güncelle':'💰 Tahsilatı Kaydet'}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -16745,6 +16763,19 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
 .ak-bos{padding:18px;text-align:center;opacity:.65;font-size:13.5px}
 .ak-ipucu{padding:10px 14px 4px;font-size:12px;opacity:.6}
 .ak-alt{padding:8px 14px;border-top:1px solid var(--border,#ddd);font-size:11.5px;opacity:.6}
+
+/* ── 3 Eki 2026: Tahsilat (Yeni Tahsilat modalı + liste + detay) Ödeme ile aynı rapor renk düzeninde; tutar yeşil ── */
+#mod-tahsilat{background:var(--rp-alan)}
+#mod-tahsilat .cari-detail-head{background:var(--rp-th-bg);border-left:4px solid var(--rp-th-fg);border-radius:10px;padding:12px 14px}
+#mod-tahsilat .cari-detail-head h2{color:var(--rp-th-fg)}
+#mod-tahsilat .cari-bakiye-box{background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:10px;padding:8px 16px}
+#mod-tahsilat .cari-bakiye-box .num{font-size:30px;font-weight:900;color:var(--green)}
+#mod-tahsilat .cari-bakiye-box .lbl{color:var(--rp-th-fg);font-weight:700}
+#mod-tahsilat .cari-item.sel{background:var(--rp-hover);border-left-color:var(--rp-th-fg)}
+#mod-tahsilat .od-tutar{font-weight:800;color:var(--green)}
+#mod-tahsilat .od-yontem{display:inline-block;background:var(--rp-th-bg);color:var(--rp-th-fg);border-radius:10px;padding:0 8px;font-size:11px;font-weight:700}
+#mod-tahsilat .od-bilgi .od-tam{grid-column:1/-1}
+.tahsilat-modal .om-tutar input{color:var(--green)}
 </style>
 
 <div id="ak-overlay" class="ak-overlay" style="display:none" onclick="if(event.target===this) akKapat()">
