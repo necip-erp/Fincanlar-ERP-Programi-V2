@@ -1197,10 +1197,10 @@ setInterval(topbarSaatGuncelle, 10000);
         İki cari arasında nakit/banka hareketi olmadan bakiye aktarır (mahsup). Kaynak carinin
         bakiyesi tutar kadar azalır, hedef carinin bakiyesi tutar kadar artar.
       </p>
-      <div style="margin-bottom:14px">
+      <div class="cv-form-kart" style="margin-bottom:14px">
         <!-- 1. satır: Cari seçimi -->
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px">
-          <div class="fld" style="flex:2;min-width:340px;margin-bottom:0;position:relative"><label>Kaynak Cari (bakiyesi azalır)</label>
+          <div class="fld cv-kaynak" style="flex:2;min-width:340px;margin-bottom:0;position:relative"><label>Kaynak Cari (bakiyesi azalır)</label>
             <input id="cvirman-kaynak-arama" type="text" placeholder="Cari kodu veya adı ile ara..." autocomplete="off" style="padding-right:34px"
                    oninput="cvCariAramaDegisti('kaynak', this.value)"
                    onfocus="cvCariOneriGoster('kaynak')"
@@ -1210,7 +1210,7 @@ setInterval(topbarSaatGuncelle, 10000);
             <input type="hidden" id="cvirman-kaynak">
             <div id="cvirman-kaynak-oneri" class="fiyat-gecmis-kutu" style="display:none;min-width:min(620px,92vw);max-height:320px;right:auto"></div>
           </div>
-          <div class="fld" style="flex:2;min-width:340px;margin-bottom:0;position:relative"><label>Hedef Cari (bakiyesi artar)</label>
+          <div class="fld cv-hedef" style="flex:2;min-width:340px;margin-bottom:0;position:relative"><label>Hedef Cari (bakiyesi artar)</label>
             <input id="cvirman-hedef-arama" type="text" placeholder="Cari kodu veya adı ile ara..." autocomplete="off" style="padding-right:34px"
                    oninput="cvCariAramaDegisti('hedef', this.value)"
                    onfocus="cvCariOneriGoster('hedef')"
@@ -12357,7 +12357,7 @@ function cariVirmanListesiCiz(){
             <td>${tarihGoster(v.tarih)}</td>
             <td>${v.kaynakCariAd}${v.kaynakCariKodu?` <span class="cari-item-kod">(${v.kaynakCariKodu})</span>`:""}</td>
             <td>${v.hedefCariAd}${v.hedefCariKodu?` <span class="cari-item-kod">(${v.hedefCariKodu})</span>`:""}</td>
-            <td>${paraFormat(v.tutar)}</td>
+            <td class="tutar-hucre">${paraFormat(v.tutar)}</td>
             <td>${v.virmanTipi || "—"}</td>
             <td>${v.aciklama || "—"}</td>
             <td style="white-space:nowrap">
@@ -15964,6 +15964,20 @@ body[data-rapor-zebra="1"] #mod-alis .cari-item:nth-child(even){background:var(-
 .alis-gecis .sira{font-weight:800;color:var(--rp-th-fg);min-width:70px;text-align:center}
 .alis-gecis .btn{font-weight:700}
 .alis-gecis .btn[disabled]{opacity:.4;cursor:default}
+/* ── 2 Eki 2026: Cari Virman da Finans/Alış'taki rapor renk düzeninde (🎨 Rapor Renkleri ile birlikte değişir) ── */
+#mod-cvirman{background:var(--rp-alan)}
+#mod-cvirman .rapor-baslik{background:var(--rp-th-bg);color:var(--rp-th-fg);padding:8px 12px;border-radius:8px;border-left:4px solid var(--rp-th-fg);margin:0 0 10px;display:flex;align-items:center;gap:10px}
+#mod-cvirman .finans-panel>p{color:var(--rp-th-fg);opacity:.85}
+#mod-cvirman .cv-form-kart{background:var(--rp-satir);border:1px solid var(--rp-th-bd)!important;border-radius:12px;padding:14px 16px}
+#mod-cvirman .fld label{color:var(--rp-th-fg);font-weight:700}
+#mod-cvirman .cv-kaynak,#mod-cvirman .cv-hedef{border-left:5px solid var(--rp-th-bd);background:var(--rp-alan);border-radius:8px;padding:8px 10px}
+#mod-cvirman .cv-kaynak{border-left-color:var(--red)}
+#mod-cvirman .cv-hedef{border-left-color:var(--green)}
+#mod-cvirman .cv-akordiyon{background:var(--rp-satir);border:1px solid var(--rp-th-bd)!important;border-radius:10px!important;margin-top:8px}
+#mod-cvirman .cv-akordiyon-baslik{background:var(--rp-th-bg);color:var(--rp-th-fg)!important;border-radius:9px;font-size:13px!important}
+#mod-cvirman .cv-akordiyon-govde{background:var(--rp-satir);border-radius:0 0 10px 10px}
+#mod-cvirman table.hareket-tbl td.tutar-hucre{font-weight:800;white-space:nowrap;color:var(--rp-th-fg)}
+#mod-cvirman .btn-primary{font-weight:800}
 </style>
 <script>
 (function(){
