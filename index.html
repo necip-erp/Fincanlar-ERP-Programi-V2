@@ -1197,10 +1197,9 @@ setInterval(topbarSaatGuncelle, 10000);
         İki cari arasında nakit/banka hareketi olmadan bakiye aktarır (mahsup). Kaynak carinin
         bakiyesi tutar kadar azalır, hedef carinin bakiyesi tutar kadar artar.
       </p>
-      <div class="cv-form-kart" style="margin-bottom:14px">
-        <!-- 1. satır: Cari seçimi -->
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px">
-          <div class="fld cv-kaynak" style="flex:2;min-width:340px;margin-bottom:0;position:relative"><label>Kaynak Cari (bakiyesi azalır)</label>
+      <div class="cv-form-kart">
+        <div class="cv-grid">
+          <div class="fld cv-kaynak"><label>Kaynak Cari (bakiyesi azalır)</label>
             <input id="cvirman-kaynak-arama" type="text" placeholder="Cari kodu veya adı ile ara..." autocomplete="off" style="padding-right:34px"
                    oninput="cvCariAramaDegisti('kaynak', this.value)"
                    onfocus="cvCariOneriGoster('kaynak')"
@@ -1210,7 +1209,7 @@ setInterval(topbarSaatGuncelle, 10000);
             <input type="hidden" id="cvirman-kaynak">
             <div id="cvirman-kaynak-oneri" class="fiyat-gecmis-kutu" style="display:none;min-width:min(620px,92vw);max-height:320px;right:auto"></div>
           </div>
-          <div class="fld cv-hedef" style="flex:2;min-width:340px;margin-bottom:0;position:relative"><label>Hedef Cari (bakiyesi artar)</label>
+          <div class="fld cv-hedef"><label>Hedef Cari (bakiyesi artar)</label>
             <input id="cvirman-hedef-arama" type="text" placeholder="Cari kodu veya adı ile ara..." autocomplete="off" style="padding-right:34px"
                    oninput="cvCariAramaDegisti('hedef', this.value)"
                    onfocus="cvCariOneriGoster('hedef')"
@@ -1220,32 +1219,31 @@ setInterval(topbarSaatGuncelle, 10000);
             <input type="hidden" id="cvirman-hedef">
             <div id="cvirman-hedef-oneri" class="fiyat-gecmis-kutu" style="display:none;min-width:min(620px,92vw);max-height:320px;right:auto"></div>
           </div>
-        </div>
-        <!-- 2. satır: Tutar ve Tarih -->
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px">
-          <div class="fld" style="width:170px;margin-bottom:0"><label>Tutar</label>
-            <input type="number" id="cvirman-tutar" step="0.01" min="0"></div>
-          <div class="fld" style="width:170px;margin-bottom:0"><label>Tarih</label>
+          <div class="fld"><label>Tutar</label>
+            <input type="number" id="cvirman-tutar" step="0.01" min="0" placeholder="0,00"></div>
+          <div class="fld"><label>Tarih</label>
             <input type="date" id="cvirman-tarih"></div>
-          <button class="btn btn-primary" id="cvirman-kaydet-btn" onclick="cariVirmanKaydet()">🔁 Virman Yap</button>
-          <button class="btn" id="cvirman-iptal-btn" style="display:none" onclick="cariVirmanDuzenlemeIptal()">İptal</button>
         </div>
-        <!-- 3. satır: diğer bilgiler — kapalı başlar, ok tuşuyla açılır -->
-        <div class="cv-akordiyon" style="border:1px solid var(--border);border-radius:8px">
-          <div class="cv-akordiyon-baslik" style="display:flex;align-items:center;gap:6px;padding:7px 12px;cursor:pointer;font-size:12px;font-weight:700;color:var(--text2);user-select:none" onclick="cvAkordiyonAcKapa(this)">
-            <span class="cv-akordiyon-ok" style="transition:transform var(--t)">▶</span> Diğer bilgiler (Açıklama, Proje Kodu, Virman Tipi)
+        <!-- Diğer bilgiler: varsayılan AÇIK (3 Eki 2026), isteyen başlığa tıklayıp kapatır -->
+        <div class="cv-akordiyon">
+          <div class="cv-akordiyon-baslik" onclick="cvAkordiyonAcKapa(this)">
+            <span class="cv-akordiyon-ok" style="transition:transform var(--t);transform:rotate(90deg)">▶</span> Diğer bilgiler (Açıklama, Proje Kodu, Virman Tipi)
           </div>
-          <div class="cv-akordiyon-govde" style="display:none;padding:0 12px 12px">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
-              <div class="fld" style="flex:1;min-width:200px;margin-bottom:0"><label>Açıklama (opsiyonel)</label>
+          <div class="cv-akordiyon-govde" style="display:block">
+            <div class="cv-grid">
+              <div class="fld cv-tam"><label>Açıklama (opsiyonel)</label>
                 <input type="text" id="cvirman-aciklama"></div>
-              <div class="fld" style="min-width:150px;margin-bottom:0"><label>Proje Kodu</label><select id="cvirman-proje-kodu" class="proje-kodu-secim"><option value="">— Proje Yok —</option></select></div>
-              <div class="fld" style="min-width:150px;margin-bottom:0"><label>Virman Tipi</label><select id="cvirman-tipi" class="virman-tipi-secim"><option value="">— Belirtilmedi —</option></select></div>
+              <div class="fld"><label>Proje Kodu</label><select id="cvirman-proje-kodu" class="proje-kodu-secim"><option value="">— Proje Yok —</option></select></div>
+              <div class="fld"><label>Virman Tipi</label><select id="cvirman-tipi" class="virman-tipi-secim"><option value="">— Belirtilmedi —</option></select></div>
             </div>
           </div>
         </div>
+        <div class="cv-aksiyon">
+          <button class="btn" id="cvirman-iptal-btn" style="display:none" onclick="cariVirmanDuzenlemeIptal()">İptal</button>
+          <button class="btn btn-primary" id="cvirman-kaydet-btn" onclick="cariVirmanKaydet()">🔁 Virman Yap</button>
+        </div>
       </div>
-      <div class="cv-akordiyon" style="border:1px solid var(--border);border-radius:8px">
+      <div class="cv-akordiyon cv-akordiyon-liste">
         <div class="cv-akordiyon-baslik" style="display:flex;align-items:center;gap:6px;padding:7px 12px;cursor:pointer;font-size:12px;font-weight:700;color:var(--text2);user-select:none" onclick="cvAkordiyonAcKapa(this)">
           <span class="cv-akordiyon-ok" style="transition:transform var(--t)">▶</span> Daha önce yapılan işlemler
         </div>
@@ -15970,14 +15968,31 @@ body[data-rapor-zebra="1"] #mod-alis .cari-item:nth-child(even){background:var(-
 #mod-cvirman .finans-panel>p{color:var(--rp-th-fg);opacity:.85}
 #mod-cvirman .cv-form-kart{background:var(--rp-satir);border:1px solid var(--rp-th-bd)!important;border-radius:12px;padding:14px 16px}
 #mod-cvirman .fld label{color:var(--rp-th-fg);font-weight:700}
-#mod-cvirman .cv-kaynak,#mod-cvirman .cv-hedef{border-left:5px solid var(--rp-th-bd);background:var(--rp-alan);border-radius:8px;padding:8px 10px}
-#mod-cvirman .cv-kaynak{border-left-color:var(--red)}
-#mod-cvirman .cv-hedef{border-left-color:var(--green)}
+#mod-cvirman .cv-kaynak label::before,#mod-cvirman .cv-hedef label::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+#mod-cvirman .cv-kaynak label::before{background:var(--red)}
+#mod-cvirman .cv-hedef label::before{background:var(--green)}
 #mod-cvirman .cv-akordiyon{background:var(--rp-satir);border:1px solid var(--rp-th-bd)!important;border-radius:10px!important;margin-top:8px}
 #mod-cvirman .cv-akordiyon-baslik{background:var(--rp-th-bg);color:var(--rp-th-fg)!important;border-radius:9px;font-size:13px!important}
 #mod-cvirman .cv-akordiyon-govde{background:var(--rp-satir);border-radius:0 0 10px 10px}
 #mod-cvirman table.hareket-tbl td.tutar-hucre{font-weight:800;white-space:nowrap;color:var(--rp-th-fg)}
 #mod-cvirman .btn-primary{font-weight:800}
+/* ── 3 Eki 2026: Cari Virman düzeni — 2 sütunlu ızgara, etiketler üstte, tüm alanlar hizalı; Diğer bilgiler varsayılan açık ── */
+#mod-cvirman .cv-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;align-items:start}
+#mod-cvirman .cv-grid .cv-tam{grid-column:1/-1}
+#mod-cvirman .fld{display:flex;flex-direction:column;gap:5px;margin:0;min-width:0}
+#mod-cvirman .fld input,#mod-cvirman .fld select{width:100%;box-sizing:border-box;height:38px;padding:8px 12px;font-size:14px}
+#mod-cvirman .fld label{font-size:11px;letter-spacing:.2px}
+#mod-cvirman .cv-kaynak input,#mod-cvirman .cv-hedef input{padding-right:38px}
+#mod-cvirman .cv-kaynak,#mod-cvirman .cv-hedef{position:relative}
+#mod-cvirman .cv-kaynak .rehber-ac-btn,#mod-cvirman .cv-hedef .rehber-ac-btn{top:auto;bottom:6px;transform:none;right:6px}
+#mod-cvirman .cv-akordiyon-baslik{display:flex;align-items:center;gap:6px;padding:8px 12px;cursor:pointer;font-weight:700;user-select:none}
+#mod-cvirman .cv-akordiyon{margin-top:16px}
+#mod-cvirman .cv-akordiyon-govde{padding:14px 12px 14px}
+#mod-cvirman .cv-akordiyon-liste{margin-top:14px}
+#mod-cvirman .cv-akordiyon-liste .cv-akordiyon-govde{padding:0 12px 12px}
+#mod-cvirman .cv-aksiyon{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+#mod-cvirman .cv-aksiyon .btn{padding:9px 20px;font-size:14px}
+@media (max-width:760px){#mod-cvirman .cv-grid{grid-template-columns:1fr}}
 </style>
 <script>
 (function(){
