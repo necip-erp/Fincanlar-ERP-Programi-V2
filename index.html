@@ -5621,9 +5621,9 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   const bugun = s ? (/^\d{4}-\d{2}-\d{2}$/.test(s.tarih) ? s.tarih + "T00:00" : s.tarih.replace(" ", "T")) : simdiTarihSaat();
   const belgeTipiBaslangic = s ? s.belgeTipi : (onBelgeTipi || _satisAktifBelgeTipi);
   overlay.innerHTML = `
-    <div class="modal-box modal-box-xwide">
-      <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <span>${duzenle ? belgeTipiBaslangic+"'i Düzenle" : "Yeni "+belgeTipiBaslangic}</span>
+    <div class="modal-box modal-box-xwide fatura-modal">
+      <h3 class="fm-baslik" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span>${duzenle ? "✏️ "+belgeTipiBaslangic+"'i Düzenle" : "🧾 Yeni "+belgeTipiBaslangic}</span>
         <span id="sm-efatura-rozet" title="Seçili carinin E-Fatura mükellefiyeti" style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;padding:4px 14px;border-radius:20px;white-space:nowrap;background:var(--bg3);color:var(--text3)">E-Fatura: —</span>
         <span id="sm-earsiv-rozet" title="Seçili carinin E-Arşiv mükellefiyeti" style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;padding:4px 14px;border-radius:20px;white-space:nowrap;background:var(--bg3);color:var(--text3)">E-Arşiv: —</span>
         <span id="sm-siparis-no-badge" style="display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">
@@ -5634,6 +5634,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         <span id="sm-proje-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Proje: —</span>
         <span id="sm-faturatipi-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Tip: —</span>
       </h3>
+      <div class="fm-kart">
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
         <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Belge Tipi</label>
           <select id="sm-belgetipi" onchange="satisModalBelgeTipiDegisti()" ${duzenle?'disabled title="Düzenlemede belge tipi değiştirilemez"':''}>
@@ -5689,6 +5690,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         <input id="sm-odeme-tutar" type="number" min="0" step="0.01" placeholder="Boş bırakılırsa faturanın tamamı varsayılır">
         <div style="font-size:11px;color:#888;margin-top:3px">Farklı/daha az bir tutar tahsil edildiyse buraya girin — kalan kısım caride borç (Açık Hesap gibi) kalır.</div>
       </div>
+      </div>
 
       <div id="sm-isleme-tikleri-fld" style="display:${belgeTipiBaslangic==='Fatura'?'flex':'none'};gap:18px;flex-wrap:wrap;margin:-4px 0 12px;padding:8px 10px;background:var(--bg3);border-radius:8px">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
@@ -5699,7 +5701,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         </label>
       </div>
 
-      <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
+      <label class="fm-etiket" style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
       <div class="satis-kalem-basliklar">
         <span class="satis-kalem-stokkodu">Stok Kodu</span><span style="flex:1">Ürün</span>
         <span class="satis-kalem-miktar">Miktar</span><span class="satis-kalem-birim">Birim</span>
@@ -5728,9 +5730,9 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
 
       <div id="sm-toplam" class="satis-toplam-detay"></div>
 
-      <div class="modal-actions">
+      <div class="modal-actions fm-aksiyon">
         <button class="btn" onclick="document.getElementById('satis-modal-overlay').remove();_satisTaslakId=null">İptal</button>
-        <button class="btn btn-primary" onclick="satisKaydet()">Kaydet</button>
+        <button class="btn btn-primary" onclick="satisKaydet()">💾 Kaydet</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -6757,12 +6759,13 @@ function alisModalAc(duzenle){
   // s.tarih ile aynı sebep: backend "yyyy-MM-dd"/"yyyy-MM-dd HH:mm" döner, datetime-local "T" ister.
   const bugun = (a && a.tarih) ? (/^\d{4}-\d{2}-\d{2}$/.test(a.tarih) ? a.tarih + "T00:00" : a.tarih.replace(" ", "T")) : simdiTarihSaat();
   overlay.innerHTML = `
-    <div class="modal-box modal-box-xwide">
-      <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <span>${duzenle ? 'Alışı Düzenle' : 'Yeni Alış'}</span>
+    <div class="modal-box modal-box-xwide fatura-modal">
+      <h3 class="fm-baslik" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span>${duzenle ? '✏️ Alışı Düzenle' : '📥 Yeni Alış'}</span>
         <span id="am-proje-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Proje: —</span>
         <span id="am-faturatipi-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Tip: —</span>
       </h3>
+      <div class="fm-kart">
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
         <div class="fld" style="flex:2;min-width:220px;margin-bottom:0;position:relative">
           <label>Tedarikçi (Cari)</label>
@@ -6789,8 +6792,9 @@ function alisModalAc(duzenle){
         <div class="fld" style="flex:1;min-width:140px"><label>Proje Kodu</label>${projeKoduSelectHTML('am-proje-kodu', a?a.projeKodu:'')}</div>
         <div class="fld" style="flex:1;min-width:140px"><label>Fatura Tipi</label>${faturaTipiSelectHTML('am-fatura-tipi', a?a.faturaTipi:'', a?'':'00')}</div>
       </div>
+      </div>
 
-      <label style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
+      <label class="fm-etiket" style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
       <div class="satis-kalem-basliklar">
         <span class="satis-kalem-stokkodu">Stok Kodu</span><span style="flex:0 0 24px;padding:0"></span>
         <span style="flex:1">Ürün</span><span style="flex:0 0 68px;padding:0"></span><span style="flex:0 0 138px;padding:0">Satılan Cari</span>
@@ -6815,9 +6819,9 @@ function alisModalAc(duzenle){
 
       <div id="am-toplam" class="satis-toplam-detay"></div>
 
-      <div class="modal-actions">
+      <div class="modal-actions fm-aksiyon">
         <button class="btn" onclick="document.getElementById('alis-modal-overlay').remove()">İptal</button>
-        <button class="btn btn-primary" onclick="alisKaydet()">Kaydet</button>
+        <button class="btn btn-primary" onclick="alisKaydet()">💾 Kaydet</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -9863,9 +9867,9 @@ function cekSenetListesiCiz(){
       <div class="cari-item-top">
         ${(topluAktif && c.durum==="Portföyde") ? `<input type="checkbox" style="margin-right:6px" ${_cekSenetTopluSecim.has(c.id)?'checked':''} onclick="event.stopPropagation()" onchange="cekSenetTopluSecToggle('${c.id}')">` : ''}
         <span class="cari-item-ad">${c.cariAd}</span>
-        <span class="cari-item-bakiye">${paraFormat(c.kalanTutar)}</span>
+        <span class="cari-item-bakiye od-tutar">${paraFormat(c.kalanTutar)}</span>
       </div>
-      <span class="cari-item-tip">${tarihGoster(c.vade)}${c.seriNo?' · '+c.seriNo:''} · ${cekSenetDurumEtiket(c)}</span>
+      <span class="cari-item-tip">${tarihGoster(c.vade)}${c.seriNo?' · '+c.seriNo:''} · <span class="od-yontem">${cekSenetDurumEtiket(c)}</span></span>
     </div>`).join("");
 }
 
@@ -9955,12 +9959,14 @@ function cekSenetAc(id){
           <div class="lbl">Kalan / Toplam ${paraFormat(c.tutar)}</div>
         </div>
       </div>
-      <div class="cari-info-grid">
+      <div class="cari-info-grid od-bilgi">
+        <div class="cari-info-item"><div class="k">Düzenlenme</div><div class="v">${tarihGoster(c.duzenlenmeTarihi)}</div></div>
+        <div class="cari-info-item"><div class="k">Vade</div><div class="v">${tarihGoster(c.vade)}${c.gecikmis?' ⚠️':''}</div></div>
         ${c.seriNo?`<div class="cari-info-item"><div class="k">Seri No</div><div class="v">${c.seriNo}</div></div>`:""}
         ${c.bankaAdi?`<div class="cari-info-item"><div class="k">Banka</div><div class="v">${c.bankaAdi}</div></div>`:""}
         <div class="cari-info-item"><div class="k">Durum</div><div class="v">${cekSenetDurumEtiket(c)}</div></div>
-        ${c.aciklama?`<div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${c.aciklama}</div></div>`:""}
         ${c.projeKodu?`<div class="cari-info-item"><div class="k">Proje Kodu</div><div class="v">${c.projeKodu}</div></div>`:""}
+        ${c.aciklama?`<div class="cari-info-item od-tam"><div class="k">Açıklama</div><div class="v">${c.aciklama}</div></div>`:""}
       </div>
       ${acik ? `
       <div class="btnrow">
@@ -10077,12 +10083,14 @@ function cekSenetCiroModalAc(id){
   overlay.id = "cekciro-modal-overlay";
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   overlay.innerHTML = `
-    <div class="modal-box">
-      <h3>Çeki Ciro Et</h3>
-      <p style="font-size:13px;color:var(--text2)">Bu çeki hangi cariye (tedarikçiye) ciro ediyorsunuz? Seçtiğiniz cariye, çek tutarı kadar Borç hareketi düşülür (o cariye olan borcunuz bu kadar azalır).</p>
-      <div class="fld" style="position:relative">
+    <div class="modal-box odeme-modal ceksenet-islem-modal">
+      <div class="om-baslik">↪️ Çeki Ciro Et</div>
+      <div class="om-kart">
+       <div class="om-grid">
+        <div class="om-not om-tam" style="margin-top:0">Bu çeki hangi cariye (tedarikçiye) ciro ediyorsunuz? Seçtiğiniz cariye, çek tutarı kadar Borç hareketi düşülür (o cariye olan borcunuz bu kadar azalır).</div>
+      <div class="fld om-tam om-hedef" style="position:relative">
         <label>Cari</label>
-        <input id="cekciro-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" style="padding-right:34px"
+        <input id="cekciro-cari-arama" type="text" placeholder="Cari kodu veya adı ile ara..." autocomplete="off" style="padding-right:38px"
                oninput="cekciroCariAramaDegisti(this.value)"
                onblur="setTimeout(()=>{const k=document.getElementById('cekciro-cari-oneri'); if(k) k.style.display='none';},200)"
                onfocus="cekciroCariAramaDegisti(this.value)">
@@ -10090,10 +10098,12 @@ function cekSenetCiroModalAc(id){
         <input type="hidden" id="cekciro-cari" value="">
         <div id="cekciro-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
-      <div class="fld"><label>Açıklama</label><input id="cekciro-aciklama" type="text" placeholder="İsteğe bağlı"></div>
-      <div class="modal-actions">
+      <div class="fld om-tam"><label>Açıklama</label><input id="cekciro-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+       </div>
+      </div>
+      <div class="om-aksiyon">
         <button class="btn" onclick="document.getElementById('cekciro-modal-overlay').remove()">İptal</button>
-        <button class="btn btn-primary" onclick="cekSenetCiroKaydet('${id}')">Ciro Et</button>
+        <button class="btn btn-primary" onclick="cekSenetCiroKaydet('${id}')">↪️ Ciro Et</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -10158,19 +10168,23 @@ function cekSenetIslemModalAc(id){
         <select id="ci-hedef-banka-hesap"></select>
       </div>` : '';
   overlay.innerHTML = `
-    <div class="modal-box">
-      <h3>${c.tip==='Alınan'?'Tahsilat':'Ödeme'} — ${c.cariAd}</h3>
-      ${c.vade ? `<div class="fld"><label>Vade</label><input value="${tarihGoster(c.vade)}${c.gecikmis?' ⚠️ vadesi geçmiş':''}" disabled></div>` : ``}
-      <div class="fld"><label>Tutar (kalan: ${paraFormat(c.kalanTutar)})</label><input id="ci-tutar" type="number" min="0" max="${c.kalanTutar}" step="0.01" value="${c.kalanTutar}"></div>
-      <div class="fld"><label>Tarih</label><input id="ci-tarih" type="datetime-local" value="${bugun}"></div>
-      <div class="fld"><label>Açıklama</label><input id="ci-aciklama" type="text" placeholder="İsteğe bağlı"></div>
-      ${hedefAlani}
-      ${(c.tip==='Verilen' && c.bankaHesapId) ? '<div style="font-size:12.5px;color:var(--text2);margin-top:-4px">🏦 Ödenen tutar, çeke bağlı banka hesabından otomatik "Çıkış" olarak düşülecek.</div>' : ''}
+    <div class="modal-box odeme-modal ceksenet-islem-modal">
+      <div class="om-baslik">${c.tip==='Alınan'?'💰 Tahsilat':'💸 Ödeme'} — ${c.cariAd}</div>
+      <div class="om-kart">
+        <div class="om-grid">
+          ${c.vade ? `<div class="fld"><label>Vade</label><input value="${tarihGoster(c.vade)}${c.gecikmis?' ⚠️ vadesi geçmiş':''}" disabled></div>` : ``}
+          <div class="fld om-tutar"><label>Tutar (kalan: ${paraFormat(c.kalanTutar)})</label><input id="ci-tutar" type="number" min="0" max="${c.kalanTutar}" step="0.01" value="${c.kalanTutar}"></div>
+          <div class="fld"><label>Tarih</label><input id="ci-tarih" type="datetime-local" value="${bugun}"></div>
+          ${hedefAlani}
+          <div class="fld om-tam"><label>Açıklama</label><input id="ci-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+          ${(c.tip==='Verilen' && c.bankaHesapId) ? '<div class="om-not om-tam">🏦 Ödenen tutar, çeke bağlı banka hesabından otomatik "Çıkış" olarak düşülecek.</div>' : ''}
+        </div>
+      </div>
       <input type="hidden" id="ci-id" value="${c.id}">
       <input type="hidden" id="ci-tip" value="${c.tip}">
-      <div class="modal-actions">
+      <div class="om-aksiyon">
         <button class="btn" onclick="document.getElementById('cekislem-modal-overlay').remove()">İptal</button>
-        <button class="btn btn-primary" onclick="cekSenetIslemKaydet()">Kaydet</button>
+        <button class="btn btn-primary" onclick="cekSenetIslemKaydet()">${c.tip==='Alınan'?'💰 Tahsil Et':'💸 Öde'}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -10245,30 +10259,41 @@ function cekSenetModalAc(onCariId){
   overlay.onclick = (e)=>{ if(e.target===overlay) cekSenetModalKapat(); };
   const bugun = simdiTarihSaat();
   overlay.innerHTML = `
-    <div class="modal-box" style="max-width:1100px;width:96vw">
-      <h3>Yeni Çek/Senet <span style="font-weight:400;font-size:12px;color:var(--text3)">— birden fazla çek/senet girilebilir</span></h3>
-      <div class="csm-grid">
-      <div class="fld"><label>Tip</label>
-        <select id="csm-tip" onchange="csmTipDegisti()">
-          <option value="Alınan" ${_cekSenetAktifTip==='Alınan'?'selected':''}>Portföydeki Çekler (müşteriden)</option>
-          <option value="Verilen" ${_cekSenetAktifTip==='Verilen'?'selected':''}>Kendi Çekim (tedarikçiye)</option>
-        </select>
+    <div class="modal-box odeme-modal ceksenet-modal" style="max-width:1100px;width:96vw">
+      <div class="om-baslik">📄 Yeni Çek/Senet <span style="font-weight:400;font-size:12px;opacity:.75">— birden fazla çek/senet girilebilir</span></div>
+      <div class="om-kart">
+        <div class="om-grid">
+          <div class="fld"><label>Tip</label>
+            <select id="csm-tip" onchange="csmTipDegisti()">
+              <option value="Alınan" ${_cekSenetAktifTip==='Alınan'?'selected':''}>Portföydeki Çekler (müşteriden)</option>
+              <option value="Verilen" ${_cekSenetAktifTip==='Verilen'?'selected':''}>Kendi Çekim (tedarikçiye)</option>
+            </select>
+          </div>
+          <div class="fld"><label>Düzenlenme Tarihi</label><input id="csm-duzenlenme" type="datetime-local" value="${bugun}"></div>
+          <div class="fld om-tam om-hedef" style="position:relative"><label>Cari *</label>
+            <input id="csm-cari-arama" type="text" placeholder="Cari kodu veya adı ile ara..." autocomplete="off" style="padding-right:38px"
+                   value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
+                   oninput="csmCariAramaDegisti()"
+                   onfocus="csmCariOneriGoster()"
+                   onblur="setTimeout(()=>csmCariOneriKapat(),200)"
+                   onkeydown="oneriKlavyeYonet(event,'csm-cari-oneri')">
+            <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('csm-cari').value=c.id; document.getElementById('csm-cari-arama').value=c.ad; cariSonrasiOdak_('csm'); })">🔍</button>
+            <input type="hidden" id="csm-cari" value="${onCariId||''}">
+            <div id="csm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+          </div>
+          <div class="fld om-tam"><label>Açıklama (tüm satırlar için)</label><input id="csm-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+        </div>
       </div>
-      <div class="fld csm-tam" style="position:relative"><label>Cari *</label>
-        <input id="csm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" style="padding-right:34px"
-               value="${onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : ''}"
-               oninput="csmCariAramaDegisti()"
-               onfocus="csmCariOneriGoster()"
-               onblur="setTimeout(()=>csmCariOneriKapat(),200)"
-               onkeydown="oneriKlavyeYonet(event,'csm-cari-oneri')">
-        <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('csm-cari').value=c.id; document.getElementById('csm-cari-arama').value=c.ad; cariSonrasiOdak_('csm'); })">🔍</button>
-        <input type="hidden" id="csm-cari" value="${onCariId||''}">
-        <div id="csm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
-      </div>
-      <div class="fld"><label>Düzenlenme Tarihi</label><input id="csm-duzenlenme" type="datetime-local" value="${bugun}"></div>
-      <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('csm-proje-kodu', '')}</div>
-      <div class="fld"><label>Seri No <span style="font-weight:400;color:var(--text3)">(toplu verilen/alınan çekleri gruplamak için, opsiyonel)</span></label><input id="csm-seri-no" type="text" placeholder="Boş bırakılırsa birden fazla satırda otomatik üretilir"></div>
-      <div class="fld csm-tam"><label>Açıklama (tüm satırlar için)</label><input id="csm-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+      <div class="om-akordiyon">
+        <div class="om-akordiyon-baslik" onclick="cvAkordiyonAcKapa(this)">
+          <span class="cv-akordiyon-ok" style="transition:transform var(--t);transform:rotate(90deg)">▶</span> Diğer bilgiler (Proje Kodu, Seri No)
+        </div>
+        <div class="om-akordiyon-govde" style="display:block">
+          <div class="om-grid">
+            <div class="fld"><label>Proje Kodu</label>${projeKoduSelectHTML('csm-proje-kodu', '')}</div>
+            <div class="fld"><label>Seri No <span style="font-weight:400;opacity:.7">(toplu çekleri gruplamak için, opsiyonel)</span></label><input id="csm-seri-no" type="text" placeholder="Boş bırakılırsa birden fazla satırda otomatik üretilir"></div>
+          </div>
+        </div>
       </div>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 8px">
@@ -10287,9 +10312,9 @@ function cekSenetModalAc(onCariId){
       <div id="csm-satirlar" style="overflow-x:auto"></div>
       <div id="csm-toplam" style="text-align:right;font-weight:800;margin:8px 2px"></div>
       <div id="csm-durum" style="font-size:12.5px;color:var(--text2);min-height:16px"></div>
-      <div class="modal-actions">
+      <div class="om-aksiyon">
         <button class="btn" onclick="cekSenetModalKapat()">İptal</button>
-        <button class="btn btn-primary" id="csm-kaydet-btn" onclick="cekSenetKaydet()">Kaydet</button>
+        <button class="btn btn-primary" id="csm-kaydet-btn" onclick="cekSenetKaydet()">💾 Kaydet</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -16776,6 +16801,32 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
 #mod-tahsilat .od-yontem{display:inline-block;background:var(--rp-th-bg);color:var(--rp-th-fg);border-radius:10px;padding:0 8px;font-size:11px;font-weight:700}
 #mod-tahsilat .od-bilgi .od-tam{grid-column:1/-1}
 .tahsilat-modal .om-tutar input{color:var(--green)}
+
+/* ── 3 Eki 2026: Çek/Senet (liste, detay, Yeni Çek/Senet modalı, Tahsil/Öde modalı) aynı rapor renk düzeninde ── */
+#mod-ceksenet{background:var(--rp-alan)}
+#mod-ceksenet .cari-detail-head{background:var(--rp-th-bg);border-left:4px solid var(--rp-th-fg);border-radius:10px;padding:12px 14px}
+#mod-ceksenet .cari-detail-head h2{color:var(--rp-th-fg)}
+#mod-ceksenet .cari-bakiye-box{background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:10px;padding:8px 16px}
+#mod-ceksenet .cari-bakiye-box .num{font-size:30px;font-weight:900;color:var(--green)}
+#mod-ceksenet .cari-bakiye-box .lbl{color:var(--rp-th-fg);font-weight:700}
+#mod-ceksenet .cari-item.sel{background:var(--rp-hover);border-left-color:var(--rp-th-fg)}
+#mod-ceksenet .od-tutar{font-weight:800;color:var(--green)}
+#mod-ceksenet .od-yontem{display:inline-block;background:var(--rp-th-bg);color:var(--rp-th-fg);border-radius:10px;padding:0 8px;font-size:11px;font-weight:700}
+#mod-ceksenet .od-bilgi .od-tam{grid-column:1/-1}
+.ceksenet-modal .om-grid{grid-template-columns:1fr 1fr}
+@media(max-width:640px){.ceksenet-modal .om-grid{grid-template-columns:1fr}}
+.ceksenet-islem-modal .om-tutar input{color:var(--green)}
+
+/* ── 3 Eki 2026: Satış / Alış fatura-sipariş-teklif formları aynı rapor renk düzeninde (alan kimlikleri ve davranış aynı, sadece görünüm) ── */
+.fatura-modal{background:var(--rp-alan,var(--bg2))}
+.fatura-modal .fm-baslik{background:var(--rp-th-bg);color:var(--rp-th-fg);padding:9px 14px;border-radius:8px;border-left:4px solid var(--rp-th-fg);font-size:16px;font-weight:800;margin:0 0 12px}
+.fatura-modal .fm-kart{background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.fatura-modal .fm-kart .fld label{color:var(--rp-th-fg);font-weight:700;font-size:11px;letter-spacing:.2px}
+.fatura-modal .fm-kart .fld input,.fatura-modal .fm-kart .fld select{height:38px;box-sizing:border-box}
+.fatura-modal .fm-etiket{color:var(--rp-th-fg)!important;font-weight:800;opacity:.9}
+.fatura-modal .satis-kalem-basliklar{background:var(--rp-th-bg);color:var(--rp-th-fg);border-radius:8px;font-weight:700}
+.fatura-modal .fm-aksiyon{gap:10px}
+.fatura-modal .fm-aksiyon .btn{padding:9px 20px;font-size:14px}
 </style>
 
 <div id="ak-overlay" class="ak-overlay" style="display:none" onclick="if(event.target===this) akKapat()">
