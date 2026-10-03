@@ -1235,6 +1235,7 @@ function handleRequest(e) {
       case "edmCariSorgula":  result = edmCariSorgula(body); break;
       case "edmFaturaGonderTest": result = edmFaturaGonderTest(body); break;
       case "getSatisEfaturaGorsel": result = satisEfaturaGorselAl(body); break;
+      case "getAlisFaturaGorselHtml": result = alisFaturaGorselHtmlAl(body); break;
       case "edmFaturaDurumSorgula": result = edmFaturaDurumSorgula(body); break;
       case "birimSiraGuncelle":     result = birimSiraGuncelle(body); break;
       case "basitTanimSiraGuncelle": result = basitTanimSiraGuncelle(body); break;
@@ -9320,6 +9321,48 @@ function satisEfaturaBilgisiAl_(satisId) {
 // ayrıştırmak yerine, gönderim anında saklanan JSON anlık görüntüsünden
 // (EFATURA_GORSEL_VERI) çiziyor — gönderilenle TAM AYNI veriyi garanti eder.
 // Ham UBL-XML'i de (indirmek/incelemek isteyenler için) ayrıca döndürür.
+// Alış (e-fatura) orijinal görseli: fatura-okuma-otomasyonu'nun Drive'a kaydettiği "<faturaNo>_orijinal.html"
+// dosyasını DOĞRUDAN okur (aynı hesap sahibi). Böylece "Faturayı Gör" tarayıcıdaki Google hesap seçimine
+// (/macros/u/N/ yönlendirmesi, "dosyayı açamıyoruz" hatası) bağlı kalmaz; ERP kendi sunucusundan görseli getirir.
+function alisFaturaGorselHtmlAl(body) {
+  const faturaNo = String((body && body.faturaNo) || "").trim();
+  if (!faturaNo) return { ok: false, hata: "faturaNo gerekli" };
+  const dosyaAdi = faturaNo + "_orijinal.html";
+  const klasorler = DriveApp.getFoldersByName("FATURALAR");
+  while (klasorler.hasNext()) {
+    const klasor = klasorler.next();
+    // Önce fatura tarihine göre ay klasörü (hızlı yol)
+    try {
+      const ss = SpreadsheetApp.openById(DIS_FIYAT_SHEET_ID);
+      const sh = ss.getSheetByName(DIS_FIYAT_SHEET_ADI);
+      if (sh) {
+        const veri = sh.getDataRange().getValues();
+        const h = veri[0], iNo = h.indexOf("FATURA_NO"), iTar = h.indexOf("FATURA_TARIHI");
+        for (let r = 1; r < veri.length; r++) {
+          if (String(veri[r][iNo] || "") === faturaNo) {
+            const d = new Date(veri[r][iTar]);
+            if (!isNaN(d.getTime())) {
+              const ay = Utilities.formatDate(d, "Europe/Istanbul", "yyyy-MM");
+              const ayK = klasor.getFoldersByName(ay);
+              if (ayK.hasNext()) {
+                const f = ayK.next().getFilesByName(dosyaAdi);
+                if (f.hasNext()) return { ok: true, html: f.next().getBlob().getDataAsString("UTF-8") };
+              }
+            }
+            break;
+          }
+        }
+      }
+    } catch (e) { /* hızlı yol olmadı, tüm ay klasörlerini tara */ }
+    const alt = klasor.getFolders();
+    while (alt.hasNext()) {
+      const f2 = alt.next().getFilesByName(dosyaAdi);
+      if (f2.hasNext()) return { ok: true, html: f2.next().getBlob().getDataAsString("UTF-8") };
+    }
+  }
+  return { ok: false, hata: "Orijinal fatura görseli bulunamadı (bu fatura, görsel kaydı eklenmeden önce işlenmiş olabilir)." };
+}
+
 function satisEfaturaGorselAl(body) {
   const satisId = body.satisId;
   if (!satisId) return { ok: false, hata: "satisId gerekli" };

@@ -2987,6 +2987,55 @@ function faturaGorLinki(faturaNo, kompakt, authuser){
   const au = (authuser === undefined) ? faturaAuthuserOku_() : authuser;
   return FATURA_OKUMA_WEBAPP_URL + "?faturaHtml=" + encodeURIComponent(faturaNo) + (au === null ? "" : "&authuser=" + au) + (kompakt ? "&kompakt=1" : "");
 }
+// ── Alış faturası görseli: ERP sunucusu Drive'dan okur, iframe'e srcdoc olarak basılır ──
+// (Google web uygulaması adresi tarayıcının hesap seçimine bağlıydı: "/macros/u/N/" → "dosyayı açamıyoruz").
+// Sunucudan alınamazsa eski adrese (faturaGorLinki) geri düşülür.
+function faturaGorselKompaktHtml_(html){
+  try{
+    const re = /(?:&Ouml;|&ouml;|Ö|ö|O|o)denecek\s*Tutar/gi; let m, son = -1;
+    while((m = re.exec(html)) !== null) son = m.index;
+    if(son >= 0){
+      const kap = html.indexOf("</table>", son);
+      if(kap >= 0){ const kes = kap + 8, gs = html.search(/<\/body>/i), s2 = gs >= 0 ? gs : html.length; if(kes < s2) html = html.substring(0, kes) + html.substring(s2); }
+    }
+  }catch(e){}
+  const js = '<script>(function(){function kes(){try{var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null,false),n,son=null;while((n=w.nextNode())){if(/[\\u00d6\\u00f6Oo]denecek\\s*Tutar/i.test(n.nodeValue))son=n;}if(!son)return;var t=son.parentNode;while(t&&t!==document.body&&t.nodeName!=="TABLE")t=t.parentNode;if(!t||t===document.body)return;for(var c=t;c&&c!==document.body;c=c.parentNode){while(c.nextSibling){c.parentNode.removeChild(c.nextSibling);}}}catch(x){}}'
+    + 'function g(){try{var b=document.body,st=b.style,o1=st.display,o2=st.width,o3=st.margin;st.display="inline-block";st.width="max-content";var cs=getComputedStyle(b),mx=(parseFloat(cs.marginLeft)||0)+(parseFloat(cs.marginRight)||0),my=(parseFloat(cs.marginTop)||0)+(parseFloat(cs.marginBottom)||0);var w=Math.ceil(b.offsetWidth+mx),h=Math.ceil(b.offsetHeight+my);st.display=o1;st.width=o2;st.margin=o3;window.top.postMessage({tip:"faturaBoyut",w:w,h:h},"*");}catch(x){}}'
+    + 'function hepsi(){kes();g();}if(document.readyState==="complete")hepsi();window.addEventListener("load",function(){hepsi();setTimeout(hepsi,300);setTimeout(hepsi,1200);});})();<\/script>';
+  return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, js + "</body>") : html + js;
+}
+const _faturaGorselOnbellek = {};
+async function faturaGorselHtmlGetir_(faturaNo){
+  if(_faturaGorselOnbellek[faturaNo]) return _faturaGorselOnbellek[faturaNo];
+  const r = await cariApi("getAlisFaturaGorselHtml", {faturaNo});
+  if(!r || !r.ok || !r.html) throw new Error((r && r.hata) || "Fatura görseli alınamadı");
+  _faturaGorselOnbellek[faturaNo] = r.html;
+  return r.html;
+}
+function faturaGorselIframeDoldur_(iframeId, faturaNo){
+  const ifr = document.getElementById(iframeId); if(!ifr || !faturaNo) return;
+  const mesaj = t => `<body style="font-family:sans-serif;padding:20px;color:#666">${t}</body>`;
+  ifr.removeAttribute("src"); ifr.srcdoc = mesaj("Fatura görseli yükleniyor…");
+  faturaGorselHtmlGetir_(faturaNo).then(html=>{
+    const hedef = document.getElementById(iframeId); if(!hedef) return;
+    hedef.removeAttribute("src"); hedef.srcdoc = faturaGorselKompaktHtml_(html);
+  }).catch(err=>{
+    const hedef = document.getElementById(iframeId); if(!hedef) return;
+    // Sunucudan alınamadı: eski web uygulaması adresine geri dön
+    hedef.removeAttribute("srcdoc"); hedef.src = faturaGorLinki(faturaNo, true);
+    console.warn("Fatura görseli sunucudan alınamadı, eski adres deneniyor:", err && err.message);
+  });
+}
+async function faturaGorselYeniSekmedeAc_(faturaNo){
+  const w = window.open("", "_blank");
+  try{
+    const html = await faturaGorselHtmlGetir_(faturaNo);
+    if(w){ w.document.open(); w.document.write(html); w.document.close(); }
+  }catch(err){
+    if(w) w.location.href = faturaGorLinki(faturaNo); else window.open(faturaGorLinki(faturaNo), "_blank");
+  }
+}
+
 // Görsel gömülü (iframe) açılamıyorsa: hesap sırasını bulup kaydetmek için yedek bağlantılar (yeni sekmede açılır).
 function faturaYedekLinklerHTML(faturaNo){
   const a = (t, n)=>`<a href="${faturaGorLinki(faturaNo,false,n)}" target="_blank" rel="noopener" onclick="${n===null?"":`faturaAuthuserKaydet(${n})`}" style="color:var(--blue);text-decoration:underline;margin-right:8px" title="Açılırsa bu hesap sırası kaydedilir">${t}</a>`;
@@ -7558,7 +7607,7 @@ function bfmZoomKontrolHTML(iframeId, etiketId){
 function faturaGorsalAc(faturaNo){
   if(!faturaNo) return;
   if(bfmFaturaYandaMi()){ bfmYanPanelAc(faturaNo); }
-  else { window.open(faturaGorLinki(faturaNo), "_blank"); }
+  else { faturaGorselYeniSekmedeAc_(faturaNo); }
 }
 // Fatura görselini (A4 ≈ 794×1123 px) panelin GÖVDESİNE tam sığdırır (genişlik ve yükseklik).
 // ── Kaynak fatura görselinde "ürünlere odak" ──
@@ -7681,8 +7730,9 @@ function bfmYanPanelAc(faturaNo){
       <button class="btn" onclick="bfmYanPanelKapat()">✕ Kapat</button>
     </div>
     <div style="padding:0 10px">${faturaYedekLinklerHTML(faturaNo)}</div>
-    <div class="fyp-govde"><iframe id="fyp-iframe" src="${faturaGorLinki(faturaNo, true)}" title="Fatura görseli"></iframe></div>`;
+    <div class="fyp-govde"><iframe id="fyp-iframe" title="Fatura görseli"></iframe></div>`;
   document.body.appendChild(panel);
+  faturaGorselIframeDoldur_("fyp-iframe", faturaNo);
   bfmSigdir("fyp-iframe","fyp-zoom-yuzde");
   setTimeout(()=>bfmSigdir("fyp-iframe","fyp-zoom-yuzde"), 250); // panel animasyonu bitince yeniden ölç
 }
@@ -8212,13 +8262,14 @@ function alisBekleyenOnayModalAc(faturaNo){
           ${f.faturaNo ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${bfmOdakKontrolHTML()}${bfmZoomKontrolHTML("bfm-onay-iframe","bfm-onay-zoom-yuzde")}</div>` : ``}
         </div>
         <div class="bfm-2col-sag-govde" id="bfm-odak-kutu">
-          ${f.faturaNo ? faturaYedekLinklerHTML(f.faturaNo) + `<iframe id="bfm-onay-iframe" src="${faturaGorLinki(f.faturaNo, true)}" title="Fatura görseli"></iframe><div id="bfm-pan-kat" title="Sol tuşla basılı tutup sürükleyerek faturayı kaydır · fare tekerleği de kaydırır"></div>` : `<div style="font-size:12px;color:var(--text3);padding:10px">Bu fatura için görsel bulunamadı.</div>`}
+          ${f.faturaNo ? faturaYedekLinklerHTML(f.faturaNo) + `<iframe id="bfm-onay-iframe" title="Fatura görseli"></iframe><div id="bfm-pan-kat" title="Sol tuşla basılı tutup sürükleyerek faturayı kaydır · fare tekerleği de kaydırır"></div>` : `<div style="font-size:12px;color:var(--text3);padding:10px">Bu fatura için görsel bulunamadı.</div>`}
         </div>
       </div>
       </div>` : ``}
     </div>`;
   document.body.appendChild(overlay);
   window._bfmAktifFatura = f;
+  if(f.faturaNo) faturaGorselIframeDoldur_("bfm-onay-iframe", f.faturaNo);
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
   bfmSutunSurukleKur_();
   f.kalemler.forEach((k,i)=>bfmSatirGuncelle(i));
