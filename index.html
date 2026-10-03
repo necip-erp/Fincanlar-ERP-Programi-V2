@@ -2979,8 +2979,16 @@ const CARI_API = "https://script.google.com/macros/s/AKfycbxlsbGdDPP42Cxm11jkDG7
 // deployment'a göre taze bir link kuruyoruz; bu link mevcut deployment değiştiği sürece
 // hep çalışır ve stored link'teki olası bozukluktan etkilenmez.
 const FATURA_OKUMA_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbysou4qEnAXeT1YFAuycdj3EA-eZ6alGlbHwQYe5SqmCq8jZCjJq2JGRYnyoTKk7VH9/exec";
-function faturaGorLinki(faturaNo, kompakt){
-  return FATURA_OKUMA_WEBAPP_URL + "?faturaHtml=" + encodeURIComponent(faturaNo) + "&authuser=0" + (kompakt ? "&kompakt=1" : "");
+function faturaGorLinki(faturaNo, kompakt, authuser){
+  // authuser: varsayılan 0 (ilk Google hesabı). Tarayıcıda birden çok Google hesabı açıksa fatura
+  // görseli yanlış hesapla açılıp "erişim yok" verebilir; yedek bağlantılar 1/2 ve hesapsız dener.
+  const au = (authuser === undefined) ? 0 : authuser;
+  return FATURA_OKUMA_WEBAPP_URL + "?faturaHtml=" + encodeURIComponent(faturaNo) + (au === null ? "" : "&authuser=" + au) + (kompakt ? "&kompakt=1" : "");
+}
+// Görsel gömülü (iframe) açılamıyorsa kullanılacak yedek bağlantılar (yeni sekmede, farklı hesap denemeleri).
+function faturaYedekLinklerHTML(faturaNo){
+  const a = (t, u)=>`<a href="${u}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;margin-right:8px">${t}</a>`;
+  return `<div style="font-size:11px;color:var(--text3);padding:4px 0">Görsel açılmıyorsa: ${a("Yeni sekmede aç", faturaGorLinki(faturaNo,false,0))}${a("2. hesapla dene", faturaGorLinki(faturaNo,false,1))}${a("Hesap seçmeden dene", faturaGorLinki(faturaNo,false,null))}</div>`;
 }
 
 let _cariYuklendi = false;
@@ -7670,6 +7678,7 @@ function bfmYanPanelAc(faturaNo){
       ${bfmZoomKontrolHTML("fyp-iframe","fyp-zoom-yuzde")}
       <button class="btn" onclick="bfmYanPanelKapat()">✕ Kapat</button>
     </div>
+    <div style="padding:0 10px">${faturaYedekLinklerHTML(faturaNo)}</div>
     <div class="fyp-govde"><iframe id="fyp-iframe" src="${faturaGorLinki(faturaNo, true)}" title="Fatura görseli"></iframe></div>`;
   document.body.appendChild(panel);
   bfmSigdir("fyp-iframe","fyp-zoom-yuzde");
@@ -8201,7 +8210,7 @@ function alisBekleyenOnayModalAc(faturaNo){
           ${f.faturaNo ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${bfmOdakKontrolHTML()}${bfmZoomKontrolHTML("bfm-onay-iframe","bfm-onay-zoom-yuzde")}</div>` : ``}
         </div>
         <div class="bfm-2col-sag-govde" id="bfm-odak-kutu">
-          ${f.faturaNo ? `<iframe id="bfm-onay-iframe" src="${faturaGorLinki(f.faturaNo, true)}" title="Fatura görseli"></iframe><div id="bfm-pan-kat" title="Sol tuşla basılı tutup sürükleyerek faturayı kaydır · fare tekerleği de kaydırır"></div>` : `<div style="font-size:12px;color:var(--text3);padding:10px">Bu fatura için görsel bulunamadı.</div>`}
+          ${f.faturaNo ? faturaYedekLinklerHTML(f.faturaNo) + `<iframe id="bfm-onay-iframe" src="${faturaGorLinki(f.faturaNo, true)}" title="Fatura görseli"></iframe><div id="bfm-pan-kat" title="Sol tuşla basılı tutup sürükleyerek faturayı kaydır · fare tekerleği de kaydırır"></div>` : `<div style="font-size:12px;color:var(--text3);padding:10px">Bu fatura için görsel bulunamadı.</div>`}
         </div>
       </div>
       </div>` : ``}
@@ -8222,13 +8231,13 @@ function alisBekleyenOnayModalAc(faturaNo){
 // stok kartını seçmen beklenir, bu yüzden "yeni stok kartı oluştur" seçeneği hiç gösterilmez.
 function bfmKalemSatiriHTML(k, i){
   const stokKoduHucre = k.birlesikMi ? `
-      <div style="display:flex;align-items:center;gap:4px">
-        <div style="position:relative;flex:1">
+      <div style="position:relative;min-width:150px">
           <input id="bfm-stokara-${i}" type="text" placeholder="Stok ara..." autocomplete="off" value="${k.stokKoduAdi||''}" style="width:100%"
                  oninput="bfmStokAramaDegisti(${i})" onfocus="bfmStokOneriGoster(${i})" onblur="setTimeout(()=>bfmStokOneriKapat(${i}),200)">
           <input type="hidden" id="bfm-stokkodu-${i}" value="${k.stokKodu||''}">
           <div id="bfm-stokoneri-${i}" class="fiyat-gecmis-kutu" style="display:none;position:absolute;z-index:20"></div>
-        </div>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:4px">
         <button type="button" class="btn" style="padding:2px 6px;font-size:11px" onclick="bfmStokRehberAc(${i})" title="Stok Rehberi (F2) — çift tıklanınca kodu satıra yazar ya da stok kartını açar (rehberin üstünden seçilir)">🔍</button>
         <button type="button" class="btn" style="padding:2px 6px;font-size:11px" onclick="bfmStokKartiAc(${i})" title="Seçili stok kartını aç">📇</button>
         <button type="button" class="btn" style="padding:2px 6px;font-size:11px" onclick="bfmYeniStokAc(${i})" title="Marka/Ürün Grubu/Alt Ürün Grubu seçerek 12 haneli kod öner ve yeni stok kartı aç">🔧</button>
@@ -8511,16 +8520,33 @@ function bfmGrupStokSor_(kalemler, n){
     if(kEl) kEl.value = kod; if(aEl) aEl.value = ad || "";
     bfmSatirGuncelle(i);
   };
-  kap.querySelectorAll("button[data-j]").forEach(b=>b.onclick = ()=>{ const c = adaylar[+b.dataset.j]; kodYaz(c.kod, c.ad); sonraki(); });
+  // Yeni stok kartı aç (kod + ad ön dolu, ad düzenlenebilir). Kaydedilirse kod birleşik satıra yazılır;
+  // kaydedilmeden kapatılırsa seçim ekranı yeniden açılır.
+  const yeniKartAc = (kod, ad)=>{
+    kapat();
+    _stokTanimSonKod = kod || ""; _stokTanimSonAd = ad || "";
+    let kaydedildi = false;
+    stokTanimModalAc(null, yeni=>{ if(yeni){ kaydedildi = true; kodYaz(yeni.stokKodu||kod||"", yeni.stokAdi||ad||""); } setTimeout(()=>bfmGrupStokSor_(kalemler, n+1), 0); }, kod || "");
+    const bekle = setInterval(()=>{
+      if(document.getElementById("stoktanim-modal-overlay")) return;
+      clearInterval(bekle);
+      setTimeout(()=>{ if(!kaydedildi){ window._stokTanimKaydedildiCB = null; bfmGrupStokSor_(kalemler, n); } }, 150);
+    }, 200);
+  };
+  kap.querySelectorAll("button[data-j]").forEach(b=>b.onclick = ()=>{
+    const c = adaylar[+b.dataset.j];
+    if(!c.kartVar){ yeniKartAc(c.kod, c.ad || k.urunAdi || ""); return; }
+    kodYaz(c.kod, c.ad); sonraki();
+  });
   kap.querySelector("#bfm-grup-sor-bos").onclick = sonraki;
   kap.querySelector("#bfm-grup-sor-rehber").onclick = ()=>{
     kapat();
     rehberAc("stok", st=>{ if(st) kodYaz(st.stokKodu||"", st.stokAdi||st.ad||""); setTimeout(()=>bfmGrupStokSor_(kalemler, n+1), 0); });
   };
   kap.querySelector("#bfm-grup-sor-yeni").onclick = ()=>{
-    kapat();
     const ipucu = (k.grupAdaylari && k.grupAdaylari[0] && k.grupAdaylari[0].kod) || "";
-    stokTanimModalAc(null, yeni=>{ if(yeni) kodYaz(yeni.stokKodu||"", yeni.stokAdi||""); setTimeout(()=>bfmGrupStokSor_(kalemler, n+1), 0); }, ipucu);
+    yeniKartAc("", k.urunAdi || "");
+    window._stokTanimFaturaKoduIpucu = ipucu;
   };
 }
 
