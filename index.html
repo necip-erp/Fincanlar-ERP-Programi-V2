@@ -2979,16 +2979,18 @@ const CARI_API = "https://script.google.com/macros/s/AKfycbxlsbGdDPP42Cxm11jkDG7
 // deployment'a göre taze bir link kuruyoruz; bu link mevcut deployment değiştiği sürece
 // hep çalışır ve stored link'teki olası bozukluktan etkilenmez.
 const FATURA_OKUMA_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbysou4qEnAXeT1YFAuycdj3EA-eZ6alGlbHwQYe5SqmCq8jZCjJq2JGRYnyoTKk7VH9/exec";
+// Tarayıcıda birden çok Google hesabı açıksa Google adresi "/macros/u/N/" ile yanlış hesaba yönlendirip
+// "dosyayı açamıyoruz" hatası verir. Doğru (uygulama sahibi) hesabın sırası burada saklanır; boşsa hesap zorlanmaz.
+function faturaAuthuserOku_(){ try{ const v = localStorage.getItem("faturaAuthuser"); return (v===null || v==="") ? null : parseInt(v,10); }catch(e){ return null; } }
+function faturaAuthuserKaydet(n){ try{ if(n===null) localStorage.removeItem("faturaAuthuser"); else localStorage.setItem("faturaAuthuser", String(n)); }catch(e){} alert(n===null ? "Hesap sırası temizlendi (hesap zorlanmayacak)." : "Fatura görselleri artık "+(n+1)+". Google hesabıyla (authuser="+n+") açılacak. Görseli yeniden aç."); }
 function faturaGorLinki(faturaNo, kompakt, authuser){
-  // authuser: varsayılan 0 (ilk Google hesabı). Tarayıcıda birden çok Google hesabı açıksa fatura
-  // görseli yanlış hesapla açılıp "erişim yok" verebilir; yedek bağlantılar 1/2 ve hesapsız dener.
-  const au = (authuser === undefined) ? null : authuser; // fatura uygulaması ANYONE_ANONYMOUS: hesap zorlamak (authuser=0) çoklu Google hesabında "dosya açılamıyor" hatası verir
+  const au = (authuser === undefined) ? faturaAuthuserOku_() : authuser;
   return FATURA_OKUMA_WEBAPP_URL + "?faturaHtml=" + encodeURIComponent(faturaNo) + (au === null ? "" : "&authuser=" + au) + (kompakt ? "&kompakt=1" : "");
 }
-// Görsel gömülü (iframe) açılamıyorsa kullanılacak yedek bağlantılar (yeni sekmede, farklı hesap denemeleri).
+// Görsel gömülü (iframe) açılamıyorsa: hesap sırasını bulup kaydetmek için yedek bağlantılar (yeni sekmede açılır).
 function faturaYedekLinklerHTML(faturaNo){
-  const a = (t, u)=>`<a href="${u}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;margin-right:8px">${t}</a>`;
-  return `<div style="font-size:11px;color:var(--text3);padding:4px 0">Görsel açılmıyorsa: ${a("Yeni sekmede aç", faturaGorLinki(faturaNo,false))}${a("1. hesapla dene", faturaGorLinki(faturaNo,false,0))}${a("2. hesapla dene", faturaGorLinki(faturaNo,false,1))}</div>`;
+  const a = (t, n)=>`<a href="${faturaGorLinki(faturaNo,false,n)}" target="_blank" rel="noopener" onclick="${n===null?"":`faturaAuthuserKaydet(${n})`}" style="color:var(--blue);text-decoration:underline;margin-right:8px" title="Açılırsa bu hesap sırası kaydedilir">${t}</a>`;
+  return `<div style="font-size:11px;color:var(--text3);padding:4px 0">Görsel açılmıyorsa hangi hesapla açıldığını seç (açılan kaydedilir): ${a("1. hesap",0)}${a("2. hesap",1)}${a("3. hesap",2)}${a("4. hesap",3)}<a href="#" onclick="faturaAuthuserKaydet(null);return false" style="color:var(--text3);text-decoration:underline">sıfırla</a></div>`;
 }
 
 let _cariYuklendi = false;
