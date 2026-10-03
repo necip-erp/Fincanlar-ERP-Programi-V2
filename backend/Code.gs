@@ -4718,9 +4718,20 @@ function cekSenetDurumGuncelle(body) {
     if (!ciroCariAd) return { ok: false, hata: "Ciro edilecek cari bulunamadı" };
 
     sheet.getRange(rowIdx, 14).setValue(ciroCariId);
+    // Kendi çek + müşteri çeki BİRLİKTE verildiyse (Çek/Senet > Ödeme) ortak Seri No, ortalama vade ve toplam
+    // cari hareket açıklamasına yazılır; çekin SERI_GRUP kolonu da (boşsa) doldurulur ki Seri No grubunda görünsün.
+    const topluSeriNo = String(body.topluSeriNo || "").trim();
+    let seriEk = "";
+    if (topluSeriNo) {
+      seriEk = " [Seri No: " + topluSeriNo + "]";
+      if (body.grupOrtalamaVade) seriEk += " (Ort. Vade: " + body.grupOrtalamaVade + ")";
+      if (body.grupToplamTutar) seriEk += " (Toplam: " + Utilities.formatString("%.2f", parseFloat(body.grupToplamTutar) || 0) + ")";
+      ensureCekSenetSeriGrupColonu(sheet);
+      if (!String(sheet.getRange(rowIdx, 18).getValue() || "").trim()) sheet.getRange(rowIdx, 18).setValue(topluSeriNo);
+    }
     cariHareketEkle({
       cariId: ciroCariId, tarih: Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"), tip: "Borç", tutar: kalanTutar,
-      aciklama: cariHareketAciklamaOlustur("CEKCIRO", id, "cek_ciro", body.aciklama),
+      aciklama: cariHareketAciklamaOlustur("CEKCIRO", id, "cek_ciro", (String(body.aciklama || "") + seriEk).trim()),
     });
   }
 

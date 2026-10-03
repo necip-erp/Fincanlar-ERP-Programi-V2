@@ -937,7 +937,30 @@ setInterval(topbarSaatGuncelle, 10000);
     </div>
   </div>
   <div class="modview" id="mod-ceksenet">
+    <div id="ceksenet-secim" class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Çek/Senet — Hangisini açmak istersin?</div>
+      <div class="modgrid" id="ceksenet-secim-grid" style="margin-top:14px"></div>
+    </div>
+
+    <div id="ceksenet-rapor-view" class="finans-panel" style="display:none;height:100%;overflow-y:auto">
+      <button class="cari-back-btn" style="display:inline-flex;padding:0 0 10px" onclick="cekSenetAnaSecimeDon()">← Çek/Senet seçimine dön</button>
+      <div class="rapor-baslik" style="margin-top:0">📊 Çek/Senet Raporu</div>
+      <div class="rapor-filtre" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:10px 0">
+        <div class="fld"><label>Tür</label><select id="csr-tip" onchange="cekSenetRaporCiz()"><option value="">Hepsi</option><option value="Alınan">📥 Müşteri Çeklerim</option><option value="Verilen">📤 Kendi Çeklerim</option></select></div>
+        <div class="fld"><label>Durum</label><select id="csr-durum" onchange="cekSenetRaporCiz()"><option value="Portföyde" selected>Portföyde (açık)</option><option value="">Tümü</option><option value="Tahsil Edildi">Tahsil Edildi</option><option value="Ödendi">Ödendi</option><option value="Ciro Edildi">Ciro Edildi</option><option value="Karşılıksız">Karşılıksız</option></select></div>
+        <div class="fld"><label>Vade (başlangıç)</label><input id="csr-bas" type="date" onchange="cekSenetRaporCiz()"></div>
+        <div class="fld"><label>Vade (bitiş)</label><input id="csr-bit" type="date" onchange="cekSenetRaporCiz()"></div>
+        <div class="fld"><label>Cari ara</label><input id="csr-ara" type="text" placeholder="Cari adı / seri no" oninput="cekSenetRaporCiz()"></div>
+        <div class="fld"><button type="button" class="btn" onclick="cekSenetRaporYenile()">↻ Yenile</button></div>
+        <div class="fld"><button type="button" class="btn" onclick="cekSenetRaporExcel()">📊 Excel'e Aktar</button></div>
+      </div>
+      <div id="csr-ozet"></div>
+      <div id="csr-liste"></div>
+    </div>
+
+    <div id="ceksenet-liste-view" style="display:none;height:100%;flex-direction:row">
     <div class="cari-list-panel">
+      <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="cekSenetAnaSecimeDon()">← Çek/Senet seçimine dön</button>
       <div class="belge-tipi-sekmeler">
         <button class="belge-tab active" data-tip="Alınan" onclick="cekSenetTipDegistir('Alınan')" title="Müşteriden aldığım çekler">📥 Müşteri Çeklerim<br><small style="font-weight:500;opacity:.75">(aldıklarım)</small></button>
         <button class="belge-tab" data-tip="Verilen" onclick="cekSenetTipDegistir('Verilen')" title="Tedarikçiye kendi çekimi verdim">📤 Kendi Çeklerim<br><small style="font-weight:500;opacity:.75">(verdiklerim)</small></button>
@@ -945,7 +968,7 @@ setInterval(topbarSaatGuncelle, 10000);
       <div id="ceksenet-tip-not" class="cs-tip-not"></div>
       <div class="cari-list-head">
         <input id="ceksenet-ara" placeholder="Çek/senet ara (cari, seri no)..." oninput="cekSenetAramaFiltrele(this.value)">
-        <button class="cari-add-btn" onclick="cekKocaniModalAc()" title="Çek koçanları (bankadan alınan boş çek yaprakları)" style="font-size:15px">📒</button>
+        <button class="cari-add-btn" id="ceksenet-kocan-btn" onclick="cekKocaniModalAc()" title="Çek koçanları (bankadan alınan boş çek yaprakları) — sadece Kendi Çeklerim için" style="font-size:15px;display:none">📒</button>
         <button class="cari-add-btn" onclick="cekSenetModalAc()" title="Yeni çek/senet">+</button>
       </div>
       <div class="cs-sirala-bar" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12.5px">
@@ -965,6 +988,7 @@ setInterval(topbarSaatGuncelle, 10000);
     </div>
     <div class="cari-detail-panel" id="ceksenet-detail-panel">
       <div class="cari-detail-empty"><span class="ic">🧾</span><p>Detayları görmek için soldan bir çek/senet seçin</p></div>
+    </div>
     </div>
   </div>
   <div class="modview" id="mod-alis">
@@ -1745,6 +1769,11 @@ const ALT_MODUL_TANIM = {
     {alt:"iade",     ic:"↩️", lbl:"İade",             desc:"Tedarikçiye yapılan iade kayıtları"},
     {alt:"bekleyen", ic:"📨", lbl:"Bekleyen Faturalar", desc:"Gelen e-Fatura'lardan onay bekleyenler"},
   ],
+  ceksenet: [
+    {alt:"tahsilat", ic:"📥", lbl:"Tahsilat",   desc:"Müşteri çeklerim: tahsil et, ciro et"},
+    {alt:"odeme",    ic:"📤", lbl:"Ödeme",      desc:"Kendi çekim + müşteri çekini birlikte ver, kendi çeklerim"},
+    {alt:"rapor",    ic:"📊", lbl:"Raporlama",  desc:"Vade, ortalama vade ve durum raporu"},
+  ],
   satis: [
     {alt:"Fatura",   ic:"🧾", lbl:"Fatura",   desc:"Kesilen satış faturaları"},
     {alt:"Teklif",   ic:"📝", lbl:"Teklif",   desc:"Müşteriye verilen teklifler"},
@@ -1752,10 +1781,10 @@ const ALT_MODUL_TANIM = {
     {alt:"Iade",     ic:"↩️", lbl:"İade",     desc:"Müşteriden geri alınan mal iadesi"},
   ],
 };
-const ALT_MODUL_FN = { stok:"stokAltModulAc", alis:"alisAltModulAc", satis:"satisAltModulAc" };
-const ALT_MODUL_GRID = { stok:"stok-secim-grid", alis:"alis-secim-grid", satis:"satis-secim-grid" };
+const ALT_MODUL_FN = { stok:"stokAltModulAc", alis:"alisAltModulAc", satis:"satisAltModulAc", ceksenet:"cekSenetAltModulAc" };
+const ALT_MODUL_GRID = { stok:"stok-secim-grid", alis:"alis-secim-grid", satis:"satis-secim-grid", ceksenet:"ceksenet-secim-grid" };
 // Alt modül kartları, ait oldukları ana modülün rengini taşır (bkz. MODULLER).
-const ALT_MODUL_RENK = { stok:"blue", alis:"red", satis:"green" };
+const ALT_MODUL_RENK = { stok:"blue", alis:"red", satis:"green", ceksenet:"yellow" };
 let _altSurukleneAnahtar = null, _altSurukleneAlt = null;
 function altModulSirasiniAl(anahtar){
   const ogeler = ALT_MODUL_TANIM[anahtar];
@@ -9883,13 +9912,110 @@ function cekSenetSirala_(liste, kural){
   return kiyas ? kopya.sort(kiyas) : liste;   // sort kararlı: eşitlerde kayıt sırası korunur
 }
 function cekSenetTipDegistir(tip){
+  cekSenetListeGorunumuAc_();
   _cekSenetAktifTip = tip;
+  // Çek koçanı sadece KENDİ çeklerimize (verdiklerimiz) aittir; müşteri çeklerinde gösterilmez.
+  const kocanBtn = document.getElementById("ceksenet-kocan-btn");
+  if(kocanBtn) kocanBtn.style.display = (tip === "Verilen") ? "" : "none";
   cekSenetTipNotuYaz_();
   const siralaEl = document.getElementById("ceksenet-sirala");
   if(siralaEl) siralaEl.value = cekSenetSiralaOku_(tip);
   _cekSenetTopluSecim.clear();
   document.querySelectorAll("#mod-ceksenet .belge-tab").forEach(b=>b.classList.toggle("active", b.dataset.tip===tip));
   cekSenetListesiCiz();
+}
+
+// ══════════════ ÇEK/SENET ALT MODÜLLERİ (Tahsilat / Ödeme / Raporlama) — 3 Eki 2026 ══════════════
+function cekSenetGorunumleriGizle_(){
+  ["ceksenet-secim","ceksenet-rapor-view","ceksenet-liste-view"].forEach(id=>{ const e = document.getElementById(id); if(e) e.style.display = "none"; });
+}
+// Liste görünümü açık değilse (seçim ekranı/rapor açıkken) listeye geçer — doğrudan cekSenetAc / cekSenetTipDegistir
+// çağıran eski kısayollar (Hızlı Erişim, cari hareketten "Çeki aç" vb.) bozulmasın diye.
+function cekSenetListeGorunumuAc_(){
+  const v = document.getElementById("ceksenet-liste-view");
+  if(!v || v.style.display === "flex") return;
+  cekSenetGorunumleriGizle_();
+  v.style.display = "flex";
+}
+function cekSenetAnaSecimeDon(){
+  cekSenetGorunumleriGizle_();
+  document.getElementById("ceksenet-secim").style.display = "block";
+  const m = document.getElementById("mod-ceksenet"); if(m) m.classList.remove("detay-acik");
+}
+function cekSenetAltModulAc(hangisi){
+  if(!_cekSenetYuklendi) cekSenetListesiYukle();
+  if(hangisi === "tahsilat"){
+    cekSenetTipDegistir("Alınan");
+  } else if(hangisi === "odeme"){
+    // Ödeme = Kendi Çeklerim listesi + "Yeni Çek" penceresi: aynı cariye kendi çekini ve müşteri çekini birlikte verirsin.
+    cekSenetTipDegistir("Verilen");
+    cekSenetModalAc();
+  } else if(hangisi === "rapor"){
+    cekSenetGorunumleriGizle_();
+    document.getElementById("ceksenet-rapor-view").style.display = "block";
+    cekSenetRaporYenile();
+  }
+}
+let _csrSon = [];
+function cekSenetRaporYenile(){
+  cariApi("getCekSenetListesi").then(res=>{
+    if(res && res.ok){ _cekSenetListe = res.cekSenetler; onbellekYaz("cekSenetListesi", res.cekSenetler); }
+    cekSenetRaporCiz();
+  }).catch(()=>cekSenetRaporCiz());
+}
+function cekSenetRaporCiz(){
+  const ozetEl = document.getElementById("csr-ozet"), listeEl = document.getElementById("csr-liste");
+  if(!ozetEl || !listeEl) return;
+  const tip = document.getElementById("csr-tip").value, durum = document.getElementById("csr-durum").value;
+  const bas = document.getElementById("csr-bas").value, bit = document.getElementById("csr-bit").value;
+  const norm = (m)=>String(m||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
+  const q = norm(document.getElementById("csr-ara").value.trim());
+  const tutarDeg = (c)=> c.durum === "Portföyde" ? (c.kalanTutar||0) : (c.tutar||0);
+  const liste = _cekSenetListe.filter(c=>(!tip || c.tip===tip) && (!durum || c.durum===durum)
+      && (!bas || (c.vade && c.vade >= bas)) && (!bit || (c.vade && c.vade <= bit))
+      && (!q || norm(c.cariAd).includes(q) || norm(c.seriNo).includes(q)))
+    .sort((a,b)=>String(a.vade||"9999").localeCompare(String(b.vade||"9999")));
+  _csrSon = liste;
+  const toplam = liste.reduce((a,c)=>a+tutarDeg(c),0);
+  const ort = csmOrtVadeHesapla_(liste.map(c=>({tutar: tutarDeg(c), vade: c.vade})));
+  const basit = (()=>{ const ms = liste.map(c=>c.vade?new Date(c.vade+"T00:00:00").getTime():NaN).filter(x=>!isNaN(x)); return ms.length ? tarihIsoYaz_(new Date(ms.reduce((a,b)=>a+b,0)/ms.length)) : ""; })();
+  const gecikmis = liste.filter(c=>c.durum==="Portföyde" && c.gecikmis);
+  const bugun = tarihIsoYaz_(new Date());
+  const otuz = tarihIsoYaz_(new Date(Date.now()+30*86400000));
+  const otuzGun = liste.filter(c=>c.durum==="Portföyde" && c.vade && c.vade >= bugun && c.vade <= otuz);
+  ozetEl.innerHTML = `<div class="finans-kartlar">
+      <div class="finans-kart"><div class="lbl">Adet</div><div class="num">${liste.length}</div></div>
+      <div class="finans-kart"><div class="lbl">Toplam Tutar</div><div class="num">${paraFormat(toplam)}</div></div>
+      <div class="finans-kart"><div class="lbl">Ortalama Vade (tutar ağırlıklı)</div><div class="num">${ort ? tarihGoster(ort.str) : '—'}</div>${ort?`<div style="font-size:12px;color:var(--text3)">${ort.gun>=0?ort.gun+' gün sonra':Math.abs(ort.gun)+' gün önce'}${basit?' · basit ort.: '+tarihGoster(basit):''}</div>`:''}</div>
+      <div class="finans-kart ${gecikmis.length?'neg':''}"><div class="lbl">Vadesi Geçmiş</div><div class="num">${gecikmis.length} adet · ${paraFormat(gecikmis.reduce((a,c)=>a+tutarDeg(c),0))}</div></div>
+      <div class="finans-kart"><div class="lbl">Önümüzdeki 30 Gün</div><div class="num">${otuzGun.length} adet · ${paraFormat(otuzGun.reduce((a,c)=>a+tutarDeg(c),0))}</div></div>
+    </div>`;
+  if(!liste.length){ listeEl.innerHTML = '<div class="cari-empty">Bu filtreyle çek/senet yok.</div>'; return; }
+  const aylar = {};
+  liste.forEach(c=>{ const k = c.vade ? c.vade.slice(0,7) : "Vadesiz"; (aylar[k] = aylar[k] || {adet:0, tutar:0}); aylar[k].adet++; aylar[k].tutar += tutarDeg(c); });
+  const ayHtml = Object.keys(aylar).sort().map(k=>`<tr><td>${k==='Vadesiz'?k:k.slice(5)+'/'+k.slice(0,4)}</td><td style="text-align:right">${aylar[k].adet}</td><td style="text-align:right">${paraFormat(aylar[k].tutar)}</td></tr>`).join("");
+  listeEl.innerHTML = `
+    <div class="rapor-baslik">Aylara Göre Vade Dağılımı</div>
+    <table class="rapor-tbl" style="max-width:420px"><thead><tr><th>Ay</th><th style="text-align:right">Adet</th><th style="text-align:right">Tutar</th></tr></thead><tbody>${ayHtml}</tbody></table>
+    <div class="rapor-baslik">Liste (vade sırasına göre)</div>
+    <div style="overflow-x:auto"><table class="rapor-tbl"><thead><tr><th>Cari</th><th>Tür</th><th>Çek No</th><th>Banka</th><th>Düzenlenme</th><th>Vade</th><th style="text-align:right">Tutar</th><th>Durum</th></tr></thead>
+    <tbody>${liste.map(c=>`<tr style="cursor:pointer" onclick="cekSenetAc('${htmlKacis(c.id)}')">
+      <td>${htmlKacis(c.cariAd)}</td><td>${c.tip==='Alınan'?'📥 Müşteri':'📤 Kendi'}</td><td>${htmlKacis(c.seriNo||'—')}</td><td>${htmlKacis(c.bankaAdi||'—')}</td>
+      <td>${c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):'—'}</td><td>${c.vade?tarihGoster(c.vade):'—'}</td>
+      <td style="text-align:right">${paraFormat(tutarDeg(c))}</td><td>${cekSenetDurumEtiket(c)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function cekSenetRaporExcel(){
+  if(typeof XLSX === "undefined"){ alert("Excel kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin."); return; }
+  if(!_csrSon.length){ alert("Aktarılacak kayıt yok."); return; }
+  const aoa = [["Cari","Tür","Çek No","Banka","Düzenlenme","Vade","Tutar","Durum"]];
+  _csrSon.forEach(c=>aoa.push([c.cariAd, c.tip==="Alınan"?"Müşteri Çeki":"Kendi Çek", c.seriNo||"", c.bankaAdi||"",
+    c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):"", c.vade?tarihGoster(c.vade):"",
+    c.durum==="Portföyde"?(c.kalanTutar||0):(c.tutar||0), c.durum]));
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [{wch:32},{wch:14},{wch:14},{wch:18},{wch:12},{wch:12},{wch:14},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Çek-Senet");
+  XLSX.writeFile(wb, "Cek_Senet_Raporu.xlsx");
 }
 
 function cekSenetDurumEtiket(c){
@@ -10002,6 +10128,7 @@ function cekSenetTopluOdemeKaydet(){
 function cekSenetAramaFiltrele(){ cekSenetListesiCiz(); }
 
 function cekSenetAc(id){
+  cekSenetListeGorunumuAc_();
   _cekSenetSecili = id;
   document.getElementById("mod-ceksenet").classList.add("detay-acik");
   cariApi("getCekSenetDetay", {id}).then(res=>{
@@ -10304,6 +10431,7 @@ function cekSenetIslemKaydet(){
 // tanımlanmış BOŞ yapraklardan seçilir (bkz. 📒 Çek Koçanları). Her satıra ayrı, ayrıca hepsine ortak görsel eklenebilir;
 // görseller kayıttan sonra yüklenir ve Cari hareketteki 🖼️ düğmesinden görülür.
 let _csmSatirlar = [], _csmTopluDosyalar = [], _csmYapraklar = [], _csmBankalar = [], _csmHesaplar = [], _csmKaydediliyor = false;
+let _csmCiroSecim = new Set(), _csmCiroAra = "";   // Verilen çekle birlikte ciro edilecek müşteri çekleri
 
 function csmYeniSatir_(oncekiSatir){
   return {
@@ -10318,6 +10446,7 @@ function cekSenetModalAc(onCariId){
   if(!_cariYuklendi) cariListesiYukle();
   if(document.getElementById("ceksenet-modal-overlay")) return;
   _csmSatirlar = [csmYeniSatir_(null)]; _csmTopluDosyalar = []; _csmYapraklar = []; _csmBankalar = []; _csmHesaplar = []; _csmKaydediliyor = false;
+  _csmCiroSecim = new Set(); _csmCiroAra = "";
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "ceksenet-modal-overlay";
@@ -10376,6 +10505,7 @@ function cekSenetModalAc(onCariId){
           <input type="file" accept="image/*" multiple style="display:none" onchange="csmTopluGorselSec(event)"></label>
       </div>
       <div id="csm-satirlar" style="overflow-x:auto"></div>
+      <div id="csm-ciro"></div>
       <div id="csm-toplam" style="text-align:right;font-weight:800;margin:8px 2px"></div>
       <div id="csm-durum" style="font-size:12.5px;color:var(--text2);min-height:16px"></div>
       <div class="om-aksiyon">
@@ -10385,6 +10515,8 @@ function cekSenetModalAc(onCariId){
     </div>`;
   document.body.appendChild(overlay);
   csmSatirlariCiz();
+  csmCiroCiz_();
+  cariApi("getCekSenetListesi").then(res=>{ if(res && res.ok){ _cekSenetListe = res.cekSenetler; csmCiroCiz_(); csmToplamGuncelle(); } }).catch(()=>{});
   // Bankalar (tanımlı) + boş çek yaprakları
   cariApiYapi("getBankaYapisi").then(res=>{ if(res && res.ok){ _csmBankalar = res.bankalar || []; _csmHesaplar = res.hesaplar || []; csmSatirlariCiz(); } }).catch(()=>{});
   csmYapraklariYukle_();
@@ -10398,6 +10530,8 @@ function csmYapraklariYukle_(){
 
 function csmTip_(){ const el = document.getElementById("csm-tip"); return el ? el.value : "Alınan"; }
 function csmTipDegisti(){
+  if(csmTip_() !== "Verilen") _csmCiroSecim.clear();
+  csmCiroCiz_();
   _csmSatirlar.forEach(s=>{ s.yaprakId = ""; if(csmTip_()==="Verilen" && s.bankaId) csmYaprakOtoSec_(s); });
   csmSatirlariCiz();
 }
@@ -10453,7 +10587,7 @@ function csmSatirlariCiz(){
       <td>${bankaHucre}</td>
       <td>${verilen?hesapHucre:''}</td>
       <td>${noHucre}</td>
-      <td><input type="date" value="${htmlKacis(s.vade)}" onchange="_csmSatirlar[${i}].vade=this.value"></td>
+      <td><input type="date" value="${htmlKacis(s.vade)}" onchange="_csmSatirlar[${i}].vade=this.value; csmToplamGuncelle()"></td>
       <td><input type="text" inputmode="decimal" class="csm-satir-tutar" ${i===0?'id="csm-tutar"':''} value="${htmlKacis(String(s.tutar||''))}" placeholder="0,00" style="text-align:right" oninput="_csmSatirlar[${i}].tutar=this.value; csmToplamGuncelle()" onchange="_csmSatirlar[${i}].tutar=this.value; csmToplamGuncelle()"></td>
       <td style="white-space:nowrap"><label class="btn" style="margin:0;padding:4px 9px;font-size:12px;cursor:pointer" title="Bu çek/senede görsel ekle">📷${gorselSay?' '+gorselSay:''}<input type="file" accept="image/*" multiple style="display:none" onchange="csmSatirGorselSec(event,${i})"></label>${gorselSay?` <span style="cursor:pointer;color:var(--red)" title="Bu satırın görsellerini kaldır" onclick="_csmSatirlar[${i}].dosyalar=[]; csmSatirlariCiz()">✕</span>`:''}</td>
       <td style="text-align:center"><span style="cursor:pointer;color:var(--red);font-weight:800" title="Satırı sil" onclick="csmSatirSil(${i})">✕</span></td>
@@ -10469,11 +10603,76 @@ function csmSatirlariCiz(){
   const say = document.getElementById("csm-toplu-say"); if(say) say.textContent = _csmTopluDosyalar.length ? "("+_csmTopluDosyalar.length+")" : "";
 }
 
+// Tutar ağırlıklı ortalama vade: Σ(tutar × vade) / Σ(tutar). ogeler: [{tutar, vade:"YYYY-MM-DD"}]
+function csmOrtVadeHesapla_(ogeler){
+  let tt = 0, tm = 0, say = 0;
+  ogeler.forEach(o=>{
+    const t = parseFloat(String(o.tutar).replace(",",".")) || 0;
+    const ms = o.vade ? new Date(o.vade+"T00:00:00").getTime() : NaN;
+    if(t > 0 && !isNaN(ms)){ tt += t; tm += t*ms; say++; }
+  });
+  if(!say) return null;
+  const d = new Date(tm/tt);
+  const bugun = new Date(); bugun.setHours(0,0,0,0);
+  return { str: tarihIsoYaz_(d), gun: Math.round((d.getTime()-bugun.getTime())/86400000), say };
+}
+function csmCiroAdaylari_(){
+  return _cekSenetListe.filter(c=>c.tip==="Alınan" && c.durum==="Portföyde" && (c.kalanTutar||0) > 0)
+    .sort((a,b)=>String(a.vade||"9999").localeCompare(String(b.vade||"9999")));
+}
+function csmSeciliCiroCekler_(){
+  if(csmTip_() !== "Verilen") return [];
+  const aday = csmCiroAdaylari_();
+  return aday.filter(c=>_csmCiroSecim.has(c.id));
+}
 function csmToplamGuncelle(){
   const el = document.getElementById("csm-toplam");
   if(!el) return;
-  const t = _csmSatirlar.reduce((a,s)=>a+(parseFloat(String(s.tutar).replace(",","."))||0),0);
-  el.textContent = _csmSatirlar.length+" adet — Toplam: "+paraFormat(t);
+  const kendiOge = _csmSatirlar.map(s=>({tutar: s.tutar, vade: s.vade}));
+  const kendiT = _csmSatirlar.reduce((a,s)=>a+(parseFloat(String(s.tutar).replace(",","."))||0),0);
+  const kendiSay = _csmSatirlar.filter(s=>(parseFloat(String(s.tutar).replace(",","."))||0) > 0).length;
+  const ciro = csmSeciliCiroCekler_();
+  const ciroT = ciro.reduce((a,c)=>a+(c.kalanTutar||0),0);
+  const ortOge = kendiOge.concat(ciro.map(c=>({tutar: c.kalanTutar, vade: c.vade})));
+  const ort = csmOrtVadeHesapla_(ortOge);
+  if(!ciro.length && !ort){ el.textContent = _csmSatirlar.length+" adet — Toplam: "+paraFormat(kendiT); return; }
+  const ortYazi = ort ? `<span style="display:inline-block;margin-left:14px;padding:3px 10px;border-radius:8px;background:var(--bg3)">Ortalama Vade: <b>${tarihGoster(ort.str)}</b> <span style="font-weight:600;color:var(--text2)">(${ort.gun>=0 ? ort.gun+" gün sonra" : Math.abs(ort.gun)+" gün önce"})</span></span>` : "";
+  el.innerHTML = (ciro.length
+    ? `Kendi çek: ${kendiSay} adet ${paraFormat(kendiT)} · Müşteri çeki: ${ciro.length} adet ${paraFormat(ciroT)} · Genel Toplam: <b>${paraFormat(kendiT+ciroT)}</b>`
+    : `${_csmSatirlar.length} adet — Toplam: ${paraFormat(kendiT)}`) + ortYazi;
+}
+// "Müşteri çeklerinden de ver (ciro)" bölümü — yalnızca Verilen (Kendi çekim) seçiliyken görünür
+function csmCiroCiz_(){
+  const kap = document.getElementById("csm-ciro");
+  if(!kap) return;
+  if(csmTip_() !== "Verilen"){ kap.innerHTML = ""; return; }
+  kap.innerHTML = `
+    <div style="margin:10px 0 6px;padding-top:8px;border-top:1px dashed var(--border)">
+      <div style="font-weight:800;margin-bottom:4px">↪️ Müşteri çeklerinden de ver (ciro) <span style="font-weight:400;font-size:12px;color:var(--text2)">— seçtiğin portföy çekleri yukarıdaki cariye ciro edilir; kendi çeklerinle birlikte ortalama vade hesaplanır</span></div>
+      <input id="csm-ciro-ara" type="text" placeholder="Müşteri adı / çek no ile ara..." value="${htmlKacis(_csmCiroAra)}" style="width:100%;max-width:340px;margin-bottom:6px" oninput="_csmCiroAra=this.value; csmCiroListeCiz_()">
+      <div id="csm-ciro-liste" style="max-height:220px;overflow:auto"></div>
+    </div>`;
+  csmCiroListeCiz_();
+}
+function csmCiroListeCiz_(){
+  const kap = document.getElementById("csm-ciro-liste");
+  if(!kap) return;
+  const q = (_csmCiroAra||"").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
+  const norm = (m)=>String(m||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
+  const aday = csmCiroAdaylari_().filter(c=>!q || norm(c.cariAd).includes(q) || norm(c.seriNo).includes(q));
+  if(!aday.length){ kap.innerHTML = '<div class="cari-empty">'+(_cekSenetYuklendi||_cekSenetListe.length ? 'Portföyde ciro edilebilir müşteri çeki yok.' : 'Yükleniyor...')+'</div>'; return; }
+  kap.innerHTML = `<table class="rapor-tbl" style="min-width:560px">
+    <thead><tr><th style="width:34px"></th><th>Müşteri</th><th>Çek No</th><th>Banka</th><th>Vade</th><th style="text-align:right">Tutar</th></tr></thead>
+    <tbody>${aday.map(c=>`<tr style="cursor:pointer" onclick="csmCiroToggle('${htmlKacis(c.id)}')">
+      <td style="text-align:center"><input type="checkbox" ${_csmCiroSecim.has(c.id)?'checked':''} onclick="event.stopPropagation()" onchange="csmCiroToggle('${htmlKacis(c.id)}')"></td>
+      <td>${htmlKacis(c.cariAd)}</td><td>${htmlKacis(c.seriNo||'—')}</td><td>${htmlKacis(c.bankaAdi||'—')}</td>
+      <td>${c.vade?tarihGoster(c.vade):'—'}${c.gecikmis?' <span class="hk-borc">⚠️</span>':''}</td>
+      <td style="text-align:right">${paraFormat(c.kalanTutar)}</td></tr>`).join("")}</tbody></table>`;
+}
+function csmCiroToggle(id){
+  if(_csmCiroSecim.has(id)) _csmCiroSecim.delete(id); else _csmCiroSecim.add(id);
+  csmCiroListeCiz_();
+  csmToplamGuncelle();
 }
 
 function csmBankaSecildi(i, bankaId){
@@ -10576,7 +10775,7 @@ function csmTopluGorselSec(evt){
 // bu modal için özel olarak açıldı.
 function cekSenetModalKapat(){
   if(_csmKaydediliyor){ alert("Kayıt sürüyor, lütfen bitmesini bekleyin."); return; }
-  const dolu = _csmSatirlar.some(s=>s.tutar || s.dosyalar.length || s.seriNo || s.yaprakId) || _csmTopluDosyalar.length;
+  const dolu = _csmSatirlar.some(s=>s.tutar || s.dosyalar.length || s.seriNo || s.yaprakId) || _csmTopluDosyalar.length || _csmCiroSecim.size;
   if(dolu && document.getElementById("ceksenet-modal-overlay") && !confirm("Girilen bilgiler kaydedilmedi. Pencere kapatılsın mı?")) return;
   const el = document.getElementById("ceksenet-modal-overlay");
   if(el) el.remove();
@@ -10626,8 +10825,12 @@ function cekSenetKaydet(){
   if(!cariId){ alert("Lütfen cari seçin"); return; }
   const tip = document.getElementById("csm-tip").value;
   const yaprakli = (s)=> tip==="Verilen" && s.belgeTuru==="Çek";
-  for(let i=0;i<_csmSatirlar.length;i++){
-    const s = _csmSatirlar[i], no = (i+1)+". satır: ";
+  // Kendi çekle birlikte ciro edilecek müşteri çekleri (sadece Verilen). Ciro seçildiyse tamamen boş kalan kendi çek satırları yok sayılır.
+  const ciroListe = csmSeciliCiroCekler_();
+  const satirBos = (s)=>!String(s.tutar||"").trim() && !s.vade && !s.bankaId && !s.yaprakId && !s.seriNo;
+  const satirlarK = ciroListe.length ? _csmSatirlar.filter(s=>!satirBos(s)) : _csmSatirlar;
+  for(let i=0;i<satirlarK.length;i++){
+    const s = satirlarK[i], no = (i+1)+". satır: ";
     const tutar = parseFloat(String(s.tutar).replace(",",".")) || 0;
     if(tutar <= 0){ alert(no+"Tutar sıfırdan büyük olmalı"); return; }
     if(!s.vade){ alert(no+"Vade tarihi gerekli"); return; }
@@ -10638,20 +10841,24 @@ function cekSenetKaydet(){
     if(yaprakli(s) && !s.yaprakId){ alert(no+"Çek numarası çek koçanından (boş yapraklardan) seçilmeli. Yaprak yoksa '📒 Çek Koçanı Tanımla' ile ekleyin."); return; }
   }
   const yaprakSay = {};
-  for(const s of _csmSatirlar){ if(s.yaprakId){ if(yaprakSay[s.yaprakId]){ alert("Aynı çek yaprağı birden fazla satırda seçilmiş."); return; } yaprakSay[s.yaprakId] = 1; } }
-  const toplam = _csmSatirlar.reduce((a,s)=>a+(parseFloat(String(s.tutar).replace(",","."))||0),0);
+  for(const s of satirlarK){ if(s.yaprakId){ if(yaprakSay[s.yaprakId]){ alert("Aynı çek yaprağı birden fazla satırda seçilmiş."); return; } yaprakSay[s.yaprakId] = 1; } }
+  const kendiToplam = satirlarK.reduce((a,s)=>a+(parseFloat(String(s.tutar).replace(",","."))||0),0);
+  const ciroToplam = ciroListe.reduce((a,c)=>a+(c.kalanTutar||0),0);
+  const toplam = kendiToplam + ciroToplam;
   const cariAd = document.getElementById("csm-cari-arama").value;
-  if(!confirm(cariAd+"\n"+_csmSatirlar.length+" adet "+tip+" çek/senet kaydedilecek.\nToplam: "+paraFormat(toplam)+"\n\nOnaylıyor musunuz?")) return;
+  const ortOnay = csmOrtVadeHesapla_(satirlarK.map(s=>({tutar:s.tutar, vade:s.vade})).concat(ciroListe.map(c=>({tutar:c.kalanTutar, vade:c.vade}))));
+  if(!confirm(cariAd+"\n"+(satirlarK.length ? satirlarK.length+" adet "+tip+" çek/senet kaydedilecek.\n" : "")+(ciroListe.length ? ciroListe.length+" adet müşteri çeki ciro edilecek ("+paraFormat(ciroToplam)+").\n" : "")+"Toplam: "+paraFormat(toplam)+(ortOnay ? "\nOrtalama vade: "+tarihGoster(ortOnay.str) : "")+"\n\nOnaylıyor musunuz?")) return;
 
   // Birden fazla satır aynı işlemde birlikte veriliyor/alınıyorsa (toplu), kullanıcı boş bırakırsa
   // otomatik bir Seri No üretilir; tüm satırlara ortak yazılır ki cari harekette birlikte görülebilsin
   // ve ortalama vade + toplam tutar açıklamaya eklensin (25 Eyl 2026).
   let topluSeriNo = (document.getElementById("csm-seri-no").value || "").trim();
-  if(!topluSeriNo && _csmSatirlar.length > 1) topluSeriNo = "TOPLU-" + Date.now();
+  if(!topluSeriNo && (satirlarK.length + ciroListe.length) > 1) topluSeriNo = "TOPLU-" + Date.now();
   let grupOrtalamaVade = "", grupToplamTutar = "";
   if(topluSeriNo){
-    const vadeMsler = _csmSatirlar.map(s=>new Date(s.vade).getTime()).filter(v=>!isNaN(v));
-    if(vadeMsler.length) grupOrtalamaVade = new Date(vadeMsler.reduce((a,b)=>a+b,0)/vadeMsler.length).toISOString().slice(0,10);
+    // Tutar ağırlıklı ortalama vade (kendi çekler + ciro edilen müşteri çekleri birlikte)
+    const ortGrup = csmOrtVadeHesapla_(satirlarK.map(s=>({tutar:s.tutar, vade:s.vade})).concat(ciroListe.map(c=>({tutar:c.kalanTutar, vade:c.vade}))));
+    if(ortGrup) grupOrtalamaVade = ortGrup.str;
     grupToplamTutar = toplam;
   }
 
@@ -10666,7 +10873,8 @@ function cekSenetKaydet(){
   _csmKaydediliyor = true; btn.disabled = true;
   const yazDurum = (m)=>{ if(durum) durum.textContent = m; };
   const olusanIdler = [], basarili = new Set(), hatalar = [], gorselHatalari = [];
-  const satirlar = _csmSatirlar.slice();
+  const satirlar = satirlarK.slice();
+  const ciroBasarili = [];
 
   (async ()=>{
     for(let i=0;i<satirlar.length;i++){
@@ -10691,6 +10899,15 @@ function cekSenetKaydet(){
         }
       }catch(err){ hatalar.push((i+1)+". satır: bağlantı hatası ("+err.message+")"); }
     }
+    for(let k=0;k<ciroListe.length;k++){
+      const c = ciroListe[k];
+      yazDurum("Müşteri çeki ciro ediliyor: "+(k+1)+" / "+ciroListe.length+"...");
+      try{
+        const r4 = await cariApi("cekSenetDurumGuncelle", {id: c.id, durum: "Ciro Edildi", ciroCariId: cariId, aciklama: ortak.aciklama, topluSeriNo, grupOrtalamaVade, grupToplamTutar});
+        if(r4 && r4.ok){ ciroBasarili.push(c.id); c.durum = "Ciro Edildi"; _csmCiroSecim.delete(c.id); }
+        else hatalar.push("Müşteri çeki ("+c.cariAd+" "+(c.seriNo||"")+"): "+((r4&&r4.hata)||"ciro edilemedi"));
+      }catch(err){ hatalar.push("Müşteri çeki ("+c.cariAd+"): bağlantı hatası ("+err.message+")"); }
+    }
     if(olusanIdler.length && _csmTopluDosyalar.length){
       for(let k=0;k<_csmTopluDosyalar.length;k++){
         const g = _csmTopluDosyalar[k];
@@ -10703,7 +10920,7 @@ function cekSenetKaydet(){
     }
   })().then(()=>{
     _csmKaydediliyor = false; if(btn) btn.disabled = false; yazDurum("");
-    if(olusanIdler.length){
+    if(olusanIdler.length || ciroBasarili.length){
       _cekSenetAktifTip = tip;
       cekSenetTipDegistir(tip);
       cekSenetListesiYukle();
@@ -10713,10 +10930,11 @@ function cekSenetKaydet(){
       // Başarılı satırlar modaldan çıkarılır, hatalılar düzeltilip tekrar kaydedilebilsin
       _csmSatirlar = _csmSatirlar.filter(s=>!basarili.has(s));
       if(!_csmSatirlar.length) _csmSatirlar = [csmYeniSatir_(null)];
+      csmCiroCiz_();
       if(olusanIdler.length) _csmTopluDosyalar = [];
       csmYapraklariYukle_();
       csmSatirlariCiz();
-      alert(olusanIdler.length+" kayıt oluşturuldu, "+hatalar.length+" satır KAYDEDİLEMEDİ (ekranda kaldı):\n\n"+hatalar.join("\n")+(gorselHatalari.length?"\n\nGörsel sorunları:\n"+gorselHatalari.join("\n"):""));
+      alert(olusanIdler.length+" kayıt oluşturuldu"+(ciroBasarili.length?", "+ciroBasarili.length+" müşteri çeki ciro edildi":"")+", "+hatalar.length+" satır KAYDEDİLEMEDİ (ekranda kaldı):\n\n"+hatalar.join("\n")+(gorselHatalari.length?"\n\nGörsel sorunları:\n"+gorselHatalari.join("\n"):""));
       return;
     }
     const el = document.getElementById("ceksenet-modal-overlay"); if(el) el.remove();
