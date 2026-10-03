@@ -10726,7 +10726,7 @@ function cekSenetKaydet(){
 }
 
 // ══════════════ ÇEK KOÇANLARI (bankadan alınan boş çek yaprakları — ÇEK NUMARASI ile tanımlanır) ══════════════
-let _kocanYapraklar = [], _kocanBankalar = [];
+let _kocanYapraklar = [], _kocanBankalar = [], _kocanCekMap = {}, _kocanDragKol = null;
 
 function csmYaprakYonet(){ cekKocaniModalAc(); }
 
@@ -10819,12 +10819,48 @@ function cekKocaniKaydet(){
   }).catch(err=>{ btn.disabled = false; alert("Bağlantı hatası: "+err.message); });
 }
 function cekKocaniListeYukle(){
-  cariApi("getCekYapraklari", {}).then(res=>{
+  Promise.all([cariApi("getCekYapraklari", {}), cariApi("getCekSenetListesi").catch(()=>null)]).then(([res, cekRes])=>{
     const el = document.getElementById("kocan-liste"); if(!el) return;
     if(!res.ok){ el.innerHTML = '<div class="cari-empty">Hata: '+htmlKacis(res.hata||"bilinmiyor")+'</div>'; return; }
     _kocanYapraklar = res.yapraklar || [];
+    // "Kullanıldı" yapraklarında kime/ne zaman/vade göstermek için bağlı çek kaydı
+    _kocanCekMap = {};
+    const cekler = (cekRes && cekRes.ok && cekRes.cekSenetler) ? cekRes.cekSenetler : (_cekSenetListe || []);
+    cekler.forEach(c=>{ _kocanCekMap[String(c.id)] = c; });
     cekKocaniListeCiz();
   }).catch(err=>{ const el = document.getElementById("kocan-liste"); if(el) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+htmlKacis(err.message)+'</div>'; });
+}
+const KOCAN_SUTUNLAR = {
+  banka: { baslik:"Banka", hucre: y=>htmlKacis(y.bankaAdi) },
+  cekNo: { baslik:"Çek No", hucre: y=>`<span style="font-family:monospace;font-weight:700">${htmlKacis(y.cekNo)}</span>` },
+  durum: { baslik:"Durum", hucre: y=>y.durum==='Boş'?'<span class="hk-alacak">Boş</span>':(y.durum==='İptal'?'<span class="hk-borc">İptal</span>':'Kullanıldı') },
+  kime:  { baslik:"Kime Verildi", hucre: y=>{ const c=_kocanCekMap[y.kullanilanCekId]; return c ? htmlKacis(c.cariAd||"—") : "—"; } },
+  verilis:{ baslik:"Veriliş Tarihi", hucre: y=>{ const c=_kocanCekMap[y.kullanilanCekId]; return c && c.duzenlenmeTarihi ? tarihGoster(c.duzenlenmeTarihi) : "—"; } },
+  vade:  { baslik:"Vade", hucre: y=>{ const c=_kocanCekMap[y.kullanilanCekId]; return c && c.vade ? tarihGoster(c.vade) : "—"; } },
+  tutar: { baslik:"Tutar", sag:true, hucre: y=>{ const c=_kocanCekMap[y.kullanilanCekId]; return c ? paraFormat(c.tutar) : "—"; } },
+  cek:   { baslik:"Çek/Senet", hucre: y=>y.kullanilanCekId?`<a href="#" onclick="cekKocaniModalKapat(); kayitSekmesindeAc('ceksenet','🧾','Çek/Senet #${htmlKacis(y.kullanilanCekId)}','CEK:${htmlKacis(y.kullanilanCekId)}',()=>{ if(!_cekSenetYuklendi) cekSenetListesiYukle(); cekSenetAc('${htmlKacis(y.kullanilanCekId)}'); }); return false;">Çeki aç</a>`:'—' },
+  islem: { baslik:"", sabit:true, hucre: y=>`${y.durum==='Boş'?`<button class="btn" style="padding:2px 8px;font-size:12px" onclick="cekYaprakIslem('${htmlKacis(y.id)}','iptal')" title="Zayi/bozuk yaprak — seçilemesin">İptal</button> <button class="btn btn-danger" style="padding:2px 8px;font-size:12px" onclick="cekYaprakIslem('${htmlKacis(y.id)}','sil')">Sil</button>`:''}${y.durum==='İptal'?`<button class="btn" style="padding:2px 8px;font-size:12px" onclick="cekYaprakIslem('${htmlKacis(y.id)}','bos')">Boşa Al</button>`:''}` }
+};
+const KOCAN_VARSAYILAN_SIRA = ["banka","cekNo","durum","kime","verilis","vade","tutar","cek","islem"];
+function kocanSutunSirasiAl_(){
+  let kayitli = null;
+  try{ kayitli = JSON.parse(localStorage.getItem("kocanSutunSirasi")||"null"); }catch(e){}
+  const gecerli = Array.isArray(kayitli) ? kayitli.filter(k=>KOCAN_SUTUNLAR[k] && !KOCAN_SUTUNLAR[k].sabit) : [];
+  KOCAN_VARSAYILAN_SIRA.forEach(k=>{ if(!KOCAN_SUTUNLAR[k].sabit && !gecerli.includes(k)) gecerli.push(k); });
+  return gecerli.concat(["islem"]);   // işlem düğmeleri hep sonda
+}
+function kocanSutunSurukle_(kaynak, hedef){
+  if(!kaynak || kaynak===hedef) return;
+  const sira = kocanSutunSirasiAl_();
+  const k = sira.indexOf(kaynak), h = sira.indexOf(hedef);
+  if(k<0 || h<0) return;
+  sira.splice(h, 0, sira.splice(k,1)[0]);
+  try{ localStorage.setItem("kocanSutunSirasi", JSON.stringify(sira)); }catch(e){}
+  cekKocaniListeCiz();
+}
+function kocanSutunSirasiSifirla(){
+  try{ localStorage.removeItem("kocanSutunSirasi"); }catch(e){}
+  cekKocaniListeCiz();
 }
 function cekKocaniListeCiz(){
   const el = document.getElementById("kocan-liste"); if(!el) return;
@@ -10832,15 +10868,22 @@ function cekKocaniListeCiz(){
   const liste = _kocanYapraklar.filter(y=>(!fb || y.bankaId===fb) && (!fd || y.durum===fd));
   const bosSay = _kocanYapraklar.filter(y=>y.durum==="Boş").length;
   if(!liste.length){ el.innerHTML = '<div class="cari-empty">Bu filtreyle çek yaprağı yok. (Toplam boş yaprak: '+bosSay+')</div>'; return; }
-  el.innerHTML = `<div style="font-size:12px;color:var(--text3);margin-bottom:4px">${liste.length} yaprak listeleniyor — toplam boş yaprak: ${bosSay}</div>
-    <div style="max-height:300px;overflow-y:auto"><table class="rapor-tbl">
-      <thead><tr><th>Banka</th><th>Çek No</th><th>Durum</th><th>Çek/Senet</th><th></th></tr></thead>
-      <tbody>${liste.map(y=>`<tr>
-        <td>${htmlKacis(y.bankaAdi)}</td><td style="font-family:monospace;font-weight:700">${htmlKacis(y.cekNo)}</td>
-        <td>${y.durum==='Boş'?'<span class="hk-alacak">Boş</span>':(y.durum==='İptal'?'<span class="hk-borc">İptal</span>':'Kullanıldı')}</td>
-        <td>${y.kullanilanCekId?`<a href="#" onclick="cekKocaniModalKapat(); kayitSekmesindeAc('ceksenet','🧾','Çek/Senet #${htmlKacis(y.kullanilanCekId)}','CEK:${htmlKacis(y.kullanilanCekId)}',()=>{ if(!_cekSenetYuklendi) cekSenetListesiYukle(); cekSenetAc('${htmlKacis(y.kullanilanCekId)}'); }); return false;">Çeki aç</a>`:'—'}</td>
-        <td style="white-space:nowrap">${y.durum==='Boş'?`<button class="btn" style="padding:2px 8px;font-size:12px" onclick="cekYaprakIslem('${htmlKacis(y.id)}','iptal')" title="Zayi/bozuk yaprak — seçilemesin">İptal</button> <button class="btn btn-danger" style="padding:2px 8px;font-size:12px" onclick="cekYaprakIslem('${htmlKacis(y.id)}','sil')">Sil</button>`:''}${y.durum==='İptal'?`<button class="btn" style="padding:2px 8px;font-size:12px" onclick="cekYaprakIslem('${htmlKacis(y.id)}','bos')">Boşa Al</button>`:''}</td>
-      </tr>`).join("")}</tbody></table></div>`;
+  const sira = kocanSutunSirasiAl_();
+  const baslikHtml = sira.map(k=>{ const d = KOCAN_SUTUNLAR[k];
+    return d.sabit ? `<th></th>` : `<th draggable="true" data-kkol="${k}"${d.sag?' style="text-align:right;cursor:grab"':' style="cursor:grab"'} title="Sürükleyerek sütun yerini değiştirebilirsiniz">${d.baslik}</th>`; }).join("");
+  const satirHtml = liste.map(y=>`<tr>${sira.map(k=>{ const d = KOCAN_SUTUNLAR[k];
+    return `<td${d.sag?' style="text-align:right"':(d.sabit?' style="white-space:nowrap"':'')}>${d.hucre(y)}</td>`; }).join("")}</tr>`).join("");
+  el.innerHTML = `<div style="font-size:12px;color:var(--text3);margin-bottom:4px">${liste.length} yaprak listeleniyor — toplam boş yaprak: ${bosSay} · <a href="#" onclick="kocanSutunSirasiSifirla(); return false;">sütun sırasını sıfırla</a></div>
+    <div style="max-height:300px;overflow-y:auto"><table class="rapor-tbl" id="kocan-tablo">
+      <thead><tr>${baslikHtml}</tr></thead>
+      <tbody>${satirHtml}</tbody></table></div>`;
+  el.querySelectorAll("th[data-kkol]").forEach(th=>{
+    th.addEventListener("dragstart", e=>{ _kocanDragKol = th.dataset.kkol; try{ e.dataTransfer.setData("text/plain","kolon"); e.dataTransfer.effectAllowed="move"; }catch(x){} });
+    th.addEventListener("dragover", e=>{ if(!_kocanDragKol) return; e.preventDefault(); th.style.outline = "2px dashed var(--blue)"; th.style.outlineOffset = "-2px"; });
+    th.addEventListener("dragleave", ()=>{ th.style.outline = ""; });
+    th.addEventListener("dragend", ()=>{ _kocanDragKol = null; el.querySelectorAll("th").forEach(x=>x.style.outline=""); });
+    th.addEventListener("drop", e=>{ e.preventDefault(); const k = _kocanDragKol; _kocanDragKol = null; kocanSutunSurukle_(k, th.dataset.kkol); });
+  });
 }
 function cekYaprakIslem(id, islem){
   const y = _kocanYapraklar.find(x=>x.id===id); if(!y) return;
