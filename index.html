@@ -2982,13 +2982,13 @@ const FATURA_OKUMA_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbysou4q
 function faturaGorLinki(faturaNo, kompakt, authuser){
   // authuser: varsayılan 0 (ilk Google hesabı). Tarayıcıda birden çok Google hesabı açıksa fatura
   // görseli yanlış hesapla açılıp "erişim yok" verebilir; yedek bağlantılar 1/2 ve hesapsız dener.
-  const au = (authuser === undefined) ? 0 : authuser;
+  const au = (authuser === undefined) ? null : authuser; // fatura uygulaması ANYONE_ANONYMOUS: hesap zorlamak (authuser=0) çoklu Google hesabında "dosya açılamıyor" hatası verir
   return FATURA_OKUMA_WEBAPP_URL + "?faturaHtml=" + encodeURIComponent(faturaNo) + (au === null ? "" : "&authuser=" + au) + (kompakt ? "&kompakt=1" : "");
 }
 // Görsel gömülü (iframe) açılamıyorsa kullanılacak yedek bağlantılar (yeni sekmede, farklı hesap denemeleri).
 function faturaYedekLinklerHTML(faturaNo){
   const a = (t, u)=>`<a href="${u}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;margin-right:8px">${t}</a>`;
-  return `<div style="font-size:11px;color:var(--text3);padding:4px 0">Görsel açılmıyorsa: ${a("Yeni sekmede aç", faturaGorLinki(faturaNo,false,0))}${a("2. hesapla dene", faturaGorLinki(faturaNo,false,1))}${a("Hesap seçmeden dene", faturaGorLinki(faturaNo,false,null))}</div>`;
+  return `<div style="font-size:11px;color:var(--text3);padding:4px 0">Görsel açılmıyorsa: ${a("Yeni sekmede aç", faturaGorLinki(faturaNo,false))}${a("1. hesapla dene", faturaGorLinki(faturaNo,false,0))}${a("2. hesapla dene", faturaGorLinki(faturaNo,false,1))}</div>`;
 }
 
 let _cariYuklendi = false;
