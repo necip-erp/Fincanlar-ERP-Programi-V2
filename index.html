@@ -939,9 +939,10 @@ setInterval(topbarSaatGuncelle, 10000);
   <div class="modview" id="mod-ceksenet">
     <div class="cari-list-panel">
       <div class="belge-tipi-sekmeler">
-        <button class="belge-tab active" data-tip="Alınan" onclick="cekSenetTipDegistir('Alınan')">Portföydeki Çekler</button>
-        <button class="belge-tab" data-tip="Verilen" onclick="cekSenetTipDegistir('Verilen')">Kendi Çekim</button>
+        <button class="belge-tab active" data-tip="Alınan" onclick="cekSenetTipDegistir('Alınan')" title="Müşteriden aldığım çekler">📥 Müşteri Çeklerim<br><small style="font-weight:500;opacity:.75">(aldıklarım)</small></button>
+        <button class="belge-tab" data-tip="Verilen" onclick="cekSenetTipDegistir('Verilen')" title="Tedarikçiye kendi çekimi verdim">📤 Kendi Çeklerim<br><small style="font-weight:500;opacity:.75">(verdiklerim)</small></button>
       </div>
+      <div id="ceksenet-tip-not" class="cs-tip-not"></div>
       <div class="cari-list-head">
         <input id="ceksenet-ara" placeholder="Çek/senet ara (cari, seri no)..." oninput="cekSenetAramaFiltrele(this.value)">
         <button class="cari-add-btn" onclick="cekKocaniModalAc()" title="Çek koçanları (bankadan alınan boş çek yaprakları)" style="font-size:15px">📒</button>
@@ -1857,8 +1858,8 @@ function hizliErisimKatalogUret(){
   ekle("cari-pasif","Cari","⏸","Cari - Pasif Cariler",()=>{modulAc("cari"); const sel=document.getElementById("cari-tip-filtre-select"); if(sel) sel.value="__pasif"; cariTipFiltreSecimden("__pasif");});
   ekle("cari-personel","Cari","🧑‍💼","Cari - Personel",()=>{modulAc("cari"); const sel=document.getElementById("cari-tip-filtre-select"); if(sel) sel.value="Personel"; cariTipFiltreSecimden("Personel");});
   // Çek/Senet
-  ekle("cek-portfoy","Çek/Senet","🧾","Çek/Senet - Portföydeki Çekler",()=>{modulAc("ceksenet"); cekSenetTipDegistir("Alınan");});
-  ekle("cek-kendi","Çek/Senet","🧾","Çek/Senet - Kendi Çekim",()=>{modulAc("ceksenet"); cekSenetTipDegistir("Verilen");});
+  ekle("cek-portfoy","Çek/Senet","🧾","Çek/Senet - Müşteri Çeklerim (aldıklarım)",()=>{modulAc("ceksenet"); cekSenetTipDegistir("Alınan");});
+  ekle("cek-kendi","Çek/Senet","🧾","Çek/Senet - Kendi Çeklerim (verdiklerim)",()=>{modulAc("ceksenet"); cekSenetTipDegistir("Verilen");});
   ekle("cek-kocan","Çek/Senet","📒","Çek/Senet - Çek Koçanları",()=>{modulAc("ceksenet"); cekKocaniModalAc();});
   // Finans bölümleri
   ekle("finans-banka-tanim","Finans","🏦","Finans - Banka Tanımlamaları",()=>{modulAc("finans"); hizliBolumeGit_("#mod-finans","Banka Tanımlamaları");});
@@ -9826,8 +9827,17 @@ function cekSenetListesiYukle(){
   });
 }
 
+function cekSenetTipNotuYaz_(){
+  const el = document.getElementById("ceksenet-tip-not");
+  if(!el) return;
+  el.innerHTML = _cekSenetAktifTip === "Alınan"
+    ? "📥 <b>Müşteriden aldığın çekler.</b> Para sana gelir: vadesinde <b>Tahsil Et</b> (Kasa/Banka'ya) ya da bir tedarikçiye <b>Ciro Et</b> (ödeme olarak ver)."
+    : "📤 <b>Kendi çekini tedarikçiye verdin.</b> Para senden çıkar: vadesinde <b>Ödendi</b> de, tutar çeke bağlı banka hesabından düşer.";
+  el.className = "cs-tip-not " + (_cekSenetAktifTip === "Alınan" ? "cs-alinan" : "cs-verilen");
+}
 function cekSenetTipDegistir(tip){
   _cekSenetAktifTip = tip;
+  cekSenetTipNotuYaz_();
   _cekSenetTopluSecim.clear();
   document.querySelectorAll("#mod-ceksenet .belge-tab").forEach(b=>b.classList.toggle("active", b.dataset.tip===tip));
   cekSenetListesiCiz();
@@ -9841,13 +9851,13 @@ function cekSenetDurumEtiket(c){
 
 // Çek/Senet "tip" alanı veride hep Alınan/Verilen olarak tutulur (geriye dönük uyum);
 // ekranda kullanıcıya Akınsoft benzeri "Portföydeki Çekler" / "Kendi Çekim" olarak gösterilir (25 Eyl 2026).
-function cekSenetTipEtiket(tip){ return tip === "Alınan" ? "Portföydeki Çekler" : "Kendi Çekim"; }
+function cekSenetTipEtiket(tip){ return tip === "Alınan" ? "📥 Müşteri Çeki (aldığım)" : "📤 Kendi Çekim (verdiğim)"; }
 function cekSenetListesiCiz(){
   const el = document.getElementById("ceksenet-items");
   const q = (document.getElementById("ceksenet-ara").value||"").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   let liste = _cekSenetListe.filter(c=>c.tip===_cekSenetAktifTip);
   if(q) liste = liste.filter(c => c.cariAd.replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.seriNo||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q));
-  if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı çek/senet yok. "+" ile ekleyin.</div>'; return; }
+  if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">' + (_cekSenetAktifTip==="Alınan" ? 'Müşteriden alınmış çek yok.' : 'Kendi verdiğin çek yok.') + ' "+" ile ekleyin.</div>'; return; }
   // Borç çeklerinde (Kendi Çekim = "Verilen") birden fazla çeki tek seferde ödeyip Banka Hesap
   // Hareketleri'nde birlikte (gruplu) görebilmek için çoklu seçim (26 Eyl 2026).
   const topluAktif = _cekSenetAktifTip === "Verilen";
@@ -9968,10 +9978,13 @@ function cekSenetAc(id){
         ${c.projeKodu?`<div class="cari-info-item"><div class="k">Proje Kodu</div><div class="v">${c.projeKodu}</div></div>`:""}
         ${c.aciklama?`<div class="cari-info-item od-tam"><div class="k">Açıklama</div><div class="v">${c.aciklama}</div></div>`:""}
       </div>
+      <div class="cs-tip-not ${c.tip==='Alınan'?'cs-alinan':'cs-verilen'}" style="margin:10px 0">${c.tip==='Alınan'
+        ? '📥 <b>Müşteriden aldığın çek.</b> Tahsil edersen para Kasa/Banka\'ya girer; ciro edersen tedarikçiye ödeme olarak vermiş olursun.'
+        : '📤 <b>Kendi çekin (tedarikçiye verdin).</b> Ödendi dediğinde tutar çeke bağlı banka hesabından düşer.'}</div>
       ${acik ? `
       <div class="btnrow">
-        <button class="btn btn-primary" onclick="cekSenetIslemModalAc('${c.id}')">${c.tip==='Alınan'?'💰 Tahsil Et':'💸 Öde'}</button>
-        ${c.tip==='Alınan' ? `<button class="btn" onclick="cekSenetCiroModalAc('${c.id}')">↪️ Ciro Et</button>` : ""}
+        <button class="btn btn-primary" onclick="cekSenetIslemModalAc('${c.id}')">${c.tip==='Alınan'?'💰 Tahsil Et (Kasa/Banka\'ya al)':'💸 Ödendi (bankadan düşsün)'}</button>
+        ${c.tip==='Alınan' ? `<button class="btn" onclick="cekSenetCiroModalAc('${c.id}')">↪️ Tedarikçiye Ciro Et (ödeme olarak ver)</button>` : ""}
         <button class="btn" onclick="cekSenetDurumGuncelleOnay('${c.id}','Karşılıksız')">⚠️ Karşılıksız İşaretle</button>
       </div>` : ""}
       ${res.hareketler.length ? `
@@ -10084,7 +10097,7 @@ function cekSenetCiroModalAc(id){
   overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
   overlay.innerHTML = `
     <div class="modal-box odeme-modal ceksenet-islem-modal">
-      <div class="om-baslik">↪️ Çeki Ciro Et</div>
+      <div class="om-baslik">↪️ Müşteri Çekini Tedarikçiye Ciro Et</div>
       <div class="om-kart">
        <div class="om-grid">
         <div class="om-not om-tam" style="margin-top:0">Bu çeki hangi cariye (tedarikçiye) ciro ediyorsunuz? Seçtiğiniz cariye, çek tutarı kadar Borç hareketi düşülür (o cariye olan borcunuz bu kadar azalır).</div>
@@ -10103,7 +10116,7 @@ function cekSenetCiroModalAc(id){
       </div>
       <div class="om-aksiyon">
         <button class="btn" onclick="document.getElementById('cekciro-modal-overlay').remove()">İptal</button>
-        <button class="btn btn-primary" onclick="cekSenetCiroKaydet('${id}')">↪️ Ciro Et</button>
+        <button class="btn btn-primary" onclick="cekSenetCiroKaydet('${id}')">↪️ Ciro Et (ödeme olarak ver)</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -10169,7 +10182,7 @@ function cekSenetIslemModalAc(id){
       </div>` : '';
   overlay.innerHTML = `
     <div class="modal-box odeme-modal ceksenet-islem-modal">
-      <div class="om-baslik">${c.tip==='Alınan'?'💰 Tahsilat':'💸 Ödeme'} — ${c.cariAd}</div>
+      <div class="om-baslik">${c.tip==='Alınan'?'💰 Müşteri Çeki Tahsilatı':'💸 Kendi Çekim Ödemesi'} — ${c.cariAd}</div>
       <div class="om-kart">
         <div class="om-grid">
           ${c.vade ? `<div class="fld"><label>Vade</label><input value="${tarihGoster(c.vade)}${c.gecikmis?' ⚠️ vadesi geçmiş':''}" disabled></div>` : ``}
@@ -10184,7 +10197,7 @@ function cekSenetIslemModalAc(id){
       <input type="hidden" id="ci-tip" value="${c.tip}">
       <div class="om-aksiyon">
         <button class="btn" onclick="document.getElementById('cekislem-modal-overlay').remove()">İptal</button>
-        <button class="btn btn-primary" onclick="cekSenetIslemKaydet()">${c.tip==='Alınan'?'💰 Tahsil Et':'💸 Öde'}</button>
+        <button class="btn btn-primary" onclick="cekSenetIslemKaydet()">${c.tip==='Alınan'?'💰 Tahsil Et':'💸 Ödendi'}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -10263,10 +10276,10 @@ function cekSenetModalAc(onCariId){
       <div class="om-baslik">📄 Yeni Çek/Senet <span style="font-weight:400;font-size:12px;opacity:.75">— birden fazla çek/senet girilebilir</span></div>
       <div class="om-kart">
         <div class="om-grid">
-          <div class="fld"><label>Tip</label>
+          <div class="fld"><label>Bu çek nedir?</label>
             <select id="csm-tip" onchange="csmTipDegisti()">
-              <option value="Alınan" ${_cekSenetAktifTip==='Alınan'?'selected':''}>Portföydeki Çekler (müşteriden)</option>
-              <option value="Verilen" ${_cekSenetAktifTip==='Verilen'?'selected':''}>Kendi Çekim (tedarikçiye)</option>
+              <option value="Alınan" ${_cekSenetAktifTip==='Alınan'?'selected':''}>📥 Müşteriden ÇEK ALDIM (portföyüme girer)</option>
+              <option value="Verilen" ${_cekSenetAktifTip==='Verilen'?'selected':''}>📤 Tedarikçiye KENDİ ÇEKİMİ VERDİM</option>
             </select>
           </div>
           <div class="fld"><label>Düzenlenme Tarihi</label><input id="csm-duzenlenme" type="datetime-local" value="${bugun}"></div>
@@ -16816,6 +16829,11 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
 .ceksenet-modal .om-grid{grid-template-columns:1fr 1fr}
 @media(max-width:640px){.ceksenet-modal .om-grid{grid-template-columns:1fr}}
 .ceksenet-islem-modal .om-tutar input{color:var(--green)}
+.cs-tip-not{font-size:12.5px;line-height:1.45;padding:8px 12px;border-radius:8px;border-left:4px solid var(--rp-th-fg);background:var(--rp-th-bg);color:var(--rp-th-fg)}
+.cs-tip-not.cs-alinan{border-left-color:var(--green)}
+.cs-tip-not.cs-verilen{border-left-color:var(--red)}
+#mod-ceksenet .belge-tab{line-height:1.25}
+#ceksenet-tip-not{margin:8px 10px 4px}
 
 /* ── 3 Eki 2026: Satış / Alış fatura-sipariş-teklif formları aynı rapor renk düzeninde (alan kimlikleri ve davranış aynı, sadece görünüm) ── */
 .fatura-modal{background:var(--rp-alan,var(--bg2))}
