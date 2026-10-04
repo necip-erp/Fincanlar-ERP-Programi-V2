@@ -406,6 +406,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .satis-kalem-sira .sira-ok{display:flex;flex-direction:column;line-height:1;font-size:9px;color:var(--text3)}
 .satis-kalem-sira .sira-ok b{cursor:pointer;padding:1px 3px}
 .satis-kalem-sira .sira-ok b:hover{color:var(--accent)}
+.sm-tutar-gizli .satis-kalem-tutar{display:none!important}
 .sm-alt-serit{position:sticky;bottom:-22px;z-index:5;background:var(--rp-alan,var(--bg2));padding:10px 0 6px;margin-top:10px;border-top:2px solid var(--rp-th-bd,var(--border))}
 .satis-kalem-urun{flex:1;min-width:0}
 .satis-kalem-miktar{width:90px;flex:0 0 90px;text-align:right}
@@ -6134,6 +6135,17 @@ function satisMiktarOdakla_(idx){
 function satisKalemEkleUI(){
   _yeniSatisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""});
   satisKalemlerCiz();
+  satisSonSatiraKaydir_();
+}
+
+// Liste uzadıkça pencere en alta kayar: üstteki belge tipi alanı yukarıda kalır, son satır ve alt şerit görünür.
+function satisSonSatiraKaydir_(){
+  const el = document.getElementById("sm-kalemler");
+  const kutu = el && el.closest(".modal-box");
+  if(!kutu) return;
+  kutu.scrollTop = kutu.scrollHeight;
+  const son = el.querySelector(".satis-kalem-satir:last-child .satis-kalem-stokkodu");
+  if(son){ try{ son.focus({preventScroll:true}); }catch(e){ son.focus(); } }
 }
 
 // Satırı yeni sıraya taşır (0 tabanlı hedef; sınırlar kırpılır).
@@ -6152,6 +6164,8 @@ function satisToplamGizleUygula_(){
   const g = satisToplamGizliMi_();
   const t = document.getElementById("sm-toplam"), b = document.getElementById("sm-toplam-gizle-btn");
   if(t) t.style.display = g ? "none" : "";
+  const ov = document.getElementById("satis-modal-overlay");
+  if(ov) ov.classList.toggle("sm-tutar-gizli", g);   // satır "Tutar" sütunu da gizlenir
   if(b) b.textContent = g ? "👁 Toplamları Göster" : "🙈 Toplamları Gizle";
 }
 function satisToplamGizleDegistir(){
