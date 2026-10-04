@@ -16573,11 +16573,14 @@ if("serviceWorker" in navigator){
       b.id = "islem-yapiliyor-bant";
       b.textContent = BANT_METNI;
       // Sayfa 4 parçaya bölünmüş gibi düşünülürse üst parçanın ORTASINDA (üst-orta) sabit durur.
-      b.style.cssText = "position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:99999;background:#ffd60a;color:#000;text-align:center;font-weight:700;font-size:13px;padding:7px 16px;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.25);display:none";
+      b.style.cssText = "position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:99999;background:#ffd60a;color:#000;text-align:center;font-weight:700;font-size:13px;padding:7px 16px;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.25);white-space:nowrap;font-variant-numeric:tabular-nums;display:none";
       document.body.appendChild(b);
     }
     return b;
   }
+  // ★ (4 Eki 2026) Art arda gelen istekler (ör. kaydet → liste yenile) tek işlem gibi sayılır: bir istek bitip 600 ms içinde
+  // yenisi başlarsa süre SIFIRLANMAZ, kaldığı yerden (9 → 10 → 11 …) devam eder. Eskiden sayaç 0'a inince süre durup
+  // yeni istekte baştan (1'den) başlıyordu.
   window.islemYapiliyorGoster_ = function(){
     sayac++;
     clearTimeout(gizleZamanlayici);
@@ -16587,10 +16590,12 @@ if("serviceWorker" in navigator){
   window.islemYapiliyorGizle_ = function(){
     sayac = Math.max(0, sayac - 1);
     if(sayac === 0){
-      sureYaz(); sureDurdur(); // son süre bantta kalsın (kapanmadan önceki kısa an)
-      // Çok kısa isteklerde bandın göz kırpıp kaybolmasını önlemek için ufak bir gecikmeyle gizlenir.
       clearTimeout(gizleZamanlayici);
-      gizleZamanlayici = setTimeout(()=>{ const b = document.getElementById("islem-yapiliyor-bant"); if(b) b.style.display = "none"; }, 120);
+      gizleZamanlayici = setTimeout(()=>{
+        if(sayac !== 0) return;
+        sureYaz(); sureDurdur();
+        const b = document.getElementById("islem-yapiliyor-bant"); if(b) b.style.display = "none";
+      }, 600);
     }
   };
 })();
