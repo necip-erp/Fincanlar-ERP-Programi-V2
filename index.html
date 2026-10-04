@@ -3037,10 +3037,7 @@ async function faturaGorselYeniSekmedeAc_(faturaNo){
 }
 
 // Görsel gömülü (iframe) açılamıyorsa: hesap sırasını bulup kaydetmek için yedek bağlantılar (yeni sekmede açılır).
-function faturaYedekLinklerHTML(faturaNo){
-  const a = (t, n)=>`<a href="${faturaGorLinki(faturaNo,false,n)}" target="_blank" rel="noopener" onclick="${n===null?"":`faturaAuthuserKaydet(${n})`}" style="color:var(--blue);text-decoration:underline;margin-right:8px" title="Açılırsa bu hesap sırası kaydedilir">${t}</a>`;
-  return `<div style="font-size:11px;color:var(--text3);padding:4px 0">Görsel açılmıyorsa hangi hesapla açıldığını seç (açılan kaydedilir): ${a("1. hesap",0)}${a("2. hesap",1)}${a("3. hesap",2)}${a("4. hesap",3)}<a href="#" onclick="faturaAuthuserKaydet(null);return false" style="color:var(--text3);text-decoration:underline">sıfırla</a></div>`;
-}
+function faturaYedekLinklerHTML(faturaNo){ return ""; } // Görsel artık ERP sunucusundan geliyor; hesap seçimi satırı gerekmiyor.
 
 let _cariYuklendi = false;
 let _cariListe = [];
