@@ -403,6 +403,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .satis-kalem-urun{flex:1;min-width:0}
 .satis-kalem-miktar{width:90px;flex:0 0 90px;text-align:right}
 .satis-kalem-birim{width:90px;flex:0 0 90px}
+.satis-kalem-birim2{width:90px;flex:0 0 90px;text-align:right}
 .satis-kalem-fiyat{width:120px;flex:0 0 120px;text-align:right}
 .satis-kalem-yuzde{width:70px;flex:0 0 70px;text-align:right}
 .satis-kalem-paket{width:88px;flex:0 0 88px;font-size:12px;color:var(--text2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1204,7 +1205,10 @@ setInterval(topbarSaatGuncelle, 10000);
         </div>
         <div class="fld" style="max-width:420px;margin-top:10px">
           <label>Belirli Cariler (opsiyonel — boş bırakılırsa yukarıdaki filtreye uyan TÜM cariler)</label>
-          <input type="text" id="mr-cari-secim-ara" placeholder="Cari ara..." autocomplete="off" oninput="mrCariSecimOneriGoster()" style="margin-bottom:4px">
+          <div style="display:flex;gap:6px;margin-bottom:4px">
+            <input type="text" id="mr-cari-secim-ara" placeholder="Cari ara..." autocomplete="off" oninput="mrCariSecimOneriGoster()" style="flex:1;margin:0">
+            <button type="button" class="btn" onclick="mrCariSecimTemizle()" title="Seçili carileri ve arama kutusunu temizler">✖ Temizle</button>
+          </div>
           <select id="mr-cari-secim" multiple size="5" onchange="muhasebeRaporuYukle()" style="width:100%"></select>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">Ctrl/Cmd tuşuyla birden fazla cari seçebilirsiniz. Hiçbiri seçili değilse filtreye uyan tüm cariler kullanılır.</div>
         </div>
@@ -1454,6 +1458,7 @@ setInterval(topbarSaatGuncelle, 10000);
         <div style="flex:1"><label>Telefon (opsiyonel)</label><input id="plasiyer-yeni-tel" type="text" placeholder="05XX XXX XX XX"></div>
         <button class="btn btn-primary" onclick="plasiyerEkleUI()">+ Ekle</button>
       </div>
+      <div style="margin-top:10px"><button id="plasiyer-eski-aktar-btn" class="btn" style="display:none" onclick="eskiYildanPlasiyerAktar()" title="Temel yıl (2026) e-tablosundaki plasiyer tanımlarını bu çalışma yılına devreder. Sadece Admin.">📥 2026 Şirketinden Devral (Plasiyerler)</button></div>
       <div id="plasiyer-liste" style="margin-top:12px"></div>
     </div>
     <div class="finans-panel">
@@ -4634,7 +4639,7 @@ function cariModalAc(editId, onKaydedildi, adIpucu){
   const tipSecenek = (deger, etiket, secili)=>`<label class="cm-seg"><input type="radio" name="cm-tip" value="${deger}" ${secili?'checked':''} onchange="cariTuruDegisti(${duzenle})"><span>${etiket}</span></label>`;
   const tipSeciliMusteri = (!c||(c.tip!=='Tedarikçi'&&c.tip!=='Bağımsız'&&c.tip!=='Personel'));
   overlay.innerHTML = `
-    <div class="modal-box modal-box-wide odeme-modal cari-modern" style="max-width:860px">
+    <div class="modal-box modal-box-wide odeme-modal cari-modern" style="max-width:1180px;width:96vw">
       <div class="om-baslik">${duzenle?"👤 Cariyi Düzenle":"👤 Yeni Cari Ekle"}</div>
 
       <div class="om-kart">
@@ -4672,10 +4677,10 @@ function cariModalAc(editId, onKaydedildi, adIpucu){
           <div class="fld"><label>İl</label>
             <select id="cm-il" onchange="cariIlDegisti()">
               <option value="">— Seçilmedi —</option>
-              ${TURKIYE_ILLERI.map(il=>`<option value="${il}" ${c&&c.il===il?'selected':''}>${il}</option>`).join("")}
+              ${TURKIYE_ILLERI.map(il=>`<option value="${il}" ${(c?c.il===il:il==='Bursa')?'selected':''}>${il}</option>`).join("")}
             </select>
           </div>
-          <div class="fld"><label>İlçe</label><select id="cm-ilce">${cariIlceSecenekleri(c?c.il:"", c?c.ilce:"")}</select></div>
+          <div class="fld"><label>İlçe</label><select id="cm-ilce">${cariIlceSecenekleri(c?c.il:"Bursa", c?c.ilce:"Osmangazi")}</select></div>
         </div>
       </div>
 
@@ -5306,11 +5311,29 @@ function siparisFaturaModalAc(siparisId){
         <div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap">
           <div class="fld" style="flex:1;min-width:180px"><label>Fatura Tarihi</label><input id="sf-tarih" type="datetime-local" value="${bugun}"></div>
           <div class="fld" style="flex:1;min-width:180px"><label>Ödeme Tipi</label>
-            <select id="sf-odeme">
-              <option value="Peşin">Peşin</option>
-              <option value="Kredi Kartı">Kredi Kartı</option>
-              <option value="Açık Hesap">Açık Hesap</option>
+            <select id="sf-odeme" onchange="siparisFaturaOdemeTipiDegisti()">
+              ${["Açık Hesap","Peşin","Kredi Kartı","Virman"].map(t=>`<option value="${t}" ${((["Açık Hesap","Peşin","Kredi Kartı","Virman"].includes(s.odemeTipi)?s.odemeTipi:(s.odemeTipi==="Nakit"?"Peşin":"Açık Hesap"))===t)?'selected':''}>${t}</option>`).join("")}
             </select>
+          </div>
+          <div class="fld" id="sf-vade-fld" style="flex:1;min-width:180px;display:none"><label>Vade Tarihi (son ödeme tarihi)</label><input id="sf-vade" type="date"></div>
+        </div>
+        <div id="sf-kk-alani" style="display:none;gap:12px;margin-top:10px;flex-wrap:wrap;padding:10px 12px;background:var(--bg3);border-radius:10px">
+          <div class="fld" style="flex:2;min-width:240px;margin-bottom:0"><label>Kredi Kartı — POS Hesabı *</label>
+            <select id="sf-kk-hesap"><option value="">— Seçiniz —</option></select>
+          </div>
+          <div class="fld" style="flex:1;min-width:200px;margin-bottom:0"><label>Tahsil Edilen Tutar</label>
+            <input id="sf-odeme-tutar" type="number" min="0" step="0.01" placeholder="Boş: faturanın tamamı">
+            <div style="font-size:11px;color:var(--text3);margin-top:3px">Daha az tahsil edildiyse kalan kısım caride borç kalır.</div>
+          </div>
+        </div>
+        <div id="sf-virman-alani" style="display:none;gap:12px;margin-top:10px;flex-wrap:wrap;padding:10px 12px;background:var(--bg3);border-radius:10px">
+          <div class="fld" style="flex:1;min-width:280px;margin-bottom:0"><label>Virman Yapılacak Cari (borç bu cariye aktarılır) *</label>
+            <div style="display:flex;gap:6px">
+              <input id="sf-virman-cari-ad" type="text" readonly placeholder="Cari seçilmedi" style="flex:1">
+              <input id="sf-virman-cari" type="hidden">
+              <button type="button" class="btn" onclick="rehberAc('cari', c=>{ document.getElementById('sf-virman-cari').value=c.id; document.getElementById('sf-virman-cari-ad').value=cariKodluAd_(c.id, c.ad); })">🔍 Cari Seç</button>
+            </div>
+            <div style="font-size:11px;color:var(--text3);margin-top:3px">Fatura ${s.cariAd} carisine yazılır, ardından aynı tutar seçilen cariye Cari Virman ile aktarılır.</div>
           </div>
         </div>
         <div class="modal-actions">
@@ -5320,7 +5343,30 @@ function siparisFaturaModalAc(siparisId){
       </div>`;
     document.body.appendChild(overlay);
     siparisFaturaKalemlerCiz();
+    siparisFaturaOdemeTipiDegisti();
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// Siparişten fatura: ödeme tipine göre ek alanlar (Açık Hesap → vade, Kredi Kartı → POS hesabı + tahsil edilen tutar,
+// Virman → virman yapılacak cari). Peşin için ek alan yok.
+function siparisFaturaOdemeTipiDegisti(){
+  const tip = (document.getElementById("sf-odeme")||{}).value;
+  const goster = (id, acik)=>{ const e = document.getElementById(id); if(e) e.style.display = acik ? "flex" : "none"; };
+  goster("sf-vade-fld", tip === "Açık Hesap");
+  goster("sf-kk-alani", tip === "Kredi Kartı");
+  goster("sf-virman-alani", tip === "Virman");
+  if(tip === "Kredi Kartı"){
+    cariApiYapi("getBankaYapisi").then(res=>{
+      if(!res.ok) return;
+      const sel = document.getElementById("sf-kk-hesap"); if(!sel) return;
+      const secili = sel.value;
+      sel.innerHTML = '<option value="">— Seçiniz —</option>' + (res.pos||[]).filter(p=>!p.pasif).map(p=>{
+        const banka = res.bankalar.find(b=>b.id===p.bankaId);
+        return `<option value="${p.id}">${p.posAdi}${banka?' — '+banka.ad:''}</option>`;
+      }).join("");
+      if(secili) sel.value = secili;
+    }).catch(()=>{});
+  }
 }
 
 function siparisFaturaKalemlerCiz(){
@@ -5409,15 +5455,24 @@ function siparisFaturaKaydet(){
     .filter(k => (parseFloat(k.aktarilacak)||0) > 0)
     .map(k => ({ kalemId: k.id, aktarilanMiktar: k.aktarilacak }));
   if(kalemler.length===0){ alert("En az bir üründe aktarılacak miktar girin"); return; }
-  cariApi("siparistenFaturaOlustur", {
-    siparisId: _siparisFaturaState.siparisId,
-    tarih: document.getElementById("sf-tarih").value,
-    odemeTipi: document.getElementById("sf-odeme").value,
-    kalemler,
-  }).then(res=>{
+  const odemeTipi = document.getElementById("sf-odeme").value;
+  const istek = { siparisId: _siparisFaturaState.siparisId, tarih: document.getElementById("sf-tarih").value, odemeTipi, kalemler };
+  if(odemeTipi === "Açık Hesap"){ istek.vade = (document.getElementById("sf-vade")||{}).value || ""; }
+  if(odemeTipi === "Kredi Kartı"){
+    istek.posHesapId = (document.getElementById("sf-kk-hesap")||{}).value || "";
+    if(!istek.posHesapId){ alert("Kredi Kartı ile faturada POS hesabı seçimi zorunludur. Lütfen POS hesabını seçin."); return; }
+    const t = (document.getElementById("sf-odeme-tutar")||{}).value;
+    if(t !== undefined && String(t).trim() !== "") istek.odemeTutari = t;
+  }
+  if(odemeTipi === "Virman"){
+    istek.virmanHedefCariId = (document.getElementById("sf-virman-cari")||{}).value || "";
+    if(!istek.virmanHedefCariId){ alert("Virman için borcun aktarılacağı cariyi seçin."); return; }
+    if(istek.virmanHedefCariId === _siparisFaturaState.siparis.cariId){ alert("Virman yapılacak cari, sipariş carisiyle aynı olamaz."); return; }
+  }
+  cariApi("siparistenFaturaOlustur", istek).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("siparis-fatura-modal-overlay").remove();
-    alert("Fatura oluşturuldu.");
+    alert("Fatura oluşturuldu."+(res.uyari?"\n\n⚠️ "+res.uyari:""));
     satisListesiYukle();
     satisAc(res.faturaId);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
@@ -5830,6 +5885,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       <div class="satis-kalem-basliklar">
         <span class="satis-kalem-stokkodu">Stok Kodu</span><span style="flex:1">Ürün</span>
         <span class="satis-kalem-miktar">Miktar</span><span class="satis-kalem-birim">Birim</span>
+        <span class="satis-kalem-birim2" title="2. Birim (ambalaj: kutu/koli vb.). Buraya yazdığınız sayı × stok kartındaki ambalaj miktarı = Miktar">Birim2</span>
         <span class="satis-kalem-fiyat">Birim Fiyat</span><span class="satis-kalem-yuzde">İsk.%</span><span class="satis-kalem-yuzde">Kdv%</span>
         <span class="satis-kalem-paket" id="sm-paket-baslik" style="display:${belgeTipiBaslangic==='Sipariş'?'block':'none'}" title="Ambalaj Tanımlama'daki ambalaj miktarına göre hesaplanan gerekli paket/kutu sayısı">Paket</span>
       </div>
@@ -6090,7 +6146,50 @@ function satisKalemAlanDegisti(idx, alan, deger){
   if(alan==='miktar' || alan==='stokKodu'){
     const paketEl = document.getElementById("sm-paket-"+idx);
     if(paketEl) paketEl.textContent = siparisPaketBilgisi(_yeniSatisKalemleri[idx]);
+    // Miktar elle değiştirildi: Birim2 kutusu (çarpan biliniyorsa) karşılık gelen değeri gösterir.
+    delete _yeniSatisKalemleri[idx].birim2;
+    if(alan==='miktar') delete _yeniSatisKalemleri[idx].carpan;   // elle girilen Miktar yeni çarpan olur
+    const b2 = document.getElementById("sm-birim2-"+idx);
+    if(b2 && document.activeElement !== b2) b2.value = satisBirim2Deger_(_yeniSatisKalemleri[idx]);
   }
+  satisToplamGuncelle();
+}
+
+// ── Birim2 (ambalaj) sütunu: yazılan Birim2 sayısı × ÇARPAN = Miktar. Çarpan, stok kartındaki ambalaj miktarıdır
+// (1 ambalaj = kaç birim1); stok kartında yoksa satırdaki Miktar çarpan olarak alınır ve satırda saklanır (k.carpan).
+function satisCarpan_(k){
+  const kod = String(k.stokKodu||"").trim();
+  const s = kod ? (_stokTanimListe||[]).find(x=>x.stokKodu===kod) : null;
+  if(s && s.ambalajMiktari > 0) return s.ambalajMiktari;
+  return parseFloat(k.carpan) || 0;
+}
+function satisBirim2Etiket_(k){
+  const kod = String(k.stokKodu||"").trim();
+  const s = kod ? (_stokTanimListe||[]).find(x=>x.stokKodu===kod) : null;
+  return (s && s.ambalajBirimi) ? s.ambalajBirimi : "Birim2";
+}
+function satisBirim2Deger_(k){
+  if(k.birim2 !== undefined && k.birim2 !== "") return k.birim2;
+  const c = satisCarpan_(k), m = parseFloat(k.miktar)||0;
+  return (c > 0 && m > 0) ? (Math.round(m / c * 10000) / 10000) : "";
+}
+function satisBirim2Degisti(idx, deger){
+  const k = _yeniSatisKalemleri[idx]; if(!k) return;
+  const b2 = parseFloat(deger);
+  k.birim2 = deger;
+  let c = satisCarpan_(k);
+  if(!(c > 0)){
+    // Stok kartında ambalaj miktarı yok: satırdaki mevcut Miktar çarpan olur (her zaman Miktar baz alınır).
+    const m = parseFloat(k.miktar)||0;
+    if(m > 0){ k.carpan = m; c = m; }
+  }
+  if(!(b2 > 0) || !(c > 0)) return;
+  k.miktar = Math.round(b2 * c * 10000) / 10000;
+  const satir = document.querySelectorAll("#sm-kalemler .satis-kalem-satir")[idx];
+  const mEl = satir ? satir.querySelector(".satis-kalem-miktar") : null;
+  if(mEl) mEl.value = k.miktar;
+  const paketEl = document.getElementById("sm-paket-"+idx);
+  if(paketEl) paketEl.textContent = siparisPaketBilgisi(k);
   satisToplamGuncelle();
 }
 
@@ -6129,6 +6228,7 @@ function satisKalemlerCiz(){
       </label>
       <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="satisKalemAlanDegisti(${idx},'miktar',this.value)" onblur="kutuMiktarUyumKontrol('${k.stokKodu||''}', this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `satisKalemAlanDegisti(${idx},'birim',this.value)`)}
+      <input class="satis-kalem-birim2" id="sm-birim2-${idx}" type="number" min="0" step="0.0001" placeholder="${htmlKacis(satisBirim2Etiket_(k))}" title="${htmlKacis(satisBirim2Etiket_(k))}: yazdığınız sayı × birim1 miktarı = Miktar" value="${satisBirim2Deger_(k)}" oninput="satisBirim2Degisti(${idx}, this.value)">
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="satisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
       <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="İskonto %" placeholder="İsk.%" value="${k.iskontoYuzde||0}" oninput="satisKalemAlanDegisti(${idx},'iskontoYuzde',this.value)">
       <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="KDV %" placeholder="Kdv%" value="${k.kdvOrani===undefined?20:k.kdvOrani}" oninput="satisKalemAlanDegisti(${idx},'kdvOrani',this.value)">
@@ -12672,6 +12772,13 @@ const MR_KOLONLAR = {
 // Cari Hareket Raporu (Toplu) / Borç-Alacak Raporu'ndaki "Belirli Cariler" çoklu seçim
 // kutusunu, mevcut Alıcı/Satıcı/Hepsi radio seçimine ve arama kutusuna göre yeniden çizer;
 // önceden seçili olan cariler (hâlâ filtreye uyuyorlarsa) seçili kalır.
+function mrCariSecimTemizle(){
+  const ara = document.getElementById("mr-cari-secim-ara"); if(ara) ara.value = "";
+  const sel = document.getElementById("mr-cari-secim");
+  if(sel) Array.from(sel.options).forEach(o=>{ o.selected = false; });
+  mrCariSecimOneriGoster();
+  muhasebeRaporuYukle();
+}
 function mrCariSecimOneriGoster(){
   const sel = document.getElementById("mr-cari-secim");
   if(!sel) return;
@@ -15339,6 +15446,7 @@ function markaSiraTasi(idx, yon){
 let _plasiyerListe = [];
 let _plasiyerYuklendi = false;
 function plasiyerListesiYukle(){
+  try{ const b=document.getElementById("plasiyer-eski-aktar-btn"); if(b) b.style.display = modulGorunurMu_({admin:true}) ? "" : "none"; }catch(e){}
   const el = document.getElementById("plasiyer-liste");
   if(el) el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getPlasiyerListesi").then(res=>{
@@ -15947,6 +16055,21 @@ function eskiYildanEdmOnekAktar(){
       try{ if(typeof edmOnekEslesmeYukle==="function") edmOnekEslesmeYukle(); }catch(e){}
       try{ if(typeof cariListesiYukle==="function") cariListesiYukle(); }catch(e){}
       alert(`${res.eklenenOnek} önek eşleştirmesi ve ${res.eklenenCari} cari aktarıldı.`+(res.atlananOnek?`\nAtlanan (kaynakta cari bulunamadı): ${res.atlananOnek}`:""));
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+// ★ EKLENDİ (4 Eki 2026): Temel yıl (2026) plasiyer tanımlarını bu çalışma yılına devreder (önizleme + onay).
+function eskiYildanPlasiyerAktar(){
+  cariApi("eskiYildanPlasiyerAktar", {onizleme:true}).then(on=>{
+    if(!on.ok){ alert("Hata: "+(on.hata||"bilinmiyor")); return; }
+    if(!on.kaynakAdet){ alert("Kaynak yılda tanımlı plasiyer bulunamadı."); return; }
+    if(!on.eklenecek){ alert(`Devredilecek yeni plasiyer yok (${on.zatenVar} plasiyer bu yılda zaten tanımlı).`); return; }
+    if(!confirm(`Kaynak yılda ${on.kaynakAdet} plasiyer var.\n• Eklenecek: ${on.eklenecek} (${(on.adlar||[]).join(", ")})\n• Bu yılda zaten olan: ${on.zatenVar}\n\nDevam edilsin mi?`)) return;
+    cariApi("eskiYildanPlasiyerAktar", {}).then(res=>{
+      if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+      plasiyerListesiYukle();
+      alert(`${res.eklenen} plasiyer devredildi.`);
     }).catch(err=>alert("Bağlantı hatası: "+err.message));
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
@@ -17683,7 +17806,13 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
 .cari-modern .cm-seg span{display:block;text-align:center;padding:8px 10px;border:1px solid var(--rp-th-bd);background:var(--rp-satir);color:var(--rp-th-fg);border-radius:9px;font-size:13px}
 .cari-modern .cm-seg:has(input:checked) span{background:var(--rp-th-bg);border-color:var(--rp-th-fg);box-shadow:0 0 0 2px var(--rp-th-bd) inset}
 .cari-modern .cm-seg:has(input:focus-visible) span{outline:2px solid var(--rp-th-fg)}
-.cari-modern{max-height:92vh;overflow:auto}
+.cari-modern{max-height:94vh;overflow:auto}
+/* Yeni Cari: geniş pencere, 3 sütunlu ızgara — tüm bilgiler tek ekranda (4 Eki 2026) */
+.cari-modern .om-grid{grid-template-columns:1fr 1fr 1fr;gap:10px 16px}
+.cari-modern .om-kart{padding:10px 14px}
+.cari-modern .om-kart+.om-kart{margin-top:8px!important}
+.cari-modern .om-kart>.fld,.cari-modern .om-grid .fld{margin-bottom:0}
+@media(max-width:900px){.cari-modern .om-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:640px){.cari-modern .om-grid{grid-template-columns:1fr}}
 
 .ak-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:100000;display:flex;align-items:flex-start;justify-content:center;padding-top:11vh}
@@ -17736,6 +17865,7 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
 
 /* ── 3 Eki 2026: Satış / Alış fatura-sipariş-teklif formları aynı rapor renk düzeninde (alan kimlikleri ve davranış aynı, sadece görünüm) ── */
 .fatura-modal{background:var(--rp-alan,var(--bg2))}
+.modal-box.fatura-modal{max-width:1400px;width:97vw}   /* Sipariş/Fatura formu daha geniş (4 Eki 2026) */
 .fatura-modal .fm-baslik{background:var(--rp-th-bg);color:var(--rp-th-fg);padding:9px 14px;border-radius:8px;border-left:4px solid var(--rp-th-fg);font-size:16px;font-weight:800;margin:0 0 12px}
 .fatura-modal .fm-kart{background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:12px;padding:14px 16px;margin-bottom:12px}
 .fatura-modal .fm-kart .fld label{color:var(--rp-th-fg);font-weight:700;font-size:11px;letter-spacing:.2px}

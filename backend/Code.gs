@@ -1077,7 +1077,7 @@ const YAZMA_DEGIL_ = /^(get|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|ed
 const OTURUMSUZ_ACTIONLAR = { girisYap: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
-  eskiPanelStokKartlariniAktar: true, eskiYildanEdmOnekAktar: true, yeniCalismaYiliOlustur: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
+  eskiPanelStokKartlariniAktar: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
   getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, kayitDefteriHatalariTemizle: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
 };
@@ -1192,6 +1192,7 @@ function handleRequest(e) {
       case "stokTanimMarkaKoduIsleToplu": result = stokTanimMarkaKoduIsleToplu(); break;
       case "eskiPanelStokKartlariniAktar": result = eskiPanelStokKartlariniAktar(body); break;
       case "eskiYildanEdmOnekAktar": result = eskiYildanEdmOnekAktar(body); break;
+      case "eskiYildanPlasiyerAktar": result = eskiYildanPlasiyerAktar(body); break;
       case "stokTanimOlcuBirimIsleToplu": result = stokTanimOlcuBirimIsleToplu(body); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
       case "getBirimListesi": result = getBirimListesi(); break;
@@ -2542,8 +2543,26 @@ function siparistenFaturaOlustur(body) {
     }
   }
 
+  // ★ (4 Eki 2026) Ödeme tipi standardı: Açık Hesap / Peşin / Kredi Kartı / Virman. Kredi Kartı → POS hesabı zorunlu
+  // (+ isteğe bağlı tahsil edilen tutar); Virman → fatura sipariş carisine yazılır, aynı tutar hedef cariye Cari Virman ile aktarılır.
+  const odemeTipiIstek = String(body.odemeTipi || "").trim();
+  if (odemeTipiIstek === "Kredi Kartı" && !String(body.posHesapId || "").trim()) {
+    return { ok: false, hata: "Kredi Kartı ile faturada POS hesabı seçimi zorunludur" };
+  }
+  let virmanHedef = null;
+  if (odemeTipiIstek === "Virman") {
+    const hedefId = String(body.virmanHedefCariId || "").trim();
+    if (!hedefId) return { ok: false, hata: "Virman için borcun aktarılacağı cari seçilmeli" };
+    if (hedefId === siparis.cariId) return { ok: false, hata: "Virman yapılacak cari, sipariş carisiyle aynı olamaz" };
+    const cSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU"]);
+    const cData = cSheet.getDataRange().getValues();
+    for (let i = 1; i < cData.length; i++) { if (String(cData[i][0]) === hedefId) { virmanHedef = { id: hedefId, ad: String(cData[i][2] || "") }; break; } }
+    if (!virmanHedef) return { ok: false, hata: "Virman yapılacak cari bulunamadı" };
+  }
+
   const faturaSonuc = saveSatis({
     cariId: siparis.cariId, cariAd: siparis.cariAd,
+    posHesapId: body.posHesapId, odemeTutari: body.odemeTutari,
     tarih: body.tarih, odemeTipi: body.odemeTipi, bankaHesapId: body.bankaHesapId, vade: body.vade,
     aciklama: String(body.aciklama || ("Sipariş #" + siparisId.slice(-6) + "'den aktarıldı")),
     belgeTipi: "Fatura", kaynakSiparisId: siparisId,
@@ -2558,7 +2577,16 @@ function siparistenFaturaOlustur(body) {
   guncellenecekler.forEach(g => { kSheet.getRange(g.satirIdx, 10).setValue(g.yeniFaturalananMiktar); });
   cacheTemizle(["stokTanimListesi", "satisListesi"]); // güncel stok hesaplamaları vb. için (dolaylı etkisi olmasa da güvenli taraf)
 
-  return { ok: true, faturaId: faturaSonuc.id, toplamTutar: faturaSonuc.toplamTutar };
+  let uyari = "";
+  if (virmanHedef && faturaSonuc.toplamTutar > 0) {
+    const v = saveCariVirman({
+      kaynakCariId: siparis.cariId, kaynakCariAd: siparis.cariAd, hedefCariId: virmanHedef.id, hedefCariAd: virmanHedef.ad,
+      tarih: String(body.tarih || "").slice(0, 10), tutar: faturaSonuc.toplamTutar,
+      aciklama: "Sipariş faturası virmanı", 
+    });
+    if (!v.ok) uyari = "Fatura oluşturuldu ancak virman yapılamadı (" + (v.hata || "bilinmiyor") + "). Virmanı Cari Virman ekranından elle yapabilirsiniz.";
+  }
+  return { ok: true, faturaId: faturaSonuc.id, toplamTutar: faturaSonuc.toplamTutar, uyari: uyari };
 }
 
 // body: { id, durum } — Sipariş'in elle takip edilen durumunu günceller
@@ -8929,6 +8957,54 @@ function silPlasiyer(body) {
     if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); cacheTemizle(["plasiyerListesi"]); return { ok: true }; }
   }
   return { ok: false, hata: "Plasiyer bulunamadı" };
+}
+
+// ★ EKLENDİ (4 Eki 2026): TEMEL YIL (2026) E-TABLOSUNDAKİ PLASİYER TANIMLARINI ÇALIŞMA YILINA DEVRET.
+// Plasiyer ID'si korunur (devredilen carilerin PLASIYER_ID'si eşleşsin diye); hedefte aynı ID ya da aynı ad
+// varsa yeniden eklenmez. body.onizleme → yazmadan sayar.
+function eskiYildanPlasiyerAktar(body) {
+  const hedefId = aktifSheetId_();
+  if (hedefId === SHEET_ID_TEMEL_) return { ok: false, hata: "Çalışma yılı zaten temel yıl; aktarılacak ayrı bir hedef yıl yok" };
+  const kaynakSS = SpreadsheetApp.openById(SHEET_ID_TEMEL_);
+  const kSheet = kaynakSS.getSheetByName(SHEETS.plasiyerler);
+  if (!kSheet) return { ok: false, hata: "Temel yılda plasiyer sayfası bulunamadı" };
+  const kData = kSheet.getDataRange().getValues();
+  const norm = function (v) {
+    return String(v || "").trim().toLocaleLowerCase("tr-TR").replace(/[ıİ]/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c").replace(/\s+/g, " ");
+  };
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.plasiyerler, PLASIYER_BASLIKLAR);
+  const hData = sheet.getDataRange().getValues();
+  const hId = {}, hAd = {};
+  let maxSira = 0;
+  for (let i = 1; i < hData.length; i++) {
+    if (hData[i][0]) hId[String(hData[i][0])] = true;
+    const ad = norm(hData[i][1]); if (ad) hAd[ad] = true;
+    maxSira = Math.max(maxSira, parseFloat(hData[i][2]) || 0);
+  }
+  const kaynak = [];
+  for (let i = 1; i < kData.length; i++) {
+    if (!kData[i][0] || !String(kData[i][1] || "").trim()) continue;
+    kaynak.push({ id: String(kData[i][0]), ad: String(kData[i][1]).trim(), sira: parseFloat(kData[i][2]) || 0, telefon: String(kData[i][3] || "") });
+  }
+  kaynak.sort(function (a, b) { return a.sira - b.sira; });
+  const yeni = [], adlar = [];
+  let zatenVar = 0;
+  kaynak.forEach(function (p) {
+    if (hId[p.id] || hAd[norm(p.ad)]) { zatenVar++; return; }
+    maxSira++;
+    yeni.push([p.id, p.ad, maxSira, p.telefon]);
+    adlar.push(p.ad);
+    hId[p.id] = true; hAd[norm(p.ad)] = true;
+  });
+  if (body && body.onizleme) return { ok: true, onizleme: true, kaynakAdet: kaynak.length, eklenecek: yeni.length, zatenVar: zatenVar, adlar: adlar };
+  if (yeni.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, yeni.length, 4).setValues(yeni);
+    SpreadsheetApp.flush();
+    cacheTemizle(["plasiyerListesi"]);
+    veriSurumuArtir_();
+  }
+  return { ok: true, eklenen: yeni.length, zatenVar: zatenVar };
 }
 
 // body: { sirali: [id1, id2, ...] }
