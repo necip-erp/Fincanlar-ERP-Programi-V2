@@ -1305,7 +1305,7 @@ setInterval(topbarSaatGuncelle, 10000);
                   <input type="checkbox" id="cvirman-kalip-tik" checked onchange="cvKalipTikDegisti()" style="width:auto"> Standart kalıp kullan
                 </label>
                 <div class="fld" style="margin:0;max-width:170px"><label>Taksit (opsiyonel)</label>
-                  <input type="number" id="cvirman-taksit" min="0" step="1" placeholder="Örn. 7" oninput="cvKalipUygula()" title="Girilen sayı açıklamanın sonuna +7 şeklinde eklenir"></div>
+                  <input type="number" id="cvirman-taksit" min="0" step="1" placeholder="Örn. 7" oninput="cvKalipUygula()" title="Girilen sayı açıklamaya +7 TAKSİT şeklinde eklenir"></div>
               </div>
               <div class="fld cv-tam"><label>Açıklama (opsiyonel)</label>
                 <input type="text" id="cvirman-aciklama"></div>
@@ -13521,7 +13521,7 @@ function cvKalipMetni_(){
   const k = kod(kId), h = kod(hId);
   if(!k && !h) return "";
   const taksit = parseInt((document.getElementById("cvirman-taksit")||{}).value, 10);
-  return "KREDİ KARTI ÇEKİMİ " + k + " / " + h + (taksit > 0 ? " +" + taksit : "");
+  return "KREDİ KARTI ÇEKİMİ " + (taksit > 0 ? "+" + taksit + " TAKSİT " : "") + k + " / " + h;
 }
 function cvKalipUygula(){
   const tik = document.getElementById("cvirman-kalip-tik");
