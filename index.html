@@ -2396,6 +2396,10 @@ function modulAc(id){
   // Silinenler listesi her açılışta taze olmalı (stale cache burada yanıltıcı olur).
   if(id === "silinenler") silinenlerYukle();
   if(id === "kayitdefteri") kayitDefteriAcildi_(); // artık her açılışta yenilemez
+  if(id === "ceksenet" && _cekModulGorunumKaydi === "rapor"){ // rapordan açılan kayıt sekmesinden dönüş: rapor sayfası geri gelir
+    _cekModulGorunumKaydi = null; delete _kayitSekmeGosterilen["ceksenet"];
+    cekSenetGorunumleriGizle_(); document.getElementById("ceksenet-rapor-view").style.display = "block";
+  }
   // Cari/Tahsilat/Ödeme modülleri doğrudan liste ekranıyla açılır — sol arama kutusuna
   // odaklan ki kullanıcı hiçbir şeye tıklamadan yazmaya başlayabilsin. (Satış/Satış İadesi
   // önce Fatura/Teklif/Sipariş seçim ekranı gösterdiği için odaklanma satisAltModulAc'te.)
@@ -10065,10 +10069,20 @@ function cariKodluAd_(cariId, cariAd){
     return (c && c.cariKodu) ? (c.cariKodu + " - " + ad) : ad;
   }catch(e){ return cariAd || ""; }
 }
-// Yeni tarayıcı sekmesinde (oturum aynı) tek bir kaydı açar; rapor/liste ekranı bu sayfada olduğu gibi kalır.
+// ★ Rapor/listeden bir kayda tıklayınca kayıt, programın ÜST SEKME ŞERİDİNDE yeni bir sekmede açılır; raporun olduğu
+// Çek/Senet sekmesine dönülünce rapor olduğu gibi (filtreler ve sıralamayla) durur.
+let _cekModulGorunumKaydi = null;
 function kayitYeniSayfadaAc_(tur, id){
-  const url = location.origin + location.pathname + location.search + "#" + tur + "=" + encodeURIComponent(id);
-  window.open(url, "_blank");
+  if(typeof seriNoGrupModalKapat === "function") seriNoGrupModalKapat();
+  if(tur === "cek"){
+    const rapor = document.getElementById("ceksenet-rapor-view"), mod = document.getElementById("mod-ceksenet");
+    if(rapor && rapor.style.display === "block" && mod && mod.classList.contains("active")) _cekModulGorunumKaydi = "rapor";
+    const c = (typeof _cekSenetListe !== "undefined" ? _cekSenetListe : []).find(x=>x.id === id);
+    const etiket = "Çek · " + ((c && (c.seriNo || c.cariAd)) ? String(c.seriNo || c.cariAd).slice(0,16) : "");
+    kayitSekmesindeAc('ceksenet','🧾',etiket,'CEK:'+id,()=>{ if(!_cekSenetYuklendi) cekSenetListesiYukle(); cekSenetAc(id); });
+  } else {
+    kayitSekmesindeAc('odeme','💸','Ödeme','ODEME:'+id,()=>{ if(!_odemeYuklendi) odemeListesiYukle(); odemeAc(id); });
+  }
 }
 function yazdirHtml_(baslik, govde){
   const logo = new URL("fincanlar-logo.png", location.href).href;
