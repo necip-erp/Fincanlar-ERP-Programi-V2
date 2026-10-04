@@ -396,7 +396,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 @media (max-width:700px){ .fatura-yan-panel{width:100vw;max-width:100vw} }
 .satis-kalem-basliklar{display:flex;gap:6px;margin-bottom:4px;font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:700}
 .satis-kalem-basliklar>span{padding:0 9px}
-.satis-kalem-satir{display:flex;gap:6px;margin-bottom:6px;align-items:center}
+.satis-kalem-satir{display:flex;gap:6px;margin-bottom:6px;align-items:center;scroll-margin-bottom:190px}
 .satis-kalem-satir input,.satis-kalem-satir select{padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--bg2);outline:none;font-family:inherit}
 .satis-kalem-satir input:focus,.satis-kalem-satir select:focus{border-color:var(--yellow);background:var(--bg2)}
 .satis-kalem-stokkodu{width:110px;flex:0 0 110px}
@@ -6128,7 +6128,13 @@ function satisMiktarOdakla_(idx){
   setTimeout(()=>{
     const satir = document.querySelectorAll("#sm-kalemler .satis-kalem-satir")[idx];
     const el = satir ? satir.querySelector(".satis-kalem-miktar") : null;
-    if(el){ el.focus(); el.select(); }
+    if(el){
+      try{ el.focus({preventScroll:true}); }catch(e){ el.focus(); }
+      el.select();
+      // F2 / rehber / öneriyle ürün eklenince de liste kayar: son satırsa en alta, değilse satır görünür olsun
+      const son = idx >= _yeniSatisKalemleri.length-1;
+      if(son) satisSonSatiraKaydir_(true); else if(satir) satir.scrollIntoView({block:"nearest"});
+    }
   }, 40);
 }
 
@@ -6139,12 +6145,12 @@ function satisKalemEkleUI(){
 }
 
 // Liste uzadıkça pencere en alta kayar: üstteki belge tipi alanı yukarıda kalır, son satır ve alt şerit görünür.
-function satisSonSatiraKaydir_(){
+function satisSonSatiraKaydir_(odakYok){
   const el = document.getElementById("sm-kalemler");
   const kutu = el && el.closest(".modal-box");
   if(!kutu) return;
   kutu.scrollTop = kutu.scrollHeight;
-  const son = el.querySelector(".satis-kalem-satir:last-child .satis-kalem-stokkodu");
+  const son = odakYok ? null : el.querySelector(".satis-kalem-satir:last-child .satis-kalem-stokkodu");
   if(son){ try{ son.focus({preventScroll:true}); }catch(e){ son.focus(); } }
 }
 
