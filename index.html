@@ -967,6 +967,7 @@ setInterval(topbarSaatGuncelle, 10000);
         <div class="fld"><button type="button" class="btn" onclick="cekSenetRaporYenile()">↻ Yenile</button></div>
         <div class="fld"><button type="button" class="btn" onclick="cekSenetRaporSutunSifirla()" title="Başlıkları sürükleyerek yerini değiştirebilirsiniz">↺ Sütun sırası</button></div>
         <div class="fld"><button type="button" class="btn" onclick="cekSenetRaporExcel()">📊 Excel'e Aktar</button></div>
+        <div class="fld"><button type="button" class="btn" onclick="cekSenetRaporYazdir()">🖨 Yazdır</button></div>
       </div>
       <div id="csr-icerik"></div>
     </div>
@@ -983,6 +984,7 @@ setInterval(topbarSaatGuncelle, 10000);
       <div class="cari-list-head">
         <input id="ceksenet-ara" placeholder="Çek/senet ara (cari, seri no)..." oninput="cekSenetAramaFiltrele(this.value)">
         <button class="cari-add-btn" id="ceksenet-kocan-btn" onclick="cekKocaniModalAc()" title="Çek koçanları (bankadan alınan boş çek yaprakları) — sadece Kendi Çeklerim için" style="font-size:15px;display:none">📒</button>
+        <button class="cari-add-btn" onclick="cekSenetListeYazdir()" title="Görünen çek listesini yazdır" style="font-size:15px">🖨</button>
         <button class="cari-add-btn" onclick="cekSenetYeniAc_()" title="Yeni çek/senet girişi">+</button>
       </div>
       <div class="cs-sirala-bar" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12.5px">
@@ -10051,18 +10053,76 @@ function cekSenetAltModulAc(hangisi){
     cekSenetRaporYenile();
   }
 }
+// ── Ortak yardımcılar (4 Eki 2026 standartları) ──
+// STANDART 1: Raporlarda cari HER ZAMAN "Cari Kodu - Cari Adı" olarak yazılır.
+// STANDART 2: Rapor/liste tablolarında başlıklar sürüklenerek yer değiştirir; başlığa tıklayınca önce büyükten küçüğe, tekrar tıklayınca küçükten büyüğe sıralanır.
+function cariKodluAd_(cariId, cariAd){
+  try{
+    const liste = (typeof _cariListe !== "undefined" && _cariListe) || [];
+    let c = cariId ? liste.find(x=>x.id===cariId) : null;
+    if(!c && cariAd){ const e = liste.filter(x=>x.ad===cariAd); if(e.length === 1) c = e[0]; }
+    const ad = cariAd || (c ? c.ad : "");
+    return (c && c.cariKodu) ? (c.cariKodu + " - " + ad) : ad;
+  }catch(e){ return cariAd || ""; }
+}
+// Yeni tarayıcı sekmesinde (oturum aynı) tek bir kaydı açar; rapor/liste ekranı bu sayfada olduğu gibi kalır.
+function kayitYeniSayfadaAc_(tur, id){
+  const url = location.origin + location.pathname + location.search + "#" + tur + "=" + encodeURIComponent(id);
+  window.open(url, "_blank");
+}
+function yazdirHtml_(baslik, govde){
+  const logo = new URL("fincanlar-logo.png", location.href).href;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${htmlKacis(baslik)}</title><style>
+    body{font-family:Arial,sans-serif;padding:20px;color:#111;font-size:12px}
+    .ust{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}h2{margin:0;font-size:18px}
+    table{border-collapse:collapse;width:100%;margin:6px 0 14px}th,td{border:1px solid #999;padding:4px 7px;font-size:11.5px;text-align:left}
+    th{background:#eee}td[style*="right"],th[style*="right"]{text-align:right}.rapor-baslik{font-weight:800;font-size:14px;margin:12px 0 2px}
+    .hk-borc{color:#b00020;font-weight:700}.hk-alacak{color:#15803d;font-weight:700}
+    @media print{body{padding:6px}}</style></head><body>
+    <div class="ust"><div><h2>${htmlKacis(baslik)}</h2><div style="color:#666">Fincanlar · ${tarihGoster(tarihIsoYaz_(new Date()))}</div></div><img src="${logo}" style="height:46px" onerror="this.style.display='none'"></div>${govde}</body></html>`;
+  const fr = document.createElement("iframe");
+  fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+  document.body.appendChild(fr);
+  fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+  setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(_){} setTimeout(()=>fr.remove(), 2500); }, 400);
+}
+// Ekrandaki bir kabın içindeki tabloları (tıklama/sürükleme niteliklerinden arındırarak) yazdırır.
+function tablolariYazdir_(baslik, kap){
+  if(!kap || !kap.querySelector("table")){ alert("Yazdırılacak liste yok."); return; }
+  const kopya = kap.cloneNode(true);
+  kopya.querySelectorAll("[onclick]").forEach(e=>e.removeAttribute("onclick"));
+  kopya.querySelectorAll("[draggable]").forEach(e=>e.removeAttribute("draggable"));
+  yazdirHtml_(baslik, kopya.innerHTML);
+}
+function cekSenetRaporYazdir(){
+  const tur = (document.getElementById("csr-tur")||{}).value === "odemeler" ? "Yapılan Ödemeler" : "Çek/Senet Raporu";
+  tablolariYazdir_(tur, document.getElementById("csr-icerik"));
+}
+function cekSenetListeYazdir(){
+  const q = (document.getElementById("ceksenet-ara").value||"").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
+  let liste = _cekSenetListe.filter(c=>c.tip===_cekSenetAktifTip);
+  if(q) liste = liste.filter(c => c.cariAd.replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) || (c.seriNo||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q));
+  liste = cekSenetSirala_(liste, cekSenetSiralaOku_(_cekSenetAktifTip));
+  if(!liste.length){ alert("Yazdırılacak çek yok."); return; }
+  const toplam = liste.reduce((a,c)=>a+(c.kalanTutar||0),0);
+  const baslik = _cekSenetAktifTip === "Alınan" ? "Müşteri Çekleri Listesi" : "Kendi Çeklerim Listesi";
+  yazdirHtml_(baslik, `<table><thead><tr><th>#</th><th>Cari</th><th>Çek No</th><th>Banka</th><th>Düzenlenme</th><th>Vade</th><th style="text-align:right">Tutar</th><th>Durum</th></tr></thead><tbody>
+    ${liste.map((c,i)=>`<tr><td>${i+1}</td><td>${htmlKacis(cariKodluAd_(c.cariId, c.cariAd))}</td><td>${htmlKacis(c.seriNo||'—')}</td><td>${htmlKacis(c.bankaAdi||'—')}</td><td>${c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):'—'}</td><td>${c.vade?tarihGoster(c.vade):'—'}</td><td style="text-align:right">${paraFormat(c.kalanTutar)}</td><td>${htmlKacis(c.durum)}</td></tr>`).join("")}
+    <tr><td colspan="6" style="text-align:right"><b>TOPLAM (${liste.length} adet)</b></td><td style="text-align:right"><b>${paraFormat(toplam)}</b></td><td></td></tr></tbody></table>`);
+}
 let _csrBolumler = [];
 const CSR_SUTUNLAR = {
-  cari:  { baslik:"Cari",        hucre:(c)=>htmlKacis(c.cariAd), excel:(c)=>c.cariAd },
-  cekNo: { baslik:"Çek No",      hucre:(c)=>htmlKacis(c.seriNo||'—'), excel:(c)=>c.seriNo||"" },
-  banka: { baslik:"Banka",       hucre:(c)=>htmlKacis(c.bankaAdi||'—'), excel:(c)=>c.bankaAdi||"" },
-  duz:   { baslik:"Düzenlenme",  hucre:(c)=>c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):'—', excel:(c)=>c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):"" },
-  vade:  { baslik:"Vade",        hucre:(c)=>c.vade?tarihGoster(c.vade):'—', excel:(c)=>c.vade?tarihGoster(c.vade):"" },
-  tutar: { baslik:"Tutar", sag:true, hucre:(c)=>paraFormat(csrTutar_(c)), excel:(c)=>csrTutar_(c) },
-  durum: { baslik:"Durum",       hucre:(c)=>cekSenetDurumEtiket(c), excel:(c)=>c.durum }
+  cari:  { baslik:"Cari",        hucre:(c)=>htmlKacis(cariKodluAd_(c.cariId, c.cariAd)), excel:(c)=>cariKodluAd_(c.cariId, c.cariAd), deger:(c)=>cariKodluAd_(c.cariId, c.cariAd) },
+  cekNo: { baslik:"Çek No",      hucre:(c)=>htmlKacis(c.seriNo||'—'), excel:(c)=>c.seriNo||"", deger:(c)=>c.seriNo||"" },
+  banka: { baslik:"Banka",       hucre:(c)=>htmlKacis(c.bankaAdi||'—'), excel:(c)=>c.bankaAdi||"", deger:(c)=>c.bankaAdi||"" },
+  duz:   { baslik:"Düzenlenme",  hucre:(c)=>c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):'—', excel:(c)=>c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):"", deger:(c)=>c.duzenlenmeTarihi||"" },
+  vade:  { baslik:"Vade",        hucre:(c)=>c.vade?tarihGoster(c.vade):'—', excel:(c)=>c.vade?tarihGoster(c.vade):"", deger:(c)=>c.vade||"" },
+  tutar: { baslik:"Tutar", sag:true, sayi:true, hucre:(c)=>paraFormat(csrTutar_(c)), excel:(c)=>csrTutar_(c), deger:(c)=>csrTutar_(c) },
+  durum: { baslik:"Durum",       hucre:(c)=>cekSenetDurumEtiket(c), excel:(c)=>c.durum, deger:(c)=>c.durum||"" }
 };
 const CSR_VARSAYILAN_SIRA = ["cari","cekNo","banka","duz","vade","tutar","durum"];
-let _csrDragKol = null;
+let _csrDragKol = null, _csrSirala = null; // _csrSirala: {k, yon:"azalan"|"artan"}
+function csrSirala(k){ _csrSirala = (_csrSirala && _csrSirala.k === k && _csrSirala.yon === "azalan") ? {k, yon:"artan"} : {k, yon:"azalan"}; cekSenetRaporCiz(); }
 function csrTutar_(c){ return c.durum === "Portföyde" ? (c.kalanTutar||0) : (c.tutar||0); }
 function csrSutunSirasiAl_(){
   let k = null; try{ k = JSON.parse(localStorage.getItem("csrSutunSirasi")||"null"); }catch(e){}
@@ -10092,8 +10152,13 @@ function csrBolumHtml_(id, baslik, liste, altBaslik){
   const gecikmis = liste.filter(c=>c.durum==="Portföyde" && c.gecikmis);
   const ozet = `<span style="font-size:12.5px;color:var(--text2)">${liste.length} adet · Toplam <b>${paraFormat(toplam)}</b>${ort?` · Ort. vade <b>${tarihGoster(ort.str)}</b> (${ort.gun>=0?ort.gun+' gün sonra':Math.abs(ort.gun)+' gün önce'})`:''}${gecikmis.length?` · <span class="hk-borc">Vadesi geçmiş ${gecikmis.length} adet ${paraFormat(gecikmis.reduce((a,c)=>a+csrTutar_(c),0))}</span>`:''}</span>`;
   const sira = csrSutunSirasiAl_();
-  const tablo = liste.length ? `<div style="overflow-x:auto"><table class="rapor-tbl csr-tbl" data-bolum="${id}"><thead><tr>${sira.map(k=>`<th draggable="true" data-ckol="${k}" style="cursor:grab${CSR_SUTUNLAR[k].sag?';text-align:right':''}" title="Sürükleyerek sütun yerini değiştirebilirsiniz">${CSR_SUTUNLAR[k].baslik}</th>`).join("")}</tr></thead>
-    <tbody>${liste.map(c=>`<tr style="cursor:pointer" onclick="cekSenetRaporSatirAc_('${htmlKacis(c.id)}')">${sira.map(k=>`<td${CSR_SUTUNLAR[k].sag?' style="text-align:right"':''}>${CSR_SUTUNLAR[k].hucre(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
+  if(_csrSirala && CSR_SUTUNLAR[_csrSirala.k]){
+    const kol = CSR_SUTUNLAR[_csrSirala.k], cc = _csrSirala.yon === "azalan" ? -1 : 1;
+    liste = liste.slice().sort((x,y)=>{ const a = kol.deger(x), b = kol.deger(y); return cc * (kol.sayi ? (a-b) : String(a).localeCompare(String(b), "tr")); });
+  }
+  const okIsaret = (k)=> (_csrSirala && _csrSirala.k === k) ? (_csrSirala.yon === "azalan" ? " ▼" : " ▲") : "";
+  const tablo = liste.length ? `<div style="overflow-x:auto"><table class="rapor-tbl csr-tbl" data-bolum="${id}"><thead><tr>${sira.map(k=>`<th draggable="true" data-ckol="${k}" onclick="csrSirala('${k}')" style="cursor:pointer${CSR_SUTUNLAR[k].sag?';text-align:right':''}" title="Tıkla: sırala (büyükten küçüğe / küçükten büyüğe) · Sürükle: sütunun yerini değiştir">${CSR_SUTUNLAR[k].baslik}${okIsaret(k)}</th>`).join("")}</tr></thead>
+    <tbody>${liste.map(c=>`<tr style="cursor:pointer" title="Tıkla: çek yeni sayfada açılır (rapor bu sayfada kalır)" onclick="kayitYeniSayfadaAc_('cek','${htmlKacis(c.id)}')">${sira.map(k=>`<td${CSR_SUTUNLAR[k].sag?' style="text-align:right"':''}>${CSR_SUTUNLAR[k].hucre(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
     : '<div class="cari-empty">Kayıt yok.</div>';
   return `<div class="${altBaslik?'':'rapor-baslik'}" style="${altBaslik?'font-weight:800;margin:14px 0 4px':''}">${baslik}</div><div style="margin:2px 0 6px">${ozet}</div>${tablo}`;
 }
@@ -10111,7 +10176,7 @@ function cekSenetRaporTurDegisti(){
 }
 function csrOdemeSatirlariOlustur_(q){
   const norm = (m)=>String(m||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
-  const cariAdi = (id)=>{ const c = (_cariListe||[]).find(x=>x.id===id); return c ? c.ad : ""; };
+  const cariAdi = (id)=>{ const c = (_cariListe||[]).find(x=>x.id===id); return c ? cariKodluAd_(id, c.ad) : ""; };
   const gruplar = {};
   const ekle = (anahtar, c, tur, cariAd)=>{
     const g = (gruplar[anahtar] = gruplar[anahtar] || {seriNo: anahtar.startsWith("~") ? "" : anahtar, cari: cariAd, tarih: "", kendi:{adet:0,tutar:0}, musteri:{adet:0,tutar:0}, vadeler:[], idler:[]});
@@ -10124,7 +10189,7 @@ function csrOdemeSatirlariOlustur_(q){
   };
   _cekSenetListe.forEach(c=>{
     if(c.tip === "Verilen"){
-      ekle(c.seriGrupNo || ("~"+c.id), c, "kendi", c.cariAd);
+      ekle(c.seriGrupNo || ("~"+c.id), c, "kendi", cariKodluAd_(c.cariId, c.cariAd));
     } else if(c.tip === "Alınan" && c.ciroCariId){
       // Ciro edilmiş müşteri çeki = ödeme (çıkış): ödeme seri no'su ayrı kolonda
       ekle(c.odemeSeriNo || ("~"+c.id), c, "musteri", cariAdi(c.ciroCariId));
@@ -10144,7 +10209,7 @@ function cekSenetOdemelerRaporuCiz_(kap){
   kap.innerHTML = `<div class="rapor-baslik">💸 Yapılan Ödemeler <span style="font-weight:400;font-size:12px;color:var(--text2)">(her satır bir ödeme işlemi · satıra tıkla: o seri no ile yapılan tüm işlemler)</span></div>
     <div style="margin:2px 0 6px;font-size:12.5px;color:var(--text2)">${satirlar.length} ödeme · Toplam <b>${paraFormat(toplam)}</b></div>` +
     (satirlar.length ? `<div style="overflow-x:auto"><table class="rapor-tbl"><thead><tr><th>Çek Ödeme Seri No</th><th>Tarih</th><th>Cari</th><th style="text-align:right">Kendi Çek</th><th style="text-align:right">Müşteri Çeki</th><th style="text-align:right">Toplam</th><th style="text-align:right">Adet</th><th>Ort. Vade</th></tr></thead><tbody>
-    ${satirlar.map(g=>`<tr style="cursor:pointer" onclick="${g.seriNo ? `seriNoGrupModalAc('${htmlKacis(g.seriNo)}')` : `cekSenetRaporSatirAc_('${htmlKacis(g.idler[0])}')`}">
+    ${satirlar.map(g=>`<tr style="cursor:pointer" onclick="${g.seriNo ? `seriNoGrupModalAc('${htmlKacis(g.seriNo)}')` : `kayitYeniSayfadaAc_('cek','${htmlKacis(g.idler[0])}')`}">
       <td><b>${g.seriNo ? htmlKacis(g.seriNo) : '<span style="color:var(--text3)">— (seri no verilmemiş)</span>'}</b></td>
       <td>${g.tarih ? tarihGoster(g.tarih) : '—'}</td><td>${htmlKacis(g.cari||'—')}</td>
       <td style="text-align:right">${g.kendi.adet ? paraFormat(g.kendi.tutar)+' <small>('+g.kendi.adet+')</small>' : '—'}</td>
@@ -11475,7 +11540,7 @@ function cekGorselModalKapat(){ const el = document.getElementById("cekgorsel-mo
 const SNG_SUTUNLAR = {
   kaynak: { baslik:"Kaynak",      deger:k=>k.kaynak==='CekSenet'?'Çek/Senet':'Ödeme',  hucre:k=>k.kaynak==='CekSenet'?'🧾 Çek/Senet':'💸 Ödeme' },
   tip:    { baslik:"Tip",         deger:k=>k.tip||"",                                    hucre:k=>k.kaynak==='CekSenet'?cekSenetTipEtiket(k.tip):htmlKacis(k.tip||"") },
-  cari:   { baslik:"Cari",        deger:k=>k.cariAd||"",                                 hucre:k=>htmlKacis(k.cariAd||'—') },
+  cari:   { baslik:"Cari",        deger:k=>cariKodluAd_(k.cariId, k.cariAd),                 hucre:k=>htmlKacis(cariKodluAd_(k.cariId, k.cariAd)||'—') },
   tutar:  { baslik:"Tutar",       deger:k=>+k.tutar||0, sayi:true, sag:true,             hucre:k=>paraFormat(k.tutar) },
   vade:   { baslik:"Vade/Tarih",  deger:k=>String(k.vade||k.tarih||""),                 hucre:k=>tarihGoster(k.vade||k.tarih) },
   durum:  { baslik:"Durum/Banka", deger:k=>k.durum||k.bankaAdi||"",                      hucre:k=>htmlKacis(k.durum||k.bankaAdi||'—') }
@@ -11518,11 +11583,11 @@ function sngCiz_(){
       <span><b>${res.kalemler.length}</b> kayıt</span>
       <span>Toplam Tutar: <b>${paraFormat(res.toplam)}</b></span>
       ${res.ortalamaVade ? `<span>Ortalama Vade: <b>${tarihGoster(res.ortalamaVade)}</b></span>` : ""}
-      <span style="margin-left:auto;font-size:11.5px">Başlığa tıkla: sırala · sürükle: yerini değiştir</span>
+      <span style="margin-left:auto;font-size:11.5px">Başlığa tıkla: sırala · sürükle: yerini değiştir · <a href="#" onclick="tablolariYazdir_('Seri No: '+(_sngVeri&&_sngVeri.seriNo||'')+' — Birlikte Yapılan İşlemler', document.getElementById('serinogrup-icerik')); return false">🖨 Yazdır</a></span>
     </div>
     <table class="hareket-tbl sng-tbl"><thead><tr>${sira.map(k=>`<th draggable="true" data-skol="${k}" onclick="sngSirala('${k}')" style="cursor:pointer${SNG_SUTUNLAR[k].sag?';text-align:right':''}" title="Tıkla: sırala (büyükten küçüğe / küçükten büyüğe) · Sürükle: sütunun yerini değiştir">${SNG_SUTUNLAR[k].baslik}${ok(k)}</th>`).join("")}</tr></thead>
     <tbody>${kalemler.map(k=>`
-      <tr class="hk-row" onclick="seriNoGrupModalKapat(); ${k.kaynak==='CekSenet' ? `kayitSekmesindeAc('ceksenet','🧾','Çek/Senet','CEK:${htmlKacis(k.id)}',()=>{ if(!_cekSenetYuklendi) cekSenetListesiYukle(); cekSenetAc('${htmlKacis(k.id)}'); })` : `kayitSekmesindeAc('odeme','💸','Ödeme','ODEME:${htmlKacis(k.id)}',()=>{ if(!_odemeYuklendi) odemeListesiYukle(); odemeAc('${htmlKacis(k.id)}'); })`}">
+      <tr class="hk-row" title="Tıkla: kayıt yeni sayfada açılır (bu pencere ve rapor yerinde kalır)" onclick="kayitYeniSayfadaAc_('${k.kaynak==='CekSenet'?'cek':'odeme'}','${htmlKacis(k.id)}')">
         ${sira.map(c=>`<td${SNG_SUTUNLAR[c].sag?' style="text-align:right"':''}>${SNG_SUTUNLAR[c].hucre(k)}</td>`).join("")}
       </tr>`).join("")}</tbody></table>`;
   el.querySelectorAll("th[data-skol]").forEach(th=>{
@@ -16338,7 +16403,16 @@ function uygulamaAcilisRutini(){
     const islem = params.get("islem");
     const shrArama = params.get("shrArama");
     const stanimAra = params.get("stanimAra");
-    if(islem){ cariHareketIslemeGit(islem); }
+    const derin = /^#(cek|odeme)=(.+)$/.exec(location.hash || "");
+    if(derin){
+      // ★ Başka sayfadan "yeni sayfada aç" ile gelinen kayıt (örn. #cek=ID): bu tarayıcı sekmesinde sadece o kayıt açılır,
+      // raporu açık bırakan ilk sayfa olduğu gibi kalır.
+      const kid = decodeURIComponent(derin[2]);
+      try{ history.replaceState(null, "", location.pathname + location.search); }catch(e){}
+      if(derin[1] === "cek") kayitSekmesindeAc('ceksenet','🧾','Çek/Senet','CEK:'+kid,()=>{ if(!_cekSenetYuklendi) cekSenetListesiYukle(); cekSenetAc(kid); });
+      else kayitSekmesindeAc('odeme','💸','Ödeme','ODEME:'+kid,()=>{ if(!_odemeYuklendi) odemeListesiYukle(); odemeAc(kid); });
+    }
+    else if(islem){ cariHareketIslemeGit(islem); }
     else if(tab && MODULLER.some(m=>m.id===tab)) modulAc(tab);
     else acilisSayfasinaGit();
     if(shrArama && tab === "stok"){
@@ -17745,6 +17819,121 @@ document.addEventListener("keydown", function(e){
     if(!e.metaKey && kisayolMetni(e) === k){ e.preventDefault(); e.stopPropagation(); const o = document.getElementById("ak-overlay"); (o && o.style.display !== "none") ? akKapat() : akAc(); }
   }catch(_){}
 }, true);
+</script>
+
+<!-- ══════════════ STANDART RAPOR TABLOSU (4 Eki 2026) ══════════════
+     Tüm rapor tablolarında (table.rapor-tbl) otomatik:
+     1) Başlıklar sürüklenerek yer değiştirir (sıra tarayıcıda, başlık kümesine göre saklanır);
+     2) Başlığa tıklayınca önce BÜYÜKTEN KÜÇÜĞE, tekrar tıklayınca küçükten büyüğe sıralanır;
+     3) Hücrede yalnızca cari adı yazıyorsa "Cari Kodu - Cari Adı" biçimine çevrilir (cari kodu her zaman görünsün).
+     Kendi sürükleme/sıralamasını yapan tablolar (th[draggable]) ve bordro atlanır. Rapor yeniden çizilince (innerHTML)
+     MutationObserver yeni tabloyu yakalar, kaydedilmiş sütun sırası uygulanır. Yeni raporlar da bunu otomatik alır. -->
+<script>
+(function(){
+  const ANAHTAR = "tabloSutun:";
+  const temiz = t => String(t||"").replace(/\s+/g," ").replace(/[▲▼]/g,"").trim();
+  function deger(td){
+    const t = temiz(td.textContent).replace(/[₺\u00A0]/g,"").trim();
+    if(t === "" || t === "—" || t === "-") return {bos:true};
+    let m = /^(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})$/.exec(t);
+    if(m) return {n: (+m[3])*10000 + (+m[2])*100 + (+m[1])};
+    if(/^-?\d{1,3}(\.\d{3})*(,\d+)?$/.test(t) || /^-?\d+(,\d+)?$/.test(t)) return {n: parseFloat(t.replace(/\./g,"").replace(",","."))};
+    const mn = /^(-?[\d.]+,\d+)\s/.exec(t); // "1.000,00 (2)" gibi sayı ile başlayanlar
+    if(mn) return {n: parseFloat(mn[1].replace(/\./g,"").replace(",","."))};
+    return {s: t.toLocaleLowerCase("tr")};
+  }
+  function kars(a, b, yon){ // yon: -1 azalan, 1 artan; boşlar her zaman sonda
+    if(a.bos || b.bos) return a.bos && b.bos ? 0 : (a.bos ? 1 : -1);
+    if(a.n !== undefined && b.n !== undefined) return yon * (a.n - b.n);
+    return yon * String(a.s !== undefined ? a.s : a.n).localeCompare(String(b.s !== undefined ? b.s : b.n), "tr", {numeric:true});
+  }
+  function anahtar(ths){ return ANAHTAR + ths.map(t=>t.dataset.orig).slice().sort().join("|"); }
+  function sutunTasi(tablo, kaynak, hedef){
+    if(kaynak === hedef) return;
+    Array.from(tablo.rows).forEach(r=>{
+      const h = r.cells; if(!h[kaynak] || !h[hedef]) return;
+      r.insertBefore(h[kaynak], kaynak < hedef ? h[hedef].nextSibling : h[hedef]);
+    });
+  }
+  function baslikSatiri(tablo){ const t = tablo.tHead; return t && t.rows.length ? t.rows[t.rows.length-1] : null; }
+  function enhance(tablo){
+    const hr = baslikSatiri(tablo); if(!hr) return;
+    if(tablo.closest(".bordro-sayfa,[data-std-yok]") || tablo.querySelector('th[draggable="true"]')) { tablo.dataset.std = "atla"; return; }
+    const ths = Array.from(hr.cells); if(ths.length < 2) { tablo.dataset.std = "atla"; return; }
+    tablo.dataset.std = "1";
+    ths.forEach(th=>{ th.dataset.orig = temiz(th.textContent); });
+    const n = ths.length;
+    const govde = Array.from(tablo.rows).filter(r=>r !== hr && r.parentNode !== tablo.tHead);
+    const tasinabilir = govde.length > 0 && govde.every(r=>r.cells.length === n && Array.from(r.cells).every(c=>!(c.colSpan > 1)));
+    // kaydedilmiş sırayı uygula
+    if(tasinabilir){
+      try{
+        const kayit = JSON.parse(localStorage.getItem(anahtar(ths)) || "null");
+        if(Array.isArray(kayit) && kayit.length === n){
+          for(let i=0;i<n;i++){
+            const mevcut = Array.from(hr.cells).map(t=>t.dataset.orig), j = mevcut.indexOf(kayit[i]);
+            if(j > -1 && j !== i) sutunTasi(tablo, j, i);
+          }
+        }
+      }catch(e){}
+    }
+    const sirala = {k:null, yon:-1};
+    Array.from(hr.cells).forEach(th=>{
+      th.style.cursor = "pointer";
+      th.title = "Tıkla: sırala (büyükten küçüğe / küçükten büyüğe)" + (tasinabilir ? " · Sürükle: sütunun yerini değiştir" : "");
+      th.addEventListener("click", ()=>{
+        const idx = Array.from(hr.cells).indexOf(th), ad = th.dataset.orig;
+        if(sirala.k === ad) sirala.yon = -sirala.yon; else { sirala.k = ad; sirala.yon = -1; }
+        Array.from(tablo.tBodies).forEach(tb=>{
+          const satirlar = Array.from(tb.rows), sirali = satirlar.filter(r=>r.cells.length === n && Array.from(r.cells).every(c=>!(c.colSpan > 1)));
+          const sabit = satirlar.filter(r=>sirali.indexOf(r) < 0);
+          sirali.map(r=>({r, d: deger(r.cells[idx])})).sort((a,b)=>kars(a.d, b.d, sirala.yon)).forEach(o=>tb.appendChild(o.r));
+          sabit.forEach(r=>tb.appendChild(r)); // toplam/ara satırlar sonda kalır
+        });
+        Array.from(hr.cells).forEach(t=>{ const o = t.querySelector(".std-ok"); if(o) o.remove(); });
+        const ok = document.createElement("span"); ok.className = "std-ok"; ok.textContent = sirala.yon < 0 ? " ▼" : " ▲"; th.appendChild(ok);
+      });
+      if(tasinabilir){
+        th.draggable = true;
+        th.addEventListener("dragstart", e=>{ tablo._stdKaynak = Array.from(hr.cells).indexOf(th); try{ e.dataTransfer.setData("text/plain","kolon"); e.dataTransfer.effectAllowed="move"; }catch(x){} });
+        th.addEventListener("dragover", e=>{ if(tablo._stdKaynak === undefined) return; e.preventDefault(); th.style.outline = "2px dashed var(--blue)"; th.style.outlineOffset = "-2px"; });
+        th.addEventListener("dragleave", ()=>{ th.style.outline = ""; });
+        th.addEventListener("dragend", ()=>{ tablo._stdKaynak = undefined; Array.from(hr.cells).forEach(t=>t.style.outline=""); });
+        th.addEventListener("drop", e=>{
+          e.preventDefault(); const k = tablo._stdKaynak; tablo._stdKaynak = undefined;
+          Array.from(hr.cells).forEach(t=>t.style.outline="");
+          const h = Array.from(hr.cells).indexOf(th); if(k === undefined || k === h) return;
+          sutunTasi(tablo, k, h);
+          try{ localStorage.setItem(anahtar(Array.from(hr.cells)), JSON.stringify(Array.from(hr.cells).map(t=>t.dataset.orig))); }catch(x){}
+        });
+      }
+    });
+  }
+  // Cari adı → "Kod - Ad" (yalnız metinden ibaret hücreler, adı tek cariye ait olanlar)
+  function cariKodla(tablo){
+    const liste = (typeof _cariListe !== "undefined" && _cariListe) || [];
+    if(!liste.length) return false;
+    if(!window._stdCariHarita || window._stdCariHaritaN !== liste.length){
+      const h = {}; liste.forEach(c=>{ if(c.ad) (h[c.ad] = h[c.ad] || []).push(c); });
+      window._stdCariHarita = h; window._stdCariHaritaN = liste.length;
+    }
+    tablo.querySelectorAll("tbody td").forEach(td=>{
+      if(td.children.length) return;
+      const t = (td.textContent||"").trim(), e = window._stdCariHarita[t];
+      if(e && e.length === 1 && e[0].cariKodu) td.textContent = e[0].cariKodu + " - " + t;
+    });
+    return true;
+  }
+  let bekliyor = false;
+  function tara(){
+    bekliyor = false;
+    document.querySelectorAll("table.rapor-tbl").forEach(t=>{
+      if(!t.dataset.std) enhance(t);
+      if(t.dataset.std !== "atla" || true){ if(!t.dataset.stdKod && cariKodla(t)) t.dataset.stdKod = "1"; }
+    });
+  }
+  new MutationObserver(()=>{ if(!bekliyor){ bekliyor = true; setTimeout(tara, 80); } }).observe(document.body, {childList:true, subtree:true});
+})();
 </script>
 </body>
 </html>

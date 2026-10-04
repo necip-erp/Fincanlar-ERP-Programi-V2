@@ -4071,7 +4071,7 @@ function getSeriNoGrubu(seriNo) {
   if (cekRes.ok) {
     cekRes.cekSenetler.forEach(c => {
       if (String(c.seriGrupNo || "") !== sn && String(c.odemeSeriNo || "") !== sn) return;
-      kalemler.push({ kaynak: "CekSenet", id: c.id, tip: c.tip, cariAd: c.cariAd, tutar: c.tutar, vade: c.vade, durum: c.durum, bankaAdi: c.bankaAdi });
+      kalemler.push({ kaynak: "CekSenet", id: c.id, tip: c.tip, cariId: c.cariId, cariAd: c.cariAd, tutar: c.tutar, vade: c.vade, durum: c.durum, bankaAdi: c.bankaAdi });
       toplam += c.tutar;
       if (c.vade) vadeler.push(c.vade);
     });
@@ -4080,7 +4080,7 @@ function getSeriNoGrubu(seriNo) {
   if (odemeRes.ok) {
     odemeRes.odemeler.forEach(o => {
       if (String(o.seriNo || "") !== sn) return;
-      kalemler.push({ kaynak: "Odeme", id: o.id, tip: o.yontem, cariAd: o.cariAd, tutar: o.tutar, tarih: o.tarih });
+      kalemler.push({ kaynak: "Odeme", id: o.id, tip: o.yontem, cariId: o.cariId, cariAd: o.cariAd, tutar: o.tutar, tarih: o.tarih });
       toplam += o.tutar;
     });
   }
