@@ -5900,7 +5900,10 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         <span class="satis-kalem-tutar" title="Satır tutarı = Miktar × Birim Fiyat">Tutar</span>
       </div>
       <div id="sm-kalemler" style="margin:8px 0"></div>
-      <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
+        <div id="sm-agirlik-bar" class="sm-agirlik-bar"></div>
+      </div>
 
       <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
         <div class="fld" id="sm-tutar-iskonto-fld" style="flex:1;min-width:220px;max-width:280px;margin-bottom:0;display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'flex':'none'}">
@@ -5917,9 +5920,9 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
           <input id="sm-dip-iskonto" type="number" min="0" max="100" step="0.01" value="${s ? (s.dipIskontoYuzde||0) : 0}" oninput="satisToplamGuncelle()">
           <p id="sm-efatura-dip-not" style="display:none;color:var(--warn,#c77);font-size:11px;margin:4px 0 0">🔒 E-Fatura mükellefi cari: dip iskonto ve tutar iskontosu kapalı — iskontoyu kalem satırındaki İsk.% ile girin.</p>
         </div>
-      </div>
 
-      <div id="sm-toplam" class="satis-toplam-detay"></div>
+        <div id="sm-toplam" class="satis-toplam-detay" style="flex:1 1 380px;margin-top:0"></div>
+      </div>
 
       <div class="modal-actions fm-aksiyon">
         <button class="btn" onclick="document.getElementById('satis-modal-overlay').remove();_satisTaslakId=null">İptal</button>
@@ -6346,9 +6349,40 @@ function satisToplamGuncelle(){
     <div class="satis-toplam-satir"><span>Ara Toplam</span><b>${paraFormat(araToplam)}</b></div>
     <div class="satis-toplam-satir"><span>Kdv Toplam</span><b>${paraFormat(kdvT)}</b></div>
     ${tutarIskontosu>0 ? `<div class="satis-toplam-satir"><span>Tutar İskontosu (${kdvSonra?'KDV sonrası':'KDV öncesi'})</span><b>-${paraFormat(tutarIskontosu)}</b></div>` : ''}
-    <div class="satis-toplam-satir genel"><span>Genel Toplam</span><b>${paraFormat(genelToplam)}</b></div>
-    ${agirlikBilgisiVar ? `<div class="satis-toplam-satir agirlik"><span>Toplam Ağırlık</span><b>${miktarFormat(Math.round(toplamAgirlik*100)/100)} kg</b></div>` : ''}`;
+    <div class="satis-toplam-satir genel"><span>Genel Toplam</span><b>${paraFormat(genelToplam)}</b></div>`;
+  const ab = document.getElementById("sm-agirlik-bar");
+  if(ab) ab.innerHTML = agirlikBilgisiVar
+    ? `⚖️ Sipariş ağırlığı: <b>${miktarFormat(Math.round(toplamAgirlik*100)/100)} kg</b> <button type="button" class="btn" style="padding:4px 12px;font-size:12px" onclick="satisAgirlikDetayAc()">Detay</button>`
+    : `<span style="color:var(--text3)">⚖️ Ağırlık: stok kartlarında ağırlık tanımlı değil</span> <button type="button" class="btn" style="padding:4px 12px;font-size:12px" onclick="satisAgirlikDetayAc()">Detay</button>`;
 }
+
+// Sipariş ağırlık dökümü: kalem bazında (stok kartındaki ağırlık × miktar). Ağırlığı tanımsız stoklar uyarıyla gösterilir.
+function satisAgirlikDetayAc(){
+  const satirlar = _yeniSatisKalemleri.filter(k=>String(k.urunAdi||"").trim() || String(k.stokKodu||"").trim()).map(k=>{
+    const kod = String(k.stokKodu||"").trim();
+    const st = kod ? (_stokTanimListe||[]).find(x=>x.stokKodu===kod) : null;
+    const m = parseFloat(k.miktar)||0, ag = st ? (st.agirlik||0) : 0;
+    return {kod, ad:k.urunAdi, miktar:m, birim:k.birim, ag, toplam:m*ag, tanimsiz: !(ag>0)};
+  });
+  const toplam = satirlar.reduce((a,x)=>a+x.toplam,0);
+  const eski = document.getElementById("agirlik-detay-overlay"); if(eski) eski.remove();
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay"; ov.id = "agirlik-detay-overlay";
+  ov.dataset.escKapat = "satisAgirlikDetayKapat";
+  ov.onclick = (e)=>{ if(e.target===ov) satisAgirlikDetayKapat(); };
+  ov.innerHTML = `<div class="modal-box" style="max-width:820px;width:94vw;max-height:88vh;overflow-y:auto">
+    <h3>⚖️ Sipariş Ağırlık Detayı</h3>
+    ${satirlar.length ? `<table class="rapor-tbl"><thead><tr><th>Stok Kodu</th><th>Ürün</th><th style="text-align:right">Miktar</th><th style="text-align:right">Ağırlık (kg/birim)</th><th style="text-align:right">Toplam (kg)</th></tr></thead><tbody>
+      ${satirlar.map(x=>`<tr><td>${htmlKacis(x.kod||'—')}</td><td>${htmlKacis(x.ad||'')}</td><td style="text-align:right">${miktarFormat(x.miktar)} ${htmlKacis(x.birim||'')}</td>
+        <td style="text-align:right">${x.tanimsiz?'<span style="color:var(--red);font-weight:700">tanımsız</span>':miktarFormat(x.ag)}</td>
+        <td style="text-align:right"><b>${x.tanimsiz?'—':miktarFormat(Math.round(x.toplam*100)/100)}</b></td></tr>`).join("")}
+      <tr><td colspan="4" style="text-align:right"><b>TOPLAM AĞIRLIK</b></td><td style="text-align:right"><b>${miktarFormat(Math.round(toplam*100)/100)} kg</b></td></tr>
+    </tbody></table>` : '<div class="cari-empty">Listede ürün yok.</div>'}
+    <div class="modal-actions"><button class="btn btn-primary" onclick="satisAgirlikDetayKapat()">Kapat</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+function satisAgirlikDetayKapat(){ const e = document.getElementById("agirlik-detay-overlay"); if(e) e.remove(); }
 
 function satisModalBelgeTipiDegisti(){
   const tip = document.getElementById("sm-belgetipi").value;
@@ -17952,6 +17986,9 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
 .fatura-modal .satis-toplam-satir.genel>span{font-size:15px}
 .fatura-modal .satis-toplam-satir.genel>b{font-size:18px}
 .fatura-modal .satis-toplam-satir.agirlik>span{color:var(--text2)}
+.fatura-modal .sm-agirlik-bar{font-size:13.5px;color:var(--text);display:flex;align-items:center;gap:10px;padding:6px 12px;background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:10px}
+/* Bulunulan hücre/alan: daha belirgin sarı (4 Eki 2026) */
+.modal-box input:focus,.modal-box select:focus,.modal-box textarea:focus,.fld input:focus,.fld select:focus,.fld textarea:focus,.satis-kalem-satir input:focus,.satis-kalem-satir select:focus{border-color:var(--yellow);background:color-mix(in srgb,var(--yellow) 30%,var(--bg2));box-shadow:0 0 0 3px color-mix(in srgb,var(--yellow) 55%,transparent)}
 .fatura-modal .sm-isk-etiket{font-weight:800;color:var(--rp-th-fg);font-size:13px;letter-spacing:.2px}
 .fatura-modal .fm-aksiyon{gap:10px}
 .fatura-modal .fm-aksiyon .btn{padding:9px 20px;font-size:14px}
