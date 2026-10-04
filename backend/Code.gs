@@ -4309,6 +4309,20 @@ function getCekSenetListesi() {
   const data = sheet.getDataRange().getValues();
   const bugun = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd");
 
+  // Ödeme/tahsilat/ciro tarihi: çekin son kapanış hareketinin tarihi (Çek raporu "Ödenenler" tablosu için, 4 Eki 2026)
+  const kapanisTarihi = {};
+  try {
+    const hSheet = getOrCreateSheet(ss, SHEETS.cekSenetHareketleri, CEK_SENET_HAREKET_BASLIKLAR);
+    const hData = hSheet.getDataRange().getValues();
+    for (let i = 1; i < hData.length; i++) {
+      const hTip = String(hData[i][3] || "");
+      if (hTip === "Ödeme" || hTip === "Tahsilat" || hTip === "Ciro Edildi" || hTip === "Karşılıksız") {
+        const t = hucreTarihStr(hData[i][2]);
+        if (t) kapanisTarihi[String(hData[i][1])] = t; // satırlar kronolojik: en son hareket kalır
+      }
+    }
+  } catch (e) {}
+
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
@@ -4317,6 +4331,7 @@ function getCekSenetListesi() {
     const vade = hucreTarihStr(row[9]);
     const durum = String(row[10] || "Portföyde");
     sonuc.push({
+      odemeTarihi: durum === "Portföyde" ? "" : (kapanisTarihi[id] || ""),
       id: id, tip: String(row[1] || ""), cariId: String(row[2] || ""), cariAd: String(row[3] || ""),
       tutar: parseFloat(row[4]) || 0, kalanTutar: parseFloat(row[5]) || 0,
       seriNo: String(row[6] || ""), bankaAdi: String(row[7] || ""),

@@ -373,6 +373,10 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 #bfm-odak-kutu{position:relative;overflow:hidden}
 #bfm-pan-kat{position:absolute;inset:0;z-index:5;cursor:grab;touch-action:none}
 #bfm-pan-kat.tutuyor{cursor:grabbing}
+/* Çek raporu bölüm başlıkları: büyük + renkli alt şerit (4 Eki 2026) */
+.csr-serit{font-size:22px;font-weight:800;padding:10px 16px 8px;margin:14px 0 6px;border-radius:8px 8px 0 0;background:var(--bg3);border-bottom:5px solid var(--accent);letter-spacing:.2px}
+.csr-serit-musteri{border-bottom-color:#16a34a}
+.csr-serit-kendi{border-bottom-color:#2563eb}
 /* Bekleyen Fatura onay tablosu: ekranı verimli kullanmak için sıkılaştırıldı (yazı 11.5px, dar sütunlar) */
 #bfm-tablo{font-size:11.5px}
 #bfm-tablo th,#bfm-tablo td{padding:5px 4px}
@@ -960,7 +964,7 @@ setInterval(topbarSaatGuncelle, 10000);
       <div class="rapor-baslik" style="margin-top:0">📊 Çek/Senet Raporu</div>
       <div class="rapor-filtre" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:10px 0">
         <div class="fld"><label>Rapor</label><select id="csr-tur" onchange="cekSenetRaporTurDegisti()"><option value="liste" selected>📋 Çek Listesi (müşteri / kendi çeklerim)</option><option value="odemeler">💸 Yapılan Ödemeler (çek ödeme seri no)</option></select></div>
-        <div class="fld" id="csr-durum-kap"><label>Müşteri çeki durumu</label><select id="csr-durum" onchange="cekSenetRaporCiz()"><option value="Portföyde" selected>Portföyde (bekleyen)</option><option value="">Tümü</option><option value="Tahsil Edildi">Tahsil Edildi</option><option value="Ciro Edildi">Ciro Edildi</option><option value="Karşılıksız">Karşılıksız</option></select></div>
+        <div class="fld" id="csr-durum-kap"><label>Müşteri çeki durumu</label><select id="csr-durum" onchange="cekSenetRaporCiz()"><option value="">Tümü</option><option value="Portföyde" selected>Portföyde (bekleyen)</option><option value="Tahsil Edildi">Tahsil Edildi</option><option value="Ciro Edildi">Ciro Edildi</option><option value="Karşılıksız">Karşılıksız</option></select></div>
         <div class="fld"><label>Vade (başlangıç)</label><input id="csr-bas" type="date" onchange="cekSenetRaporCiz()"></div>
         <div class="fld"><label>Vade (bitiş)</label><input id="csr-bit" type="date" onchange="cekSenetRaporCiz()"></div>
         <div class="fld"><label>Cari / çek no ara</label><input id="csr-ara" type="text" placeholder="Cari adı / çek no" oninput="cekSenetRaporCiz()"></div>
@@ -2293,6 +2297,7 @@ function kayitSekmesindeAc(modulId, ikon, etiket, kimlik, acFonksiyonu){
 // sekme, modülde başka bir kayıt/liste açılınca ya da sekme kapanınca geçersiz sayılır (aşağıdaki
 // sarmalayıcılar + sekmeKapat). Kullanıcı bir kayda tıklayarak AÇIYORSA (zorla=true) her zaman tazelenir.
 let _kayitSekmeGosterilen = {};   // modulId -> o an modülde görünen kayıt sekmesinin id'si
+let _cekRaporAcik = false;   // Çek/Senet modülünde rapor ekranı açık mı (rapordan açılan çek sekmesinden sonra da raporun geri gelmesi için)
 let _kayitAcCalisiyor = false;    // ac() içindeki dahili çağrılar işareti bozmasın
 function kayitSekmesiniGoster(sekmeId, zorla){
   const veri = _kayitSekmeVeri[sekmeId];
@@ -2396,7 +2401,7 @@ function modulAc(id){
   // Silinenler listesi her açılışta taze olmalı (stale cache burada yanıltıcı olur).
   if(id === "silinenler") silinenlerYukle();
   if(id === "kayitdefteri") kayitDefteriAcildi_(); // artık her açılışta yenilemez
-  if(id === "ceksenet" && _cekModulGorunumKaydi === "rapor"){ // rapordan açılan kayıt sekmesinden dönüş: rapor sayfası geri gelir
+  if(id === "ceksenet" && (_cekModulGorunumKaydi === "rapor" || _cekRaporAcik)){ // rapordan açılan kayıt sekmesinden dönüş: rapor sayfası geri gelir
     _cekModulGorunumKaydi = null; delete _kayitSekmeGosterilen["ceksenet"];
     cekSenetGorunumleriGizle_(); document.getElementById("ceksenet-rapor-view").style.display = "block";
   }
@@ -10044,9 +10049,11 @@ function cekSenetListeGorunumuAc_(){
   // Her zaman diğer görünümleri (seçim ekranı / rapor) kapatır: "liste zaten açık" diye erken çıkılırsa
   // rapor arkada görünür kalabiliyordu (4 Eki 2026: rapordan çek açılınca rapor sayfası kalıyordu).
   ["ceksenet-secim","ceksenet-rapor-view"].forEach(id=>{ const e = document.getElementById(id); if(e) e.style.display = "none"; });
+  if(!_kayitAcCalisiyor) _cekRaporAcik = false;   // kayıt sekmesi açılırken rapor işareti korunur
   v.style.display = "flex";
 }
 function cekSenetAnaSecimeDon(){
+  _cekRaporAcik = false;
   cekSenetGorunumleriGizle_();
   document.getElementById("ceksenet-secim").style.display = "block";
   const m = document.getElementById("mod-ceksenet"); if(m) m.classList.remove("detay-acik");
@@ -10061,6 +10068,7 @@ function cekSenetAltModulAc(hangisi){
     // Ödeme: seçim ekranında kalır, giriş penceresi açılır (kendi çek + müşteri çeki çıkışı, sonunda bordro).
     cekSenetModalAc(null, "odeme");
   } else if(hangisi === "rapor"){
+    _cekRaporAcik = true;
     cekSenetGorunumleriGizle_();
     document.getElementById("ceksenet-rapor-view").style.display = "block";
     cekSenetRaporYenile();
@@ -10141,9 +10149,10 @@ const CSR_SUTUNLAR = {
   duz:   { baslik:"Düzenlenme",  hucre:(c)=>c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):'—', excel:(c)=>c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):"", deger:(c)=>c.duzenlenmeTarihi||"" },
   vade:  { baslik:"Vade",        hucre:(c)=>c.vade?tarihGoster(c.vade):'—', excel:(c)=>c.vade?tarihGoster(c.vade):"", deger:(c)=>c.vade||"" },
   tutar: { baslik:"Tutar", sag:true, sayi:true, hucre:(c)=>paraFormat(csrTutar_(c)), excel:(c)=>csrTutar_(c), deger:(c)=>csrTutar_(c) },
+  odeme: { baslik:"Ödeme Tarihi", hucre:(c)=>c.odemeTarihi?tarihGoster(c.odemeTarihi):'—', excel:(c)=>c.odemeTarihi?tarihGoster(c.odemeTarihi):"", deger:(c)=>c.odemeTarihi||"" },
   durum: { baslik:"Durum",       hucre:(c)=>cekSenetDurumEtiket(c), excel:(c)=>c.durum + (cekCiroCariMetni_(c) ? " → " + cekCiroCariMetni_(c) : ""), deger:(c)=>(c.durum||"") + (cekCiroCariMetni_(c) ? " " + cekCiroCariMetni_(c) : "") }
 };
-const CSR_VARSAYILAN_SIRA = ["cari","cekNo","banka","duz","vade","tutar","durum"];
+const CSR_VARSAYILAN_SIRA = ["cari","cekNo","banka","duz","vade","odeme","tutar","durum"];
 let _csrDragKol = null, _csrSirala = null; // _csrSirala: {k, yon:"azalan"|"artan"}
 function csrSirala(k){ _csrSirala = (_csrSirala && _csrSirala.k === k && _csrSirala.yon === "azalan") ? {k, yon:"artan"} : {k, yon:"azalan"}; cekSenetRaporCiz(); }
 function csrTutar_(c){ return c.durum === "Portföyde" ? (c.kalanTutar||0) : (c.tutar||0); }
@@ -10170,12 +10179,12 @@ function cekSenetRaporYenile(){
     cekSenetRaporCiz();
   }).catch(()=>cekSenetRaporCiz());
 }
-function csrBolumHtml_(id, baslik, liste, altBaslik){
+function csrBolumHtml_(id, baslik, liste, altBaslik, odemeSutunu){
   const toplam = liste.reduce((a,c)=>a+csrTutar_(c),0);
   const ort = csmOrtVadeHesapla_(liste.map(c=>({tutar: csrTutar_(c), vade: c.vade})));
   const gecikmis = liste.filter(c=>c.durum==="Portföyde" && c.gecikmis);
   const ozet = `<span style="font-size:12.5px;color:var(--text2)">${liste.length} adet · Toplam <b>${paraFormat(toplam)}</b>${ort?` · Ort. vade <b>${tarihGoster(ort.str)}</b> (${ort.gun>=0?ort.gun+' gün sonra':Math.abs(ort.gun)+' gün önce'})`:''}${gecikmis.length?` · <span class="hk-borc">Vadesi geçmiş ${gecikmis.length} adet ${paraFormat(gecikmis.reduce((a,c)=>a+csrTutar_(c),0))}</span>`:''}</span>`;
-  const sira = csrSutunSirasiAl_();
+  const sira = csrSutunSirasiAl_().filter(k => k !== "odeme" || odemeSutunu);   // Ödeme Tarihi yalnız "Ödenenler" tablosunda
   if(_csrSirala && CSR_SUTUNLAR[_csrSirala.k]){
     const kol = CSR_SUTUNLAR[_csrSirala.k], cc = _csrSirala.yon === "azalan" ? -1 : 1;
     liste = liste.slice().sort((x,y)=>{ const a = kol.deger(x), b = kol.deger(y); return cc * (kol.sayi ? (a-b) : String(a).localeCompare(String(b), "tr")); });
@@ -10256,7 +10265,7 @@ function cekSenetRaporCiz(){
   const musteri = _cekSenetListe.filter(c=>c.tip==="Alınan" && (!durum || c.durum===durum) && ortak(c)).sort(vadeSirala);
   const kendiBekleyen = _cekSenetListe.filter(c=>c.tip==="Verilen" && c.durum==="Portföyde" && ortak(c)).sort(vadeSirala);
   const kendiVerilen = _cekSenetListe.filter(c=>c.tip==="Verilen" && c.durum!=="Portföyde" && ortak(c)).sort(vadeSirala);
-  _csrBolumler = [["Müşteri Çeki", musteri], ["Kendi Çek - Bekleyen", kendiBekleyen], ["Kendi Çek - Verilenler", kendiVerilen]];
+  _csrBolumler = [["Müşteri Çeki", musteri], ["Kendi Çek - Bekleyen", kendiBekleyen], ["Kendi Çek - Ödenenler", kendiVerilen]];
   // Bekleyen (Portföyde) çeklerin aylara göre vade dağılımı: müşteri çeki ↔ kendi çek yan yana
   const aylar = {};
   _cekSenetListe.filter(c=>c.durum==="Portföyde" && ortak(c)).forEach(c=>{
@@ -10268,10 +10277,11 @@ function cekSenetRaporCiz(){
     <td style="text-align:right">${aylar[k].m.adet}</td><td style="text-align:right">${paraFormat(aylar[k].m.tutar)}</td>
     <td style="text-align:right">${aylar[k].k.adet}</td><td style="text-align:right">${paraFormat(aylar[k].k.tutar)}</td></tr>`).join("");
   kap.innerHTML =
-    csrBolumHtml_("musteri", "📥 Müşteri Çeklerim", musteri) +
-    `<div class="rapor-baslik" style="margin-top:22px">📤 Kendi Çeklerim</div>` +
+    `<div class="csr-serit csr-serit-musteri">📥 Müşteri Çeklerim</div>` +
+    csrBolumHtml_("musteri", "Müşteri Çekleri", musteri, true) +
+    `<div class="csr-serit csr-serit-kendi" style="margin-top:28px">📤 Kendi Çeklerim</div>` +
     csrBolumHtml_("bekleyen", "⏳ Bekleyen <span style=\"font-weight:400;font-size:12px;color:var(--text2)\">(ödenmeyi bekleyen, vadesi gelmemiş/gelen)</span>", kendiBekleyen, true) +
-    csrBolumHtml_("verilen", "✅ Verilenler <span style=\"font-weight:400;font-size:12px;color:var(--text2)\">(ödenmiş / kapanmış)</span>", kendiVerilen, true) +
+    csrBolumHtml_("verilen", "✅ Ödenenler <span style=\"font-weight:400;font-size:12px;color:var(--text2)\">(ödenmiş / kapanmış)</span>", kendiVerilen, true, true) +
     (ayHtml ? `<div class="rapor-baslik" style="margin-top:22px">Bekleyen Çeklerin Aylara Göre Vade Dağılımı</div>
       <table class="rapor-tbl" style="max-width:640px"><thead><tr><th>Ay</th><th style="text-align:right">Müşteri çeki adet</th><th style="text-align:right">Tutar</th><th style="text-align:right">Kendi çek adet</th><th style="text-align:right">Tutar</th></tr></thead><tbody>${ayHtml}</tbody></table>` : "");
   kap.querySelectorAll("th[data-ckol]").forEach(th=>{
