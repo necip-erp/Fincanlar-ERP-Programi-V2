@@ -1274,7 +1274,7 @@ setInterval(topbarSaatGuncelle, 10000);
                    onfocus="cvCariOneriGoster('kaynak')"
                    onblur="setTimeout(()=>cvCariOneriKapat('kaynak'),200)"
                    onkeydown="oneriKlavyeYonet(event,'cvirman-kaynak-oneri')">
-            <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('cvirman-kaynak').value=c.id; document.getElementById('cvirman-kaynak-arama').value=c.ad+(c.cariKodu?' ('+c.cariKodu+')':''); })">🔍</button>
+            <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('cvirman-kaynak').value=c.id; document.getElementById('cvirman-kaynak-arama').value=c.ad+(c.cariKodu?' ('+c.cariKodu+')':''); cvKalipUygula(); })">🔍</button>
             <input type="hidden" id="cvirman-kaynak">
             <div id="cvirman-kaynak-oneri" class="fiyat-gecmis-kutu" style="display:none;min-width:min(620px,92vw);max-height:320px;right:auto"></div>
           </div>
@@ -1284,7 +1284,7 @@ setInterval(topbarSaatGuncelle, 10000);
                    onfocus="cvCariOneriGoster('hedef')"
                    onblur="setTimeout(()=>cvCariOneriKapat('hedef'),200)"
                    onkeydown="oneriKlavyeYonet(event,'cvirman-hedef-oneri')">
-            <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('cvirman-hedef').value=c.id; document.getElementById('cvirman-hedef-arama').value=c.ad+(c.cariKodu?' ('+c.cariKodu+')':''); })">🔍</button>
+            <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('cvirman-hedef').value=c.id; document.getElementById('cvirman-hedef-arama').value=c.ad+(c.cariKodu?' ('+c.cariKodu+')':''); cvKalipUygula(); })">🔍</button>
             <input type="hidden" id="cvirman-hedef">
             <div id="cvirman-hedef-oneri" class="fiyat-gecmis-kutu" style="display:none;min-width:min(620px,92vw);max-height:320px;right:auto"></div>
           </div>
@@ -1300,6 +1300,13 @@ setInterval(topbarSaatGuncelle, 10000);
           </div>
           <div class="cv-akordiyon-govde" style="display:block">
             <div class="cv-grid">
+              <div class="fld cv-tam" style="display:flex;flex-direction:row;gap:18px;align-items:flex-end;flex-wrap:wrap">
+                <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-weight:700;margin:0 0 9px" title="Açıklamayı 'KREDİ KARTI ÇEKİMİ <kaynak cari kodu> / <hedef cari kodu>' kalıbıyla otomatik yazar">
+                  <input type="checkbox" id="cvirman-kalip-tik" checked onchange="cvKalipTikDegisti()" style="width:auto"> Standart kalıp kullan
+                </label>
+                <div class="fld" style="margin:0;max-width:170px"><label>Taksit (opsiyonel)</label>
+                  <input type="number" id="cvirman-taksit" min="0" step="1" placeholder="Örn. 7" oninput="cvKalipUygula()" title="Girilen sayı açıklamanın sonuna +7 şeklinde eklenir"></div>
+              </div>
               <div class="fld cv-tam"><label>Açıklama (opsiyonel)</label>
                 <input type="text" id="cvirman-aciklama"></div>
               <div class="fld"><label>Proje Kodu</label><select id="cvirman-proje-kodu" class="proje-kodu-secim"><option value="">— Proje Yok —</option></select></div>
@@ -13503,7 +13510,31 @@ function cvCariSec(which, i){
   document.getElementById("cvirman-" + which).value = c.id;
   document.getElementById("cvirman-" + which + "-arama").value = c.ad + (c.cariKodu ? " (" + c.cariKodu + ")" : "");
   kutu.style.display = "none";
+  cvKalipUygula();
 }
+
+// ★ (4 Eki 2026) Cari Virman standart açıklama kalıbı: "KREDİ KARTI ÇEKİMİ <kaynak cari kodu> / <hedef cari kodu>"
+// (+ taksit girildiyse " +7" gibi). Tik açıkken cari/taksit değiştikçe açıklama otomatik yazılır; elle de düzenlenebilir.
+function cvKalipMetni_(){
+  const kId = (document.getElementById("cvirman-kaynak")||{}).value, hId = (document.getElementById("cvirman-hedef")||{}).value;
+  const kod = (id)=>{ const c = id ? (_cariListe||[]).find(x=>x.id===id) : null; return c ? (c.cariKodu || c.ad || "") : ""; };
+  const k = kod(kId), h = kod(hId);
+  if(!k && !h) return "";
+  const taksit = parseInt((document.getElementById("cvirman-taksit")||{}).value, 10);
+  return "KREDİ KARTI ÇEKİMİ " + k + " / " + h + (taksit > 0 ? " +" + taksit : "");
+}
+function cvKalipUygula(){
+  const tik = document.getElementById("cvirman-kalip-tik");
+  if(!tik || !tik.checked) return;
+  const a = document.getElementById("cvirman-aciklama");
+  if(a) a.value = cvKalipMetni_();
+}
+function cvKalipTikDegisti(){
+  const tik = document.getElementById("cvirman-kalip-tik");
+  try{ localStorage.setItem("cvKalipTik", tik.checked ? "1" : "0"); }catch(e){}
+  if(tik.checked) cvKalipUygula();
+}
+(function(){ try{ const v = localStorage.getItem("cvKalipTik"); document.addEventListener("DOMContentLoaded", ()=>{ const t = document.getElementById("cvirman-kalip-tik"); if(t && v === "0") t.checked = false; }); }catch(e){} })();
 
 function cariVirmanKaydet(){
   const kaynakId = document.getElementById("cvirman-kaynak").value;
@@ -13569,6 +13600,7 @@ function cariVirmanDuzenlemeIptal(){
   document.getElementById("cvirman-hedef-arama").value = "";
   document.getElementById("cvirman-tutar").value = "";
   document.getElementById("cvirman-aciklama").value = "";
+  const _tk = document.getElementById("cvirman-taksit"); if(_tk) _tk.value = "";
   document.getElementById("cvirman-proje-kodu").value = "";
   document.getElementById("cvirman-tipi").value = "";
 }
