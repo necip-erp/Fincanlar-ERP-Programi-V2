@@ -9959,6 +9959,7 @@ let _cekSenetTopluSecim = new Set();
 
 function cekSenetListesiYukle(){
   _cekSenetYuklendi = true;
+  cekCariListesiGaranti_(cekSenetCariSonrasiTazele_);
   const onbellek = onbellekOku("cekSenetListesi", ONBELLEK_MAX_YAS);
   if(onbellek){ _cekSenetListe = onbellek; cekSenetListesiCiz(); }
   else document.getElementById("ceksenet-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
@@ -10039,8 +10040,10 @@ function cekSenetGorunumleriGizle_(){
 // çağıran eski kısayollar (Hızlı Erişim, cari hareketten "Çeki aç" vb.) bozulmasın diye.
 function cekSenetListeGorunumuAc_(){
   const v = document.getElementById("ceksenet-liste-view");
-  if(!v || v.style.display === "flex") return;
-  cekSenetGorunumleriGizle_();
+  if(!v) return;
+  // Her zaman diğer görünümleri (seçim ekranı / rapor) kapatır: "liste zaten açık" diye erken çıkılırsa
+  // rapor arkada görünür kalabiliyordu (4 Eki 2026: rapordan çek açılınca rapor sayfası kalıyordu).
+  ["ceksenet-secim","ceksenet-rapor-view"].forEach(id=>{ const e = document.getElementById(id); if(e) e.style.display = "none"; });
   v.style.display = "flex";
 }
 function cekSenetAnaSecimeDon(){
@@ -10127,7 +10130,7 @@ function cekSenetListeYazdir(){
   const toplam = liste.reduce((a,c)=>a+(c.kalanTutar||0),0);
   const baslik = _cekSenetAktifTip === "Alınan" ? "Müşteri Çekleri Listesi" : "Kendi Çeklerim Listesi";
   yazdirHtml_(baslik, `<table><thead><tr><th>#</th><th>Cari</th><th>Çek No</th><th>Banka</th><th>Düzenlenme</th><th>Vade</th><th style="text-align:right">Tutar</th><th>Durum</th></tr></thead><tbody>
-    ${liste.map((c,i)=>`<tr><td>${i+1}</td><td>${htmlKacis(cariKodluAd_(c.cariId, c.cariAd))}</td><td>${htmlKacis(c.seriNo||'—')}</td><td>${htmlKacis(c.bankaAdi||'—')}</td><td>${c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):'—'}</td><td>${c.vade?tarihGoster(c.vade):'—'}</td><td style="text-align:right">${paraFormat(c.kalanTutar)}</td><td>${htmlKacis(c.durum)}</td></tr>`).join("")}
+    ${liste.map((c,i)=>`<tr><td>${i+1}</td><td>${htmlKacis(cariKodluAd_(c.cariId, c.cariAd))}</td><td>${htmlKacis(c.seriNo||'—')}</td><td>${htmlKacis(c.bankaAdi||'—')}</td><td>${c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):'—'}</td><td>${c.vade?tarihGoster(c.vade):'—'}</td><td style="text-align:right">${paraFormat(c.kalanTutar)}</td><td>${htmlKacis(c.durum + (cekCiroCariMetni_(c) ? " → " + cekCiroCariMetni_(c) : ""))}</td></tr>`).join("")}
     <tr><td colspan="6" style="text-align:right"><b>TOPLAM (${liste.length} adet)</b></td><td style="text-align:right"><b>${paraFormat(toplam)}</b></td><td></td></tr></tbody></table>`);
 }
 let _csrBolumler = [];
@@ -10138,7 +10141,7 @@ const CSR_SUTUNLAR = {
   duz:   { baslik:"Düzenlenme",  hucre:(c)=>c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):'—', excel:(c)=>c.duzenlenmeTarihi?tarihGoster(c.duzenlenmeTarihi):"", deger:(c)=>c.duzenlenmeTarihi||"" },
   vade:  { baslik:"Vade",        hucre:(c)=>c.vade?tarihGoster(c.vade):'—', excel:(c)=>c.vade?tarihGoster(c.vade):"", deger:(c)=>c.vade||"" },
   tutar: { baslik:"Tutar", sag:true, sayi:true, hucre:(c)=>paraFormat(csrTutar_(c)), excel:(c)=>csrTutar_(c), deger:(c)=>csrTutar_(c) },
-  durum: { baslik:"Durum",       hucre:(c)=>cekSenetDurumEtiket(c), excel:(c)=>c.durum, deger:(c)=>c.durum||"" }
+  durum: { baslik:"Durum",       hucre:(c)=>cekSenetDurumEtiket(c), excel:(c)=>c.durum + (cekCiroCariMetni_(c) ? " → " + cekCiroCariMetni_(c) : ""), deger:(c)=>(c.durum||"") + (cekCiroCariMetni_(c) ? " " + cekCiroCariMetni_(c) : "") }
 };
 const CSR_VARSAYILAN_SIRA = ["cari","cekNo","banka","duz","vade","tutar","durum"];
 let _csrDragKol = null, _csrSirala = null; // _csrSirala: {k, yon:"azalan"|"artan"}
@@ -10161,6 +10164,7 @@ function csrSutunSurukle_(kaynak, hedef){
 }
 function cekSenetRaporSutunSifirla(){ try{ localStorage.removeItem("csrSutunSirasi"); }catch(e){} cekSenetRaporCiz(); }
 function cekSenetRaporYenile(){
+  cekCariListesiGaranti_(cekSenetCariSonrasiTazele_);
   cariApi("getCekSenetListesi").then(res=>{
     if(res && res.ok){ _cekSenetListe = res.cekSenetler; onbellekYaz("cekSenetListesi", res.cekSenetler); }
     cekSenetRaporCiz();
@@ -10229,7 +10233,7 @@ function cekSenetOdemelerRaporuCiz_(kap){
   kap.innerHTML = `<div class="rapor-baslik">💸 Yapılan Ödemeler <span style="font-weight:400;font-size:12px;color:var(--text2)">(her satır bir ödeme işlemi · satıra tıkla: o seri no ile yapılan tüm işlemler)</span></div>
     <div style="margin:2px 0 6px;font-size:12.5px;color:var(--text2)">${satirlar.length} ödeme · Toplam <b>${paraFormat(toplam)}</b></div>` +
     (satirlar.length ? `<div style="overflow-x:auto"><table class="rapor-tbl"><thead><tr><th>Çek Ödeme Seri No</th><th>Tarih</th><th>Cari</th><th style="text-align:right">Kendi Çek</th><th style="text-align:right">Müşteri Çeki</th><th style="text-align:right">Toplam</th><th style="text-align:right">Adet</th><th>Ort. Vade</th></tr></thead><tbody>
-    ${satirlar.map(g=>`<tr style="cursor:pointer" onclick="${g.seriNo ? `seriNoGrupModalAc('${htmlKacis(g.seriNo)}')` : `kayitYeniSayfadaAc_('cek','${htmlKacis(g.idler[0])}')`}">
+    ${satirlar.map(g=>`<tr style="cursor:pointer" onclick="${g.seriNo ? `seriNoGrupModalAc('${htmlKacis(g.seriNo)}')` : `cekGrupModalAc_('${g.idler.map(htmlKacis).join(",")}')`}">
       <td><b>${g.seriNo ? htmlKacis(g.seriNo) : '<span style="color:var(--text3)">— (seri no verilmemiş)</span>'}</b></td>
       <td>${g.tarih ? tarihGoster(g.tarih) : '—'}</td><td>${htmlKacis(g.cari||'—')}</td>
       <td style="text-align:right">${g.kendi.adet ? paraFormat(g.kendi.tutar)+' <small>('+g.kendi.adet+')</small>' : '—'}</td>
@@ -10260,7 +10264,7 @@ function cekSenetRaporCiz(){
     const a = (aylar[k] = aylar[k] || {m:{adet:0,tutar:0}, k:{adet:0,tutar:0}});
     const h = c.tip==="Alınan" ? a.m : a.k; h.adet++; h.tutar += csrTutar_(c);
   });
-  const ayHtml = Object.keys(aylar).sort().map(k=>`<tr><td>${k==='Vadesiz'?k:k.slice(5)+'/'+k.slice(0,4)}</td>
+  const ayHtml = Object.keys(aylar).sort().map(k=>`<tr><td data-sirala="${k==='Vadesiz'?'':(+k.slice(0,4))*100+(+k.slice(5,7))}">${k==='Vadesiz'?k:k.slice(5)+'/'+k.slice(0,4)}</td>
     <td style="text-align:right">${aylar[k].m.adet}</td><td style="text-align:right">${paraFormat(aylar[k].m.tutar)}</td>
     <td style="text-align:right">${aylar[k].k.adet}</td><td style="text-align:right">${paraFormat(aylar[k].k.tutar)}</td></tr>`).join("");
   kap.innerHTML =
@@ -10352,10 +10356,43 @@ function cekSenetBordroYazdir(){
   setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(_){} setTimeout(()=>fr.remove(), 2000); }, 350);
 }
 
-function cekSenetDurumEtiket(c){
+// Ciro edilmiş müşteri çekinin hangi cariye verildiği: "Cari Kodu - Cari Adı" (4 Eki 2026). Ciro değilse boş döner.
+function cekCiroCariMetni_(c){
+  if(!c || c.durum !== "Ciro Edildi" || !c.ciroCariId) return "";
+  const liste = (typeof _cariListe !== "undefined" && _cariListe) || [];
+  if(!liste.length) return "(cari bilgisi yükleniyor…)";
+  const k = cariKodluAd_(c.ciroCariId, "");
+  return k || ("Cari bulunamadı (#" + c.ciroCariId + ")");
+}
+// Ciro edilen cari / cari kodları için cari listesi şart; çek ekranları açılırken yüklü değilse yüklenir, sonra ekran tazelenir.
+function cekCariListesiGaranti_(sonra){
+  if(typeof _cariListe !== "undefined" && _cariListe && _cariListe.length) return;
+  try{
+    const onb = onbellekOku("cariListesi", ONBELLEK_MAX_YAS);
+    if(onb && onb.length){ _cariListe = onb.slice().sort((a,b)=>(a.ad||"").localeCompare(b.ad||"",'tr')); if(sonra) sonra(); return; }
+  }catch(e){}
+  cariApi("getCariListesi").then(res=>{
+    if(res && res.ok && res.cariler){
+      _cariListe = res.cariler.sort((a,b)=>(a.ad||"").localeCompare(b.ad||"",'tr')); _cariYuklendi = true;
+      try{ onbellekYaz("cariListesi", res.cariler); }catch(e){}
+      if(sonra) sonra();
+    }
+  }).catch(()=>{});
+}
+function cekSenetCariSonrasiTazele_(){
+  try{
+    cekSenetListesiCiz();
+    const r = document.getElementById("ceksenet-rapor-view");
+    if(r && r.style.display === "block") cekSenetRaporCiz();
+    const lv = document.getElementById("ceksenet-liste-view");   // yalnız liste/detay ekranı açıkken detayı tazele (rapor görünümünü bozmasın)
+    if(_cekSenetSecili && lv && lv.style.display === "flex" && document.querySelector("#ceksenet-detail-panel .od-bilgi")) cekSenetAc(_cekSenetSecili);
+  }catch(e){}
+}
+function cekSenetDurumEtiket(c, ciroYaz){
   if(c.durum === "Portföyde") return c.gecikmis ? `<span class="hk-borc">Vadesi geçti</span>` : `<span class="tip-badge">Portföyde</span>`;
   if(c.durum === "Tahsil Edildi" || c.durum === "Ödendi") return `<span class="hk-alacak">${c.durum}</span>`;
-  return `<span class="hk-borc">${c.durum}</span>`; // Karşılıksız / Ciro Edildi
+  const ciro = ciroYaz === false ? "" : cekCiroCariMetni_(c);
+  return `<span class="hk-borc">${c.durum}</span>` + (ciro ? ` <span class="cs-ciro-cari" style="color:var(--text2);font-weight:600" title="Ciro edilen cari">→ ${htmlKacis(ciro)}</span>` : ""); // Karşılıksız / Ciro Edildi
 }
 
 // Çek/Senet "tip" alanı veride hep Alınan/Verilen olarak tutulur (geriye dönük uyum);
@@ -10392,7 +10429,8 @@ function cekSenetListesiCiz(){
         <span class="cari-item-ad">${c.cariAd}</span>
         <span class="cari-item-bakiye od-tutar">${paraFormat(c.kalanTutar)}</span>
       </div>
-      <span class="cari-item-tip">${tarihGoster(c.vade)}${c.seriNo?' · '+c.seriNo:''} · <span class="od-yontem">${cekSenetDurumEtiket(c)}</span></span>
+      <span class="cari-item-tip">${tarihGoster(c.vade)}${c.seriNo?' · '+c.seriNo:''} · <span class="od-yontem">${cekSenetDurumEtiket(c, false)}</span></span>
+      ${cekCiroCariMetni_(c) ? `<div style="font-size:11.5px;color:var(--text2);margin-top:2px;line-height:1.3">↪ <b>Ciro:</b> ${htmlKacis(cekCiroCariMetni_(c))}</div>` : ""}
     </div>`).join("");
 }
 
@@ -10472,6 +10510,9 @@ function cekSenetAc(id){
     const panel = document.getElementById("ceksenet-detail-panel");
     if(!res.ok){ panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>'+(res.hata||"Bulunamadı")+'</p></div>'; return; }
     const c = res.cek;
+    // Detay servisi ciro edilen cariyi taşımayabilir (eski sunucu sürümü) → listeden tamamla.
+    if(!c.ciroCariId){ const _l = _cekSenetListe.find(x=>x.id===c.id); if(_l && _l.ciroCariId) c.ciroCariId = _l.ciroCariId; }
+    const ciroCariMetni = cekCiroCariMetni_(c);
     const acik = c.durum === "Portföyde";
     const hareketVar = res.hareketler.length > 0;
     panel.innerHTML = `
@@ -10491,7 +10532,8 @@ function cekSenetAc(id){
         <div class="cari-info-item"><div class="k">Vade</div><div class="v">${tarihGoster(c.vade)}${c.gecikmis?' ⚠️':''}</div></div>
         ${c.seriNo?`<div class="cari-info-item"><div class="k">Seri No</div><div class="v">${c.seriNo}</div></div>`:""}
         ${c.bankaAdi?`<div class="cari-info-item"><div class="k">Banka</div><div class="v">${c.bankaAdi}</div></div>`:""}
-        <div class="cari-info-item"><div class="k">Durum</div><div class="v">${cekSenetDurumEtiket(c)}</div></div>
+        <div class="cari-info-item"><div class="k">Durum</div><div class="v">${cekSenetDurumEtiket(c, false)}</div></div>
+        ${ciroCariMetni?`<div class="cari-info-item od-tam"><div class="k">Ciro Edilen Cari</div><div class="v"><b>${htmlKacis(ciroCariMetni)}</b></div></div>`:""}
         ${c.projeKodu?`<div class="cari-info-item"><div class="k">Proje Kodu</div><div class="v">${c.projeKodu}</div></div>`:""}
         ${c.aciklama?`<div class="cari-info-item od-tam"><div class="k">Açıklama</div><div class="v">${c.aciklama}</div></div>`:""}
       </div>
@@ -11563,7 +11605,7 @@ const SNG_SUTUNLAR = {
   cari:   { baslik:"Cari",        deger:k=>cariKodluAd_(k.cariId, k.cariAd),                 hucre:k=>htmlKacis(cariKodluAd_(k.cariId, k.cariAd)||'—') },
   tutar:  { baslik:"Tutar",       deger:k=>+k.tutar||0, sayi:true, sag:true,             hucre:k=>paraFormat(k.tutar) },
   vade:   { baslik:"Vade/Tarih",  deger:k=>String(k.vade||k.tarih||""),                 hucre:k=>tarihGoster(k.vade||k.tarih) },
-  durum:  { baslik:"Durum/Banka", deger:k=>k.durum||k.bankaAdi||"",                      hucre:k=>htmlKacis(k.durum||k.bankaAdi||'—') }
+  durum:  { baslik:"Durum/Banka", deger:k=>k.durum||k.bankaAdi||"",                      hucre:k=>{ let t = k.durum||k.bankaAdi||'—'; if(k.kaynak==='CekSenet'){ const cc = (typeof _cekSenetListe!=='undefined'?_cekSenetListe:[]).find(x=>x.id===k.id); const ct = cc ? cekCiroCariMetni_(cc) : ''; if(ct) t += ' → ' + ct; } return htmlKacis(t); } }
 };
 const SNG_VARSAYILAN_SIRA = ["kaynak","tip","cari","tutar","vade","durum"];
 let _sngVeri = null, _sngSirala = null, _sngDrag = null; // _sngSirala: {k, yon:"azalan"|"artan"}
@@ -11643,6 +11685,37 @@ function seriNoGrupModalAc(seriNo){
   }).catch(err=>{ const el = document.getElementById("serinogrup-icerik"); if(el) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+htmlKacis(err.message)+'</div>'; });
 }
 function seriNoGrupModalKapat(){ const el = document.getElementById("serinogrup-modal-overlay"); if(el) el.remove(); }
+// Seri no'su verilmemiş ödeme satırı (4 Eki 2026): seri no'lu satırlarla aynı şekilde ÖNE açılan pencerede
+// çek(ler)in detayı (cari kodlu, tutar, vade, durum, ciro edilen cari) gösterilir; çeke tıklayınca kayıt yeni sekmede açılır.
+function cekGrupModalAc_(idListesi){
+  const idler = String(idListesi||"").split(",").filter(Boolean);
+  const liste = (typeof _cekSenetListe !== "undefined" ? _cekSenetListe : []).filter(c=>idler.includes(c.id));
+  if(document.getElementById("serinogrup-modal-overlay")) document.getElementById("serinogrup-modal-overlay").remove();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "serinogrup-modal-overlay";
+  overlay.dataset.escKapat = "seriNoGrupModalKapat";
+  overlay.onclick = (e)=>{ if(e.target===overlay) seriNoGrupModalKapat(); };
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:760px;width:94vw;max-height:88vh;overflow-y:auto">
+      <h3>🧾 Çek Ödemesi (seri no verilmemiş) — Detay</h3>
+      <div id="serinogrup-icerik"><div class="cari-empty">Yükleniyor...</div></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="seriNoGrupModalKapat()">Kapat</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  _sngSirala = null;
+  if(!liste.length){ document.getElementById("serinogrup-icerik").innerHTML = '<div class="cari-empty">Çek kaydı bulunamadı.</div>'; _sngVeri = null; return; }
+  const ort = csmOrtVadeHesapla_(liste.map(c=>({tutar: c.tutar||0, vade: c.vade})));
+  _sngVeri = {
+    seriNo: "seri no verilmemiş",
+    kalemler: liste.map(c=>({kaynak:"CekSenet", id:c.id, tip:c.tip, cariId:c.cariId, cariAd:c.cariAd, tutar:c.tutar, vade:c.vade, durum:c.durum, bankaAdi:c.bankaAdi})),
+    toplam: liste.reduce((a,c)=>a+(c.tutar||0),0),
+    ortalamaVade: ort ? ort.str : ""
+  };
+  sngCiz_();
+}
 </script>
 
 <!-- ══════════════ FİNANS MODÜLÜ (özet kartları) ══════════════ -->
@@ -17882,8 +17955,14 @@ document.addEventListener("keydown", function(e){
   const ANAHTAR = "tabloSutun:";
   const temiz = t => String(t||"").replace(/\s+/g," ").replace(/[▲▼]/g,"").trim();
   function deger(td){
+    // Hücre kendi sıralama değerini taşıyabilir (data-sirala; boş = sona): ör. "Ay" sütunu yıl*100+ay.
+    const ds = td.getAttribute && td.getAttribute("data-sirala");
+    if(ds !== null && ds !== undefined) return ds === "" ? {bos:true} : {n: parseFloat(ds)};
     const t = temiz(td.textContent).replace(/[₺\u00A0]/g,"").trim();
     if(t === "" || t === "—" || t === "-") return {bos:true};
+    // "AA/YYYY" (ay/yıl) → önce YIL, sonra ay (4 Eki 2026: ay baz alınıp yıl yok sayılıyordu)
+    const ay = /^(\d{1,2})\/(\d{4})$/.exec(t);
+    if(ay) return {n: (+ay[2])*100 + (+ay[1])};
     let m = /^(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})$/.exec(t);
     if(m) return {n: (+m[3])*10000 + (+m[2])*100 + (+m[1])};
     if(/^-?\d{1,3}(\.\d{3})*(,\d+)?$/.test(t) || /^-?\d+(,\d+)?$/.test(t)) return {n: parseFloat(t.replace(/\./g,"").replace(",","."))};

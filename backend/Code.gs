@@ -4369,6 +4369,7 @@ function getCekSenetDetay(id) {
         yaprakId: String(row[16] || ""),
         seriGrupNo: metinOku_(row[17]),
         bankaHesapId: String(row[18] || ""),
+        ciroCariId: String(row[13] || ""),   // Ciro Edildi çekte ciro edilen cari (ekranda Cari Kodu - Ad olarak yazılır)
       };
       break;
     }
