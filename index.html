@@ -404,6 +404,8 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .satis-kalem-miktar{width:90px;flex:0 0 90px;text-align:right}
 .satis-kalem-birim{width:90px;flex:0 0 90px}
 .satis-kalem-birim2{width:90px;flex:0 0 90px;text-align:right}
+.satis-kalem-birim2ad{width:80px;flex:0 0 80px;font-size:12.5px;color:var(--text2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.satis-kalem-basliklar>.satis-kalem-birim2ad{text-align:left}
 .satis-kalem-fiyat{width:120px;flex:0 0 120px;text-align:right}
 .satis-kalem-yuzde{width:70px;flex:0 0 70px;text-align:right}
 .satis-kalem-paket{width:88px;flex:0 0 88px;font-size:12px;color:var(--text2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -5892,7 +5894,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       <div class="satis-kalem-basliklar">
         <span class="satis-kalem-stokkodu">Stok Kodu</span><span style="flex:1">Ürün</span>
         <span class="satis-kalem-miktar">Miktar</span><span class="satis-kalem-birim">Birim</span>
-        <span class="satis-kalem-birim2" title="2. Birim (ambalaj: kutu/koli vb.). Buraya yazdığınız sayı × stok kartındaki ambalaj miktarı = Miktar">Birim2</span>
+        <span class="satis-kalem-birim2" title="Miktar 2 (ambalaj adedi: kutu/koli vb.). Buraya yazdığınız sayı × stok kartındaki ambalaj miktarı = Miktar">Miktar 2</span><span class="satis-kalem-birim2ad">Birim 2</span>
         <span class="satis-kalem-fiyat">Birim Fiyat</span><span class="satis-kalem-yuzde">İsk.%</span><span class="satis-kalem-yuzde">Kdv%</span>
         <span class="satis-kalem-paket" id="sm-paket-baslik" style="display:${belgeTipiBaslangic==='Sipariş'?'block':'none'}" title="Ambalaj Tanımlama'daki ambalaj miktarına göre hesaplanan gerekli paket/kutu sayısı">Paket</span>
       </div>
@@ -6158,6 +6160,8 @@ function satisKalemAlanDegisti(idx, alan, deger){
     if(alan==='miktar') delete _yeniSatisKalemleri[idx].carpan;   // elle girilen Miktar yeni çarpan olur
     const b2 = document.getElementById("sm-birim2-"+idx);
     if(b2 && document.activeElement !== b2) b2.value = satisBirim2Deger_(_yeniSatisKalemleri[idx]);
+    const b2ad = document.getElementById("sm-birim2ad-"+idx);
+    if(b2ad) b2ad.textContent = satisBirim2Ad_(_yeniSatisKalemleri[idx]);
   }
   satisToplamGuncelle();
 }
@@ -6170,10 +6174,10 @@ function satisCarpan_(k){
   if(s && s.ambalajMiktari > 0) return s.ambalajMiktari;
   return parseFloat(k.carpan) || 0;
 }
-function satisBirim2Etiket_(k){
+function satisBirim2Ad_(k){
   const kod = String(k.stokKodu||"").trim();
   const s = kod ? (_stokTanimListe||[]).find(x=>x.stokKodu===kod) : null;
-  return (s && s.ambalajBirimi) ? s.ambalajBirimi : "Birim2";
+  return (s && s.ambalajBirimi) ? s.ambalajBirimi : "";
 }
 function satisBirim2Deger_(k){
   if(k.birim2 !== undefined && k.birim2 !== "") return k.birim2;
@@ -6235,7 +6239,8 @@ function satisKalemlerCiz(){
       </label>
       <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="satisKalemAlanDegisti(${idx},'miktar',this.value)" onblur="kutuMiktarUyumKontrol('${k.stokKodu||''}', this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `satisKalemAlanDegisti(${idx},'birim',this.value)`)}
-      <input class="satis-kalem-birim2" id="sm-birim2-${idx}" type="number" min="0" step="0.0001" placeholder="${htmlKacis(satisBirim2Etiket_(k))}" title="${htmlKacis(satisBirim2Etiket_(k))}: yazdığınız sayı × birim1 miktarı = Miktar" value="${satisBirim2Deger_(k)}" oninput="satisBirim2Degisti(${idx}, this.value)">
+      <input class="satis-kalem-birim2" id="sm-birim2-${idx}" type="number" min="0" step="0.0001" placeholder="Miktar 2" title="Miktar 2: yazdığınız sayı × birim1 (ambalaj) miktarı = Miktar" value="${satisBirim2Deger_(k)}" oninput="satisBirim2Degisti(${idx}, this.value)">
+      <span class="satis-kalem-birim2ad" id="sm-birim2ad-${idx}" title="Stok kartındaki ambalaj birimi">${htmlKacis(satisBirim2Ad_(k))}</span>
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="satisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
       <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="İskonto %" placeholder="İsk.%" value="${k.iskontoYuzde||0}" oninput="satisKalemAlanDegisti(${idx},'iskontoYuzde',this.value)">
       <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="KDV %" placeholder="Kdv%" value="${k.kdvOrani===undefined?20:k.kdvOrani}" oninput="satisKalemAlanDegisti(${idx},'kdvOrani',this.value)">
