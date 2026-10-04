@@ -1073,7 +1073,7 @@ function doPost(e) {
 // Bu action'lar oturum/token gerektirmeden çalışır (login ekranı henüz token
 // almadan bunlara ihtiyaç duyar).
 // Veriyi değiştirmeyen işlemler kilit beklemez (istemcideki CARI_API_YAZMA_DEGIL_ ile aynı mantık).
-const YAZMA_DEGIL_ = /^(get|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|nakliyeSorunluFaturalar$)/; // giriş/çıkış/parola oturum satırı yazar → kilitli (satır kayması olmasın)
+const YAZMA_DEGIL_ = /^(get|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|cekSeriNoUret|nakliyeSorunluFaturalar$)/; // giriş/çıkış/parola oturum satırı yazar → kilitli (satır kayması olmasın)
 const OTURUMSUZ_ACTIONLAR = { girisYap: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
@@ -1222,6 +1222,7 @@ function handleRequest(e) {
       case "saveSeriTanim":    result = saveSeriTanim(body); break;
       case "silSeriTanim":     result = silSeriTanim(body); break;
       case "seriSonrakiNoUret": result = seriSonrakiNoUret(body); break;
+      case "cekSeriNoUret": result = cekSeriNoUret(body); break;
       case "getBasitTanimListesi": result = getBasitTanimListesi(body.tip); break;
       case "saveBasitTanim":       result = saveBasitTanim(body); break;
       case "silBasitTanim":        result = silBasitTanim(body); break;
@@ -4069,7 +4070,7 @@ function getSeriNoGrubu(seriNo) {
   const cekRes = getCekSenetListesi();
   if (cekRes.ok) {
     cekRes.cekSenetler.forEach(c => {
-      if (String(c.seriGrupNo || "") !== sn) return;
+      if (String(c.seriGrupNo || "") !== sn && String(c.odemeSeriNo || "") !== sn) return;
       kalemler.push({ kaynak: "CekSenet", id: c.id, tip: c.tip, cariAd: c.cariAd, tutar: c.tutar, vade: c.vade, durum: c.durum, bankaAdi: c.bankaAdi });
       toplam += c.tutar;
       if (c.vade) vadeler.push(c.vade);
@@ -4324,6 +4325,8 @@ function getCekSenetListesi() {
       belgeTuru: String(row[15] || "") === "Senet" ? "Senet" : "Çek",
       seriGrupNo: metinOku_(row[17]),
       bankaHesapId: String(row[18] || ""),
+      ciroCariId: String(row[13] || ""),
+      odemeSeriNo: metinOku_(row[19]),
       gecikmis: durum === "Portföyde" && !!vade && vade < bugun,
     });
   }
@@ -4729,6 +4732,9 @@ function cekSenetDurumGuncelle(body) {
       if (body.grupToplamTutar) seriEk += " (Toplam: " + Utilities.formatString("%.2f", parseFloat(body.grupToplamTutar) || 0) + ")";
       ensureCekSenetSeriGrupColonu(sheet);
       if (!String(sheet.getRange(rowIdx, 18).getValue() || "").trim()) sheet.getRange(rowIdx, 18).setValue(topluSeriNo);
+      // Ciro = ÖDEME işlemi: çekin tahsilat seri no'su (18. kolon) korunur, ödeme seri no'su ayrı kolona (20) yazılır.
+      if (!String(sheet.getRange(1, 20).getValue() || "")) sheet.getRange(1, 20).setValue("ODEME_SERI_NO").setFontWeight("bold").setBackground("#e8edf5");
+      sheet.getRange(rowIdx, 20).setNumberFormat("@").setValue(topluSeriNo);
     }
     cariHareketEkle({
       cariId: ciroCariId, tarih: Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"), tip: "Borç", tutar: kalanTutar,
@@ -8142,6 +8148,7 @@ const SERI_TUR_ETIKETLER = {
   siparis: "Sipariş No", teklif: "Teklif No",
   satis_fatura: "Satış Fatura No", alis_fatura: "Alış Fatura No",
   cari_alici: "Cari No (Alıcı)", cari_satici: "Cari No (Satıcı)",
+  cek_odeme: "Çek Ödeme Seri No", cek_tahsilat: "Çek Tahsilat Seri No",
 };
 
 function seriFormatla(prefix, no, basamak) {
@@ -8269,6 +8276,38 @@ function silSeriTanim(body) {
       if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); return { ok: true }; }
     }
     return { ok: false, hata: "Kayıt bulunamadı" };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Çek/Senet işlem seri numaraları: her ÖDEME (çıkış) işlemi "2026-1001"den, her TAHSİLAT (müşteri çeki girişi) işlemi
+// "2026-0001"den başlayarak sıra numarası alır. Sayaçlar Ayarlar > Seri Tanımları'ndaki "Çek Ödeme Seri No" /
+// "Çek Tahsilat Seri No" satırlarıdır (ilk kullanımda otomatik oluşturulur, istenirse oradan düzenlenir).
+// body: { tur: "odeme" | "tahsilat" }
+function cekSeriNoUret(body) {
+  const tur = String((body && body.tur) || "") === "odeme" ? "cek_odeme" : "cek_tahsilat";
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR);
+  const lock = kilitGetir_();
+  lock.waitLock(10000);
+  try {
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] && String(data[i][5] || "") === tur) {
+        const prefix = String(data[i][2] || "");
+        const sonrakiNo = parseInt(data[i][3]) || 1;
+        const basamak = parseInt(data[i][4]) || 4;
+        sheet.getRange(i + 1, 4).setValue(sonrakiNo + 1);
+        return { ok: true, no: seriFormatla(prefix, sonrakiNo, basamak) };
+      }
+    }
+    // Tanım yok: oluştur (yıl-önek, ödeme 1001'den, tahsilat 0001'den)
+    const yil = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy");
+    const ilk = tur === "cek_odeme" ? 1001 : 1;
+    const ad = tur === "cek_odeme" ? "Çek Ödeme Seri No" : "Çek Tahsilat Seri No";
+    sheet.appendRow(["sr_" + Date.now() + "_" + tur, ad, yil + "-", ilk + 1, 4, tur]);
+    return { ok: true, no: seriFormatla(yil + "-", ilk, 4) };
   } finally {
     lock.releaseLock();
   }
