@@ -7610,7 +7610,12 @@ function bfmZoomKontrolHTML(iframeId, etiketId){
 // (yeni sekmede tam/orijinal hâliyle açıldığında kırpma uygulanmıyor).
 function faturaGorsalAc(faturaNo){
   if(!faturaNo) return;
-  if(bfmFaturaYandaMi()){ bfmYanPanelAc(faturaNo); }
+  if(bfmFaturaYandaMi()){
+    // 4 Eki 2026: aynı faturanın paneli zaten açıkken "Faturayı Gör"e tekrar tıklanırsa panel kapanır.
+    const acik = document.getElementById("fatura-yan-panel");
+    if(acik && acik.dataset.faturaNo === String(faturaNo)){ bfmYanPanelKapat(); return; }
+    bfmYanPanelAc(faturaNo);
+  }
   else { faturaGorselYeniSekmedeAc_(faturaNo); }
 }
 // Fatura görselini (A4 ≈ 794×1123 px) panelin GÖVDESİNE tam sığdırır (genişlik ve yükseklik).
@@ -7727,6 +7732,7 @@ function bfmYanPanelAc(faturaNo){
   const panel = document.createElement("div");
   panel.className = "fatura-yan-panel";
   panel.id = "fatura-yan-panel";
+  panel.dataset.faturaNo = String(faturaNo);
   panel.innerHTML = `
     <div class="fyp-ust">
       <b style="font-size:13px">📄 Fatura — ${faturaNo}</b>
@@ -12068,7 +12074,10 @@ function muhasebeRaporuTipDegisti(){
   // Kar/Zarar Raporu, elle bir tarih seçilmediği sürece TÜM geçmişten itibaren hesaplanır
   // (maliyet/FIFO hesaplaması geçmişe bağımlı olduğu için "son 2 ay" varsayılanı burada
   // yanıltıcı olurdu) — kullanıcı dilerse yine kendi tarih aralığını seçebilir (27 Eyl 2026).
-  if(tip === "karZarar" && _mrOncekiTip !== "karZarar") document.getElementById("rapor-baslangic").value = "";
+  if(tip === "karZarar" && _mrOncekiTip !== "karZarar"){
+    document.getElementById("rapor-baslangic").value = "";
+    raporYukle(); // üstteki toplam kutuları da yeni tarih aralığıyla yenilensin
+  }
   _mrOncekiTip = tip;
   document.getElementById("mr-kasa-mod-alani").style.display = (tip === "kasaRaporu") ? "flex" : "none";
   // Kasa Raporu kendi Excel butonuna sahip (mr-kasa-mod-alani içinde) — genel buton onunla çakışmasın diye gizlenir.
@@ -16278,14 +16287,27 @@ const SHR_SUTUNLAR = [
   { anahtar: "cikis",     baslik: "Çıkış",      al: h => h.hareketTipi==="Çıkış" ? (parseFloat(h.miktar)||0) : 0 },
   { anahtar: "kalan",     baslik: "Kalan",      al: h => h.kalan||0 },
   { anahtar: "birim",     baslik: "Birim",      al: h => (h.birim||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
+  { anahtar: "alisFiyat", baslik: "Alış Fiyatı",  al: h => shrAlisFiyat_(h) },
+  { anahtar: "satisFiyat",baslik: "Satış Fiyatı", al: h => shrSatisFiyat_(h) },
   { anahtar: "belgeTipi", baslik: "Belge Tipi", al: h => (h.belgeTipi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
   { anahtar: "belgeNo",   baslik: "Belge No",   al: h => (h.belgeNo||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
   { anahtar: "aciklama",  baslik: "Açıklama",   al: h => (h.aciklama||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
 ];
 
+// Stok hareketine yazılan birim fiyat (MALIYET_FIYATI sütunu) belgenin tipine göre okunur:
+// Satış Faturası / Satış İadesi → Satış Fiyatı; Alış Faturası / Alış İadesi / elle girişler (Devir vb.) → Alış Fiyatı.
+const SHR_SATIS_BELGELERI = { "Satış Faturası":1, "Satış İadesi":1 };
+function shrSatisFiyat_(h){ return SHR_SATIS_BELGELERI[h.belgeTipi] ? (parseFloat(h.maliyetFiyati)||0) : 0; }
+function shrAlisFiyat_(h){ return SHR_SATIS_BELGELERI[h.belgeTipi] ? 0 : (parseFloat(h.maliyetFiyati)||0); }
+
+// Başlığa ilk tıklama büyükten küçüğe, tekrar tıklama küçükten büyüğe (ERP standardı).
 function stokHareketSirala(anahtar){
-  if(_shrSirala.anahtar === anahtar) _shrSirala.yon = (_shrSirala.yon==="asc" ? "desc" : "asc");
-  else _shrSirala = { anahtar, yon: "asc" };
+  if(_shrSirala.anahtar === anahtar) _shrSirala.yon = (_shrSirala.yon==="desc" ? "asc" : "desc");
+  else _shrSirala = { anahtar, yon: "desc" };
+  stokHareketRaporuCiz();
+}
+function stokHareketSutunSifirla(){
+  try{ Object.keys(localStorage).filter(k=>k.indexOf("mrKolonSira_stokHareket_")===0).forEach(k=>localStorage.removeItem(k)); }catch(e){}
   stokHareketRaporuCiz();
 }
 
@@ -16335,7 +16357,12 @@ function stokHareketRaporuCiz(){
     const aktif = s.anahtar === _shrSirala.anahtar;
     const ok = aktif ? (_shrSirala.yon==="asc" ? "▲" : "▼") : "▲";
     return `<th class="siralanabilir${aktif?' aktif':''}" onclick="stokHareketSirala('${s.anahtar}')">${s.baslik} <span class="ok">${ok}</span></th>`;
-  }).join("") + "<th></th>";
+  }).join("") + '<th data-mr-sabit="1"></th>';
+
+  // Üstteki toplam kutuları: arama / marka / ebat / ürün filtresi uygulanmış satırlardan hesaplanır
+  // (eskiden sunucunun filtresiz toplamı gösteriliyordu, filtre değişince kutular değişmiyordu).
+  let girisToplamF = 0, cikisToplamF = 0;
+  hareketler.forEach(h=>{ const m = parseFloat(h.miktar)||0; if(h.hareketTipi === "Giriş") girisToplamF += m; else cikisToplamF += m; });
 
   // Uzun aralıklarda (özellikle tarih filtresi temizlenip "Tümü" seçildiğinde) tüm
   // hareketleri tek seferde DOM'a basmak yerine adım adım gösteriyoruz.
@@ -16345,8 +16372,9 @@ function stokHareketRaporuCiz(){
 
   el.innerHTML = `
     <div class="finans-kartlar">
-      <div class="finans-kart"><div class="lbl">Toplam Giriş</div><div class="num">${miktarFormat(_shrSonuc.girisToplam)}</div></div>
-      <div class="finans-kart"><div class="lbl">Toplam Çıkış</div><div class="num">${miktarFormat(_shrSonuc.cikisToplam)}</div></div>
+      <div class="finans-kart pos"><div class="lbl">Toplam Giriş</div><div class="num">${miktarFormat(girisToplamF)}</div></div>
+      <div class="finans-kart neg"><div class="lbl">Toplam Çıkış</div><div class="num">${miktarFormat(cikisToplamF)}</div></div>
+      <div class="finans-kart ${(girisToplamF-cikisToplamF)>=0?'pos':'neg'}"><div class="lbl">Net (Giriş − Çıkış)</div><div class="num">${miktarFormat(girisToplamF-cikisToplamF)}</div></div>
     </div>
     <table class="rapor-tbl">
       <thead><tr>${basliklar}</tr></thead>
@@ -16356,7 +16384,7 @@ function stokHareketRaporuCiz(){
           const btn = belgeliMi ? `<button class="btn" style="font-size:11px;padding:4px 8px" onclick="stokHareketBelgeAc('${h.belgeTipi}','${h.belgeNo}')" title="İlgili belgeyi aç">📄 Aç</button>` : "";
           const giris = h.hareketTipi==="Giriş" ? miktarFormat(h.miktar) : "";
           const cikis = h.hareketTipi==="Çıkış" ? miktarFormat(h.miktar) : "";
-          return `<tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td class="hk-alacak">${giris}</td><td class="hk-borc">${cikis}</td><td>${miktarFormat(h.kalan)}</td><td>${h.birim}</td><td>${h.belgeTipi||''}${h.islemTuru?`<div style="margin-top:2px">${mrIslemTuruRozet({islemTuru:h.islemTuru})}</div>`:''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td><td>${btn}</td></tr>`;
+          return `<tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td class="hk-alacak">${giris}</td><td class="hk-borc">${cikis}</td><td>${miktarFormat(h.kalan)}</td><td>${h.birim}</td><td style="text-align:right">${shrAlisFiyat_(h)>0 ? paraFormat(shrAlisFiyat_(h)) : ''}</td><td style="text-align:right">${shrSatisFiyat_(h)>0 ? paraFormat(shrSatisFiyat_(h)) : ''}</td><td>${h.belgeTipi||''}${h.islemTuru?`<div style="margin-top:2px">${mrIslemTuruRozet({islemTuru:h.islemTuru})}</div>`:''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td><td>${btn}</td></tr>`;
         }).join("")}
       </tbody>
     </table>
@@ -16364,6 +16392,13 @@ function stokHareketRaporuCiz(){
       <span style="font-size:12px;color:var(--text3)">${gosterilecekler.length} / ${toplamEslesen} satır gösteriliyor</span>
       ${dahaFazlaVar ? `<button class="btn" onclick="stokHareketDahaFazlaGoster()">⬇️ Daha fazla göster (+${Math.min(SHR_SAYFA_ADIM, toplamEslesen-gosterilecekler.length)})</button>` : ""}
     </div>`;
+  // Sütun başlıkları sürüklenerek yer değiştirebilsin (sıra tarayıcıda saklanır); Giriş/Çıkış renkleri.
+  if(typeof mrRenkUygula === "function") mrRenkUygula(el);
+  if(typeof mrSutunSurukleKur === "function"){
+    mrSutunSurukleKur(el, "stokHareket");
+    const sifirla = el.querySelector('button[onclick="mrSutunSirasiSifirla()"]');
+    if(sifirla) sifirla.setAttribute("onclick", "stokHareketSutunSifirla()");
+  }
 }
 
 function stokHareketDahaFazlaGoster(){

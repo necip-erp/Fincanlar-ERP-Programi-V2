@@ -5827,15 +5827,21 @@ function getFinansOzet() {
   return cacheOkuVeyaHesapla("finansOzet", 30, function () {
   const ss = acikSS_();
 
-  function toplamAl(sheetName, headers, kolonIdx) {
+  function toplamAl(sheetName, headers, kolonIdx, belgeTipiIdx) {
     const sheet = getOrCreateSheet(ss, sheetName, headers);
     const data = sheet.getDataRange().getValues();
     let toplam = 0;
-    for (let i = 1; i < data.length; i++) toplam += parseFloat(data[i][kolonIdx]) || 0;
+    for (let i = 1; i < data.length; i++) {
+      if (belgeTipiIdx !== undefined) {
+        const bt = String(data[i][belgeTipiIdx] || "").trim();
+        if (bt && bt !== "Fatura") continue; // Sipariş/Teklif satış toplamına girmez
+      }
+      toplam += parseFloat(data[i][kolonIdx]) || 0;
+    }
     return toplam;
   }
 
-  const toplamSatis = toplamAl(SHEETS.satislar, ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"], 4);
+  const toplamSatis = toplamAl(SHEETS.satislar, ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"], 4, 8);
   const toplamAlis = toplamAl(SHEETS.alislar, ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"], 4);
   const toplamTahsilat = toplamAl(SHEETS.tahsilatlar, ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI"], 4);
   const toplamOdeme = toplamAl(SHEETS.odemeler, ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI"], 4);
@@ -5884,13 +5890,19 @@ function getRaporOzet(body) {
 
   const ss = acikSS_();
 
-  function ozetCikar(sheetName, headers, tarihIdx, tutarIdx) {
+  // belgeTipiIdx verilirse (Satislar için 8) yalnızca FATURA satırları sayılır — Sipariş ve Teklif
+  // kayıtları satış toplamına girmemeli (4 Eki 2026: üst toplam kutusu siparişleri de topluyordu).
+  function ozetCikar(sheetName, headers, tarihIdx, tutarIdx, belgeTipiIdx) {
     const sheet = getOrCreateSheet(ss, sheetName, headers);
     const data = sheet.getDataRange().getValues();
     let sayi = 0, toplam = 0;
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       if (!row[0]) continue;
+      if (belgeTipiIdx !== undefined) {
+        const bt = String(row[belgeTipiIdx] || "").trim();
+        if (bt && bt !== "Fatura") continue;
+      }
       if (!araligaDahilMi(String(row[tarihIdx] || ""))) continue;
       sayi++;
       toplam += parseFloat(row[tutarIdx]) || 0;
@@ -5898,7 +5910,7 @@ function getRaporOzet(body) {
     return { sayi: sayi, toplam: toplam };
   }
 
-  const satis = ozetCikar(SHEETS.satislar, ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"], 1, 4);
+  const satis = ozetCikar(SHEETS.satislar, ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"], 1, 4, 8);
   const alis = ozetCikar(SHEETS.alislar, ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"], 1, 4);
   const tahsilat = ozetCikar(SHEETS.tahsilatlar, ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI"], 1, 4);
   const odeme = ozetCikar(SHEETS.odemeler, ["ID","TARIH","CARI_ID","CARI_AD","TUTAR","YONTEM","ACIKLAMA","KAYIT_TARIHI"], 1, 4);
