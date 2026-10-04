@@ -404,6 +404,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .satis-kalem-miktar{width:90px;flex:0 0 90px;text-align:right}
 .satis-kalem-birim{width:90px;flex:0 0 90px}
 .satis-kalem-birim2{width:90px;flex:0 0 90px;text-align:right}
+.satis-kalem-tutar{width:112px;flex:0 0 112px;text-align:right;font-weight:800;font-size:13px;padding-right:6px;white-space:nowrap}
 .satis-kalem-birim2ad{width:80px;flex:0 0 80px;font-size:12.5px;color:var(--text2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .satis-kalem-basliklar>.satis-kalem-birim2ad{text-align:left}
 .satis-kalem-fiyat{width:120px;flex:0 0 120px;text-align:right}
@@ -579,8 +580,8 @@ body.giris-yapildi #login-ekran{display:none}
   </div>
   <button class="homebtn" id="ak-btn" onclick="akAc()" title="Akıllı Arama: ne yapmak istediğini yaz, doğrudan işleme geç (Ctrl+K)">⚡ Ne yapmak istiyorsun? <span class="kisayol-ipucu" id="ak-btn-kisayol">Ctrl+K</span></button>
   <button class="homebtn" id="home-btn" onclick="gitAnaSayfa()" title="Ana Sayfa (Ctrl + sayı satırında 1'in solundaki tuş)">← Ana Sayfa <span class="kisayol-ipucu">Ctrl+"</span></button>
-  <button class="homebtn" id="veri-yenile-btn" style="display:inline-block;margin-left:8px" onclick="verileriYenile()" title="Verileri yenile: sayfa yeniden yüklenmez, açık sekmeler ve pencereler kapanmaz">↻ Verileri Yenile <span class="kisayol-ipucu" id="veri-yenile-ipucu">Alt+V</span></button>
-  <button class="homebtn" id="yenile-btn" style="display:inline-block;margin-left:6px" onclick="sayfayiYenile()" title="Sayfayı tamamen yeniden yükler (açık sekmeler kapanır, en güncel sürüm alınır)">⟳ Sayfayı Yenile <span class="kisayol-ipucu" id="yenile-ipucu">Alt+R</span></button>
+  <button class="homebtn" id="veri-yenile-btn" style="display:inline-block;margin-left:8px" onclick="verileriYenile()" title="Sayfayı yenile: sayfa yeniden yüklenmez, açık sekmeler ve pencereler kapanmaz (verileri sunucudan tazeler)">↻ Sayfayı Yenile <span class="kisayol-ipucu" id="veri-yenile-ipucu">Alt+V</span></button>
+  <button class="homebtn" id="yenile-btn" style="display:inline-block;margin-left:6px" onclick="sayfayiYenile()" title="Sayfayı tamamen yeniden yükler (açık sekmeler kapanır, en güncel sürüm alınır)">⟳ Yeniden Yükle <span class="kisayol-ipucu" id="yenile-ipucu">Alt+R</span></button>
   <div id="modul-switcher-wrap" style="position:relative">
     <button class="homebtn" id="modul-switcher-btn" onclick="modulSwitcherAcKapat(event)" title="Başka bir modülü sekme olarak aç">⇄ Modül</button>
     <div id="modul-switcher-liste" class="modul-switcher-liste" style="display:none"></div>
@@ -3160,7 +3161,7 @@ function cariApi(action, params, _tokenYenidenDenendi){
         const simdi = Date.now();
         if(!window._dvUyariZamani_ || simdi - window._dvUyariZamani_ > 60000){
           window._dvUyariZamani_ = simdi;
-          if(typeof toastGoster === "function") toastGoster("Başka bir kullanıcı veri değiştirdi — güncel görmek için Alt+V (Verileri Yenile)");
+          if(typeof toastGoster === "function") toastGoster("Başka bir kullanıcı veri değiştirdi — güncel görmek için Alt+V (Sayfayı Yenile)");
         }
       }
       window._sonDv_ = yeniDv;
@@ -5896,14 +5897,14 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         <span class="satis-kalem-miktar">Miktar</span><span class="satis-kalem-birim">Birim</span>
         <span class="satis-kalem-birim2" title="Miktar 2 (ambalaj adedi: kutu/koli vb.). Buraya yazdığınız sayı × stok kartındaki ambalaj miktarı = Miktar">Miktar 2</span><span class="satis-kalem-birim2ad">Birim 2</span>
         <span class="satis-kalem-fiyat">Birim Fiyat</span><span class="satis-kalem-yuzde">İsk.%</span><span class="satis-kalem-yuzde">Kdv%</span>
-        <span class="satis-kalem-paket" id="sm-paket-baslik" style="display:${belgeTipiBaslangic==='Sipariş'?'block':'none'}" title="Ambalaj Tanımlama'daki ambalaj miktarına göre hesaplanan gerekli paket/kutu sayısı">Paket</span>
+        <span class="satis-kalem-tutar" title="Satır tutarı = Miktar × Birim Fiyat">Tutar</span>
       </div>
       <div id="sm-kalemler" style="margin:8px 0"></div>
       <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
 
       <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
         <div class="fld" id="sm-tutar-iskonto-fld" style="flex:1;min-width:220px;max-width:280px;margin-bottom:0;display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'flex':'none'}">
-          <label>Tutar İskontosu (₺)</label>
+          <label class="sm-isk-etiket">Tutar İskontosu (₺)</label>
           <input id="sm-tutar-iskontosu" type="number" min="0" step="0.01" value="${s ? (s.tutarIskontosu||0) : 0}" oninput="satisToplamGuncelle()">
           <label style="flex-direction:row;align-items:center;gap:6px;text-transform:none;font-size:12px;color:var(--text2);margin-top:6px">
             <input id="sm-tutar-iskonto-kdv-sonra" type="checkbox" ${!s || s.tutarIskontoKdvSonra?'checked':''} onchange="satisToplamGuncelle()" style="width:auto">
@@ -5912,7 +5913,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
           <p id="sm-kdv-sonra-not" style="display:none;color:var(--warn,#c77);font-size:11px;margin:4px 0 0">⚠️ Bu cari E-Fatura/E-Arşiv mükellefi olduğu için KDV sonrası iskontoya izin verilmiyor — iskonto KDV'den önce (matrahtan) düşülecek.</p>
         </div>
 
-        <div class="fld" style="flex:1;min-width:180px;max-width:220px;margin-bottom:0"><label>Dip İskonto (%)</label>
+        <div class="fld" style="flex:1;min-width:180px;max-width:220px;margin-bottom:0"><label class="sm-isk-etiket">Dip İskonto (%)</label>
           <input id="sm-dip-iskonto" type="number" min="0" max="100" step="0.01" value="${s ? (s.dipIskontoYuzde||0) : 0}" oninput="satisToplamGuncelle()">
           <p id="sm-efatura-dip-not" style="display:none;color:var(--warn,#c77);font-size:11px;margin:4px 0 0">🔒 E-Fatura mükellefi cari: dip iskonto ve tutar iskontosu kapalı — iskontoyu kalem satırındaki İsk.% ile girin.</p>
         </div>
@@ -6239,12 +6240,12 @@ function satisKalemlerCiz(){
       </label>
       <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="satisKalemAlanDegisti(${idx},'miktar',this.value)" onblur="kutuMiktarUyumKontrol('${k.stokKodu||''}', this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `satisKalemAlanDegisti(${idx},'birim',this.value)`)}
-      <input class="satis-kalem-birim2" id="sm-birim2-${idx}" type="number" min="0" step="0.0001" placeholder="Miktar 2" title="Miktar 2: yazdığınız sayı × birim1 (ambalaj) miktarı = Miktar" value="${satisBirim2Deger_(k)}" oninput="satisBirim2Degisti(${idx}, this.value)">
+      <input class="satis-kalem-birim2" id="sm-birim2-${idx}" type="number" min="0" step="1" placeholder="Miktar 2" title="Miktar 2: yazdığınız sayı × birim1 (ambalaj) miktarı = Miktar" value="${satisBirim2Deger_(k)}" oninput="satisBirim2Degisti(${idx}, this.value)">
       <span class="satis-kalem-birim2ad" id="sm-birim2ad-${idx}" title="Stok kartındaki ambalaj birimi">${htmlKacis(satisBirim2Ad_(k))}</span>
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="satisKalemAlanDegisti(${idx},'birimFiyat',this.value)">
       <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="İskonto %" placeholder="İsk.%" value="${k.iskontoYuzde||0}" oninput="satisKalemAlanDegisti(${idx},'iskontoYuzde',this.value)">
       <input class="satis-kalem-yuzde" type="number" min="0" step="0.01" title="KDV %" placeholder="Kdv%" value="${k.kdvOrani===undefined?20:k.kdvOrani}" oninput="satisKalemAlanDegisti(${idx},'kdvOrani',this.value)">
-      ${siparis ? `<span class="satis-kalem-paket" id="sm-paket-${idx}" title="Ambalaj Tanımlama'ya göre gerekli paket/kutu sayısı">${siparisPaketBilgisi(k)}</span>` : ''}
+      <span class="satis-kalem-tutar" id="sm-tutar-${idx}" title="Satır tutarı = Miktar × Birim Fiyat">${paraFormat((parseFloat(k.miktar)||0)*(parseFloat(k.birimFiyat)||0))}</span>
       ${_yeniSatisKalemleri.length>1 ? `<span class="hk-sil" onclick="satisKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
   satisToplamGuncelle();
@@ -6328,6 +6329,15 @@ function satisToplamGuncelle(){
     genelToplam = araToplam + kdvT - tutarIskontosu;
   }
   genelToplam = Math.max(0, genelToplam);
+  // Satır tutarları (Miktar × Birim Fiyat) ve toplam ağırlık (stok kartındaki ağırlık × miktar)
+  let toplamAgirlik = 0, agirlikBilgisiVar = false;
+  _yeniSatisKalemleri.forEach((k,i)=>{
+    const te = document.getElementById("sm-tutar-"+i);
+    if(te) te.textContent = paraFormat((parseFloat(k.miktar)||0)*(parseFloat(k.birimFiyat)||0));
+    const kod = String(k.stokKodu||"").trim();
+    const st = kod ? (_stokTanimListe||[]).find(x=>x.stokKodu===kod) : null;
+    if(st && st.agirlik > 0){ agirlikBilgisiVar = true; toplamAgirlik += (parseFloat(k.miktar)||0) * st.agirlik; }
+  });
   const el = document.getElementById("sm-toplam");
   if(!el) return;
   el.innerHTML = `
@@ -6336,7 +6346,8 @@ function satisToplamGuncelle(){
     <div class="satis-toplam-satir"><span>Ara Toplam</span><b>${paraFormat(araToplam)}</b></div>
     <div class="satis-toplam-satir"><span>Kdv Toplam</span><b>${paraFormat(kdvT)}</b></div>
     ${tutarIskontosu>0 ? `<div class="satis-toplam-satir"><span>Tutar İskontosu (${kdvSonra?'KDV sonrası':'KDV öncesi'})</span><b>-${paraFormat(tutarIskontosu)}</b></div>` : ''}
-    <div class="satis-toplam-satir genel"><span>Genel Toplam</span><b>${paraFormat(genelToplam)}</b></div>`;
+    <div class="satis-toplam-satir genel"><span>Genel Toplam</span><b>${paraFormat(genelToplam)}</b></div>
+    ${agirlikBilgisiVar ? `<div class="satis-toplam-satir agirlik"><span>Toplam Ağırlık</span><b>${miktarFormat(Math.round(toplamAgirlik*100)/100)} kg</b></div>` : ''}`;
 }
 
 function satisModalBelgeTipiDegisti(){
@@ -15124,6 +15135,7 @@ function tanimListesiYukle(tip){
     if(!res.ok){ if(el) el.innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _tanimListeCache[tip] = res.kalemler;
     _tanimListeYuklendi[tip] = true;
+    try{ stokTanimModalSelectTazele_(tip); }catch(e){}
     if(tip === "projeKodu") projeKoduSelectleriTazele();
     if(tip === "faturaTipi") faturaTipiSelectleriTazele();
     if(tip === "virmanTipi") virmanTipiSelectleriTazele();
@@ -15619,8 +15631,8 @@ function ayarlarListesiCiz(){
     ...[
       ["_akilliArama","⚡ Akıllı Arama (ne yapmak istediğini yaz, doğrudan işleme geç)","Sipariş gir, Tahsilat gir, Virman, Pos işle, Cari aç, Telefon öğren... yazınca ilgili işlemi açar"],
       ["_yeniKayit","➕ Yeni kayıt (açık ekrandaki + düğmesi)","Tahsilat, Ödeme, Cari, Stok, Alış, Satış... ekranlarında yeni kayıt açar"],
-      ["_veriYenile","↻ Verileri yenile (sayfa ve sekmeler kapanmadan)","Açık sekmeleri ve pencereleri kapatmadan tüm listeleri sunucudan tazeler"],
-      ["_yenile","⟳ Sayfayı yenile (tam yeniden yükleme)","Önbelleği temizleyip sayfayı yeniden yükler; açık sekmeler kapanır"],
+      ["_veriYenile","↻ Sayfayı yenile (sayfa ve sekmeler kapanmadan)","Açık sekmeleri ve pencereleri kapatmadan tüm listeleri sunucudan tazeler"],
+      ["_yenile","⟳ Yeniden yükle (tam yeniden yükleme)","Önbelleği temizleyip sayfayı yeniden yükler; açık sekmeler kapanır"],
       ["_solListe","◀ Soldaki listeyi gizle / göster (Cari, Alış, Satış)","Açık modülün sol listesini daraltır/açar"],
       ["_modulGeri","← Bir önceki ekrana dön (alt modülden seçim ekranına)","Geri düğmesi olan ekranlarda bir kademe geri gider"],
     ].map(([anahtar, etiket, ipucu])=>`
@@ -15873,6 +15885,25 @@ function stokTanimAramaFiltrele(deger){
 // yazılanlar bu önbelleğe karışmaz.
 let _stokTanimSonKod = "";
 let _stokTanimSonAd = "";
+// Stok tanımı penceresi tanım listeleri (ambalaj, ürün grubu, ebat…) YÜKLENMEDEN açılırsa seçim kutuları boş kalıyordu
+// (ör. Ambalaj Birimi gelmiyordu). Liste sonradan gelince açık penceredeki ilgili kutu mevcut seçimi koruyarak yenilenir.
+function stokTanimModalSelectTazele_(tip){
+  if(!document.getElementById("stoktanim-modal-overlay")) return;
+  const k = window._stokTanimModalK;
+  const liste = _tanimListeCache[tip] || [];
+  if(tip === "ambalaj"){
+    const sel = document.getElementById("st-ambalajbirimi"); if(!sel) return;
+    const cur = sel.value || (k ? k.ambalajBirimi : "") || "";
+    const ads = liste.map(a=>a.ad); if(cur && !ads.includes(cur)) ads.unshift(cur);
+    sel.innerHTML = '<option value="">— Seçiniz —</option>' + ads.map(ad=>`<option value="${ad}" ${ad===cur?'selected':''}>${ad}</option>`).join("");
+    return;
+  }
+  const harita = {urunGrubu:["st-urungrubu","urunGrubuId"], altUrunGrubu:["st-alturungrubu","altUrunGrubuId"], ebat:["st-ebat","ebatId"], renk:["st-renk","renkId"]}[tip];
+  if(!harita) return;
+  const sel = document.getElementById(harita[0]); if(!sel) return;
+  const cur = sel.value || (k ? k[harita[1]] : "") || "";
+  sel.innerHTML = '<option value="">— Seçiniz —</option>' + liste.map(x=>`<option value="${x.id}" ${cur===x.id?'selected':''}>${x.kod?x.kod+' — ':''}${x.ad}</option>`).join("");
+}
 function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
   window._stokTanimKaydedildiCB = onKaydedildi || null;
   // Faturadan/tedarikçiden gelen ham ürün kodu (varsa) — "🔧 Öner" butonu, firma kodu
@@ -15883,6 +15914,7 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
   if(!_markaYuklendi) markaListesiYukle();
   ["urunGrubu","altUrunGrubu","ebat","renk","ambalaj"].forEach(tip=>{ if(!_tanimListeYuklendi[tip]) tanimListesiYukle(tip); });
   const k = editId ? _stokTanimListe.find(x=>x.id===editId) : null;
+  window._stokTanimModalK = k;
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "stoktanim-modal-overlay";
@@ -15915,6 +15947,7 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
           </select>
         </div>
         <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Minimum Stok Miktarı</label><input id="st-minstok" type="number" min="0" step="1" value="${k?k.minStok||'':''}" placeholder="0 = uyarı kapalı"></div>
+        <div class="fld" style="flex:1;min-width:150px;margin-bottom:0"><label>Ağırlık (kg / 1. birim)</label><input id="st-agirlik" type="number" min="0" step="0.001" value="${k?(k.agirlik||''):''}" placeholder="Örn. 18,5" title="1. birimin (m², adet vb.) kg cinsinden ağırlığı — siparişte toplam ağırlık hesabında kullanılır"></div>
       </div>
       <div style="background:var(--blue-l);border:1px solid var(--border);border-radius:10px;padding:12px 14px 4px;margin-bottom:12px">
         <div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px">Fiyat ve KDV Bilgileri</div>
@@ -16008,6 +16041,7 @@ function stokTanimKaydet(id){
     renkId: document.getElementById("st-renk").value,
     barkod: document.getElementById("st-barkod").value,
     minStok: document.getElementById("st-minstok").value,
+    agirlik: (document.getElementById("st-agirlik")||{}).value || "0",
   };
   cariApi("saveStokTanim", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
@@ -17908,7 +17942,17 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
 .fatura-modal .fm-kart .fld label{color:var(--rp-th-fg);font-weight:700;font-size:11px;letter-spacing:.2px}
 .fatura-modal .fm-kart .fld input,.fatura-modal .fm-kart .fld select{height:38px;box-sizing:border-box}
 .fatura-modal .fm-etiket{color:var(--rp-th-fg)!important;font-weight:800;opacity:.9}
-.fatura-modal .satis-kalem-basliklar{background:var(--rp-th-bg);color:var(--rp-th-fg);border-radius:8px;font-weight:700}
+.fatura-modal .satis-kalem-basliklar{background:var(--rp-th-bg);color:var(--rp-th-fg);border-radius:8px;font-weight:800;font-size:12.5px;padding:7px 0;letter-spacing:.2px}
+/* Dip toplamlar: yazılar tutarların soluna (sağa hizalı), belirgin renkler (4 Eki 2026) */
+.fatura-modal .satis-toplam-detay{max-width:500px;margin-left:auto;background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:12px;padding:10px 16px}
+.fatura-modal .satis-toplam-satir{justify-content:flex-end;align-items:baseline;gap:22px;font-size:14px;padding:5px 0;color:var(--text)}
+.fatura-modal .satis-toplam-satir>span{flex:1;text-align:right;font-weight:800;color:var(--rp-th-fg);letter-spacing:.2px}
+.fatura-modal .satis-toplam-satir>b{flex:0 0 150px;text-align:right;font-size:15px;color:var(--text)}
+.fatura-modal .satis-toplam-satir.genel{background:var(--rp-th-bg);border-radius:8px;padding:8px 10px;margin-top:8px;border-top:none}
+.fatura-modal .satis-toplam-satir.genel>span{font-size:15px}
+.fatura-modal .satis-toplam-satir.genel>b{font-size:18px}
+.fatura-modal .satis-toplam-satir.agirlik>span{color:var(--text2)}
+.fatura-modal .sm-isk-etiket{font-weight:800;color:var(--rp-th-fg);font-size:13px;letter-spacing:.2px}
 .fatura-modal .fm-aksiyon{gap:10px}
 .fatura-modal .fm-aksiyon .btn{padding:9px 20px;font-size:14px}
 </style>

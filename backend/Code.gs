@@ -7114,7 +7114,9 @@ const STOK_TANIM_BASLIKLAR = ["ID","STOK_KODU","STOK_ADI","BIRIM1","AMBALAJ_MIKT
 // sayfalara başlık eklemediği için bu göç adımı gerekli). KDV_ALIS/KDV_SATIS
 // 23 Eyl 2026'da eklendi (Akınsoft ilhamlı Stok Tanımları yeniden tasarımı).
 function ensureStokTanimEkColonlari_orj_(sheet) {
-  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS"];
+  // AGIRLIK (4 Eki 2026): 1. birim başına ağırlık (kg) — siparişte toplam ağırlık için. STOK_TANIM_BASLIKLAR'a EKLENMEZ
+  // (toplu yazan fonksiyonlar 20 sütunluk satır yazıyor); sütun yalnızca bu göç adımıyla eklenir.
+  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK"];
   eklenecek.forEach((baslik, idx) => {
     const kolonNo = 12 + idx;
     const mevcut = sheet.getRange(1, kolonNo).getValue();
@@ -7149,6 +7151,7 @@ function stokTanimSatiriNesneYap(row) {
     // KDV oranları boşsa (eski kayıtlar) Türkiye'deki genel oran %20 varsayılır.
     kdvAlis: (row[18] === "" || row[18] === undefined || row[18] === null) ? 20 : (parseFloat(row[18]) || 0),
     kdvSatis: (row[19] === "" || row[19] === undefined || row[19] === null) ? 20 : (parseFloat(row[19]) || 0),
+    agirlik: parseFloat(row[20]) || 0,   // kg / 1. birim
   };
 }
 
@@ -7576,6 +7579,8 @@ function saveStokTanim(body) {
     String(body.barkod || ""),
     body.kdvAlis === undefined || body.kdvAlis === "" ? 20 : (parseFloat(body.kdvAlis) || 0),
     body.kdvSatis === undefined || body.kdvSatis === "" ? 20 : (parseFloat(body.kdvSatis) || 0),
+    // Ağırlık gönderilmediyse (eski istemci) mevcut değer korunur
+    body.agirlik === undefined ? (satirIdx > 0 ? (parseFloat(data[satirIdx - 1][20]) || 0) : 0) : (parseFloat(String(body.agirlik).replace(",", ".")) || 0),
   ];
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);
@@ -10336,7 +10341,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20260930a";
+const ENSURE_SURUM_ = "20261004a";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}
