@@ -400,6 +400,13 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .satis-kalem-satir input,.satis-kalem-satir select{padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--bg2);outline:none;font-family:inherit}
 .satis-kalem-satir input:focus,.satis-kalem-satir select:focus{border-color:var(--yellow);background:var(--bg2)}
 .satis-kalem-stokkodu{width:110px;flex:0 0 110px}
+.satis-kalem-sirabas,.satis-kalem-sira{width:64px;flex:0 0 64px;display:flex;align-items:center;gap:2px}
+.satis-kalem-sirabas{padding:0 9px!important;box-sizing:border-box}
+.satis-kalem-sira input{width:40px;flex:0 0 40px;padding:7px 2px!important;text-align:center;font-weight:800}
+.satis-kalem-sira .sira-ok{display:flex;flex-direction:column;line-height:1;font-size:9px;color:var(--text3)}
+.satis-kalem-sira .sira-ok b{cursor:pointer;padding:1px 3px}
+.satis-kalem-sira .sira-ok b:hover{color:var(--accent)}
+.sm-alt-serit{position:sticky;bottom:-22px;z-index:5;background:var(--rp-alan,var(--bg2));padding:10px 0 6px;margin-top:10px;border-top:2px solid var(--rp-th-bd,var(--border))}
 .satis-kalem-urun{flex:1;min-width:0}
 .satis-kalem-miktar{width:90px;flex:0 0 90px;text-align:right}
 .satis-kalem-birim{width:90px;flex:0 0 90px}
@@ -5893,6 +5900,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
 
       <label class="fm-etiket" style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
       <div class="satis-kalem-basliklar">
+        <span class="satis-kalem-sirabas" title="Sıra no — numarayı değiştirerek veya ▲▼ ile satırı taşıyabilirsiniz">Sıra</span>
         <span class="satis-kalem-stokkodu">Stok Kodu</span><span style="flex:1">Ürün</span>
         <span class="satis-kalem-miktar">Miktar</span><span class="satis-kalem-birim">Birim</span>
         <span class="satis-kalem-birim2" title="Miktar 2 (ambalaj adedi: kutu/koli vb.). Buraya yazdığınız sayı × stok kartındaki ambalaj miktarı = Miktar">Miktar 2</span><span class="satis-kalem-birim2ad">Birim 2</span>
@@ -5905,7 +5913,8 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         <div id="sm-agirlik-bar" class="sm-agirlik-bar"></div>
       </div>
 
-      <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
+      <div id="sm-alt-serit" class="sm-alt-serit">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
         <div class="fld" id="sm-tutar-iskonto-fld" style="flex:1;min-width:220px;max-width:280px;margin-bottom:0;display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'flex':'none'}">
           <label class="sm-isk-etiket">Tutar İskontosu (₺)</label>
           <input id="sm-tutar-iskontosu" type="number" min="0" step="0.01" value="${s ? (s.tutarIskontosu||0) : 0}" oninput="satisToplamGuncelle()">
@@ -5921,7 +5930,10 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
           <p id="sm-efatura-dip-not" style="display:none;color:var(--warn,#c77);font-size:11px;margin:4px 0 0">🔒 E-Fatura mükellefi cari: dip iskonto ve tutar iskontosu kapalı — iskontoyu kalem satırındaki İsk.% ile girin.</p>
         </div>
 
-        <div id="sm-toplam" class="satis-toplam-detay" style="flex:1 1 380px;margin-top:0"></div>
+        <div style="flex:1"></div>
+        <button type="button" class="btn" id="sm-toplam-gizle-btn" style="padding:5px 12px;font-size:12px;align-self:flex-start" onclick="satisToplamGizleDegistir()" title="Alt toplamları göster / gizle"></button>
+        <div id="sm-toplam" class="satis-toplam-detay" style="flex:0 0 360px;margin-top:0"></div>
+      </div>
       </div>
 
       <div class="modal-actions fm-aksiyon">
@@ -6124,6 +6136,29 @@ function satisKalemEkleUI(){
   satisKalemlerCiz();
 }
 
+// Satırı yeni sıraya taşır (0 tabanlı hedef; sınırlar kırpılır).
+function satisKalemTasi(idx, hedef){
+  const n = _yeniSatisKalemleri.length;
+  hedef = Math.max(0, Math.min(n-1, hedef));
+  if(hedef === idx){ satisKalemlerCiz(); return; }
+  const [k] = _yeniSatisKalemleri.splice(idx,1);
+  _yeniSatisKalemleri.splice(hedef,0,k);
+  satisKalemlerCiz();
+}
+
+// Alt toplamları göster/gizle (tercih tarayıcıda hatırlanır)
+function satisToplamGizliMi_(){ try{ return localStorage.getItem("sm_toplam_gizli")==="1"; }catch(e){ return false; } }
+function satisToplamGizleUygula_(){
+  const g = satisToplamGizliMi_();
+  const t = document.getElementById("sm-toplam"), b = document.getElementById("sm-toplam-gizle-btn");
+  if(t) t.style.display = g ? "none" : "";
+  if(b) b.textContent = g ? "👁 Toplamları Göster" : "🙈 Toplamları Gizle";
+}
+function satisToplamGizleDegistir(){
+  try{ localStorage.setItem("sm_toplam_gizli", satisToplamGizliMi_() ? "0" : "1"); }catch(e){}
+  satisToplamGizleUygula_();
+}
+
 function satisKalemSilUI(idx){
   _yeniSatisKalemleri.splice(idx,1);
   satisKalemlerCiz();
@@ -6227,6 +6262,7 @@ function satisKalemlerCiz(){
   const siparis = tip === "Sipariş";
   el.innerHTML = _yeniSatisKalemleri.map((k,idx)=>`
     <div class="satis-kalem-satir">
+      <span class="satis-kalem-sira"><input type="number" min="1" max="${_yeniSatisKalemleri.length}" step="1" value="${idx+1}" title="Sıra no — değiştirip Enter'a basınca satır o sıraya taşınır" onchange="satisKalemTasi(${idx}, (parseInt(this.value)||1)-1)"><span class="sira-ok"><b title="Yukarı taşı" onclick="satisKalemTasi(${idx},${idx-1})">▲</b><b title="Aşağı taşı" onclick="satisKalemTasi(${idx},${idx+1})">▼</b></span></span>
       <input class="satis-kalem-stokkodu" type="text" placeholder="Stok Kodu" value="${k.stokKodu||''}" oninput="satisKalemAlanDegisti(${idx},'stokKodu',this.value)">
       <button type="button" class="hk-sil" style="color:var(--accent);font-size:15px" title="Aktif stok kartını aç" onclick="satisKalemStokKartiAc(${idx})">📇</button>
       <div style="flex:1;position:relative">
@@ -6252,6 +6288,7 @@ function satisKalemlerCiz(){
       ${_yeniSatisKalemleri.length>1 ? `<span class="hk-sil" onclick="satisKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
   satisToplamGuncelle();
+  satisToplamGizleUygula_();
 }
 
 // Ürün adı alanına yazarken, Stok Tanımlama listesinden eşleşen ürünleri önerir.
@@ -17978,7 +18015,7 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
 .fatura-modal .fm-etiket{color:var(--rp-th-fg)!important;font-weight:800;opacity:.9}
 .fatura-modal .satis-kalem-basliklar{background:var(--rp-th-bg);color:var(--rp-th-fg);border-radius:8px;font-weight:800;font-size:12.5px;padding:7px 0;letter-spacing:.2px}
 /* Dip toplamlar: yazılar tutarların soluna (sağa hizalı), belirgin renkler (4 Eki 2026) */
-.fatura-modal .satis-toplam-detay{max-width:500px;margin-left:auto;background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:12px;padding:10px 16px}
+.fatura-modal .satis-toplam-detay{max-width:360px;margin-left:auto;background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:12px;padding:10px 16px}
 .fatura-modal .satis-toplam-satir{justify-content:flex-end;align-items:baseline;gap:22px;font-size:14px;padding:5px 0;color:var(--text)}
 .fatura-modal .satis-toplam-satir>span{flex:1;text-align:right;font-weight:800;color:var(--rp-th-fg);letter-spacing:.2px}
 .fatura-modal .satis-toplam-satir>b{flex:0 0 150px;text-align:right;font-size:15px;color:var(--text)}
