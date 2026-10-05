@@ -734,6 +734,11 @@ setInterval(topbarSaatGuncelle, 10000);
           <div class="lbl">Ambalaj Tanımları</div>
           <div class="desc">Kutu, Koli, Palet, Rulo vb.</div>
         </div>
+        <div class="modtile" onclick="stokTanimAltAc('agirlik')">
+          <span class="ic">⚖️</span>
+          <div class="lbl">Ağırlık Tanımları</div>
+          <div class="desc">Stok ağırlıkları — tek tek ve toplu</div>
+        </div>
       </div>
     </div>
 
@@ -779,6 +784,28 @@ setInterval(topbarSaatGuncelle, 10000);
           <button class="cari-add-btn" onclick="stokTanimModalAc()" title="Yeni ürün tanımla">+</button>
         </div>
         <div class="cari-items" id="stoktanim-items"><div class="cari-empty">Yükleniyor...</div></div>
+      </div>
+    </div>
+
+    <!-- KADEME 3: Ağırlık Tanımları (tek tek + filtrelenen listeye toplu uygulama) -->
+    <div id="stok-agirlik-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
+      <div>
+        <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('tanimlar')">← Geri</button>
+        <div class="rapor-baslik" style="margin:8px 0 6px">⚖️ Ağırlık Tanımlama <span style="font-size:12px;font-weight:600;color:var(--text3)">(kg / 1. birim — örn. 1 m² kaç kg, 1 adet kaç kg)</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:0 0 8px">
+          <input id="agt-ara" placeholder="Ara: ürün adı, stok kodu, marka kodu..." oninput="agirlikTanimFiltrele()" autocomplete="off" style="flex:1;min-width:240px">
+          <select id="agt-marka" onchange="agirlikTanimFiltrele()" style="min-width:170px"><option value="">Tüm marka kodları</option></select>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;margin:0;cursor:pointer"><input type="checkbox" id="agt-tanimsiz" style="width:auto" onchange="agirlikTanimFiltrele()"> Sadece ağırlığı tanımsız olanlar</label>
+          <span id="agt-sayi" style="font-size:12.5px;color:var(--text3);font-weight:700"></span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 8px;padding:8px 10px;background:var(--bg3);border-radius:8px">
+          <b style="font-size:13px">Toplu uygula:</b>
+          <input id="agt-toplu-deger" type="number" min="0" step="0.001" placeholder="kg / 1. birim" style="width:130px;text-align:right" autocomplete="off">
+          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;margin:0;cursor:pointer"><input type="checkbox" id="agt-sadece-bos" style="width:auto"> Yalnız ağırlığı tanımsız olanlara</label>
+          <button class="btn btn-primary" id="agt-toplu-btn" onclick="agirlikTanimTopluUygula()">Filtrelenen tüm stoklara uygula</button>
+          <span id="agt-durum" style="font-size:12.5px;color:var(--text2)"></span>
+        </div>
+        <div class="cari-items" id="agt-items"><div class="cari-empty">Yükleniyor...</div></div>
       </div>
     </div>
 
@@ -1935,7 +1962,7 @@ function hizliErisimKatalogUret(){
     .forEach(([id,ic,lbl,tip,tur])=>ekle(id,"Stok",ic,"Stok - "+lbl,()=>{modulAc("stok"); stokAltModulAc("islemler"); tur ? stokHareketFormAc(tip,tur) : stokHareketFormAc(tip);}));
   [["stok-tanim","🏷️","Stok Tanımlama","tanim"],["stok-birim","📏","Birim Tanımları","birim"],["stok-marka","🏭","Marka Tanımları","marka"],
    ["stok-urungrubu","🗂️","Ürün Grubu Tanımları","urunGrubu"],["stok-alturungrubu","📁","Alt Ürün Grubu Tanımları","altUrunGrubu"],
-   ["stok-ebat","📐","Ebat Tanımları","ebat"],["stok-renk","🎨","Renk Tanımları","renk"],["stok-ambalaj","📦","Ambalaj Tanımları","ambalaj"]]
+   ["stok-ebat","📐","Ebat Tanımları","ebat"],["stok-renk","🎨","Renk Tanımları","renk"],["stok-ambalaj","📦","Ambalaj Tanımları","ambalaj"],["stok-agirlik","⚖️","Ağırlık Tanımları","agirlik"]]
     .forEach(([id,ic,lbl,k])=>ekle(id,"Stok",ic,"Stok - "+lbl,()=>{modulAc("stok"); stokAltModulAc("tanimlar"); stokTanimAltAc(k);}));
   ekle("stok-hareket","Stok","📈","Stok - Stok Hareket Raporu",()=>{modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("hareket");});
   ekle("stok-siparis-rapor","Stok","🧾","Stok - Stok Bazlı Sipariş Raporu",()=>{modulAc("stok"); stokAltModulAc("raporlar"); stokRaporAltAc("siparis");});
@@ -5930,7 +5957,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
             </div>
           </div>
         </div>
-        <button type="button" class="btn" id="sm-toplam-gizle-btn" style="padding:5px 12px;font-size:12px;align-self:flex-start" onclick="satisToplamGizleDegistir()" title="Alt toplamları göster / gizle"></button>
+        <button type="button" class="btn" id="sm-toplam-gizle-btn" style="padding:4px 9px;font-size:16px;line-height:1;align-self:flex-start" onclick="satisToplamGizleDegistir()" data-ipucu="Alt toplamları göster / gizle"></button>
         <div id="sm-toplam" class="satis-toplam-detay" style="flex:0 0 360px;margin-top:0"></div>
       </div>
       </div>
@@ -6171,12 +6198,39 @@ function satisToplamGizleUygula_(){
   if(t) t.style.display = g ? "none" : "";
   const ov = document.getElementById("satis-modal-overlay");
   if(ov) ov.classList.toggle("sm-tutar-gizli", g);   // satır "Tutar" sütunu da gizlenir
-  if(b) b.textContent = g ? "👁 Toplamları Göster" : "🙈 Toplamları Gizle";
+  if(b){ b.textContent = g ? "👁" : "🙈"; b.setAttribute("data-ipucu", g ? "Toplamları göster" : "Toplamları gizle"); }
 }
 function satisToplamGizleDegistir(){
   try{ localStorage.setItem("sm_toplam_gizli", satisToplamGizliMi_() ? "0" : "1"); }catch(e){}
   satisToplamGizleUygula_();
 }
+
+// ★ (5 Eki 2026) data-ipucu="..." olan öğelerin üzerinde fare 2 saniye beklerse küçük açıklama kutusu gösterilir
+// (tarayıcının kendi title gecikmesi yerine; tıklayınca / fare çekilince kapanır).
+(function(){
+  let zamanlayici = null, kutu = null;
+  function ipucuKapat(){ clearTimeout(zamanlayici); zamanlayici = null; if(kutu){ kutu.remove(); kutu = null; } }
+  document.addEventListener("mouseover", function(e){
+    const el = e.target.closest ? e.target.closest("[data-ipucu]") : null;
+    if(!el || el.contains(e.relatedTarget)) return;
+    ipucuKapat();
+    zamanlayici = setTimeout(function(){
+      const metin = el.getAttribute("data-ipucu"); if(!metin || !el.isConnected) return;
+      kutu = document.createElement("div");
+      kutu.textContent = metin;
+      kutu.style.cssText = "position:fixed;z-index:99999;background:#222;color:#fff;padding:5px 10px;border-radius:6px;font-size:12px;font-weight:600;pointer-events:none;max-width:260px;box-shadow:0 2px 8px rgba(0,0,0,.3)";
+      document.body.appendChild(kutu);
+      const r = el.getBoundingClientRect();
+      kutu.style.top = Math.min(window.innerHeight - kutu.offsetHeight - 6, r.bottom + 6) + "px";
+      kutu.style.left = Math.max(6, Math.min(window.innerWidth - kutu.offsetWidth - 6, r.left + r.width/2 - kutu.offsetWidth/2)) + "px";
+    }, 2000);
+  });
+  document.addEventListener("mouseout", function(e){
+    const el = e.target.closest ? e.target.closest("[data-ipucu]") : null;
+    if(el && !el.contains(e.relatedTarget)) ipucuKapat();
+  });
+  document.addEventListener("mousedown", ipucuKapat, true);
+})();
 
 function satisKalemSilUI(idx){
   _yeniSatisKalemleri.splice(idx,1);
@@ -6407,36 +6461,86 @@ function satisToplamGuncelle(){
     ${tutarIskontosu>0 ? `<div class="satis-toplam-satir"><span>Tutar İskontosu (${kdvSonra?'KDV sonrası':'KDV öncesi'})</span><b>-${paraFormat(tutarIskontosu)}</b></div>` : ''}
     <div class="satis-toplam-satir genel"><span>Genel Toplam</span><b>${paraFormat(genelToplam)}</b></div>`;
   const ab = document.getElementById("sm-agirlik-bar");
-  if(ab) ab.innerHTML = agirlikBilgisiVar
-    ? `⚖️ Sipariş ağırlığı: <b>${miktarFormat(Math.round(toplamAgirlik*100)/100)} kg</b> <button type="button" class="btn" style="padding:4px 12px;font-size:12px" onclick="satisAgirlikDetayAc()">Detay</button>`
-    : `<span style="color:var(--text3)">⚖️ Ağırlık: stok kartlarında ağırlık tanımlı değil</span> <button type="button" class="btn" style="padding:4px 12px;font-size:12px" onclick="satisAgirlikDetayAc()">Detay</button>`;
+  if(ab){
+    // Ağırlığı tanımsız (stok kartı var ama kg girilmemiş) kalem sayısı
+    let eksik = 0;
+    _yeniSatisKalemleri.forEach(k=>{
+      const kod = String(k.stokKodu||"").trim(); if(!kod) return;
+      const st = (_stokTanimListe||[]).find(x=>x.stokKodu===kod);
+      if(st && !(st.agirlik > 0)) eksik++;
+    });
+    ab.innerHTML = agirlikBilgisiVar
+      ? `<span class="sm-ag-kucuk" onclick="satisAgirlikDetayAc()" data-ipucu="${eksik>0 ? eksik+' ürünün ağırlığı tanımsız — ' : ''}Ağırlık detayı (tıklayın, ağırlık girebilirsiniz)">⚖ ${miktarFormat(Math.round(toplamAgirlik*100)/100)} kg${eksik>0?' *':''}</span>`
+      : `<span class="sm-ag-kucuk sm-ag-yok" onclick="satisAgirlikDetayAc()" data-ipucu="Stok kartlarında ağırlık tanımlı değil — tıklayıp girebilirsiniz">⚖ — kg</span>`;
+  }
 }
 
-// Sipariş ağırlık dökümü: kalem bazında (stok kartındaki ağırlık × miktar). Ağırlığı tanımsız stoklar uyarıyla gösterilir.
+// Sipariş ağırlık dökümü: kalem bazında (stok kartındaki ağırlık × miktar). Ağırlığı tanımsız stoklar için kg burada girilip
+// "Kaydet" ile doğrudan stok kartına işlenir (1. birim başına kg).
 function satisAgirlikDetayAc(){
   const satirlar = _yeniSatisKalemleri.filter(k=>String(k.urunAdi||"").trim() || String(k.stokKodu||"").trim()).map(k=>{
     const kod = String(k.stokKodu||"").trim();
     const st = kod ? (_stokTanimListe||[]).find(x=>x.stokKodu===kod) : null;
-    const m = parseFloat(k.miktar)||0, ag = st ? (st.agirlik||0) : 0;
-    return {kod, ad:k.urunAdi, miktar:m, birim:k.birim, ag, toplam:m*ag, tanimsiz: !(ag>0)};
+    return {kod, ad:k.urunAdi, miktar:parseFloat(k.miktar)||0, birim:k.birim, st, ag: st ? (st.agirlik||0) : 0};
   });
-  const toplam = satirlar.reduce((a,x)=>a+x.toplam,0);
   const eski = document.getElementById("agirlik-detay-overlay"); if(eski) eski.remove();
   const ov = document.createElement("div");
   ov.className = "modal-overlay"; ov.id = "agirlik-detay-overlay";
+  ov.style.zIndex = 60; // Sipariş penceresinin üstünde
   ov.dataset.escKapat = "satisAgirlikDetayKapat";
   ov.onclick = (e)=>{ if(e.target===ov) satisAgirlikDetayKapat(); };
-  ov.innerHTML = `<div class="modal-box" style="max-width:820px;width:94vw;max-height:88vh;overflow-y:auto">
+  ov.innerHTML = `<div class="modal-box" style="max-width:860px;width:94vw;max-height:88vh;overflow-y:auto">
     <h3>⚖️ Sipariş Ağırlık Detayı</h3>
-    ${satirlar.length ? `<table class="rapor-tbl"><thead><tr><th>Stok Kodu</th><th>Ürün</th><th style="text-align:right">Miktar</th><th style="text-align:right">Ağırlık (kg/birim)</th><th style="text-align:right">Toplam (kg)</th></tr></thead><tbody>
-      ${satirlar.map(x=>`<tr><td>${htmlKacis(x.kod||'—')}</td><td>${htmlKacis(x.ad||'')}</td><td style="text-align:right">${miktarFormat(x.miktar)} ${htmlKacis(x.birim||'')}</td>
-        <td style="text-align:right">${x.tanimsiz?'<span style="color:var(--red);font-weight:700">tanımsız</span>':miktarFormat(x.ag)}</td>
-        <td style="text-align:right"><b>${x.tanimsiz?'—':miktarFormat(Math.round(x.toplam*100)/100)}</b></td></tr>`).join("")}
-      <tr><td colspan="4" style="text-align:right"><b>TOPLAM AĞIRLIK</b></td><td style="text-align:right"><b>${miktarFormat(Math.round(toplam*100)/100)} kg</b></td></tr>
+    ${satirlar.length ? `<p style="font-size:12px;color:var(--text3);margin:0 0 8px">Ağırlığı (kg / 1. birim) buraya yazıp <b>Kaydet</b>'e basınca stok kartına işlenir.</p>
+    <table class="rapor-tbl"><thead><tr><th>Stok Kodu</th><th>Ürün</th><th style="text-align:right">Miktar</th><th style="text-align:right">Ağırlık (kg/birim)</th><th style="text-align:right">Toplam (kg)</th></tr></thead><tbody>
+      ${satirlar.map(x=>`<tr data-satir="1" data-miktar="${x.miktar}"><td>${htmlKacis(x.kod||'—')}</td><td>${htmlKacis(x.ad||'')}</td><td style="text-align:right">${miktarFormat(x.miktar)} ${htmlKacis(x.birim||'')}</td>
+        <td style="text-align:right">${x.st
+          ? `<input class="ag-giris" type="number" min="0" step="0.001" data-id="${htmlKacis(x.st.id)}" data-eski="${x.ag>0?x.ag:''}" value="${x.ag>0?x.ag:''}" placeholder="kg" oninput="satisAgirlikDetayHesapla_(this)" style="width:96px;text-align:right">`
+          : '<span style="color:var(--text3)" title="Bu satırın bağlı olduğu bir stok kartı yok">stok kartı yok</span>'}</td>
+        <td class="ag-toplam" style="text-align:right"></td></tr>`).join("")}
+      <tr><td colspan="4" style="text-align:right"><b>TOPLAM AĞIRLIK</b></td><td style="text-align:right"><b id="ag-genel-toplam"></b></td></tr>
     </tbody></table>` : '<div class="cari-empty">Listede ürün yok.</div>'}
-    <div class="modal-actions"><button class="btn btn-primary" onclick="satisAgirlikDetayKapat()">Kapat</button></div>
+    <div class="modal-actions"><button class="btn" onclick="satisAgirlikDetayKapat()">Kapat</button>${satirlar.some(x=>x.st) ? '<button class="btn btn-primary" id="ag-kaydet-btn" onclick="satisAgirlikDetayKaydet()">💾 Kaydet</button>' : ''}</div>
   </div>`;
   document.body.appendChild(ov);
+  satisAgirlikDetayHesapla_();
+}
+// Pencere içindeki değerlerden satır ve genel toplamları (kaydetmeden) hesaplar; aynı stok birden çok satırdaysa kutular eşitlenir.
+function satisAgirlikDetayHesapla_(kaynak){
+  const ov = document.getElementById("agirlik-detay-overlay"); if(!ov) return;
+  if(kaynak && kaynak.dataset && kaynak.dataset.id){
+    ov.querySelectorAll('.ag-giris').forEach(i=>{ if(i!==kaynak && i.dataset.id===kaynak.dataset.id) i.value = kaynak.value; });
+  }
+  let toplam = 0;
+  ov.querySelectorAll('tr[data-satir]').forEach(tr=>{
+    const inp = tr.querySelector('.ag-giris');
+    const m = parseFloat(tr.dataset.miktar)||0;
+    const ag = inp ? (parseFloat(String(inp.value).replace(",","."))||0) : 0;
+    const c = tr.querySelector('.ag-toplam');
+    if(c) c.innerHTML = ag>0 ? '<b>'+miktarFormat(Math.round(m*ag*100)/100)+'</b>' : '<span style="color:var(--red);font-weight:700">tanımsız</span>';
+    toplam += m*ag;
+  });
+  const t = document.getElementById("ag-genel-toplam");
+  if(t) t.textContent = miktarFormat(Math.round(toplam*100)/100) + " kg";
+}
+function satisAgirlikDetayKaydet(){
+  const ov = document.getElementById("agirlik-detay-overlay"); if(!ov) return;
+  const degisen = {};
+  ov.querySelectorAll('.ag-giris').forEach(i=>{
+    const yeni = Math.max(0, parseFloat(String(i.value).replace(",","."))||0);
+    const eski = parseFloat(i.dataset.eski)||0;
+    if(yeni !== eski) degisen[i.dataset.id] = yeni;
+  });
+  const guncellemeler = Object.keys(degisen).map(id=>({id, agirlik:degisen[id]}));
+  if(!guncellemeler.length){ satisAgirlikDetayKapat(); return; }
+  const btn = document.getElementById("ag-kaydet-btn"); if(btn){ btn.disabled = true; btn.textContent = "Kaydediliyor..."; }
+  cariApi("stokAgirlikTopluKaydet", {guncellemeler}).then(res=>{
+    if(!res || !res.ok){ if(btn){ btn.disabled = false; btn.textContent = "💾 Kaydet"; } alert("Hata: "+((res&&(res.hata||res.error))||"bilinmiyor")); return; }
+    (_stokTanimListe||[]).forEach(k=>{ if(degisen[k.id] !== undefined) k.agirlik = degisen[k.id]; });
+    try{ onbellekYaz("stokTanimListesi", _stokTanimListe); }catch(e){}
+    satisAgirlikDetayKapat();
+    satisToplamGuncelle();
+  }).catch(err=>{ if(btn){ btn.disabled = false; btn.textContent = "💾 Kaydet"; } alert("Bağlantı hatası: "+err.message); });
 }
 function satisAgirlikDetayKapat(){ const e = document.getElementById("agirlik-detay-overlay"); if(e) e.remove(); }
 
@@ -15797,7 +15901,7 @@ function sekmeGenisligiKaydet(px){
 // Tüm Stok alt panelleri — bir tanesi gösterilirken diğerleri gizlenir.
 const STOK_PANELLER = ["stok-secim","stok-islemler-secim","stok-tanimlar-secim","stok-raporlar-secim",
   "stok-panel-view","stok-tanim-view","stok-birim-view","stok-marka-view","stok-urunGrubu-view",
-  "stok-altUrunGrubu-view","stok-ebat-view","stok-renk-view","stok-ambalaj-view",
+  "stok-altUrunGrubu-view","stok-ebat-view","stok-renk-view","stok-ambalaj-view","stok-agirlik-view",
   "stok-giris-view","stok-cikis-view","stok-toplu-view","stok-hareket-rapor-view","stok-kritik-rapor-view"];
 
 function stokPaneliGoster(id){
@@ -15828,6 +15932,9 @@ function stokTanimAltAc(hangisi){
   } else if(hangisi === "birim"){
     stokPaneliGoster("stok-birim-view");
     birimListesiYukle();
+  } else if(hangisi === "agirlik"){
+    stokPaneliGoster("stok-agirlik-view");
+    agirlikTanimYukle_();
   } else if(hangisi === "marka"){
     stokPaneliGoster("stok-marka-view");
     markaListesiYukle();
@@ -15877,6 +15984,136 @@ function stokKritikRaporuYukle(){
         </tbody>
       </table>`;
   }).catch(err=>{ el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
+}
+
+// ── ⚖️ AĞIRLIK TANIMLAMA (5 Eki 2026) ──
+// Stok kartlarının 1. birim başına ağırlığı (kg): tek tek (satırdaki kutuya yazınca kaydolur) veya o an FİLTRELENEN listedeki
+// tüm stoklara toplu uygulanır. Filtre: arama (ad/stok kodu/marka kodu/barkod) + marka kodu seçimi + "yalnız tanımsız".
+let _agtFiltreli = [];
+let _agtLimit = 150;
+function agirlikTanimYukle_(){
+  const el = document.getElementById("agt-items");
+  const onbellek = _stokTanimListe && _stokTanimListe.length ? _stokTanimListe : onbellekOku("stokTanimListesi", ONBELLEK_MAX_YAS);
+  if(onbellek && onbellek.length){ _stokTanimListe = onbellek; agirlikTanimMarkaSecenekleri_(); agirlikTanimFiltrele(); }
+  else if(el) el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  if(!_markaYuklendi) cariApi("getMarkaListesi").then(r=>{ if(r && r.ok){ _markaListe = r.markalar; _markaYuklendi = true; agirlikTanimMarkaSecenekleri_(); } }).catch(()=>{});
+  cariApi("getStokTanimListesi").then(res=>{
+    if(!res.ok){ if(el && !(onbellek && onbellek.length)) el.innerHTML = '<div class="cari-empty">Hata: '+htmlKacis(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
+    _stokTanimListe = res.kalemler; _stokTanimYuklendi = true;
+    onbellekYaz("stokTanimListesi", res.kalemler);
+    agirlikTanimMarkaSecenekleri_();
+    agirlikTanimFiltrele();
+  }).catch(err=>{ if(el && !(onbellek && onbellek.length)) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+htmlKacis(err.message)+'</div>'; });
+}
+// Marka kodu seçenekleri: stok kodlarının ilk 2 hanesi; Marka Tanımlama'da karşılığı varsa adı da yazılır.
+function agirlikTanimMarkaSecenekleri_(){
+  const sel = document.getElementById("agt-marka"); if(!sel) return;
+  const secili = sel.value;
+  const kodlar = {};
+  (_stokTanimListe||[]).forEach(k=>{ const m = String(k.markaKodu||"").trim().toUpperCase(); if(m) kodlar[m] = (kodlar[m]||0)+1; });
+  const ad = {}; (_markaListe||[]).forEach(m=>{ if(m.kod) ad[String(m.kod).toUpperCase()] = m.ad; });
+  sel.innerHTML = '<option value="">Tüm marka kodları</option>' + Object.keys(kodlar).sort().map(m=>`<option value="${htmlKacis(m)}">${htmlKacis(m)}${ad[m]?" — "+htmlKacis(ad[m]):""} (${kodlar[m]})</option>`).join("");
+  sel.value = Object.prototype.hasOwnProperty.call(kodlar, secili) ? secili : "";
+}
+function agirlikTanimFiltrele(){
+  _agtLimit = 150;
+  const q = ((document.getElementById("agt-ara")||{}).value||"").trim();
+  const mk = ((document.getElementById("agt-marka")||{}).value||"").toUpperCase();
+  const sadeceTanimsiz = !!(document.getElementById("agt-tanimsiz")||{}).checked;
+  _agtFiltreli = (_stokTanimListe||[]).filter(k=>
+    (!mk || String(k.markaKodu||"").trim().toUpperCase() === mk) &&
+    (!sadeceTanimsiz || !(k.agirlik > 0)) &&
+    (!q || stokEslesirMi(k, q)));
+  agirlikTanimCiz_();
+}
+function agirlikTanimCiz_(){
+  const el = document.getElementById("agt-items"); if(!el) return;
+  const tanimli = _agtFiltreli.filter(k=>k.agirlik>0).length;
+  const sayi = document.getElementById("agt-sayi");
+  if(sayi) sayi.textContent = _agtFiltreli.length.toLocaleString("tr-TR")+" stok · "+tanimli.toLocaleString("tr-TR")+" tanımlı";
+  const btn = document.getElementById("agt-toplu-btn");
+  if(btn) btn.textContent = "Filtrelenen "+_agtFiltreli.length.toLocaleString("tr-TR")+" stoğa uygula";
+  if(!_agtFiltreli.length){ el.innerHTML = '<div class="cari-empty">Filtreye uyan stok yok.</div>'; return; }
+  const gosterilecek = _agtFiltreli.slice(0, _agtLimit);
+  el.innerHTML = `
+    <table class="hareket-tbl stoktanim-tbl">
+      <thead><tr><th>Marka</th><th>Stok Kodu</th><th>Stok Adı</th><th>Birimi</th><th style="text-align:right">Ağırlık (kg / 1. birim)</th><th style="text-align:right" title="Ağırlık × ambalaj miktarı (1 kutu/koli kaç kg)">Ambalaj (kg)</th></tr></thead>
+      <tbody>
+        ${gosterilecek.map(k=>`
+          <tr>
+            <td>${k.markaKodu ? `<span class="tip-badge">${htmlKacis(k.markaKodu)}</span>` : "—"}</td>
+            <td>${htmlKacis(k.stokKodu||"—")}</td>
+            <td>${olcuBasaAlGoster(k.stokAdi, k.markaKodu)}</td>
+            <td>${htmlKacis(k.birim1||"—")}</td>
+            <td style="text-align:right"><input class="agt-in" type="number" min="0" step="0.001" data-id="${htmlKacis(k.id)}" data-eski="${k.agirlik>0?k.agirlik:''}" value="${k.agirlik>0?k.agirlik:''}" placeholder="kg" autocomplete="off"
+                 onchange="agirlikTanimTekKaydet(this)" onkeydown="agirlikTanimEnter_(event,this)" style="width:100px;text-align:right"></td>
+            <td style="text-align:right;color:var(--text3)" id="agt-amb-${htmlKacis(k.id)}">${k.agirlik>0 && k.ambalajMiktari>0 ? miktarFormat(Math.round(k.agirlik*k.ambalajMiktari*100)/100)+" kg"+(k.ambalajBirimi?" / "+htmlKacis(k.ambalajBirimi):"") : "—"}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>
+    ${_agtFiltreli.length > _agtLimit ? `<div class="liste-daha-fazla" onclick="_agtLimit+=150; agirlikTanimCiz_()">+ ${_agtFiltreli.length-_agtLimit} kayıt daha göster</div>` : ""}`;
+}
+function agirlikTanimEnter_(e, inp){
+  if(e.key !== "Enter") return;
+  e.preventDefault();
+  const tum = Array.from(document.querySelectorAll("#agt-items .agt-in"));
+  const sonraki = tum[tum.indexOf(inp)+1];
+  inp.blur();                       // değer değiştiyse onchange kaydeder
+  if(sonraki){ sonraki.focus(); sonraki.select(); }
+}
+// Tek stok: kutuya yazınca (odak çıkınca/Enter) o kartın ağırlığı kaydedilir.
+function agirlikTanimTekKaydet(inp){
+  const yeni = Math.max(0, parseFloat(String(inp.value).replace(",","."))||0);
+  const eski = parseFloat(inp.dataset.eski)||0;
+  if(yeni === eski) return;
+  inp.style.borderColor = "var(--yellow)";
+  cariApi("stokAgirlikTopluKaydet", {guncellemeler:[{id:inp.dataset.id, agirlik:yeni}]}).then(res=>{
+    if(!res || !res.ok){ inp.style.borderColor = "var(--red)"; alert("Kaydedilemedi: "+((res&&(res.hata||res.error))||"bilinmiyor")); return; }
+    agirlikTanimYerelGuncelle_([inp.dataset.id], yeni);
+    inp.dataset.eski = yeni>0 ? yeni : "";
+    inp.style.borderColor = "var(--green,#16a34a)";
+    const k = (_stokTanimListe||[]).find(x=>x.id===inp.dataset.id);
+    const amb = document.getElementById("agt-amb-"+inp.dataset.id);
+    if(amb && k) amb.textContent = yeni>0 && k.ambalajMiktari>0 ? miktarFormat(Math.round(yeni*k.ambalajMiktari*100)/100)+" kg"+(k.ambalajBirimi?" / "+k.ambalajBirimi:"") : "—";
+    const sayi = document.getElementById("agt-sayi");
+    if(sayi) sayi.textContent = _agtFiltreli.length.toLocaleString("tr-TR")+" stok · "+_agtFiltreli.filter(x=>x.agirlik>0).length.toLocaleString("tr-TR")+" tanımlı";
+    setTimeout(()=>{ inp.style.borderColor = ""; }, 1200);
+  }).catch(err=>{ inp.style.borderColor = "var(--red)"; alert("Bağlantı hatası: "+err.message); });
+}
+function agirlikTanimYerelGuncelle_(idler, deger){
+  const set = new Set(idler);
+  (_stokTanimListe||[]).forEach(k=>{ if(set.has(k.id)) k.agirlik = deger; });
+  try{ onbellekYaz("stokTanimListesi", _stokTanimListe); }catch(e){}
+}
+// Toplu: o an filtrelenen listedeki tüm stok kartlarına (isteğe bağlı: yalnız tanımsız olanlara) aynı ağırlık yazılır.
+async function agirlikTanimTopluUygula(){
+  const deger = Math.round((parseFloat(String((document.getElementById("agt-toplu-deger")||{}).value||"").replace(",","."))||0)*1000)/1000;
+  const durum = document.getElementById("agt-durum");
+  if(!(deger > 0)){ alert("Önce 0'dan büyük bir ağırlık (kg / 1. birim) yazın."); return; }
+  const sadeceBos = !!(document.getElementById("agt-sadece-bos")||{}).checked;
+  const hedef = _agtFiltreli.filter(k=>!sadeceBos || !(k.agirlik > 0));
+  if(!hedef.length){ alert("Uygulanacak stok yok (filtre boş ya da hepsinde ağırlık zaten tanımlı)."); return; }
+  const mk = (document.getElementById("agt-marka")||{}).value || "";
+  const ara = ((document.getElementById("agt-ara")||{}).value||"").trim();
+  const filtreOzet = [mk?("marka kodu "+mk):"", ara?('arama "'+ara+'"'):"", sadeceBos?"yalnız tanımsız olanlar":""].filter(Boolean).join(", ") || "filtre yok (tüm stoklar)";
+  if(!confirm(hedef.length.toLocaleString("tr-TR")+" stok kartının ağırlığı "+miktarFormat(deger)+" kg (1. birim başına) olarak ayarlanacak.\n\nFiltre: "+filtreOzet+"\nBu işlem mevcut ağırlıkların üzerine yazar. Devam edilsin mi?")) return;
+  const btn = document.getElementById("agt-toplu-btn"); if(btn) btn.disabled = true;
+  let yapilan = 0;
+  try{
+    for(let i=0; i<hedef.length; i+=400){
+      const parca = hedef.slice(i, i+400);
+      if(durum) durum.textContent = "Kaydediliyor... "+Math.min(i+400, hedef.length)+" / "+hedef.length;
+      const res = await cariApi("stokAgirlikTopluKaydet", {guncellemeler: parca.map(k=>({id:k.id, agirlik:deger}))});
+      if(!res || !res.ok) throw new Error((res&&(res.hata||res.error))||"bilinmiyor");
+      agirlikTanimYerelGuncelle_(parca.map(k=>k.id), deger);
+      yapilan += parca.length;
+    }
+    if(durum) durum.textContent = "✓ "+yapilan.toLocaleString("tr-TR")+" stoğa uygulandı.";
+  }catch(err){
+    if(durum) durum.textContent = "⚠ "+yapilan.toLocaleString("tr-TR")+" stok kaydedildi, sonra hata: "+err.message;
+  }
+  if(btn) btn.disabled = false;
+  agirlikTanimFiltrele();
 }
 
 // ── STOK TANIMLAMA MODÜLÜ ──
@@ -18083,7 +18320,10 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
 .siparis-duzen .satis-toplam-satir{padding:2px 0;font-size:13px}
 .siparis-duzen .satis-toplam-satir.genel{padding:5px 10px;margin-top:4px}
 .siparis-duzen .sm-liste-alt .btn{padding:5px 12px}
-.siparis-duzen .sm-agirlik-bar{padding:3px 10px;font-size:12.5px}
+.fatura-modal.siparis-duzen .sm-agirlik-bar{padding:0;border:none;background:none;font-size:11.5px;color:var(--text3)}
+.sm-ag-kucuk{cursor:pointer;white-space:nowrap}
+.sm-ag-kucuk:hover{color:var(--accent);text-decoration:underline}
+.sm-ag-yok{opacity:.7}
 
 </style>
 

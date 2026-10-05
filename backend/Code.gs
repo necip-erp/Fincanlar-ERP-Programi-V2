@@ -1194,6 +1194,7 @@ function handleRequest(e) {
       case "eskiYildanEdmOnekAktar": result = eskiYildanEdmOnekAktar(body); break;
       case "eskiYildanPlasiyerAktar": result = eskiYildanPlasiyerAktar(body); break;
       case "stokTanimOlcuBirimIsleToplu": result = stokTanimOlcuBirimIsleToplu(body); break;
+      case "stokAgirlikTopluKaydet": result = stokAgirlikTopluKaydet(body); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
       case "getBirimListesi": result = getBirimListesi(); break;
       case "saveBirim":       result = saveBirim(body); break;
@@ -7299,6 +7300,36 @@ function stokTanimMarkaKoduIsleToplu() {
   }
   if (guncellenen > 0) cacheTemizle(["stokTanimListesi"]);
   return { ok: true, guncellenen: guncellenen };
+}
+
+// ★ EKLENDİ (5 Eki 2026): Stok kartlarında 1. birim başına ağırlık (kg) — tek tek veya toplu kayıt.
+// body.guncellemeler: [{id, agirlik}, ...]  (id = stok kartı ID'si; agirlik 0/boş → ağırlık silinir/tanımsız)
+// Tek toplu yazma: AGIRLIK sütunu (21.) tek setValues ile güncellenir; başka sütunlara dokunulmaz.
+function stokAgirlikTopluKaydet(body) {
+  const g = Array.isArray(body.guncellemeler) ? body.guncellemeler : [];
+  if (g.length === 0) return { ok: false, hata: "Güncellenecek kayıt yok" };
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  ensureStokTanimEkColonlari(sheet);
+  const son = sheet.getLastRow();
+  if (son < 2) return { ok: false, hata: "Stok kartı bulunamadı" };
+  const ids = sheet.getRange(2, 1, son - 1, 1).getValues();
+  const mevcut = sheet.getRange(2, 21, son - 1, 1).getValues(); // AGIRLIK = 21. sütun
+  const idSatir = {};
+  ids.forEach((r, i) => { if (r[0]) idSatir[String(r[0])] = i; });
+  let guncellenen = 0, bulunamayan = 0;
+  g.forEach(k => {
+    const i = idSatir[String(k.id || "")];
+    if (i === undefined) { bulunamayan++; return; }
+    const hamDeger = (k.agirlik === undefined || k.agirlik === null) ? "" : String(k.agirlik).replace(",", ".");
+    const a = Math.max(0, Math.round((parseFloat(hamDeger) || 0) * 1000) / 1000);
+    if ((parseFloat(mevcut[i][0]) || 0) !== a) { mevcut[i][0] = a > 0 ? a : ""; guncellenen++; }
+  });
+  if (guncellenen > 0) {
+    sheet.getRange(2, 21, son - 1, 1).setValues(mevcut);
+    cacheTemizle(["stokTanimListesi"]);
+  }
+  return { ok: true, guncellenen: guncellenen, bulunamayan: bulunamayan };
 }
 
 // ★ EKLENDİ (30 Eyl 2026): Stok adında şu ölçülerden biri geçen kartların birimi m² olur (Birim Tanımlama'daki yazımıyla, bkz. m2BirimAdi_):
