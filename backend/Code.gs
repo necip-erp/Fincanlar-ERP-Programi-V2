@@ -2070,7 +2070,10 @@ function getSatisListesi() {
     if (String(data[i][8] || "") === "Sipariş") siparisIdleri.add(String(data[i][0]));
   }
   let faturalanmaHaritasi = {};
-  if (siparisIdleri.size > 0) {
+  // Liste (Satış Raporu) ekranındaki "KDV" ve "Ara Toplam" sütunları için her satışın KDV toplamı da
+  // kalemlerden hesaplanır (Ara Toplam = Genel Toplam - KDV; dip/tutar iskontosu zaten Genel Toplam'a işlidir).
+  const kdvHaritasi = {};
+  {
     const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
       ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
     ensureSatisKalemVergiKolonlari(kSheet);
@@ -2079,8 +2082,11 @@ function getSatisListesi() {
     for (let i = 1; i < kData.length; i++) {
       const row = kData[i];
       const satisId = String(row[1] || "");
-      if (!siparisIdleri.has(satisId)) continue;
+      if (!satisId) continue;
       const miktar = parseFloat(row[3]) || 0;
+      const h = satisKalemHesapla(miktar, parseFloat(row[5]) || 0, parseFloat(row[7]) || 0, parseFloat(row[8]) || 0);
+      kdvHaritasi[satisId] = (kdvHaritasi[satisId] || 0) + (h.kdvTutari || 0);
+      if (!siparisIdleri.has(satisId)) continue;
       const faturalanan = parseFloat(row[9]) || 0;
       if (!faturalananMap[satisId]) faturalananMap[satisId] = { tam: 0, hic: 0, toplamKalem: 0 };
       faturalananMap[satisId].toplamKalem++;
@@ -2112,6 +2118,7 @@ function getSatisListesi() {
       cariAd: String(row[3] || ""),
       cariKodu: cariKoduMap[cariId] || "",
       toplamTutar: parseFloat(row[4]) || 0,
+      kdvToplam: Math.round((kdvHaritasi[id] || 0) * 100) / 100,
       odemeTipi: String(row[5] || ""),
       aciklama: String(row[6] || ""),
       kayitTarihi: hucreTarihStr(row[7]),

@@ -325,6 +325,35 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
   .cari-back-btn{display:inline-flex!important}
 }
 .cari-back-btn{display:none;align-items:center;gap:4px;background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;padding:0 0 12px;font-weight:600}
+/* ── Satış Raporu (Sipariş/Teklif/Fatura listesi) ── */
+.sr-ust{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px 6px}
+.sr-baslik{font-size:18px;font-weight:800;color:var(--text)}
+.sr-filtre{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;padding:6px 16px 10px;border-bottom:1px solid var(--border)}
+.sr-filtre .fld{display:flex;flex-direction:column;gap:3px}
+.sr-filtre .fld input,.sr-filtre .fld select{padding:6px 8px;font-size:12.5px;min-width:120px}
+.sr-hizli{display:flex;gap:4px;align-items:flex-end}
+.sr-hizli .btn{padding:6px 9px;font-size:12px}
+.sr-icerik{flex:1;min-height:0;overflow:auto;padding:0 16px}
+.sr-tbl{border-collapse:collapse;width:100%;font-size:12.5px;background:var(--rp-satir,#fff)}
+.sr-tbl th{position:sticky;top:0;z-index:1;background:var(--rp-th-bg,#dbe7f7);color:var(--rp-th-fg,#1f3a5f);border:1px solid var(--rp-th-bd,#9db8dd);padding:7px 9px;text-align:left;white-space:nowrap;cursor:pointer;user-select:none}
+.sr-tbl td{border:1px solid var(--border);padding:6px 9px;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.sr-tbl tbody tr:nth-child(even){background:var(--rp-satir2,#f3f7fc)}
+.sr-tbl tbody tr{cursor:pointer}
+.sr-tbl tbody tr:hover{background:var(--rp-hover,#fff3c4)}
+.sr-tbl td.sag,.sr-tbl th.sag{text-align:right}
+.sr-tbl td.sr-kod{font-weight:700}
+.sr-d{display:inline-block;padding:2px 9px;border-radius:5px;font-weight:700;font-size:12px}
+.sr-d-beklemede{background:#fff3c4;color:#7a5b00}
+.sr-d-muhasebelendi{background:#cfe3ff;color:#16457f}
+.sr-d-teslim-edildi{background:#19d419;color:#043d04}
+.sr-d-onaylandi{background:#d6f5d6;color:#1b5e20}
+.sr-d-kismen-faturalandi{background:#ffe0b2;color:#8a4b00}
+.sr-d-haber-verecek{background:#ffd6d6;color:#8a1c1c}
+.sr-d-edm{background:#d6f5d6;color:#1b5e20}
+.sr-d-diger{background:var(--bg3);color:var(--text2)}
+.sr-alt{display:flex;gap:22px;flex-wrap:wrap;padding:9px 16px;border-top:2px solid var(--rp-th-bd,#9db8dd);background:var(--rp-foot,#e8eff9);font-size:13px;color:var(--text2)}
+.sr-alt b{color:var(--text)}
+#satis-view .cari-list-panel{display:none}
 
 /* ── SATIŞ MODÜLÜ ── */
 #mod-satis{flex-direction:row}
@@ -1124,6 +1153,42 @@ setInterval(topbarSaatGuncelle, 10000);
     <div id="satis-secim" class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Satış — Hangisini açmak istersin?</div>
       <div class="modgrid" id="satis-secim-grid" style="margin-top:14px"></div>
+    </div>
+
+    <!-- ★ (6 Eki 2026) Satış Raporu: Sipariş/Teklif/Fatura önce geniş bir liste (rapor) olarak açılır; bir kayda tıklayınca kayıt
+         üst sekme şeridinde YENİ sekmede açılır, bu liste yerinde kalır. -->
+    <div id="satis-rapor-view" style="display:none;height:100%;flex-direction:column;overflow:hidden;width:100%">
+      <div class="sr-ust">
+        <button class="cari-back-btn" style="display:inline-flex;padding:0" onclick="satisAnaSecimeDon()">← Satış seçimine dön</button>
+        <div class="sr-baslik" id="sr-baslik">Sipariş Raporu</div>
+        <div class="belge-tipi-sekmeler" style="margin:0">
+          <button class="belge-tab active" data-tip="Fatura" onclick="satisBelgeTipiDegistir('Fatura')">Fatura</button>
+          <button class="belge-tab" data-tip="Teklif" onclick="satisBelgeTipiDegistir('Teklif')">Teklif</button>
+          <button class="belge-tab" data-tip="Sipariş" onclick="satisBelgeTipiDegistir('Sipariş')">Sipariş</button>
+        </div>
+        <button class="btn btn-primary" id="sr-yeni-btn" style="margin-left:auto" onclick="satisRaporYeni()">➕ Yeni</button>
+        <button class="btn" onclick="satisRaporYazdir()" title="Listeyi yazdır">🖨 Yazdır</button>
+        <button class="btn" onclick="satisListesiYukle()" title="Listeyi sunucudan yenile">↻</button>
+      </div>
+      <div class="sr-filtre">
+        <div class="fld"><label>Başlangıç</label><input type="date" id="sr-bas" onchange="satisRaporFiltreDegisti()"></div>
+        <div class="fld"><label>Bitiş</label><input type="date" id="sr-bit" onchange="satisRaporFiltreDegisti()"></div>
+        <div class="sr-hizli">
+          <button class="btn" onclick="satisRaporTarihHizli('bugun')">Bugün</button>
+          <button class="btn" onclick="satisRaporTarihHizli('7')">7 gün</button>
+          <button class="btn" onclick="satisRaporTarihHizli('30')">30 gün</button>
+          <button class="btn" onclick="satisRaporTarihHizli('yil')">Bu yıl</button>
+          <button class="btn" onclick="satisRaporTarihHizli('tumu')">Tümü</button>
+        </div>
+        <div class="fld"><label>Cari (kod / ünvan)</label><input id="sr-cari" autocomplete="off" oninput="satisRaporFiltreDegisti()" placeholder="Cari kodu veya ünvanı"></div>
+        <div class="fld"><label>Belge No</label><input id="sr-no" autocomplete="off" oninput="satisRaporFiltreDegisti()" placeholder="S-2026-..."></div>
+        <div class="fld"><label>Durum</label><select id="sr-durum" onchange="satisRaporFiltreDegisti()"><option value="">Tümü</option></select></div>
+        <div class="fld"><label>Ödeme Tipi</label><select id="sr-odeme" onchange="satisRaporFiltreDegisti()"><option value="">Tümü</option></select></div>
+        <button class="btn" onclick="satisRaporFiltreTemizle()">✕ Temizle</button>
+      </div>
+      <div id="sr-taslaklar"></div>
+      <div id="sr-icerik" class="sr-icerik"><div class="cari-empty">Yükleniyor...</div></div>
+      <div id="sr-alt" class="sr-alt"></div>
     </div>
 
     <div id="satis-view" style="display:none;height:100%;flex-direction:row">
@@ -2623,6 +2688,14 @@ modulAc = function(id){
     if(id === "cari" && !_cariYuklendi){ cariListesiYukle(); }
     if(id === "cari" && !_plasiyerYuklendi){ plasiyerListesiYukle(); }
     if(id === "satis" && ilkAcilis){ satisAnaSecimeDon(); }
+    // ★ Satış sekmesine (kayıt sekmesinden) dönünce: kayıt artık kendi sekmesinde olduğu için burada liste/rapor (ya da seçim ekranı) görünür.
+    if(id === "satis" && !ilkAcilis){
+      const sv = document.getElementById("satis-view");
+      if(sv && sv.style.display === "flex"){
+        delete _kayitSekmeGosterilen["satis"];
+        if(_satisRaporSecildi){ satisRaporGoster_(); satisRaporCiz_(); } else { satisAnaSecimeDon(); }
+      }
+    }
     if(id === "alis" && ilkAcilis){ alisAnaSecimeDon(); }
     if(id === "tahsilat" && !_tahsilatYuklendi){ tahsilatListesiYukle(); }
     if(id === "odeme" && !_odemeYuklendi){ odemeListesiYukle(); }
@@ -4941,11 +5014,12 @@ function satisEdmFiltreSecimden(deger){
 function satisListesiYukle(){
   _satisYuklendi = true;
   const onbellek = onbellekOku("satisListesi", ONBELLEK_MAX_YAS);
-  if(onbellek){ _satisListe = onbellek; satisListesiCiz(_satisListe); satisSonFaturalarGoster(); }
+  if(onbellek){ _satisListe = onbellek; _satisListeGeldi_ = true; satisListesiCiz(_satisListe); satisSonFaturalarGoster(); }
   else document.getElementById("satis-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
   cariApi("getSatisListesi").then(res=>{
     if(!res.ok){ if(!onbellek) document.getElementById("satis-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _satisListe = res.satislar;
+    _satisListeGeldi_ = true;
     onbellekYaz("satisListesi", res.satislar);
     satisListesiCiz(_satisListe);
     satisSonFaturalarGoster();
@@ -4960,6 +5034,10 @@ let _satisAktifBelgeTipi = "Fatura";
 function satisAnaSecimeDon(){
   document.getElementById("satis-secim").style.display = "block";
   document.getElementById("satis-view").style.display = "none";
+  const rapor = document.getElementById("satis-rapor-view");
+  if(rapor) rapor.style.display = "none";
+  _satisRaporAcik = false;
+  _satisRaporSecildi = false;
   const iadeView = document.getElementById("satisiade-view");
   if(iadeView) iadeView.style.display = "none";
 }
@@ -4968,19 +5046,184 @@ function satisAltModulAc(tip){
   document.getElementById("mod-satis").classList.remove("detay-acik");
   if(tip === "Iade"){
     document.getElementById("satis-view").style.display = "none";
+    const rp = document.getElementById("satis-rapor-view"); if(rp) rp.style.display = "none";
+    _satisRaporAcik = false;
     document.getElementById("satisiade-view").style.display = "flex";
     if(!_satisIadeYuklendi) satisIadeListesiYukle();
     return;
   }
   document.getElementById("satisiade-view") && (document.getElementById("satisiade-view").style.display = "none");
-  document.getElementById("satis-view").style.display = "flex";
+  // ★ Sipariş/Teklif/Fatura artık önce geniş LİSTE (rapor) olarak açılır; kayıt, listeden tıklanınca yeni sekmede açılır.
+  document.getElementById("satis-view").style.display = "none";
   document.getElementById("satis-detail-panel").innerHTML =
-    '<div class="cari-detail-empty"><span class="ic">📤</span><p>Detayları görmek için soldan bir satış seçin</p></div><div id="satis-son-faturalar"></div>';
+    '<div class="cari-detail-empty"><span class="ic">📤</span><p>Detayları görmek için listeden bir satış seçin</p></div><div id="satis-son-faturalar"></div>';
   _satisSecili = null;
+  _satisRaporSecildi = true;
+  satisRaporGoster_();
   satisBelgeTipiDegistir(tip);
   if(!_satisYuklendi) satisListesiYukle();
-  odakSolAramaKutusu("satis-ara");
 }
+
+// ══════════════ SATIŞ RAPORU (Sipariş/Teklif/Fatura listesi) — 6 Eki 2026 ══════════════
+// Wolvox "Sipariş Raporu" düzeni: geniş tablo; filtre (tarih, cari kodu/ünvan, belge no, durum, ödeme tipi);
+// başlıklar sürüklenerek yer değiştirir, başlığa tıklayınca önce büyükten küçüğe sonra küçükten büyüğe sıralanır;
+// cari HER ZAMAN cari koduyla gösterilir; kayda tıklayınca kayıt üst sekme şeridinde YENİ sekmede açılır, liste yerinde kalır.
+let _satisRaporAcik = false;
+let _satisRaporSecildi = false;   // kullanıcı Fatura/Teklif/Sipariş listesinden birini açtı mı (sekmeye dönüşte liste geri gelsin)
+let _srSirala = null;   // {k, yon:"azalan"|"artan"}
+let _srDrag = null;
+const SR_SUTUNLAR = {
+  durum:   { baslik:"Durum",        deger:s=>srDurum_(s),                       hucre:s=>{ const d = srDurum_(s); return d ? `<span class="sr-d ${srDurumSinifi_(d)}" title="${htmlKacis(s.efaturaDurum||"")}">${htmlKacis(d)}</span>` : ""; } },
+  cariKodu:{ baslik:"Cari Kodu",    deger:s=>s.cariKodu||"",                    hucre:s=>htmlKacis(s.cariKodu||""), sinif:"sr-kod" },
+  cariAd:  { baslik:"Cari Ünvanı",  deger:s=>s.cariAd||"",                      hucre:s=>htmlKacis(s.cariAd||"") },
+  no:      { baslik:"Belge No",     deger:s=>s.siparisNo||"",                   hucre:s=>htmlKacis(s.siparisNo||"") },
+  tarih:   { baslik:"Tarih",        deger:s=>String(s.tarih||""),               hucre:s=>tarihGoster(s.tarih) },
+  odeme:   { baslik:"Ödeme Tipi",   deger:s=>s.odemeTipi||"",                   hucre:s=>htmlKacis(s.odemeTipi||"") },
+  aciklama:{ baslik:"Açıklama",     deger:s=>s.aciklama||"",                    hucre:s=>htmlKacis(s.aciklama||"") },
+  ara:     { baslik:"Ara Toplam",   deger:s=>srAra_(s)||0, sayi:true, sag:true, hucre:s=>srAra_(s)==null?"—":paraFormat(srAra_(s)) },
+  kdv:     { baslik:"Toplam KDV",   deger:s=>+s.kdvToplam||0, sayi:true, sag:true, hucre:s=>s.kdvToplam==null?"—":paraFormat(s.kdvToplam) },
+  genel:   { baslik:"Genel Toplam", deger:s=>+s.toplamTutar||0, sayi:true, sag:true, hucre:s=>paraFormat(s.toplamTutar) },
+};
+const SR_VARSAYILAN_SIRA = ["durum","cariKodu","cariAd","no","tarih","odeme","aciklama","ara","kdv","genel"];
+function srAra_(s){ return s.kdvToplam==null ? null : Math.round(((+s.toplamTutar||0) - (+s.kdvToplam||0))*100)/100; }
+function srDurum_(s){
+  if(s.belgeTipi === "Sipariş") return s.siparisDurumu || "";
+  if(s.belgeTipi === "Teklif") return "";
+  return s.efaturaNo ? "EDM'e Gönderildi" : "Gönderilmedi";
+}
+function srDurumSinifi_(d){
+  if(d === "EDM'e Gönderildi") return "sr-d-edm";
+  const m = {"Beklemede":"sr-d-beklemede","Muhasebelendi":"sr-d-muhasebelendi","Teslim Edildi":"sr-d-teslim-edildi","Onaylandı":"sr-d-onaylandi","Kısmen Faturalandı":"sr-d-kismen-faturalandi","Haber Verecek":"sr-d-haber-verecek"};
+  return m[d] || "sr-d-diger";
+}
+function srSutunSirasiAl_(){
+  let k = null; try{ k = JSON.parse(localStorage.getItem("satisRaporSutunSirasi")||"null"); }catch(e){}
+  const sira = Array.isArray(k) ? k.filter(x=>SR_SUTUNLAR[x]) : [];
+  SR_VARSAYILAN_SIRA.forEach(x=>{ if(!sira.includes(x)) sira.push(x); });
+  return sira;
+}
+function srSutunSurukle_(kaynak, hedef){
+  if(!kaynak || kaynak === hedef) return;
+  const sira = srSutunSirasiAl_(), k = sira.indexOf(kaynak), h = sira.indexOf(hedef);
+  if(k < 0 || h < 0) return;
+  sira.splice(h, 0, sira.splice(k,1)[0]);
+  try{ localStorage.setItem("satisRaporSutunSirasi", JSON.stringify(sira)); }catch(e){}
+  satisRaporCiz_();
+}
+function satisRaporSirala(k){
+  _srSirala = (_srSirala && _srSirala.k === k && _srSirala.yon === "azalan") ? {k, yon:"artan"} : {k, yon:"azalan"};
+  satisRaporCiz_();
+}
+function satisRaporGoster_(){
+  _satisRaporAcik = true;
+  const rp = document.getElementById("satis-rapor-view");
+  document.getElementById("satis-secim").style.display = "none";
+  document.getElementById("satis-view").style.display = "none";
+  const iv = document.getElementById("satisiade-view"); if(iv) iv.style.display = "none";
+  document.getElementById("mod-satis").classList.remove("detay-acik");
+  rp.style.display = "flex";
+  // İlk açılışta tarih aralığı son 30 gün (kullanıcı değiştirebilir / "Tümü")
+  const bas = document.getElementById("sr-bas"), bit = document.getElementById("sr-bit");
+  if(bas && bit && !bas.value && !bit.value && !_srTarihTumu) satisRaporTarihHizli("30", true);
+}
+let _srTarihTumu = false;
+function satisRaporTarihHizli(tur, sessiz){
+  const bas = document.getElementById("sr-bas"), bit = document.getElementById("sr-bit");
+  const bugun = new Date(), iso = d=>tarihIsoYaz_(d);
+  _srTarihTumu = false;
+  if(tur === "tumu"){ bas.value = ""; bit.value = ""; _srTarihTumu = true; }
+  else if(tur === "bugun"){ bas.value = bit.value = iso(bugun); }
+  else if(tur === "yil"){ bas.value = bugun.getFullYear()+"-01-01"; bit.value = iso(bugun); }
+  else { const g = new Date(bugun); g.setDate(g.getDate() - (parseInt(tur,10)||30)); bas.value = iso(g); bit.value = iso(bugun); }
+  if(!sessiz) satisRaporCiz_();
+}
+function satisRaporFiltreDegisti(){
+  const b = document.getElementById("sr-bas"), t = document.getElementById("sr-bit");
+  _srTarihTumu = !b.value && !t.value;
+  satisRaporCiz_();
+}
+function satisRaporFiltreTemizle(){
+  ["sr-cari","sr-no","sr-durum","sr-odeme"].forEach(id=>{ const e = document.getElementById(id); if(e) e.value = ""; });
+  satisRaporTarihHizli("30", true);
+  satisRaporCiz_();
+}
+function satisRaporYeni(){
+  satisModalAc();
+}
+function satisRaporYazdir(){
+  tablolariYazdir_("Satış Raporu — " + _satisAktifBelgeTipi, document.getElementById("sr-icerik"));
+}
+function satisSekmeEtiketi_(s){
+  const no = s && s.siparisNo ? s.siparisNo : (s && s.id ? String(s.id).slice(-6) : "");
+  return (s && s.belgeTipi ? s.belgeTipi : "Satış") + " " + no;
+}
+function satisRaporKayitAc(id){
+  const s = (_satisListe||[]).find(x=>x.id===id);
+  kayitSekmesindeAc('satis','📤',satisSekmeEtiketi_(s),'SATIS:'+id,()=>satisAc(id));
+}
+function satisRaporCiz_(){
+  const rp = document.getElementById("satis-rapor-view");
+  if(!rp || rp.style.display === "none") return;
+  const tip = _satisAktifBelgeTipi;
+  const bas = document.getElementById("sr-bas").value, bit = document.getElementById("sr-bit").value;
+  const norm = t=>String(t||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
+  const qCari = norm(document.getElementById("sr-cari").value.trim());
+  const qNo = norm(document.getElementById("sr-no").value.trim());
+  document.getElementById("sr-baslik").textContent = (tip === "Sipariş" ? "Sipariş" : tip === "Teklif" ? "Teklif" : "Fatura") + " Raporu (Satış Yönetimi)";
+  const yeniBtn = document.getElementById("sr-yeni-btn"); if(yeniBtn) yeniBtn.textContent = "➕ Yeni " + tip;
+  const tipListe = (_satisListe||[]).filter(s=>(s.belgeTipi||"Fatura") === tip);
+  // Durum / ödeme tipi filtre seçenekleri o türdeki kayıtlardan çıkar (seçili değer korunur)
+  const doldur = (id, degerler)=>{
+    const sel = document.getElementById(id), mevcut = sel.value;
+    const uniq = Array.from(new Set(degerler.filter(Boolean))).sort((a,b)=>a.localeCompare(b,"tr"));
+    sel.innerHTML = '<option value="">Tümü</option>' + uniq.map(d=>`<option value="${htmlKacis(d)}">${htmlKacis(d)}</option>`).join("");
+    sel.value = uniq.includes(mevcut) ? mevcut : "";
+  };
+  doldur("sr-durum", tipListe.map(srDurum_));
+  doldur("sr-odeme", tipListe.map(s=>s.odemeTipi));
+  const fDurum = document.getElementById("sr-durum").value, fOdeme = document.getElementById("sr-odeme").value;
+  let liste = tipListe.filter(s=>{
+    const t = String(s.tarih||"").slice(0,10);
+    if(bas && t < bas) return false;
+    if(bit && t > bit) return false;
+    if(qCari && !(norm(s.cariKodu).includes(qCari) || norm(s.cariAd).includes(qCari))) return false;
+    if(qNo && !norm(s.siparisNo).includes(qNo)) return false;
+    if(fDurum && srDurum_(s) !== fDurum) return false;
+    if(fOdeme && s.odemeTipi !== fOdeme) return false;
+    return true;
+  });
+  if(_srSirala){
+    const kol = SR_SUTUNLAR[_srSirala.k], c = _srSirala.yon === "azalan" ? -1 : 1;
+    liste = liste.slice().sort((x,y)=>{
+      const a = kol.deger(x), b = kol.deger(y);
+      return c * (kol.sayi ? (a - b) : String(a).localeCompare(String(b), "tr"));
+    });
+  }
+  const sira = srSutunSirasiAl_();
+  const ok = k=> (_srSirala && _srSirala.k === k) ? (_srSirala.yon === "azalan" ? " ▼" : " ▲") : "";
+  document.getElementById("sr-taslaklar").innerHTML = (typeof satisTaslakListeHTML_ === "function" && satisTaslakListeHTML_())
+    ? '<div style="padding:6px 16px 0">' + satisTaslakListeHTML_() + '</div>' : "";
+  const icerik = document.getElementById("sr-icerik");
+  if(!_satisYuklendi || (!_satisListe.length && !_satisListeGeldi_)){
+    icerik.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+  } else if(!liste.length){
+    icerik.innerHTML = '<div class="cari-empty">Bu filtrelerle kayıt bulunamadı. Tarih aralığını genişletmek için "Tümü"ne basın.</div>';
+  } else {
+    icerik.innerHTML = `<table class="sr-tbl"><thead><tr>${sira.map(k=>`<th draggable="true" data-srkol="${k}" class="${SR_SUTUNLAR[k].sag?'sag':''}" onclick="satisRaporSirala('${k}')" title="Tıkla: sırala (büyükten küçüğe / küçükten büyüğe) · Sürükle: sütunun yerini değiştir">${SR_SUTUNLAR[k].baslik}${ok(k)}</th>`).join("")}</tr></thead>
+      <tbody>${liste.map(s=>`<tr onclick="satisRaporKayitAc('${htmlKacis(s.id)}')" title="Tıkla: kayıt yeni sekmede açılır (bu liste yerinde kalır)">${sira.map(k=>{ const c = SR_SUTUNLAR[k]; return `<td class="${(c.sag?'sag ':'')+(c.sinif||'')}">${c.hucre(s)}</td>`; }).join("")}</tr>`).join("")}</tbody></table>`;
+    icerik.querySelectorAll("th[data-srkol]").forEach(th=>{
+      th.addEventListener("dragstart", e=>{ _srDrag = th.dataset.srkol; try{ e.dataTransfer.setData("text/plain","kolon"); e.dataTransfer.effectAllowed="move"; }catch(x){} });
+      th.addEventListener("dragover", e=>{ if(!_srDrag) return; e.preventDefault(); th.style.outline = "2px dashed var(--blue)"; th.style.outlineOffset = "-2px"; });
+      th.addEventListener("dragleave", ()=>{ th.style.outline = ""; });
+      th.addEventListener("dragend", ()=>{ _srDrag = null; icerik.querySelectorAll("th").forEach(x=>x.style.outline=""); });
+      th.addEventListener("drop", e=>{ e.preventDefault(); const k = _srDrag; _srDrag = null; srSutunSurukle_(k, th.dataset.srkol); });
+    });
+  }
+  const topla = f=>liste.reduce((a,s)=>a+(f(s)||0),0);
+  document.getElementById("sr-alt").innerHTML =
+    `<span><b>${liste.length}</b> kayıt</span><span style="margin-left:auto">Ara Toplam: <b>${paraFormat(topla(s=>srAra_(s)))}</b></span><span>Toplam KDV: <b>${paraFormat(topla(s=>+s.kdvToplam))}</b></span><span>Genel Toplam: <b>${paraFormat(topla(s=>+s.toplamTutar))}</b></span>`;
+}
+let _satisListeGeldi_ = false;
 
 // Fatura sekmesi açıkken, sayfanın altında son kesilen faturaları listeler.
 function satisSonFaturalarGoster(){
@@ -5122,6 +5365,7 @@ function satisTaslakListeHTML_(){
 }
 
 function satisListesiCiz(liste){
+  try{ satisRaporCiz_(); }catch(e){ console.error("Satış raporu çizilemedi:", e); }
   const el = document.getElementById("satis-items");
   const sayacEl = document.getElementById("satis-sonuc-sayisi");
   let filtreliListe = liste.filter(s => (s.belgeTipi||"Fatura") === _satisAktifBelgeTipi);
@@ -5208,6 +5452,9 @@ function satisAc(id){
   // satisAnaSecimeDon()'u tetikleyip Fatura/Teklif/Sipariş seçim ekranını gösterir;
   // burada onu kapatıp doğrudan detay görünümüne geçiyoruz ki kayıt direkt açılsın.
   document.getElementById("satis-secim").style.display = "none";
+  const rpv = document.getElementById("satis-rapor-view"); if(rpv) rpv.style.display = "none";
+  _satisRaporAcik = false;
+  const ivw = document.getElementById("satisiade-view"); if(ivw) ivw.style.display = "none";
   document.getElementById("satis-view").style.display = "flex";
   document.getElementById("mod-satis").classList.add("detay-acik");
   const panel = document.getElementById("satis-detail-panel");
@@ -5264,7 +5511,8 @@ function edmOtomatikDurum_(res){
 }
 
 function satisListeyeDon(){
-  document.getElementById("mod-satis").classList.remove("detay-acik");
+  // Detaydan "Listeye dön": Satış sekmesine (rapor/liste) geçilir; kayıt sekmesi açık kalır.
+  modulAc("satis");
 }
 
 // EDM'e gönderilmiş bir faturanın (Satış ekranındaki içerik görünümü ve yazdırma/EDM onay
@@ -6718,7 +6966,10 @@ function satisKaydet(){
     satisBelgeTipiDegistir(body.belgeTipi);
     satisListesiYukle();
     if(cariId) cariListesiYukle(); // cari bakiyesi güncellenmiş olabilir
-    satisAc(duzenleId || res.id);
+    // Kaydedilen belge listeyi bozmadan YENİ sekmede açılır (liste/rapor yerinde kalır)
+    const kayitId = duzenleId || res.id;
+    const kayitOzet = (_satisListe||[]).find(x=>x.id===kayitId) || {belgeTipi:body.belgeTipi, siparisNo:body.siparisNo, id:kayitId};
+    kayitSekmesindeAc('satis','📤',satisSekmeEtiketi_(kayitOzet),'SATIS:'+kayitId,()=>satisAc(kayitId));
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
