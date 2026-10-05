@@ -805,6 +805,13 @@ setInterval(topbarSaatGuncelle, 10000);
           <button class="btn btn-primary" id="agt-toplu-btn" onclick="agirlikTanimTopluUygula()">Filtrelenen tüm stoklara uygula</button>
           <span id="agt-durum" style="font-size:12.5px;color:var(--text2)"></span>
         </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 8px;padding:8px 10px;background:var(--bg3);border-radius:8px">
+          <b style="font-size:13px">Toplu KDV oranı:</b>
+          <select id="agt-kdv-oran" style="width:110px"><option value="20">%20</option><option value="10">%10</option><option value="1">%1</option><option value="0">%0</option></select>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;margin:0;cursor:pointer"><input type="checkbox" id="agt-kdv-alis" style="width:auto"> Alış KDV'sine de uygula</label>
+          <button class="btn btn-primary" id="agt-kdv-btn" onclick="stokKdvTopluUygula()">Filtrelenen tüm stoklara KDV uygula</button>
+          <span style="font-size:12px;color:var(--text3)">Satış KDV'si faturada kalem satırına otomatik gelir (örn. banyo dolapları %10).</span>
+        </div>
         <div class="cari-items" id="agt-items"><div class="cari-empty">Yükleniyor...</div></div>
       </div>
     </div>
@@ -3315,7 +3322,7 @@ function hizPaneliIndir(){
 // ★ (1 Eki 2026) Okuma olsa da yavaş olduğu için "İşlem yapılıyor + geçen süre" bandı gösterilen çağrılar:
 // Bekleyen Alış Faturaları listesi (dış e-tablo + birkaç sayfa okuyor). Başka ekran eklemek için buraya ekle.
 const CARI_API_BANT_OKUMA_ = /^(getBekleyenAlisFaturalari)$/;
-const CARI_API_YAZMA_DEGIL_ = /^(get|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
+const CARI_API_YAZMA_DEGIL_ = /^(get|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|edmOrtamDurumu|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
 // Yapı/tanım verisini değiştiren işlemler (banka, hesap, pos, kart, seri, tanım, marka, plasiyer, birim...).
 const CARI_API_YAPI_ISLEMI_ = /(Banka|Hesap|Pos|KrediKart|Seri|BasitTanim|Marka|Plasiyer|Birim|AciklamaSablon|SiparisDurum|SiraGuncelle)/;
 
@@ -4714,9 +4721,10 @@ function cariModalAc(editId, onKaydedildi, adIpucu){
           <div class="fld"><label>Telefon</label><input id="cm-telefon" type="text" value="${c?c.telefon:''}" placeholder="05xx xxx xx xx"></div>
           <div class="fld"><label>Vergi No / TCKN</label>
             <div style="display:flex;gap:6px">
-              <input id="cm-vergino" type="text" value="${c?c.vergiNo:''}" style="flex:1">
+              <input id="cm-vergino" type="text" inputmode="numeric" value="${c?c.vergiNo:''}" style="flex:1" oninput="cmKimlikIpucu()">
               <button type="button" class="btn" title="EDM üzerinden VKN/TCKN'ye göre e-Fatura/e-Arşiv durumunu sorgula" onclick="cmEdmSorgula()">🔍 Sistemden Veri Çek</button>
             </div>
+            <div id="cm-kimlik-ipucu" style="font-size:11.5px;margin-top:3px;min-height:15px"></div>
           </div>
           <div class="fld om-tam"><label>Adres</label><input id="cm-adres" type="text" value="${c?c.adres:''}"></div>
           <div class="fld"><label>İl</label>
@@ -4763,6 +4771,7 @@ function cariModalAc(editId, onKaydedildi, adIpucu){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  try{ cmKimlikIpucu(); }catch(e){}
   setTimeout(()=>{ const e = document.getElementById("cm-ad"); if(e){ if(adIpucu && !e.value) e.value = adIpucu; e.focus(); } }, 50);
   // Yeni cari eklerken (düzenleme değil) modal açılır açılmaz, işaretli olan
   // tık (varsayılan: Alıcı) için sıradaki cari numarasını otomatik getir.
@@ -4806,6 +4815,8 @@ function cariSonrakiNoKullan(tipParam){
 function cariKaydet(id){
   const ad = document.getElementById("cm-ad").value.trim();
   if(!ad){ alert("Ad zorunlu"); return; }
+  const kimlikHam = document.getElementById("cm-vergino").value.trim().replace(/\D/g,"");
+  if(kimlikHam && kimlikHam.length!==10 && kimlikHam.length!==11 && !confirm("Vergi No / TCKN "+kimlikHam.length+" haneli. VKN 10, TCKN 11 haneli olmalı; bu haliyle e-Fatura/e-Arşiv gönderilemez.\n\nYine de kaydedilsin mi?")) return;
   const body = {
     id: id || undefined,
     ad,
@@ -4846,6 +4857,17 @@ function cariKaydet(id){
 // sorgulayıp E-Fatura/E-Arşiv alanlarını otomatik dolduracak. EDM Bilişim'den test
 // ortamı/API bilgileri gelene kadar backend bilinçli olarak sadece bilgilendirici
 // bir hata döner; hiçbir şekilde cari otomatik "Evet"e çekilmez.
+// 10 hane = VKN (şirket), 11 hane = TCKN (şahıs). TCKN'li carilerde e-Fatura/e-Arşiv alıcı bloğuna kişi
+// (Ad/Soyad) yazılır; bu yüzden Cari adı "Ad Soyad" biçiminde olmalıdır (son kelime soyad sayılır).
+function cmKimlikIpucu(){
+  const el = document.getElementById("cm-vergino"), ip = document.getElementById("cm-kimlik-ipucu");
+  if(!el || !ip) return;
+  const ham = el.value.trim(), r = ham.replace(/\D/g,"");
+  if(!ham){ ip.textContent=""; return; }
+  if(r.length===10){ ip.style.color="#1b7a3a"; ip.textContent="✔ VKN (tüzel kişi / şirket)"; }
+  else if(r.length===11){ ip.style.color="#1b7a3a"; ip.textContent="✔ TCKN (şahıs) — Cari adı \"Ad Soyad\" biçiminde olmalı"; }
+  else { ip.style.color="#b3261e"; ip.textContent="⚠ VKN 10, TCKN 11 haneli olmalı (şu an "+r.length+" hane)"; }
+}
 function cmEdmSorgula(){
   const vergiNo = document.getElementById("cm-vergino").value.trim();
   if(!vergiNo){ alert("Önce Vergi/Kimlik No girin."); return; }
@@ -5202,11 +5224,43 @@ function satisAc(id){
       _satisAktifBelgeTipi = belgeTipi;
       document.querySelectorAll(".belge-tab").forEach(b=>b.classList.toggle("active", b.dataset.tip===belgeTipi));
     }
-    satisDetayCiz(res);
-    satisListesiCiz(_satisListe);
+    edmOrtamYukle_().then(()=>{
+      satisDetayCiz(res);
+      satisListesiCiz(_satisListe);
+      edmOtomatikDurum_(res);
+    });
   }).catch(err=>{
     panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>Bağlantı hatası: '+err.message+'</p></div>';
   });
+}
+
+// EDM ortamı (test/canlı) — düğme metinleri ve onay ekranı için; açılışta bir kez sorulur.
+let _edmOrtam = {canli:false, canliAcik:false, yuklendi:false};
+function edmOrtamYukle_(){
+  if(_edmOrtam.yuklendi) return Promise.resolve(_edmOrtam);
+  return cariApi("edmOrtamDurumu",{}).then(r=>{
+    if(r && r.ok){ _edmOrtam = {canli:!!r.canli, canliAcik:!!r.canliAcik, yuklendi:true}; }
+    return _edmOrtam;
+  }).catch(()=>_edmOrtam);
+}
+// Otomatik durum takibi: gönderilmiş ve henüz kesinleşmemiş (Kabul/Red/İptal olmayan) faturayı açınca
+// portal durumu arka planda sessizce sorgulanır; değiştiyse ekran tazelenir. Aynı fatura 5 dk'da bir kez.
+const _edmOtoDurumSon = {};
+function edmOtomatikDurum_(res){
+  const s = res && res.satis;
+  if(!s || s.belgeTipi!=="Fatura" || !s.efaturaUuid) return;
+  if(/kabul edildi|reddedildi|iptal/i.test(s.efaturaDurum||"")) return;
+  const simdi = Date.now();
+  if(_edmOtoDurumSon[s.id] && simdi-_edmOtoDurumSon[s.id] < 300000) return;
+  _edmOtoDurumSon[s.id] = simdi;
+  cariApi("edmFaturaDurumSorgula",{satisId:s.id}).then(d=>{
+    if(!d || !d.ok) return;
+    const yeni = d.ozet || "";
+    if(yeni && yeni !== (s.efaturaDurum||"")){
+      const panel = document.getElementById("satis-detail-panel");
+      if(panel && panel.innerHTML.indexOf(s.efaturaNo) > -1) satisAc(s.id);
+    }
+  }).catch(()=>{});
 }
 
 function satisListeyeDon(){
@@ -5271,7 +5325,9 @@ function satisDetayCiz(res){
       ${siparis && s.siparisDurumu !== "Muhasebelendi" ? `<button class="btn btn-primary" onclick="siparisFaturaModalAc('${s.id}')">🧾 Fatura Oluştur</button>` : ''}
       ${(s.belgeTipi==='Sipariş'||s.belgeTipi==='Teklif') ? `<button class="btn btn-primary" onclick="satisDuzenleAc('${s.id}')">✏️ Düzenle</button>` : ''}
       <button class="btn btn-primary" onclick="satisFisYazdir('${s.id}')">🖨 Yazdır</button>
-      ${s.belgeTipi==='Fatura' ? `<button class="btn" title="EDM test ortamına DENEME e-Fatura gönderimi (test alıcısına)" onclick="satisEdmTestGonder('${s.id}')">🧪 EDM'e Test Gönder</button>` : ''}
+      ${s.belgeTipi==='Fatura' && !(_edmOrtam.canli && s.efaturaUuid) ? (_edmOrtam.canli
+          ? `<button class="btn btn-primary" title="Faturayı EDM üzerinden GERÇEK alıcıya (GİB) e-Fatura olarak gönderir" onclick="satisEdmTestGonder('${s.id}')">📤 e-Fatura Gönder</button>`
+          : `<button class="btn" title="EDM test ortamına DENEME e-Fatura gönderimi (test alıcısına)" onclick="satisEdmTestGonder('${s.id}')">🧪 EDM'e Test Gönder</button>`) : ''}
       ${s.belgeTipi==='Fatura' && s.efaturaUuid ? `<button class="btn" title="EDM/GİB portalındaki güncel durumu sorgula" onclick="satisEdmDurumSorgula('${s.id}')">🔄 Durumu Sorgula</button>` : ''}
       ${s.belgeTipi==='Fatura' && s.efaturaUuid ? `<button class="btn" title="EDM'e gönderilen faturanın resmi görünümünü göster" onclick="satisEfaturaGorselGoster('${s.id}')">🖼️ Resmi Görüntüle</button>` : ''}
       ${s.belgeTipi==='Fatura' && s.efaturaUuid ? `<button class="btn" title="EDM portalını yeni sekmede açar (giriş gerektirir) — E-Fatura No/UUID panoya kopyalanır, portalda onunla arayabilirsiniz" onclick="edmPortaldaAc('${s.efaturaNo||''}','${s.efaturaUuid||''}')">🔗 EDM Portalında Aç</button>` : ''}
@@ -5543,7 +5599,9 @@ function satisFisYazdir(id){
 // kez, resmi fatura formatında görüp onaylar (kullanıcı isteği: browser confirm()
 // yerine sayfa içi/uzun/fatura formatlı ekran, 15 Eyl 2026).
 function satisEdmTestGonder(id){
-  if(!confirm("Bu faturanın kalem/tutar bilgileriyle EDM TEST ortamına bir DENEME e-Fatura gönderimi yapılacak (alıcı: EDM'in test mükellefi, gerçek cariniz DEĞİL). Devam edilsin mi?")) return;
+  const canli = _edmOrtam.canli;
+  if(canli && !_edmOrtam.canliAcik){ alert("Canlı e-Fatura gönderimi henüz açılmadı.\n\nApps Script > Proje Ayarları > Script Özellikleri'ne EDM_CANLI_GONDERIM = EVET ekleyin."); return; }
+  if(!canli && !confirm("Bu faturanın kalem/tutar bilgileriyle EDM TEST ortamına bir DENEME e-Fatura gönderimi yapılacak (alıcı: EDM'in test mükellefi, gerçek cariniz DEĞİL). Devam edilsin mi?")) return;
 
   cariApi("getSatisDetay", {satisId:id}).then(detay=>{
     if(!detay.ok){ alert("Fatura bilgisi alınamadı: "+(detay.hata||"bilinmiyor")); return; }
@@ -5570,11 +5628,11 @@ function edmOnayEkraniGoster(s, kalemler, t, c, satisId){
   overlay.id = "edm-onay-overlay";
   overlay.innerHTML = `
     <div class="modal-box modal-box-xwide" style="max-height:92vh;display:flex;flex-direction:column">
-      <h3 style="flex-shrink:0;margin:0 0 6px">🧪 EDM Test Ortamına Gönderim — Son Onay</h3>
-      <p style="flex-shrink:0;margin:0 0 14px;font-size:13px;color:var(--text3)">
-        Aşağıdaki fatura EDM TEST ortamına DENEME olarak gönderilecek (alıcı her zaman
-        EDM'in kendi test mükellefidir, gerçek cariniz DEĞİLDİR). Göndermeden önce
-        rakamları son kez kontrol edin.
+      <h3 style="flex-shrink:0;margin:0 0 6px">${_edmOrtam.canli?'📤 e-Fatura Gönderimi (CANLI) — Son Onay':'🧪 EDM Test Ortamına Gönderim — Son Onay'}</h3>
+      <p style="flex-shrink:0;margin:0 0 14px;font-size:13px;color:${_edmOrtam.canli?'#b3261e':'var(--text3)'};${_edmOrtam.canli?'font-weight:600':''}">
+        ${_edmOrtam.canli
+          ? 'Bu fatura GERÇEK olarak '+(c.ad||s.cariAd||'cari')+' adına GİB\'e gönderilecek ve geri alınamaz (hata varsa iptal/iade faturası gerekir). KDV oranlarını, tutarları ve cari bilgilerini son kez kontrol edin.'
+          : 'Aşağıdaki fatura EDM TEST ortamına DENEME olarak gönderilecek (alıcı her zaman EDM\'in kendi test mükellefidir, gerçek cariniz DEĞİLDİR). Göndermeden önce rakamları son kez kontrol edin.'}
       </p>
       <div style="flex:1;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:20px;background:#fff">
         ${belgeFormuHTMLOlustur(s, kalemler, t, c)}
@@ -5588,9 +5646,9 @@ function edmOnayEkraniGoster(s, kalemler, t, c, satisId){
 }
 function edmOnayEkraniOnayla(satisId){
   edmOnayEkraniKapat();
-  cariApi("edmFaturaGonderTest", {satisId}).then(res=>{
+  cariApi("edmFaturaGonder", {satisId, canliOnay: _edmOrtam.canli === true}).then(res=>{
     if(!res.ok){ alert("EDM gönderim hatası:\n\n"+(res.hata||"bilinmiyor")); return; }
-    let mesaj = "✅ EDM'e deneme gönderimi başarılı.\n\nAlıcı: "+(res.aliciUnvan||"—")+"\nE-Fatura No: "+(res.efaturaNo||"—")+"\nDurum: "+(res.durum||"—");
+    let mesaj = (res.canli ? "✅ e-Fatura GİB'e gönderildi." : "✅ EDM'e deneme gönderimi başarılı.")+"\n\nAlıcı: "+(res.aliciUnvan||"—")+"\nE-Fatura No: "+(res.efaturaNo||"—")+"\nDurum: "+(res.durum||"—");
     const od = res.otomatikDurumSorgusu;
     if(od){
       mesaj += od.ok ? ("\n\nPortal durumu: "+(od.ozet||"—")) : ("\n\n(Otomatik portal durum sorgusu henüz sonuç vermedi: "+(od.hata||"")+")");
@@ -6721,7 +6779,7 @@ function satisIadeAc(id){
   panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⏳</span><p>Yükleniyor...</p></div>';
   cariApi("getSatisIadeDetay", {iadeId:id}).then(res=>{
     if(!res.ok){ panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>'+(res.hata||"Hata")+'</p></div>'; return; }
-    satisIadeDetayCiz(res);
+    edmOrtamYukle_().then(()=>satisIadeDetayCiz(res));
   }).catch(err=>{
     panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>Bağlantı hatası: '+err.message+'</p></div>';
   });
@@ -6748,11 +6806,15 @@ function satisIadeDetayCiz(res){
       </div>
     </div>
     ${a.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${a.aciklama}</div></div></div>` : ""}
+    ${a.iadeFaturaNo ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">İade Edilen Fatura</div><div class="v">${a.iadeFaturaNo}${a.iadeFaturaTarihi?(' · '+tarihGoster(a.iadeFaturaTarihi)):''}</div></div></div>` : ""}
+    ${a.efaturaNo ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">İade e-Fatura No</div><div class="v">${a.efaturaNo}</div></div>${a.efaturaDurum?`<div class="cari-info-item"><div class="k">Portal Durumu</div><div class="v">${a.efaturaDurum}</div></div>`:''}</div>` : ""}
     <div class="btnrow">
+      ${a.cariId && !(_edmOrtam.canli && a.efaturaUuid) ? `<button class="btn ${_edmOrtam.canli?'btn-primary':''}" onclick="satisIadeEdmGonder('${a.id}')">${_edmOrtam.canli?'📤 İade e-Faturası Gönder':"🧪 EDM'e Test Gönder"}</button>` : ''}
+      ${a.efaturaUuid ? `<button class="btn" onclick="satisIadeEdmDurum('${a.id}')">🔄 Durumu Sorgula</button>` : ''}
       <button class="btn btn-danger" onclick="satisIadeSilOnay('${a.id}')">🗑 İadeyi Sil</button>
     </div>
     <table class="hareket-tbl">
-      <thead><tr><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>Tutar</th></tr></thead>
+      <thead><tr><th>Ürün</th><th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>KDV %</th><th>Tutar</th></tr></thead>
       <tbody>
         ${kalemler.map(k=>`
           <tr>
@@ -6760,11 +6822,31 @@ function satisIadeDetayCiz(res){
             <td>${miktarFormat(k.miktar)}</td>
             <td>${k.birim}</td>
             <td>${fiyatFormat(k.birimFiyat)}</td>
-            <td>${paraFormat(k.tutar)}</td>
+            <td>%${k.kdvOrani||0}</td>
+            <td>${paraFormat(k.tutar*(1+(k.kdvOrani||0)/100))}</td>
           </tr>`).join("")}
       </tbody>
     </table>
   `;
+}
+function satisIadeEdmGonder(id){
+  edmOrtamYukle_().then(()=>{
+    if(_edmOrtam.canli && !_edmOrtam.canliAcik){ alert("Canlı e-Fatura gönderimi henüz açılmadı (EDM_CANLI_GONDERIM = EVET gerekli)."); return; }
+    const m = _edmOrtam.canli ? "Bu iade GERÇEK olarak GİB'e IADE tipli e-Fatura gönderilecek ve geri alınamaz. Devam edilsin mi?" : "Bu iade EDM TEST ortamına DENEME olarak gönderilecek. Devam edilsin mi?";
+    if(!confirm(m)) return;
+    cariApi("edmFaturaGonder",{iadeId:id, canliOnay:_edmOrtam.canli===true}).then(res=>{
+      if(!res.ok){ alert("EDM gönderim hatası:\n\n"+(res.hata||"bilinmiyor")); return; }
+      alert((res.canli?"✅ İade e-Faturası gönderildi.":"✅ Deneme gönderimi başarılı.")+"\n\nE-Fatura No: "+(res.efaturaNo||"—")+"\nDurum: "+(res.durum||"—"));
+      satisIadeAc(id);
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  });
+}
+function satisIadeEdmDurum(id){
+  cariApi("edmFaturaDurumSorgula",{iadeId:id}).then(res=>{
+    if(!res.ok){ alert("Durum sorgusu başarısız:\n\n"+(res.hata||"bilinmiyor")); return; }
+    alert("Portal Durumu\n\n"+(res.ozet||"—"));
+    satisIadeAc(id);
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
 function satisIadeSilOnay(id){
@@ -6781,7 +6863,7 @@ function satisIadeSilOnay(id){
 }
 
 function satisIadeModalAc(){
-  _yeniSatisIadeKalemleri = [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0}];
+  _yeniSatisIadeKalemleri = [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, kdvOrani:20}];
   if(!_cariYuklendi) cariListesiYukle();
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -6806,6 +6888,10 @@ function satisIadeModalAc(){
       <div class="fld" id="stim-serbest-ad-fld"><label>Müşteri Adı (cari seçilmediyse)</label><input id="stim-serbest-ad" type="text" placeholder="Peşin Müşteri"></div>
       <div class="fld"><label>Tarih</label><input id="stim-tarih" type="datetime-local" value="${bugun}"></div>
       <div class="fld"><label>Açıklama</label><input id="stim-aciklama" type="text" placeholder="İsteğe bağlı (ör. iade nedeni)"></div>
+      <div style="display:flex;gap:10px">
+        <div class="fld" style="flex:1"><label>İade Edilen Fatura No (e-Fatura iadesi için)</label><input id="stim-iade-fatura-no" type="text" placeholder="ör. FYT2026000000123"></div>
+        <div class="fld" style="flex:0 0 160px"><label>Fatura Tarihi</label><input id="stim-iade-fatura-tarih" type="date"></div>
+      </div>
 
       <label style="font-size:10px;color:var(--text3);text-transform:uppercase">İade Edilen Ürünler</label>
       <div id="stim-kalemler" style="margin:8px 0"></div>
@@ -6864,20 +6950,20 @@ function stimCariSec(i){
 }
 
 function satisIadeKalemEkleUI(){
-  _yeniSatisIadeKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0});
+  _yeniSatisIadeKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, kdvOrani:20});
   satisIadeKalemlerCiz();
 }
 function satisIadeKalemSilUI(idx){
   _yeniSatisIadeKalemleri.splice(idx,1);
-  if(_yeniSatisIadeKalemleri.length===0) _yeniSatisIadeKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0});
+  if(_yeniSatisIadeKalemleri.length===0) _yeniSatisIadeKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, kdvOrani:20});
   satisIadeKalemlerCiz();
 }
 function satisIadeKalemAlanDegisti(idx, alan, deger){
-  _yeniSatisIadeKalemleri[idx][alan] = (alan==='miktar'||alan==='birimFiyat') ? (parseFloat(deger)||0) : deger;
-  if(alan==='miktar' || alan==='birimFiyat') satisIadeToplamGuncelle();
+  _yeniSatisIadeKalemleri[idx][alan] = (alan==='miktar'||alan==='birimFiyat'||alan==='kdvOrani') ? (parseFloat(deger)||0) : deger;
+  if(alan==='miktar' || alan==='birimFiyat' || alan==='kdvOrani') satisIadeToplamGuncelle();
 }
 function satisIadeToplamGuncelle(){
-  const toplam = _yeniSatisIadeKalemleri.reduce((s,k)=> s + (parseFloat(k.miktar)||0)*(parseFloat(k.birimFiyat)||0), 0);
+  const toplam = _yeniSatisIadeKalemleri.reduce((s,k)=> s + Math.round((parseFloat(k.miktar)||0)*(parseFloat(k.birimFiyat)||0)*100)/100*(1+((k.kdvOrani===undefined?20:(parseFloat(k.kdvOrani)||0))/100)), 0);
   const el = document.getElementById("stim-toplam");
   if(el) el.textContent = paraFormat(toplam);
 }
@@ -6894,7 +6980,7 @@ function satisIadeKalemlerCiz(){
                onblur="setTimeout(()=>satisIadeUrunOneriKapat(${idx}),200)"
                onfocus="satisIadeUrunOneriGoster(${idx})"
                onkeydown="oneriKlavyeYonet(event,'stim-urun-oneri-${idx}')">
-        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniSatisIadeKalemleri[${idx}].urunAdi=s.stokAdi; _yeniSatisIadeKalemleri[${idx}].stokKodu=s.stokKodu||''; _yeniSatisIadeKalemleri[${idx}].birim=s.birim1||'adet'; if(s.satisFiyati) _yeniSatisIadeKalemleri[${idx}].birimFiyat=s.satisFiyati; satisIadeKalemlerCiz(); })">🔍</button>
+        <button type="button" class="rehber-ac-btn" style="right:2px" title="Stok Rehberi" onclick="rehberAc('stok', s=>{ _yeniSatisIadeKalemleri[${idx}].urunAdi=s.stokAdi; _yeniSatisIadeKalemleri[${idx}].stokKodu=s.stokKodu||''; _yeniSatisIadeKalemleri[${idx}].birim=s.birim1||'adet'; if(s.satisFiyati) _yeniSatisIadeKalemleri[${idx}].birimFiyat=s.satisFiyati; _yeniSatisIadeKalemleri[${idx}].kdvOrani=(s.kdvSatis===undefined||s.kdvSatis===null||s.kdvSatis===''?20:parseFloat(s.kdvSatis)); satisIadeKalemlerCiz(); })">🔍</button>
         <div id="stim-urun-oneri-${idx}" class="fiyat-gecmis-kutu" style="display:none"></div>
       </div>
       <label style="display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text3);flex:0 0 auto;white-space:nowrap" title="Bu kalem bir stok kartına bağlı değil (hizmet/masraf gibi) — stoktan düşülmez">
@@ -6903,6 +6989,7 @@ function satisIadeKalemlerCiz(){
       <input class="satis-kalem-miktar" type="number" min="0" step="0.0001" placeholder="Miktar" value="${k.miktar}" oninput="satisIadeKalemAlanDegisti(${idx},'miktar',this.value)">
       ${birimSelectHTML('satis-kalem-birim', k.birim, `satisIadeKalemAlanDegisti(${idx},'birim',this.value)`)}
       <input class="satis-kalem-fiyat" type="number" min="0" step="0.0001" placeholder="Birim Fiyat" value="${k.birimFiyat}" oninput="satisIadeKalemAlanDegisti(${idx},'birimFiyat',this.value)">
+      <input class="satis-kalem-miktar" style="max-width:62px" type="number" min="0" max="100" step="1" title="KDV %" placeholder="KDV %" value="${k.kdvOrani===undefined?20:k.kdvOrani}" oninput="satisIadeKalemAlanDegisti(${idx},'kdvOrani',this.value)">
       ${_yeniSatisIadeKalemleri.length>1 ? `<span class="hk-sil" onclick="satisIadeKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
   satisIadeToplamGuncelle();
@@ -6942,6 +7029,7 @@ function satisIadeUrunOneriSec(idx, oneriIdx){
   _yeniSatisIadeKalemleri[idx].stokKodu = s.stokKodu || "";
   _yeniSatisIadeKalemleri[idx].birim = s.birim1 || "adet";
   _yeniSatisIadeKalemleri[idx].birimFiyat = parseFloat(s.satisFiyati) || 0;
+  _yeniSatisIadeKalemleri[idx].kdvOrani = (s.kdvSatis===undefined||s.kdvSatis===null||s.kdvSatis==='') ? 20 : (parseFloat(s.kdvSatis)||0);
   satisIadeKalemlerCiz();
 }
 
@@ -6961,6 +7049,8 @@ function satisIadeKaydet(){
     cariAd: !cariId ? serbestAd : undefined,
     tarih: document.getElementById("stim-tarih").value,
     aciklama: document.getElementById("stim-aciklama").value,
+    iadeFaturaNo: document.getElementById("stim-iade-fatura-no").value.trim(),
+    iadeFaturaTarihi: document.getElementById("stim-iade-fatura-tarih").value,
     kalemler,
   };
   cariApi("saveSatisIade", body).then(res=>{
@@ -16086,6 +16176,34 @@ function agirlikTanimYerelGuncelle_(idler, deger){
   try{ onbellekYaz("stokTanimListesi", _stokTanimListe); }catch(e){}
 }
 // Toplu: o an filtrelenen listedeki tüm stok kartlarına (isteğe bağlı: yalnız tanımsız olanlara) aynı ağırlık yazılır.
+async function stokKdvTopluUygula(){
+  const oran = parseFloat((document.getElementById("agt-kdv-oran")||{}).value);
+  const alisDa = !!(document.getElementById("agt-kdv-alis")||{}).checked;
+  const durum = document.getElementById("agt-durum");
+  const hedef = _agtFiltreli.slice();
+  if(!hedef.length){ alert("Filtre boş — önce marka/arama ile hedef stokları listeleyin."); return; }
+  const mk = (document.getElementById("agt-marka")||{}).value || "";
+  const ara = ((document.getElementById("agt-ara")||{}).value||"").trim();
+  const filtreOzet = [mk?("marka kodu "+mk):"", ara?('arama "'+ara+'"'):""].filter(Boolean).join(", ") || "filtre yok (TÜM stoklar)";
+  if(!confirm(hedef.length.toLocaleString("tr-TR")+" stok kartının satış KDV'si %"+oran+(alisDa?" (alış KDV'si de)":"")+" olarak ayarlanacak.\n\nFiltre: "+filtreOzet+"\nDevam edilsin mi?")) return;
+  const btn = document.getElementById("agt-kdv-btn"); if(btn) btn.disabled = true;
+  let yapilan = 0;
+  try{
+    for(let i=0; i<hedef.length; i+=400){
+      const parca = hedef.slice(i, i+400);
+      if(durum) durum.textContent = "KDV kaydediliyor... "+Math.min(i+400, hedef.length)+" / "+hedef.length;
+      const res = await cariApi("stokKdvTopluKaydet", {ids: parca.map(k=>k.id), kdvSatis: oran, kdvAlis: alisDa ? oran : ""});
+      if(!res || !res.ok) throw new Error((res&&(res.hata||res.error))||"bilinmiyor");
+      const idSet = new Set(parca.map(k=>k.id));
+      (_stokTanimListe||[]).forEach(k=>{ if(idSet.has(k.id)){ k.kdvSatis = oran; if(alisDa) k.kdvAlis = oran; } });
+      yapilan += parca.length;
+    }
+    if(durum) durum.textContent = "✓ "+yapilan.toLocaleString("tr-TR")+" stoğa %"+oran+" KDV uygulandı.";
+  }catch(err){
+    if(durum) durum.textContent = "⚠ "+yapilan.toLocaleString("tr-TR")+" stok kaydedildi, sonra hata: "+err.message;
+  }
+  if(btn) btn.disabled = false;
+}
 async function agirlikTanimTopluUygula(){
   const deger = Math.round((parseFloat(String((document.getElementById("agt-toplu-deger")||{}).value||"").replace(",","."))||0)*1000)/1000;
   const durum = document.getElementById("agt-durum");
@@ -16284,7 +16402,8 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
           <div class="fld" style="flex:1;min-width:100px;margin-bottom:0"><label>KDV Alış (%)</label><input id="st-kdvalis" type="number" min="0" max="100" step="1" value="${k?(k.kdvAlis===undefined||k.kdvAlis===null?20:k.kdvAlis):20}"></div>
           <div class="fld" style="flex:1;min-width:130px;margin-bottom:0"><label>Satış Fiyatı</label><input id="st-satisfiyat" type="number" min="0" step="0.0001" value="${k?k.satisFiyati:''}"></div>
           <div class="fld" style="flex:1;min-width:120px;margin-bottom:0"><label>Satış İskontosu (%)</label><input id="st-satisiskonto" type="number" min="0" step="0.01" value="${k?k.satisIskontosu:''}"></div>
-          <div class="fld" style="flex:1;min-width:100px;margin-bottom:0"><label>KDV Satış (%)</label><input id="st-kdvsatis" type="number" min="0" max="100" step="1" value="${k?(k.kdvSatis===undefined||k.kdvSatis===null?20:k.kdvSatis):20}"></div>
+          <div class="fld" style="flex:1;min-width:100px;margin-bottom:0"><label>KDV Satış (%)</label><input id="st-kdvsatis" type="number" min="0" max="100" step="1" value="${k?(k.kdvSatis===undefined||k.kdvSatis===null?20:k.kdvSatis):20}">
+            <div style="display:flex;gap:4px;margin-top:3px">${[20,10,1,0].map(o=>`<button type="button" class="btn" style="padding:1px 8px;font-size:11px" onclick="document.getElementById('st-kdvsatis').value=${o}">%${o}</button>`).join("")}</div></div>
         </div>
       </div>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">

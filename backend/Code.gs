@@ -1195,6 +1195,7 @@ function handleRequest(e) {
       case "eskiYildanPlasiyerAktar": result = eskiYildanPlasiyerAktar(body); break;
       case "stokTanimOlcuBirimIsleToplu": result = stokTanimOlcuBirimIsleToplu(body); break;
       case "stokAgirlikTopluKaydet": result = stokAgirlikTopluKaydet(body); break;
+      case "stokKdvTopluKaydet": result = stokKdvTopluKaydet(body); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
       case "getBirimListesi": result = getBirimListesi(); break;
       case "saveBirim":       result = saveBirim(body); break;
@@ -1237,6 +1238,8 @@ function handleRequest(e) {
       case "plasiyerSiraGuncelle": result = plasiyerSiraGuncelle(body); break;
       case "edmCariSorgula":  result = edmCariSorgula(body); break;
       case "edmFaturaGonderTest": result = edmFaturaGonderTest(body); break;
+      case "edmFaturaGonder": result = edmFaturaGonder(body); break;
+      case "edmOrtamDurumu": result = edmOrtamDurumu(); break;
       case "getSatisEfaturaGorsel": result = satisEfaturaGorselAl(body); break;
       case "getAlisFaturaGorselHtml": result = alisFaturaGorselHtmlAl(body); break;
       case "edmFaturaDurumSorgula": result = edmFaturaDurumSorgula(body); break;
@@ -3640,6 +3643,41 @@ function silAlisIade(body) {
 // stok tarafında ise mal depoya GERİ DÖNDÜĞÜ için "Giriş" yazılır.
 // ════════════════════════════════════════════════
 
+// ★ Satış iadesi e-Fatura kolonları (SatisIadeler: 8 EFATURA_NO, 9 UUID, 10 DURUM, 11 IADE_FATURA_NO, 12 IADE_FATURA_TARIHI,
+// 13 UBL_XML, 14 GORSEL_VERI; SatisIadeKalemleri: 9 KDV_ORANI). Başlıklar yoksa eklenir.
+const SATIS_IADE_BASLIK = ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"];
+const SATIS_IADE_KALEM_BASLIK = ["ID","IADE_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"];
+function satisIadeSayfalari_(ss) {
+  const sSheet = getOrCreateSheet(ss, SHEETS.satisIadeler, SATIS_IADE_BASLIK);
+  const kSheet = getOrCreateSheet(ss, SHEETS.satisIadeKalemleri, SATIS_IADE_KALEM_BASLIK);
+  const sb = ["EFATURA_NO","EFATURA_UUID","EFATURA_DURUM","IADE_FATURA_NO","IADE_FATURA_TARIHI","EFATURA_UBL_XML","EFATURA_GORSEL_VERI"];
+  const mevcut = sSheet.getRange(1, 8, 1, sb.length).getValues()[0];
+  if (mevcut.join("|") !== sb.join("|")) sSheet.getRange(1, 8, 1, sb.length).setValues([sb]).setFontWeight("bold").setBackground("#e8edf5");
+  if (String(kSheet.getRange(1, 9).getValue() || "") !== "KDV_ORANI") kSheet.getRange(1, 9).setValue("KDV_ORANI").setFontWeight("bold").setBackground("#e8edf5");
+  return { sSheet: sSheet, kSheet: kSheet };
+}
+function iadeEfaturaSatiriBul_(iadeId) {
+  const sh = satisIadeSayfalari_(acikSS_()).sSheet;
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) if (String(data[i][0]) === String(iadeId)) return { sh: sh, row: i + 1, d: data[i] };
+  return null;
+}
+function iadeEfaturaNoKaydet_(iadeId, no, uuid, xml, gorselJson) {
+  const b = iadeEfaturaSatiriBul_(iadeId);
+  if (!b) return false;
+  b.sh.getRange(b.row, 8, 1, 3).setValues([[no, uuid || "", ""]]);
+  b.sh.getRange(b.row, 13, 1, 2).setValues([[xml || "", gorselJson || ""]]);
+  return true;
+}
+function iadeEfaturaBilgisiAl_(iadeId) {
+  const b = iadeEfaturaSatiriBul_(iadeId);
+  if (!b) return null;
+  return { rowIndex: b.row, efaturaNo: String(b.d[7] || ""), uuid: String(b.d[8] || ""), durum: String(b.d[9] || ""), ublXml: String(b.d[12] || ""), gorselVeriJson: String(b.d[13] || "") };
+}
+function iadeEfaturaDurumKaydet_(rowIndex, metin) {
+  satisIadeSayfalari_(acikSS_()).sSheet.getRange(rowIndex, 10).setValue(metin);
+}
+
 function getSatisIadeListesi() {
   const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satisIadeler,
@@ -3666,12 +3704,8 @@ function getSatisIadeListesi() {
 function getSatisIadeDetay(iadeId) {
   if (!iadeId) return { ok: false, hata: "iadeId gerekli" };
   const ss = acikSS_();
-  const sSheet = getOrCreateSheet(ss, SHEETS.satisIadeler,
-    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
-  const kSheet = getOrCreateSheet(ss, SHEETS.satisIadeKalemleri,
-    ["ID","IADE_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
-
-  const data = sSheet.getDataRange().getValues();
+  const sy = satisIadeSayfalari_(ss);
+  const data = sy.sSheet.getDataRange().getValues();
   let iade = null;
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(iadeId)) {
@@ -3679,22 +3713,26 @@ function getSatisIadeDetay(iadeId) {
         id: String(data[i][0]), tarih: hucreTarihStr(data[i][1]), cariId: String(data[i][2] || ""),
         cariAd: String(data[i][3] || ""), toplamTutar: parseFloat(data[i][4]) || 0,
         aciklama: String(data[i][5] || ""), kayitTarihi: hucreTarihStr(data[i][6]),
+        efaturaNo: String(data[i][7] || ""), efaturaUuid: String(data[i][8] || ""), efaturaDurum: String(data[i][9] || ""),
+        iadeFaturaNo: String(data[i][10] || ""), iadeFaturaTarihi: data[i][11] ? hucreTarihStr(data[i][11]) : "",
       };
       break;
     }
   }
   if (!iade) return { ok: false, hata: "İade bulunamadı" };
 
-  const kData = kSheet.getDataRange().getValues();
+  const kData = sy.kSheet.getDataRange().getValues();
   const kalemler = [];
   for (let i = 1; i < kData.length; i++) {
     const row = kData[i];
     if (String(row[1]) !== String(iadeId)) continue;
+    const miktar = parseFloat(row[3]) || 0, birimFiyat = parseFloat(row[5]) || 0;
+    const kdvOrani = parseFloat(row[8]) || 0;
     kalemler.push({
       id: String(row[0]), iadeId: String(row[1]), urunAdi: String(row[2] || ""),
-      miktar: parseFloat(row[3]) || 0, birim: String(row[4] || ""),
-      birimFiyat: parseFloat(row[5]) || 0, tutar: parseFloat(row[6]) || 0,
-      stokKodu: String(row[7] || ""),
+      miktar: miktar, birim: String(row[4] || ""),
+      birimFiyat: birimFiyat, tutar: parseFloat(row[6]) || 0,
+      stokKodu: String(row[7] || ""), kdvOrani: kdvOrani, iskontoYuzde: 0,
     });
   }
   return { ok: true, iade: iade, kalemler: kalemler };
@@ -3713,10 +3751,8 @@ function saveSatisIade(body) {
   const ss = acikSS_();
   const stokHata = kalemlerStokKoduDogrula(ss, kalemler);
   if (stokHata) return { ok: false, hata: stokHata };
-  const sSheet = getOrCreateSheet(ss, SHEETS.satisIadeler,
-    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ACIKLAMA","KAYIT_TARIHI"]);
-  const kSheet = getOrCreateSheet(ss, SHEETS.satisIadeKalemleri,
-    ["ID","IADE_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
+  const sy = satisIadeSayfalari_(ss);
+  const sSheet = sy.sSheet, kSheet = sy.kSheet;
 
   const cariId = String(body.cariId || "").trim();
   let cariAd = String(body.cariAd || "").trim();
@@ -3730,19 +3766,23 @@ function saveSatisIade(body) {
   }
   if (!cariAd) cariAd = "Peşin Müşteri";
 
-  let toplamTutar = 0;
-  kalemler.forEach(k => { toplamTutar += (parseFloat(k.miktar) || 0) * (parseFloat(k.birimFiyat) || 0); });
+  // KDV dahil toplam (satış faturasıyla aynı mantık). kdvOrani gelmezse %20 varsayılır.
+  const iadeHesap = edmFaturaHesapla_(kalemler.map(k => ({ urunAdi: k.urunAdi, miktar: k.miktar, birimFiyat: k.birimFiyat, iskontoYuzde: 0,
+    kdvOrani: (k.kdvOrani === undefined || k.kdvOrani === null || k.kdvOrani === "") ? 20 : k.kdvOrani })));
+  const toplamTutar = iadeHesap.genelToplam;
 
   const id = "sti_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.aciklama || ""), kayitTarihi]);
+  sSheet.appendRow([id, tarih, cariId, cariAd, toplamTutar, String(body.aciklama || ""), kayitTarihi, "", "", "",
+    String(body.iadeFaturaNo || "").trim(), String(body.iadeFaturaTarihi || "").trim()]);
   const _kSatirlar = [];
   kalemler.forEach((k, idx) => {
     const kId = "stik_" + Date.now() + "_" + idx;
     const miktar = parseFloat(k.miktar) || 0;
     const birimFiyat = parseFloat(k.birimFiyat) || 0;
-    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, String(k.stokKodu || "").trim()]);
+    const hs = iadeHesap.kalemler[idx];
+    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, String(k.stokKodu || "").trim(), hs.kdvOrani]);
   });
   kalemSatirlariTopluYaz_(kSheet, _kSatirlar);
 
@@ -3768,6 +3808,10 @@ function saveSatisIade(body) {
 function silSatisIade(body) {
   const id = String(body.id || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
+  if (!body._geriAlmadanKaydetme && edmOrtamDurumu().canli) {
+    const eb = iadeEfaturaBilgisiAl_(id);
+    if (eb && eb.uuid) return { ok: false, hata: "Bu iade GİB'e e-Fatura olarak gönderilmiş; silinemez." };
+  }
 
   const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satisIadeler,
@@ -7332,6 +7376,34 @@ function stokAgirlikTopluKaydet(body) {
   return { ok: true, guncellenen: guncellenen, bulunamayan: bulunamayan };
 }
 
+// ★ (5 Eki 2026) Toplu KDV oranı: banyo dolapları gibi %10 KDV'li ürün grupları için. body: { ids:[...], kdvSatis, kdvAlis(opsiyonel) }
+function stokKdvTopluKaydet(body) {
+  const ids = Array.isArray(body.ids) ? body.ids.map(String) : [];
+  if (!ids.length) return { ok: false, hata: "Güncellenecek kayıt yok" };
+  const gecerli = function(v) { const n = parseFloat(v); return (isFinite(n) && n >= 0 && n <= 100) ? n : null; };
+  const satisOrani = gecerli(body.kdvSatis);
+  const alisOrani = (body.kdvAlis === undefined || body.kdvAlis === null || body.kdvAlis === "") ? null : gecerli(body.kdvAlis);
+  if (satisOrani === null && alisOrani === null) return { ok: false, hata: "Geçerli bir KDV oranı (0-100) girin" };
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  ensureStokTanimEkColonlari(sheet);
+  const son = sheet.getLastRow();
+  if (son < 2) return { ok: false, hata: "Stok kartı bulunamadı" };
+  const idKolon = sheet.getRange(2, 1, son - 1, 1).getValues();
+  const kdv = sheet.getRange(2, 19, son - 1, 2).getValues(); // 19 KDV_ALIS, 20 KDV_SATIS
+  const hedef = {}; ids.forEach(function(i) { hedef[i] = true; });
+  let guncellenen = 0;
+  idKolon.forEach(function(r, i) {
+    if (!hedef[String(r[0])]) return;
+    let degisti = false;
+    if (alisOrani !== null && parseFloat(kdv[i][0]) !== alisOrani) { kdv[i][0] = alisOrani; degisti = true; }
+    if (satisOrani !== null && parseFloat(kdv[i][1]) !== satisOrani) { kdv[i][1] = satisOrani; degisti = true; }
+    if (degisti) guncellenen++;
+  });
+  if (guncellenen > 0) { sheet.getRange(2, 19, son - 1, 2).setValues(kdv); cacheTemizle(["stokTanimListesi"]); }
+  return { ok: true, guncellenen: guncellenen };
+}
+
 // ★ EKLENDİ (30 Eyl 2026): Stok adında şu ölçülerden biri geçen kartların birimi m² olur (Birim Tanımlama'daki yazımıyla, bkz. m2BirimAdi_):
 // 60X120, 45X45, 42,5X42,5, 20X90, 20X120 (ters yazım 120X60 da dahil). "X" yerine x, * veya × ve "42,5" yerine "42.5" yazılması fark etmez;
 // "160X120" gibi başka ölçü içinde kalan rakamlar eşleşmez (sayılar tam karşılaştırılır).
@@ -9582,7 +9654,7 @@ function edmResmiFaturaHTMLOlustur_(v) {
   return '' +
     '<div style="font-family:Arial,Helvetica,sans-serif;color:#111;max-width:1000px;margin:0 auto">' +
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1a3b6d;padding-bottom:10px;margin-bottom:14px">' +
-    '<div><div style="font-size:20px;font-weight:800;color:#1a3b6d;letter-spacing:1px">e-FATURA</div>' +
+    '<div><div style="font-size:20px;font-weight:800;color:#1a3b6d;letter-spacing:1px">e-FATURA' + (v.tip === 'IADE' ? ' (İADE)' : '') + '</div>' +
     '<div style="font-size:11px;color:#555;margin-top:2px">TEMELFATURA senaryosu · UBL-TR 1.2</div></div>' +
     '<table style="font-size:11.5px;border-collapse:collapse">' +
     '<tr><td style="color:#555;padding:1px 8px 1px 0">Fatura No</td><td><b>' + edmXmlEscape_(v.faturaNo||'—') + '</b></td></tr>' +
@@ -9600,7 +9672,9 @@ function edmResmiFaturaHTMLOlustur_(v) {
     '<div style="flex:1;border:1px solid #ccc;border-radius:6px;padding:10px 12px">' +
     '<div style="font-size:10px;font-weight:700;color:#1a3b6d;text-transform:uppercase;margin-bottom:6px">Alıcı</div>' +
     '<div style="font-size:12.5px;font-weight:700">' + edmXmlEscape_(v.aliciUnvan||'—') + '</div>' +
-    '<div style="font-size:11.5px;color:#333;margin-top:2px">VKN/TCKN: ' + edmXmlEscape_(v.aliciVkn||'—') + '</div>' +
+    '<div style="font-size:11.5px;color:#333;margin-top:2px">' + (v.aliciKimlikTuru || 'VKN/TCKN') + ': ' + edmXmlEscape_(v.aliciVkn||'—') + '</div>' +
+    (v.aliciAdres ? '<div style="font-size:11.5px;color:#333">' + edmXmlEscape_(v.aliciAdres) + '</div>' : '') +
+    (v.iadeFaturaNo ? '<div style="font-size:11.5px;color:#333">İade edilen fatura: <b>' + edmXmlEscape_(v.iadeFaturaNo) + '</b></div>' : '') +
     '</div></div>' +
     '<table style="width:100%;border-collapse:collapse;font-size:12px" border="1" cellpadding="6">' +
     '<thead><tr style="background:#eef1f7">' +
@@ -9609,7 +9683,8 @@ function edmResmiFaturaHTMLOlustur_(v) {
     '<div style="display:flex;justify-content:flex-end;margin-top:14px">' +
     '<table style="border-collapse:collapse;font-size:12.5px;min-width:280px">' +
     '<tr><td style="color:#555;padding:2px 10px 2px 0">Mal Hizmet Toplam Tutarı</td><td style="text-align:right">' + para(v.araToplam) + '</td></tr>' +
-    '<tr><td style="color:#555;padding:2px 10px 2px 0">Hesaplanan KDV</td><td style="text-align:right">' + para(v.kdvToplam) + '</td></tr>' +
+    (v.kdvGruplari || []).map(function(g){ return '<tr><td style="color:#555;padding:2px 10px 2px 0">Hesaplanan KDV (%' + g.oran + ')</td><td style="text-align:right">' + para(g.kdv) + '</td></tr>'; }).join('') +
+    ((v.kdvGruplari || []).length ? '' : '<tr><td style="color:#555;padding:2px 10px 2px 0">Hesaplanan KDV</td><td style="text-align:right">' + para(v.kdvToplam) + '</td></tr>') +
     '<tr style="font-weight:800;font-size:14px;border-top:1px solid #ccc"><td style="padding:6px 10px 0 0">Vergiler Dahil Toplam Tutar</td><td style="text-align:right;padding-top:6px">' + para(v.genelToplam) + '</td></tr>' +
     '</table></div>' +
     '<div style="margin-top:18px;font-size:10.5px;color:#777;border-top:1px solid #eee;padding-top:8px">' +
@@ -9635,10 +9710,11 @@ function edmFaturaDurumSorgula(body) {
   if (!ayar.url || !ayar.user || !ayar.password) {
     return { ok: false, hata: "EDM bağlantı bilgileri tanımlı değil (Script Özellikleri)." };
   }
-  const satisId = body.satisId;
+  const iadeMi = !!body.iadeId;
+  const satisId = iadeMi ? body.iadeId : body.satisId;
   if (!satisId) return { ok: false, hata: "satisId gerekli" };
-  const kayit = satisEfaturaBilgisiAl_(satisId);
-  if (!kayit) return { ok: false, hata: "Satış bulunamadı." };
+  const kayit = iadeMi ? iadeEfaturaBilgisiAl_(satisId) : satisEfaturaBilgisiAl_(satisId);
+  if (!kayit) return { ok: false, hata: iadeMi ? "İade bulunamadı." : "Satış bulunamadı." };
   if (!kayit.uuid) {
     return { ok: false, hata: "Bu fatura henüz EDM'e gönderilmemiş (kayıtlı UUID yok)." };
   }
@@ -9668,26 +9744,82 @@ function edmFaturaDurumSorgula(body) {
     sonuc.yanitAciklamaTr = edmDurumTurkce_(sonuc.yanitAciklama);
     const ozetParcalar = [sonuc.statusTr, sonuc.statusAciklamaTr, sonuc.yanitAciklamaTr].filter(function(x){ return x; });
     sonuc.ozet = ozetParcalar.length ? ozetParcalar.join(" — ") : "Durum bilgisi henüz yok";
-    satisEfaturaDurumKaydet_(kayit.rowIndex, sonuc.ozet);
+    if (iadeMi) iadeEfaturaDurumKaydet_(kayit.rowIndex, sonuc.ozet); else satisEfaturaDurumKaydet_(kayit.rowIndex, sonuc.ozet);
     return sonuc;
   } catch (err) {
     return { ok: false, hata: "EDM durum sorgusu hatası: " + err.message };
   }
 }
 
-// UBL-TR 1.2 TEMELFATURA XML'i oluşturur. p: { uuid, tarih(yyyy-MM-dd), saat(HH:mm:ss),
-//   aliciVkn, aliciUnvan, kalemler:[{urunAdi,miktar,birim,birimFiyat,tutar,kdvOrani,kdvTutari}],
-//   araToplam, kdvToplam, genelToplam }
+// ★ (5 Eki 2026) Fatura kalemlerinden e-Fatura tutarlarını hesaplar. Her satır kuruşa yuvarlanır; KDV, KDV ORANINA GÖRE gruplanır
+// (aynı faturada %10 ve %20 kalem olabilir — banyo dolapları %10). Belge toplamları satırların yuvarlanmış toplamıdır, böylece
+// XML içinde satır/vergi/toplam tutarları birbirini tutar (GİB şematron kuralı).
+function edmYuvarla2_(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+function edmFaturaHesapla_(kalemler) {
+  const satirlar = [], grup = {};
+  let net = 0, kdv = 0;
+  (kalemler || []).forEach(function(k) {
+    const miktar = Number(k.miktar) || 0, fiyat = Number(k.birimFiyat) || 0, iskY = Number(k.iskontoYuzde) || 0;
+    const oran = (k.kdvOrani === undefined || k.kdvOrani === null || k.kdvOrani === "") ? 20 : (Number(k.kdvOrani) || 0);
+    const brut = edmYuvarla2_(miktar * fiyat);
+    const isk = edmYuvarla2_(brut * iskY / 100);
+    const tutar = edmYuvarla2_(brut - isk);
+    const kdvT = edmYuvarla2_(tutar * oran / 100);
+    satirlar.push({ urunAdi: k.urunAdi, stokKodu: k.stokKodu || "", miktar: miktar, birim: k.birim, birimFiyat: fiyat,
+      iskontoYuzde: iskY, iskontoTutari: isk, brut: brut, tutar: tutar, kdvOrani: oran, kdvTutari: kdvT });
+    const g = grup[oran] || (grup[oran] = { oran: oran, matrah: 0, kdv: 0 });
+    g.matrah = edmYuvarla2_(g.matrah + tutar); g.kdv = edmYuvarla2_(g.kdv + kdvT);
+    net = edmYuvarla2_(net + tutar); kdv = edmYuvarla2_(kdv + kdvT);
+  });
+  const gruplar = Object.keys(grup).map(function(o) { return grup[o]; }).sort(function(a, b) { return b.oran - a.oran; });
+  return { kalemler: satirlar, kdvGruplari: gruplar, araToplam: net, kdvToplam: kdv, genelToplam: edmYuvarla2_(net + kdv) };
+}
+
+// Alıcı (AccountingCustomerParty) bloğu: VKN (tüzel) → PartyName; TCKN (şahıs) → Person(Ad/Soyad) zorunlu.
+// a: { kimlik, kimlikTuru:"VKN"|"TCKN", unvan, adres, ilce, il }
+function edmAliciPartyXml_(a) {
+  const tckn = a.kimlikTuru === "TCKN";
+  let x = '\t<cac:AccountingCustomerParty>\n\t\t<cac:Party>\n' +
+    '\t\t\t<cac:PartyIdentification><cbc:ID schemeID="' + (tckn ? "TCKN" : "VKN") + '">' + a.kimlik + '</cbc:ID></cac:PartyIdentification>\n';
+  if (!tckn) x += '\t\t\t<cac:PartyName><cbc:Name>' + edmXmlEscape_(a.unvan) + '</cbc:Name></cac:PartyName>\n';
+  x += '\t\t\t<cac:PostalAddress>\n' +
+    (a.adres ? '\t\t\t\t<cbc:StreetName>' + edmXmlEscape_(a.adres) + '</cbc:StreetName>\n' : '\t\t\t\t<cbc:BuildingName/>\n') +
+    '\t\t\t\t<cbc:CitySubdivisionName>' + edmXmlEscape_(a.ilce || "") + '</cbc:CitySubdivisionName>\n' +
+    '\t\t\t\t<cbc:CityName>' + edmXmlEscape_(a.il || "") + '</cbc:CityName>\n' +
+    '\t\t\t\t<cac:Country><cbc:IdentificationCode>TR</cbc:IdentificationCode><cbc:Name>Türkiye</cbc:Name></cac:Country>\n' +
+    '\t\t\t</cac:PostalAddress>\n';
+  if (tckn) {
+    const parcalar = String(a.unvan || "").trim().split(/\s+/);
+    const soyad = parcalar.length > 1 ? parcalar.pop() : "-";
+    const ad = parcalar.join(" ") || "-";
+    x += '\t\t\t<cac:Person><cbc:FirstName>' + edmXmlEscape_(ad) + '</cbc:FirstName><cbc:FamilyName>' + edmXmlEscape_(soyad) + '</cbc:FamilyName></cac:Person>\n';
+  }
+  return x + '\t\t</cac:Party>\n\t</cac:AccountingCustomerParty>\n';
+}
+
+// UBL-TR 1.2 TEMELFATURA XML'i oluşturur. p: { uuid, tarih(yyyy-MM-dd), saat(HH:mm:ss), saticiVkn, alici:{...edmAliciPartyXml_},
+//   hesap: edmFaturaHesapla_ sonucu, tip: "SATIS"|"IADE", iadeRef:{faturaNo, tarih} (IADE için), not }
 function edmFaturaXmlOlustur_(p) {
   const s = EDM_SELLER;
+  const h = p.hesap;
   const saticiVkn = p.saticiVkn || s.vkn;
-  const satirlarXml = p.kalemler.map(function(k, idx) {
+  const tip = p.tip === "IADE" ? "IADE" : "SATIS";
+  const satirlarXml = h.kalemler.map(function(k, idx) {
     const birimKodu = edmBirimKodu_(k.birim);
+    const iskontoXml = k.iskontoTutari > 0
+      ? '\t\t<cac:AllowanceCharge>\n' +
+        '\t\t\t<cbc:ChargeIndicator>false</cbc:ChargeIndicator>\n' +
+        '\t\t\t<cbc:MultiplierFactorNumeric>' + (k.iskontoYuzde / 100).toFixed(4) + '</cbc:MultiplierFactorNumeric>\n' +
+        '\t\t\t<cbc:Amount currencyID="TRY">' + k.iskontoTutari.toFixed(2) + '</cbc:Amount>\n' +
+        '\t\t\t<cbc:BaseAmount currencyID="TRY">' + k.brut.toFixed(2) + '</cbc:BaseAmount>\n' +
+        '\t\t</cac:AllowanceCharge>\n'
+      : '';
     return '' +
       '\t<cac:InvoiceLine>\n' +
       '\t\t<cbc:ID>' + (idx + 1) + '</cbc:ID>\n' +
       '\t\t<cbc:InvoicedQuantity unitCode="' + birimKodu + '">' + k.miktar + '</cbc:InvoicedQuantity>\n' +
       '\t\t<cbc:LineExtensionAmount currencyID="TRY">' + k.tutar.toFixed(2) + '</cbc:LineExtensionAmount>\n' +
+      iskontoXml +
       '\t\t<cac:TaxTotal>\n' +
       '\t\t\t<cbc:TaxAmount currencyID="TRY">' + k.kdvTutari.toFixed(2) + '</cbc:TaxAmount>\n' +
       '\t\t\t<cac:TaxSubtotal>\n' +
@@ -9705,12 +9837,31 @@ function edmFaturaXmlOlustur_(p) {
       '\t\t</cac:TaxTotal>\n' +
       '\t\t<cac:Item>\n' +
       '\t\t\t<cbc:Name>' + edmXmlEscape_(k.urunAdi) + '</cbc:Name>\n' +
+      (k.stokKodu ? '\t\t\t<cac:SellersItemIdentification><cbc:ID>' + edmXmlEscape_(k.stokKodu) + '</cbc:ID></cac:SellersItemIdentification>\n' : '') +
       '\t\t</cac:Item>\n' +
       '\t\t<cac:Price>\n' +
       '\t\t\t<cbc:PriceAmount currencyID="TRY">' + k.birimFiyat.toFixed(4) + '</cbc:PriceAmount>\n' +
       '\t\t</cac:Price>\n' +
       '\t</cac:InvoiceLine>';
   }).join("\n");
+
+  // KDV oranına göre ayrı TaxSubtotal (belge düzeyi)
+  const kdvGrupXml = h.kdvGruplari.map(function(g) {
+    return '\t\t<cac:TaxSubtotal>\n' +
+      '\t\t\t<cbc:TaxableAmount currencyID="TRY">' + g.matrah.toFixed(2) + '</cbc:TaxableAmount>\n' +
+      '\t\t\t<cbc:TaxAmount currencyID="TRY">' + g.kdv.toFixed(2) + '</cbc:TaxAmount>\n' +
+      '\t\t\t<cbc:CalculationSequenceNumeric>1</cbc:CalculationSequenceNumeric>\n' +
+      '\t\t\t<cbc:Percent>' + g.oran + '</cbc:Percent>\n' +
+      '\t\t\t<cac:TaxCategory><cac:TaxScheme><cbc:Name>KDV GERCEK</cbc:Name><cbc:TaxTypeCode>0015</cbc:TaxTypeCode></cac:TaxScheme></cac:TaxCategory>\n' +
+      '\t\t</cac:TaxSubtotal>\n';
+  }).join("");
+
+  const iadeRefXml = (tip === "IADE" && p.iadeRef && p.iadeRef.faturaNo)
+    ? '\t<cac:BillingReference>\n\t\t<cac:InvoiceDocumentReference>\n' +
+      '\t\t\t<cbc:ID>' + edmXmlEscape_(p.iadeRef.faturaNo) + '</cbc:ID>\n' +
+      '\t\t\t<cbc:IssueDate>' + edmXmlEscape_(String(p.iadeRef.tarih || p.tarih).substring(0, 10)) + '</cbc:IssueDate>\n' +
+      '\t\t</cac:InvoiceDocumentReference>\n\t</cac:BillingReference>\n'
+    : '';
 
   return '<Invoice xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:xades="http://uri.etsi.org/01903/v1.3.2#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xsi:schemaLocation="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2 UBL-Invoice-2.1.xsd" xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2">\n' +
     '\t<cbc:UBLVersionID>2.1</cbc:UBLVersionID>\n' +
@@ -9721,10 +9872,11 @@ function edmFaturaXmlOlustur_(p) {
     '\t<cbc:UUID>' + p.uuid + '</cbc:UUID>\n' +
     '\t<cbc:IssueDate>' + p.tarih + '</cbc:IssueDate>\n' +
     '\t<cbc:IssueTime>' + p.saat + '</cbc:IssueTime>\n' +
-    '\t<cbc:InvoiceTypeCode>SATIS</cbc:InvoiceTypeCode>\n' +
-    '\t<cbc:Note>Fincanlar ERP - DENEME gönderimi</cbc:Note>\n' +
+    '\t<cbc:InvoiceTypeCode>' + tip + '</cbc:InvoiceTypeCode>\n' +
+    (p.not ? '\t<cbc:Note>' + edmXmlEscape_(p.not) + '</cbc:Note>\n' : '') +
     '\t<cbc:DocumentCurrencyCode>TRY</cbc:DocumentCurrencyCode>\n' +
-    '\t<cbc:LineCountNumeric>' + p.kalemler.length + '</cbc:LineCountNumeric>\n' +
+    '\t<cbc:LineCountNumeric>' + h.kalemler.length + '</cbc:LineCountNumeric>\n' +
+    iadeRefXml +
     '\t<cac:AccountingSupplierParty>\n' +
     '\t\t<cac:Party>\n' +
     '\t\t\t<cac:PartyIdentification><cbc:ID schemeID="VKN">' + saticiVkn + '</cbc:ID></cac:PartyIdentification>\n' +
@@ -9738,62 +9890,106 @@ function edmFaturaXmlOlustur_(p) {
     '\t\t\t<cac:PartyTaxScheme><cac:TaxScheme><cbc:Name>' + edmXmlEscape_(s.vergiDairesi) + '</cbc:Name></cac:TaxScheme></cac:PartyTaxScheme>\n' +
     '\t\t</cac:Party>\n' +
     '\t</cac:AccountingSupplierParty>\n' +
-    '\t<cac:AccountingCustomerParty>\n' +
-    '\t\t<cac:Party>\n' +
-    '\t\t\t<cac:PartyIdentification><cbc:ID schemeID="VKN">' + p.aliciVkn + '</cbc:ID></cac:PartyIdentification>\n' +
-    '\t\t\t<cac:PartyName><cbc:Name>' + edmXmlEscape_(p.aliciUnvan) + '</cbc:Name></cac:PartyName>\n' +
-    '\t\t\t<cac:PostalAddress>\n' +
-    '\t\t\t\t<cbc:BuildingName/>\n' +
-    '\t\t\t\t<cbc:CitySubdivisionName/>\n' +
-    '\t\t\t\t<cbc:CityName/>\n' +
-    '\t\t\t\t<cac:Country><cbc:IdentificationCode>TR</cbc:IdentificationCode><cbc:Name>Türkiye</cbc:Name></cac:Country>\n' +
-    '\t\t\t</cac:PostalAddress>\n' +
-    '\t\t</cac:Party>\n' +
-    '\t</cac:AccountingCustomerParty>\n' +
+    edmAliciPartyXml_(p.alici) +
     '\t<cac:TaxTotal>\n' +
-    '\t\t<cbc:TaxAmount currencyID="TRY">' + p.kdvToplam.toFixed(2) + '</cbc:TaxAmount>\n' +
-    '\t\t<cac:TaxSubtotal>\n' +
-    '\t\t\t<cbc:TaxableAmount currencyID="TRY">' + p.araToplam.toFixed(2) + '</cbc:TaxableAmount>\n' +
-    '\t\t\t<cbc:TaxAmount currencyID="TRY">' + p.kdvToplam.toFixed(2) + '</cbc:TaxAmount>\n' +
-    '\t\t\t<cbc:CalculationSequenceNumeric>1</cbc:CalculationSequenceNumeric>\n' +
-    '\t\t\t<cbc:Percent>' + (p.kalemler[0] ? p.kalemler[0].kdvOrani : 20) + '</cbc:Percent>\n' +
-    '\t\t\t<cac:TaxCategory><cac:TaxScheme><cbc:Name>KDV GERCEK</cbc:Name><cbc:TaxTypeCode>0015</cbc:TaxTypeCode></cac:TaxScheme></cac:TaxCategory>\n' +
-    '\t\t</cac:TaxSubtotal>\n' +
+    '\t\t<cbc:TaxAmount currencyID="TRY">' + h.kdvToplam.toFixed(2) + '</cbc:TaxAmount>\n' +
+    kdvGrupXml +
     '\t</cac:TaxTotal>\n' +
     '\t<cac:LegalMonetaryTotal>\n' +
-    '\t\t<cbc:LineExtensionAmount currencyID="TRY">' + p.araToplam.toFixed(2) + '</cbc:LineExtensionAmount>\n' +
-    '\t\t<cbc:TaxExclusiveAmount currencyID="TRY">' + p.araToplam.toFixed(2) + '</cbc:TaxExclusiveAmount>\n' +
-    '\t\t<cbc:TaxInclusiveAmount currencyID="TRY">' + p.genelToplam.toFixed(2) + '</cbc:TaxInclusiveAmount>\n' +
+    '\t\t<cbc:LineExtensionAmount currencyID="TRY">' + h.araToplam.toFixed(2) + '</cbc:LineExtensionAmount>\n' +
+    '\t\t<cbc:TaxExclusiveAmount currencyID="TRY">' + h.araToplam.toFixed(2) + '</cbc:TaxExclusiveAmount>\n' +
+    '\t\t<cbc:TaxInclusiveAmount currencyID="TRY">' + h.genelToplam.toFixed(2) + '</cbc:TaxInclusiveAmount>\n' +
     '\t\t<cbc:AllowanceTotalAmount currencyID="TRY">0</cbc:AllowanceTotalAmount>\n' +
-    '\t\t<cbc:PayableAmount currencyID="TRY">' + p.genelToplam.toFixed(2) + '</cbc:PayableAmount>\n' +
+    '\t\t<cbc:PayableAmount currencyID="TRY">' + h.genelToplam.toFixed(2) + '</cbc:PayableAmount>\n' +
     '\t</cac:LegalMonetaryTotal>\n' +
     satirlarXml + '\n' +
     '</Invoice>';
 }
 
-// body: { satisId }
-function edmFaturaGonderTest(body) {
+// ★ (5 Eki 2026) e-Fatura gönderimi (SendInvoice) — TEST ve CANLI.
+//  • EDM_URL "test" içeriyorsa: eskisi gibi DENEME — alıcı her zaman EDM'in test mükellefi (gerçek cariye gitmez).
+//  • Canlı adreste: gerçek cariye gider. Güvenlik kapıları: (1) Script Özelliği EDM_CANLI_GONDERIM = EVET olmalı,
+//    (2) istemci açık onay göndermeli (canliOnay), (3) aynı fatura ikinci kez gönderilmez, (4) kayıtlı EDM_OWN_IDENTIFIER
+//    firma VKN'sine eşit olmalı (test hesabının bilgisi canlıya taşınmasın), (5) carinin VKN/TCKN'si 10/11 hane ve
+//    GİB'de e-Fatura mükellefi olmalı (değilse e-Arşiv gerekir — henüz açık değil), (6) il/ilçe dolu olmalı.
+//  • Dip iskonto / tutar iskontosu e-Faturada kullanılamaz (zaten e-fatura carisinde kapalı); varsa gönderilmez.
+// body: { satisId, canliOnay }
+function edmFaturaGonder(body) {
   const ayar = edmAyarlariniAl_();
   if (!ayar.url || !ayar.user || !ayar.password) {
     return { ok: false, hata: "EDM bağlantı bilgileri tanımlı değil (Script Özellikleri)." };
   }
-  if (ayar.url.indexOf("test") === -1) {
-    return { ok: false, hata: "Güvenlik: bu deneme gönderim fonksiyonu sadece TEST ortamı EDM_URL'inde çalışır, canlı ortamda devre dışı." };
-  }
-  const satisId = body.satisId;
+  const testMi = ayar.url.indexOf("test") > -1;
+  const iadeMi = !!body.iadeId;
+  const satisId = iadeMi ? body.iadeId : body.satisId;
   if (!satisId) return { ok: false, hata: "satisId gerekli" };
-  const detay = getSatisDetay(satisId);
-  if (!detay.ok) return { ok: false, hata: "Satış bulunamadı: " + (detay.hata || "") };
-  if (!detay.kalemler || detay.kalemler.length === 0) {
-    return { ok: false, hata: "Bu faturada hiç kalem yok, gönderilemez." };
+  let satis, detay;
+  if (iadeMi) {
+    // Satış iadesi → IADE tipli e-Fatura (BillingReference: iade edilen asıl fatura zorunlu)
+    const idt = getSatisIadeDetay(satisId);
+    if (!idt.ok) return { ok: false, hata: "İade bulunamadı: " + (idt.hata || "") };
+    satis = idt.iade; satis.belgeTipi = "Fatura";
+    satis.toplamlar = { genelToplam: idt.iade.toplamTutar };
+    detay = { ok: true, satis: satis, kalemler: idt.kalemler };
+    if (!String(satis.iadeFaturaNo || "").trim()) return { ok: false, hata: "İade e-Faturası için 'İade edilen fatura no' girilmeli (iade kaydında boş). İade kaydını silip bu bilgiyle yeniden girin." };
+    if (!satis.cariId) return { ok: false, hata: "Cari seçilmemiş (peşin müşteri) iade e-Fatura olarak gönderilemez." };
+  } else {
+    detay = getSatisDetay(satisId);
+    if (!detay.ok) return { ok: false, hata: "Satış bulunamadı: " + (detay.hata || "") };
+    satis = detay.satis;
+  }
+  if (satis.belgeTipi !== "Fatura") return { ok: false, hata: "Sadece Fatura belgesi e-Fatura olarak gönderilebilir." };
+  if (!detay.kalemler || detay.kalemler.length === 0) return { ok: false, hata: "Bu faturada hiç kalem yok, gönderilemez." };
+  if ((satis.dipIskontoYuzde || 0) > 0 || (satis.tutarIskontosu || 0) > 0) {
+    return { ok: false, hata: "Bu faturada dip iskonto / tutar iskontosu var. e-Faturada yalnızca kalem iskontosu kullanılabilir — iskontoyu kalem satırındaki İsk.% alanına taşıyın." };
+  }
+  if (!testMi) {
+    if (PropertiesService.getScriptProperties().getProperty("EDM_CANLI_GONDERIM") !== "EVET") {
+      return { ok: false, hata: "Canlı e-Fatura gönderimi kapalı. Açmak için Apps Script > Proje Ayarları > Script Özellikleri'ne EDM_CANLI_GONDERIM = EVET ekleyin." };
+    }
+    if (body.canliOnay !== true) return { ok: false, hata: "Canlı gönderim için açık onay gerekli." };
+    if (satis.efaturaUuid) return { ok: false, hata: "Bu belge zaten EDM'e gönderilmiş (" + (satis.efaturaNo || satis.efaturaUuid) + "). Aynı belge ikinci kez gönderilemez." };
+  }
+
+  let cari = null;
+  if (!testMi) {
+    const cr = getCariDetay(satis.cariId);
+    if (!cr.ok) return { ok: false, hata: "Fatura carisi bulunamadı." };
+    cari = cr.cari;
+  }
+  const kimlikHam = cari ? String(cari.vergiNo || "").replace(/[^0-9]/g, "") : "";
+  if (!testMi) {
+    if (kimlikHam.length !== 10 && kimlikHam.length !== 11) return { ok: false, hata: "Carinin Vergi No / TCKN alanı 10 (VKN) veya 11 (TCKN) haneli olmalı (şu an: \"" + (cari.vergiNo || "boş") + "\")." };
+    if (!String(cari.il || "").trim() || !String(cari.ilce || "").trim()) return { ok: false, hata: "Carinin İl ve İlçe bilgisi dolu olmalı (e-Fatura alıcı adresi için zorunlu)." };
+  }
+
+  const hesap = edmFaturaHesapla_(detay.kalemler.map(function(k) {
+    return { urunAdi: k.urunAdi, stokKodu: k.stokKodu, miktar: k.miktar, birim: k.birim, birimFiyat: k.birimFiyat, iskontoYuzde: k.iskontoYuzde, kdvOrani: k.kdvOrani };
+  }));
+  const fark = Math.abs(hesap.genelToplam - (satis.toplamlar.genelToplam || 0));
+  if (fark > 0.10) {
+    return { ok: false, hata: "Faturanın hesaplanan toplamı (" + hesap.genelToplam.toFixed(2) + ") ERP'deki genel toplamdan (" + (satis.toplamlar.genelToplam || 0).toFixed(2) + ") farklı. Güvenlik için gönderilmedi; kalem tutarlarını kontrol edin." };
   }
 
   try {
     const sessionId = edmLogin_(ayar);
     const kendi = edmKendiBilgimiAl_(ayar, sessionId);
     if (!kendi) return { ok: false, hata: "GetUserList boş döndü — bu EDM hesabına tanımlı hiç posta kutusu/birim yok görünüyor." };
-    const alici = edmVknBilgiAl_(ayar, sessionId, EDM_TEST_ALICI_VKN);
-    if (!alici) return { ok: false, hata: "EDM test alıcısı (" + EDM_TEST_ALICI_VKN + ") bulunamadı." };
+    if (!testMi && kendi.identifier !== EDM_SELLER.vkn) {
+      return { ok: false, hata: "Kayıtlı EDM_OWN_IDENTIFIER (" + kendi.identifier + ") firma VKN'si (" + EDM_SELLER.vkn + ") ile uyuşmuyor. Script Özellikleri'ndeki EDM_OWN_IDENTIFIER / EDM_OWN_ALIAS / EDM_OWN_TITLE / EDM_OWN_UNIT değerlerini silip tekrar deneyin (canlı hesaptan yeniden alınır)." };
+    }
+    const aliciKimlik = testMi ? EDM_TEST_ALICI_VKN : kimlikHam;
+    const aliciEdm = edmVknBilgiAl_(ayar, sessionId, aliciKimlik);
+    if (!aliciEdm) {
+      return { ok: false, hata: testMi ? ("EDM test alıcısı (" + EDM_TEST_ALICI_VKN + ") bulunamadı.") : ("Bu cari (" + aliciKimlik + ") GİB'de e-Fatura mükellefi görünmüyor. e-Arşiv faturası gerekir — e-Arşiv gönderimi henüz açık değil.") };
+    }
+    const alici = {
+      kimlik: aliciKimlik,
+      kimlikTuru: aliciKimlik.length === 11 ? "TCKN" : "VKN",
+      unvan: testMi ? (aliciEdm.title || "EDM Test Mükellefi") : (aliciEdm.title || cari.ad),
+      adres: cari ? String(cari.adres || "").trim() : "",
+      il: cari ? cari.il : "", ilce: cari ? cari.ilce : "",
+    };
 
     const now = new Date();
     const xmlParams = {
@@ -9802,32 +9998,25 @@ function edmFaturaGonderTest(body) {
       tarih: Utilities.formatDate(now, "Europe/Istanbul", "yyyy-MM-dd"),
       saat: Utilities.formatDate(now, "Europe/Istanbul", "HH:mm:ss"),
       saticiVkn: kendi.identifier,
-      aliciVkn: EDM_TEST_ALICI_VKN,
-      aliciUnvan: alici.title || "EDM Test Mükellefi",
-      kalemler: detay.kalemler.map(function(k) {
-        return {
-          urunAdi: k.urunAdi, miktar: k.miktar, birim: k.birim,
-          birimFiyat: k.birimFiyat, tutar: k.tutar - (k.iskontoTutari || 0),
-          kdvOrani: k.kdvOrani, kdvTutari: k.kdvTutari,
-        };
-      }),
-      araToplam: detay.satis.toplamlar.araToplam,
-      kdvToplam: detay.satis.toplamlar.kdvToplam,
-      genelToplam: detay.satis.toplamlar.genelToplam,
+      alici: alici,
+      hesap: hesap,
+      tip: iadeMi ? "IADE" : "SATIS",
+      iadeRef: iadeMi ? { faturaNo: satis.iadeFaturaNo, tarih: satis.iadeFaturaTarihi || satis.tarih } : null,
+      not: testMi ? "Fincanlar ERP - DENEME gönderimi" : String(satis.aciklama || "").trim(),
     };
     const invoiceXml = edmFaturaXmlOlustur_(xmlParams);
     const contentB64 = Utilities.base64Encode(invoiceXml, Utilities.Charset.UTF_8);
 
-    const kanal = "TEST";
+    const kanal = testMi ? "TEST" : "PROD";
     const soapBody = '<SendInvoiceRequest xmlns="http://tempuri.org/">' +
       edmRequestHeaderBlock_(sessionId, kanal) +
-      '<RECEIVER xmlns="" vkn="' + EDM_TEST_ALICI_VKN + '" alias="' + edmXmlEscape_(alici.alias) + '"/>' +
+      '<RECEIVER xmlns="" vkn="' + aliciKimlik + '" alias="' + edmXmlEscape_(aliciEdm.alias) + '"/>' +
       '<INVOICE xmlns="" TRXID="0">' +
       '<HEADER>' +
       '<SENDER>' + kendi.identifier + '</SENDER>' +
-      '<RECEIVER>' + EDM_TEST_ALICI_VKN + '</RECEIVER>' +
+      '<RECEIVER>' + aliciKimlik + '</RECEIVER>' +
       '<FROM>' + edmXmlEscape_(kendi.alias) + '</FROM>' +
-      '<TO>' + edmXmlEscape_(alici.alias) + '</TO>' +
+      '<TO>' + edmXmlEscape_(aliciEdm.alias) + '</TO>' +
       '<INTERNETSALES>false</INTERNETSALES>' +
       '<EARCHIVE>false</EARCHIVE>' +
       '</HEADER>' +
@@ -9844,44 +10033,42 @@ function edmFaturaGonderTest(body) {
     if (returnCode !== "0") {
       return { ok: false, hata: "EDM RETURN_CODE=" + returnCode + " (başarısız). Yanıt: " + xml.substring(0, 500) };
     }
-    // ÖNEMLİ: Kendi ürettiğimiz "FYT..." numarasının EDM/GİB açısından hiçbir
-    // karşılığı/önemi yok — istekte ID belirtmediğimiz için EDM faturayı KENDİ
-    // serisinden otomatik numaralandırıyor. Asıl geçerli/resmi numara, yanıttaki
-    // <INVOICE ... ID="..." UUID="..."> özelliklerinde (attribute, alt etiket
-    // DEĞİL) geliyor — bunu doğru okuyup gerçek numara olarak kaydediyoruz.
-    // Yanıt beklenmedik şekilde bu bilgiyi içermezse kendi ürettiğimiz numaraya
-    // (xmlParams.faturaNo/uuid) düşüyoruz ki hiç kayıt kalmasın diye.
+    // EDM faturayı KENDİ serisinden numaralandırır; resmi numara/UUID yanıttaki <INVOICE ID= UUID=> özniteliklerindedir.
     const edmGercekNo = edmXmlOznitelik_(xml, "INVOICE", "ID");
     const edmGercekUuid = edmXmlOznitelik_(xml, "INVOICE", "UUID");
     const gercekFaturaNo = edmGercekNo || xmlParams.faturaNo;
     const gercekUuid = edmGercekUuid || xmlParams.uuid;
-    // "Resmi Görüntüle" ekranı için: hem gönderilen ham UBL-XML'i hem de o XML'in
-    // üretildiği alanların JSON anlık görüntüsünü saklıyoruz — görsel her zaman
-    // GERÇEKTEN GÖNDERİLEN veriden çizilsin, sonradan Sheets'te değişen veriden değil.
+    // "Resmi Görüntüle" için gönderilen verinin anlık görüntüsü (sonradan Sheets'te değişse de görsel aynı kalsın).
     const gorselVeri = {
-      faturaNo: gercekFaturaNo, uuid: gercekUuid,
+      faturaNo: gercekFaturaNo, uuid: gercekUuid, tip: iadeMi ? "IADE" : "SATIS", iadeFaturaNo: iadeMi ? satis.iadeFaturaNo : "",
       tarih: xmlParams.tarih, saat: xmlParams.saat,
-      saticiVkn: xmlParams.saticiVkn, aliciVkn: xmlParams.aliciVkn, aliciUnvan: xmlParams.aliciUnvan,
-      kalemler: xmlParams.kalemler,
-      araToplam: xmlParams.araToplam, kdvToplam: xmlParams.kdvToplam, genelToplam: xmlParams.genelToplam,
+      saticiVkn: xmlParams.saticiVkn, aliciVkn: alici.kimlik, aliciKimlikTuru: alici.kimlikTuru, aliciUnvan: alici.unvan,
+      aliciAdres: [alici.adres, alici.ilce, alici.il].filter(function(x){ return x; }).join(", "),
+      kalemler: hesap.kalemler, kdvGruplari: hesap.kdvGruplari,
+      araToplam: hesap.araToplam, kdvToplam: hesap.kdvToplam, genelToplam: hesap.genelToplam,
     };
-    satisEfaturaNoKaydet_(satisId, gercekFaturaNo, gercekUuid, invoiceXml, JSON.stringify(gorselVeri));
+    if (iadeMi) iadeEfaturaNoKaydet_(satisId, gercekFaturaNo, gercekUuid, invoiceXml, JSON.stringify(gorselVeri));
+    else satisEfaturaNoKaydet_(satisId, gercekFaturaNo, gercekUuid, invoiceXml, JSON.stringify(gorselVeri));
 
-    // Gönderim başarılı olur olmaz portal durumunu otomatik sorgula (best-effort —
-    // GİB'in durumu işlemesi biraz zaman alabileceğinden bu sorgu başarısız ya da
-    // henüz güncel olmayabilir; hata olsa bile gönderim sonucunu bozmasın).
     let otomatikDurum = null;
     try {
-      otomatikDurum = edmFaturaDurumSorgula({ satisId: satisId });
+      otomatikDurum = edmFaturaDurumSorgula(iadeMi ? { iadeId: satisId } : { satisId: satisId });
     } catch (durumErr) {
       otomatikDurum = { ok: false, hata: "Otomatik durum sorgusu başarısız: " + durumErr.message };
     }
-
-    return { ok: true, durum: edmDurumTurkce_(status) || "Gönderildi", aliciUnvan: alici.title, efaturaNo: gercekFaturaNo, uuid: gercekUuid, ozetXml: xml.substring(0, 800), otomatikDurumSorgusu: otomatikDurum };
+    return { ok: true, canli: !testMi, durum: edmDurumTurkce_(status) || "Gönderildi", aliciUnvan: alici.unvan, efaturaNo: gercekFaturaNo, uuid: gercekUuid, ozetXml: xml.substring(0, 800), otomatikDurumSorgusu: otomatikDurum };
   } catch (err) {
     return { ok: false, hata: "EDM gönderim hatası: " + err.message };
   }
 }
+// İstemcinin düğme/uyarı metinlerini ayarlaması için: bağlı EDM ortamı test mi canlı mı, canlı gönderim kilidi açık mı.
+function edmOrtamDurumu() {
+  const ayar = edmAyarlariniAl_();
+  const testMi = !ayar.url || ayar.url.indexOf("test") > -1;
+  return { ok: true, canli: !testMi, canliAcik: !testMi && PropertiesService.getScriptProperties().getProperty("EDM_CANLI_GONDERIM") === "EVET" };
+}
+// Eski ad (istemci uyumluluğu): aynı fonksiyona yönlenir.
+function edmFaturaGonderTest(body) { return edmFaturaGonder(body); }
 
 // ════════════════════════════════════════════════
 // POS HAREKETLERİ — Tahsilatta "Kredi Kartı" seçilip bir POS hesabı
