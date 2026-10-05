@@ -16814,6 +16814,9 @@ function stokHareketRaporuTemizle(){
 // çalışmıyor, sadece geçerli bir oturum doğrulandıktan sonra girisAkisiBaslat()
 // tarafından bir kez çağrılıyor (bkz. aşağıdaki giriş ekranı script bloğu).
 function uygulamaAcilisRutini(){
+  // ★ Giriş yapılınca modül kutuları yeniden çizilir: sayfa giriş ekranındayken çizilen liste rolü bilmediği için
+  // Admin'e özel modülleri (Kayıt Defteri) gizliyordu; çıkış-giriş sonrası sayfa yenilenmeden de görünsün.
+  try{ modgridCiz(); }catch(e){}
   (function(){
     const params = new URLSearchParams(location.search);
     const tab = params.get("tab");
