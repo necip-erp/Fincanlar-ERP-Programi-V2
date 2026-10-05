@@ -5810,7 +5810,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "satis-modal-overlay";
-  overlay.classList.add("tema-yesil");
+  overlay.classList.add("tema-yesil","sm-tam");
   overlay.dataset.escKapat = "satisModalTaslakKapat"; // Esc ile kapatmada da (uyarıyı onaylayınca) taslak kaydedilir
   overlay.onclick = (e)=>{ if(e.target===overlay) satisModalTaslakKapat(); }; // boşluğa tıklama: bilgiler silinmez, "Yarım kalan" olur
   // s.tarih backend'den "yyyy-MM-dd" veya "yyyy-MM-dd HH:mm" biçiminde gelir (hucreTarihStr);
@@ -5819,7 +5819,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   const bugun = s ? (/^\d{4}-\d{2}-\d{2}$/.test(s.tarih) ? s.tarih + "T00:00" : s.tarih.replace(" ", "T")) : simdiTarihSaat();
   const belgeTipiBaslangic = s ? s.belgeTipi : (onBelgeTipi || _satisAktifBelgeTipi);
   overlay.innerHTML = `
-    <div class="modal-box modal-box-xwide fatura-modal">
+    <div class="modal-box modal-box-xwide fatura-modal siparis-duzen">
       <h3 class="fm-baslik" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <span>${duzenle ? "✏️ "+belgeTipiBaslangic+"'i Düzenle" : "🧾 Yeni "+belgeTipiBaslangic}</span>
         <span id="sm-efatura-rozet" title="Seçili carinin E-Fatura mükellefiyeti" style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;padding:4px 14px;border-radius:20px;white-space:nowrap;background:var(--bg3);color:var(--text3)">E-Fatura: —</span>
@@ -5833,24 +5833,29 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         <span id="sm-faturatipi-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Tip: —</span>
       </h3>
       <div class="fm-kart">
-      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Belge Tipi</label>
+      <div class="sm-satir sm-satir-1">
+        <div class="fld sm-w-belge" style="margin-bottom:0"><label>Belge Tipi</label>
           <select id="sm-belgetipi" onchange="satisModalBelgeTipiDegisti()" ${duzenle?'disabled title="Düzenlemede belge tipi değiştirilemez"':''}>
             <option value="Fatura" ${belgeTipiBaslangic==='Fatura'?'selected':''}>Fatura</option>
             <option value="Teklif" ${belgeTipiBaslangic==='Teklif'?'selected':''}>Teklif</option>
             <option value="Sipariş" ${belgeTipiBaslangic==='Sipariş'?'selected':''}>Sipariş</option>
           </select>
         </div>
-        <div class="fld" id="sm-siparis-durum-fld" style="flex:1;min-width:160px;margin-bottom:0;display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
+        <div class="fld sm-w-durum" id="sm-siparis-durum-fld" style="margin-bottom:0;display:${belgeTipiBaslangic==='Sipariş'?'flex':'none'}">
           <label>Sipariş Durumu</label>
           <select id="sm-siparis-durumu">
             ${siparisDurumSecenekleriHTML(s ? s.siparisManuelDurum : (_siparisDurumlari.length ? _siparisDurumlari[0].ad : "Beklemede"))}
           </select>
         </div>
+        <div class="fld sm-w-tarih" style="margin-bottom:0"><label>Tarih</label><input id="sm-tarih" type="datetime-local" value="${bugun}"></div>
+        <div class="fld sm-w-vade" id="sm-vade-fld" style="margin-bottom:0;display:none">
+          <label>Vade Tarihi</label>
+          <input id="sm-vade" type="date" value="${belgeTipiBaslangic==='Sipariş' ? bugun.slice(0,10) : ''}">
+        </div>
       </div>
-      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <div class="fld" style="flex:2;min-width:220px;margin-bottom:0;position:relative"><label>Müşteri (Cari)</label>
-          <input id="sm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" style="padding-right:34px"
+      <div class="sm-satir sm-satir-2">
+        <div class="fld sm-w-cari" style="margin-bottom:0;position:relative"><label>Müşteri (Cari)</label>
+          <input id="sm-cari-arama" type="text" placeholder="Cari ara (F1)..." autocomplete="off" style="padding-right:34px"
                  value="${s ? (s.cariId ? s.cariAd : '') : (onCariId ? (_cariListe.find(c=>c.id===onCariId)||{}).ad||'' : '')}"
                  oninput="smCariAramaDegisti(this.value)"
                  onfocus="smCariOneriGoster()"
@@ -5860,14 +5865,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
           <input type="hidden" id="sm-cari" value="${s ? (s.cariId||'') : (onCariId||'')}">
           <div id="sm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
         </div>
-        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Tarih</label><input id="sm-tarih" type="datetime-local" value="${bugun}"></div>
-        <div class="fld" id="sm-vade-fld" style="flex:1;min-width:140px;margin-bottom:0;display:none">
-          <label>Vade Tarihi (son ödeme tarihi)</label>
-          <input id="sm-vade" type="date" value="${belgeTipiBaslangic==='Sipariş' ? bugun.slice(0,10) : ''}">
-        </div>
-      </div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap">
-        <div class="fld" style="flex:1;min-width:160px"><label>Ödeme Tipi</label>
+        <div class="fld sm-w-odeme" style="margin-bottom:0"><label>Ödeme Tipi</label>
           <select id="sm-odeme" onchange="satisOdemeTipiDegisti()">
             <option value="" ${s && s.odemeTipi===''?'selected':''}>— Seçilmedi —</option>
             <option value="Nakit" ${s && s.odemeTipi==='Nakit'?'selected':''}>Nakit</option>
@@ -5875,63 +5873,63 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
             <option value="Açık Hesap" ${!s || s.odemeTipi==='Açık Hesap'?'selected':''}>Açık Hesap</option>
           </select>
         </div>
-        <div class="fld" style="flex:2;min-width:220px"><label>Açıklama</label><input id="sm-aciklama" type="text" placeholder="İsteğe bağlı" value="${s ? (s.aciklama||'') : ''}"></div>
-        <div class="fld" style="flex:1;min-width:140px"><label>Proje Kodu</label>${projeKoduSelectHTML('sm-proje-kodu', s?s.projeKodu:'')}</div>
-        <div class="fld" id="sm-fatura-tipi-fld" style="flex:1;min-width:140px;display:${belgeTipiBaslangic==='Fatura'?'flex':'none'}"><label>Fatura Tipi</label>${faturaTipiSelectHTML('sm-fatura-tipi', s?s.faturaTipi:'', s?'':'00')}</div>
-      </div>
-      <div class="fld" id="sm-kk-fld" style="display:none">
-        <label>Kredi Kartı — POS Hesabı</label>
-        <select id="sm-kk-hesap"><option value="">— Seçiniz —</option></select>
-      </div>
-      <div class="fld" id="sm-odeme-tutar-fld" style="display:none">
-        <label>Tahsil Edilen Tutar</label>
-        <input id="sm-odeme-tutar" type="number" min="0" step="0.01" placeholder="Boş bırakılırsa faturanın tamamı varsayılır">
-        <div style="font-size:11px;color:#888;margin-top:3px">Farklı/daha az bir tutar tahsil edildiyse buraya girin — kalan kısım caride borç (Açık Hesap gibi) kalır.</div>
+        <div class="fld sm-w-proje" style="margin-bottom:0"><label>Proje Kodu</label>${projeKoduSelectHTML('sm-proje-kodu', s?s.projeKodu:'')}</div>
+        <div class="fld sm-w-ftip" id="sm-fatura-tipi-fld" style="margin-bottom:0;display:${belgeTipiBaslangic==='Fatura'?'flex':'none'}"><label>Fatura Tipi</label>${faturaTipiSelectHTML('sm-fatura-tipi', s?s.faturaTipi:'', s?'':'00')}</div>
+        <div class="fld sm-w-kk" id="sm-kk-fld" style="margin-bottom:0;display:none">
+          <label>Kredi Kartı — POS Hesabı</label>
+          <select id="sm-kk-hesap"><option value="">— Seçiniz —</option></select>
+        </div>
+        <div class="fld sm-w-tahsil" id="sm-odeme-tutar-fld" style="margin-bottom:0;display:none">
+          <label title="Farklı/daha az bir tutar tahsil edildiyse buraya girin — kalan kısım caride borç (Açık Hesap gibi) kalır.">Tahsil Edilen Tutar</label>
+          <input id="sm-odeme-tutar" type="number" min="0" step="0.01" placeholder="Boşsa faturanın tamamı" title="Boş bırakılırsa faturanın tamamı varsayılır. Farklı/daha az bir tutar tahsil edildiyse buraya girin — kalan kısım caride borç (Açık Hesap gibi) kalır.">
+        </div>
       </div>
       </div>
 
-      <div id="sm-isleme-tikleri-fld" style="display:${belgeTipiBaslangic==='Fatura'?'flex':'none'};gap:18px;flex-wrap:wrap;margin:-4px 0 12px;padding:8px 10px;background:var(--bg3);border-radius:8px">
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
-          <input type="checkbox" id="sm-stok-isle" ${(!s || s.stokIsle !== false) ? 'checked' : ''}> Stoğa işle
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
-          <input type="checkbox" id="sm-cari-isle" ${(!s || s.cariIsle !== false) ? 'checked' : ''}> Cariye işle
-        </label>
+      <div class="sm-liste-alan" id="sm-liste-alan">
+        <div class="satis-kalem-basliklar">
+          <span class="satis-kalem-sirabas" title="Sıra no — numarayı değiştirerek veya ▲▼ ile satırı taşıyabilirsiniz">Sıra</span>
+          <span class="satis-kalem-stokkodu">Stok Kodu</span><span style="flex:1">Ürün</span>
+          <span class="satis-kalem-miktar">Miktar</span><span class="satis-kalem-birim">Birim</span>
+          <span class="satis-kalem-birim2" title="Miktar 2 (ambalaj adedi: kutu/koli vb.). Buraya yazdığınız sayı × stok kartındaki ambalaj miktarı = Miktar">Miktar 2</span><span class="satis-kalem-birim2ad">Birim 2</span>
+          <span class="satis-kalem-fiyat">Birim Fiyat</span><span class="satis-kalem-yuzde">İsk.%</span><span class="satis-kalem-yuzde">Kdv%</span>
+          <span class="satis-kalem-tutar" title="Satır tutarı = Miktar × Birim Fiyat">Tutar</span>
+        </div>
+        <div id="sm-kalemler"></div>
       </div>
-
-      <label class="fm-etiket" style="font-size:10px;color:var(--text3);text-transform:uppercase">Ürün Kalemleri</label>
-      <div class="satis-kalem-basliklar">
-        <span class="satis-kalem-sirabas" title="Sıra no — numarayı değiştirerek veya ▲▼ ile satırı taşıyabilirsiniz">Sıra</span>
-        <span class="satis-kalem-stokkodu">Stok Kodu</span><span style="flex:1">Ürün</span>
-        <span class="satis-kalem-miktar">Miktar</span><span class="satis-kalem-birim">Birim</span>
-        <span class="satis-kalem-birim2" title="Miktar 2 (ambalaj adedi: kutu/koli vb.). Buraya yazdığınız sayı × stok kartındaki ambalaj miktarı = Miktar">Miktar 2</span><span class="satis-kalem-birim2ad">Birim 2</span>
-        <span class="satis-kalem-fiyat">Birim Fiyat</span><span class="satis-kalem-yuzde">İsk.%</span><span class="satis-kalem-yuzde">Kdv%</span>
-        <span class="satis-kalem-tutar" title="Satır tutarı = Miktar × Birim Fiyat">Tutar</span>
-      </div>
-      <div id="sm-kalemler" style="margin:8px 0"></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div class="sm-liste-alt">
         <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
         <div id="sm-agirlik-bar" class="sm-agirlik-bar"></div>
       </div>
 
       <div id="sm-alt-serit" class="sm-alt-serit">
-      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
-        <div class="fld" id="sm-tutar-iskonto-fld" style="flex:1;min-width:220px;max-width:280px;margin-bottom:0;display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'flex':'none'}">
-          <label class="sm-isk-etiket">Tutar İskontosu (₺)</label>
-          <input id="sm-tutar-iskontosu" type="number" min="0" step="0.01" value="${s ? (s.tutarIskontosu||0) : 0}" oninput="satisToplamGuncelle()">
-          <label style="flex-direction:row;align-items:center;gap:6px;text-transform:none;font-size:12px;color:var(--text2);margin-top:6px">
-            <input id="sm-tutar-iskonto-kdv-sonra" type="checkbox" ${!s || s.tutarIskontoKdvSonra?'checked':''} onchange="satisToplamGuncelle()" style="width:auto">
-            KDV'den sonra düş (tik yoksa KDV'den önce düşülür)
-          </label>
-          <p id="sm-kdv-sonra-not" style="display:none;color:var(--warn,#c77);font-size:11px;margin:4px 0 0">⚠️ Bu cari E-Fatura/E-Arşiv mükellefi olduğu için KDV sonrası iskontoya izin verilmiyor — iskonto KDV'den önce (matrahtan) düşülecek.</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+        <div style="flex:1;min-width:340px;display:flex;flex-direction:column;gap:8px">
+          <div class="fld" style="margin-bottom:0"><label>Açıklama</label><input id="sm-aciklama" type="text" placeholder="İsteğe bağlı" value="${s ? (s.aciklama||'') : ''}"></div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
+            <div class="fld" id="sm-tutar-iskonto-fld" style="flex:1;min-width:200px;max-width:260px;margin-bottom:0;display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'flex':'none'}">
+              <label class="sm-isk-etiket">Tutar İskontosu (₺)</label>
+              <input id="sm-tutar-iskontosu" type="number" min="0" step="0.01" value="${s ? (s.tutarIskontosu||0) : 0}" oninput="satisToplamGuncelle()">
+              <label style="flex-direction:row;align-items:center;gap:6px;text-transform:none;font-size:12px;color:var(--text2);margin-top:4px">
+                <input id="sm-tutar-iskonto-kdv-sonra" type="checkbox" ${!s || s.tutarIskontoKdvSonra?'checked':''} onchange="satisToplamGuncelle()" style="width:auto">
+                KDV'den sonra düş
+              </label>
+              <p id="sm-kdv-sonra-not" style="display:none;color:var(--warn,#c77);font-size:11px;margin:4px 0 0">⚠️ Bu cari E-Fatura/E-Arşiv mükellefi olduğu için KDV sonrası iskontoya izin verilmiyor — iskonto KDV'den önce (matrahtan) düşülecek.</p>
+            </div>
+            <div class="fld" style="flex:1;min-width:150px;max-width:190px;margin-bottom:0"><label class="sm-isk-etiket">Dip İskonto (%)</label>
+              <input id="sm-dip-iskonto" type="number" min="0" max="100" step="0.01" value="${s ? (s.dipIskontoYuzde||0) : 0}" oninput="satisToplamGuncelle()">
+              <p id="sm-efatura-dip-not" style="display:none;color:var(--warn,#c77);font-size:11px;margin:4px 0 0">🔒 E-Fatura mükellefi cari: dip iskonto ve tutar iskontosu kapalı — iskontoyu kalem satırındaki İsk.% ile girin.</p>
+            </div>
+            <div id="sm-isleme-tikleri-fld" style="display:${belgeTipiBaslangic==='Fatura'?'flex':'none'};gap:16px;flex-wrap:wrap;align-items:center;padding:8px 10px;background:var(--bg3);border-radius:8px;align-self:flex-end">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
+                <input type="checkbox" id="sm-stok-isle" ${(!s || s.stokIsle !== false) ? 'checked' : ''}> Stoğa işle
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
+                <input type="checkbox" id="sm-cari-isle" ${(!s || s.cariIsle !== false) ? 'checked' : ''}> Cariye işle
+              </label>
+            </div>
+          </div>
         </div>
-
-        <div class="fld" style="flex:1;min-width:180px;max-width:220px;margin-bottom:0"><label class="sm-isk-etiket">Dip İskonto (%)</label>
-          <input id="sm-dip-iskonto" type="number" min="0" max="100" step="0.01" value="${s ? (s.dipIskontoYuzde||0) : 0}" oninput="satisToplamGuncelle()">
-          <p id="sm-efatura-dip-not" style="display:none;color:var(--warn,#c77);font-size:11px;margin:4px 0 0">🔒 E-Fatura mükellefi cari: dip iskonto ve tutar iskontosu kapalı — iskontoyu kalem satırındaki İsk.% ile girin.</p>
-        </div>
-
-        <div style="flex:1"></div>
         <button type="button" class="btn" id="sm-toplam-gizle-btn" style="padding:5px 12px;font-size:12px;align-self:flex-start" onclick="satisToplamGizleDegistir()" title="Alt toplamları göster / gizle"></button>
         <div id="sm-toplam" class="satis-toplam-detay" style="flex:0 0 360px;margin-top:0"></div>
       </div>
@@ -6146,9 +6144,10 @@ function satisKalemEkleUI(){
 
 // Liste uzadıkça pencere en alta kayar: üstteki belge tipi alanı yukarıda kalır, son satır ve alt şerit görünür.
 function satisSonSatiraKaydir_(odakYok){
+  // Üst bilgi alanı sabit kalır; yalnız kalem listesi kendi içinde (gerekirse) son satıra kayar.
   const el = document.getElementById("sm-kalemler");
-  const kutu = el && el.closest(".modal-box");
-  if(!kutu) return;
+  const kutu = document.getElementById("sm-liste-alan");
+  if(!el || !kutu) return;
   kutu.scrollTop = kutu.scrollHeight;
   const son = odakYok ? null : el.querySelector(".satis-kalem-satir:last-child .satis-kalem-stokkodu");
   if(son){ try{ son.focus({preventScroll:true}); }catch(e){ son.focus(); } }
@@ -18052,6 +18051,40 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
 .fatura-modal .sm-isk-etiket{font-weight:800;color:var(--rp-th-fg);font-size:13px;letter-spacing:.2px}
 .fatura-modal .fm-aksiyon{gap:10px}
 .fatura-modal .fm-aksiyon .btn{padding:9px 20px;font-size:14px}
+/* ── Sipariş/Teklif/Fatura formu: Akınsoft tarzı sıkı üst bölüm + uzun, kendi içinde kayan kalem listesi (5 Eki 2026) ── */
+.modal-overlay.sm-tam{padding:8px;align-items:stretch}
+.modal-box.siparis-duzen{max-width:1500px;width:99vw;height:calc(100vh - 16px);max-height:none;overflow:hidden;display:flex;flex-direction:column;padding:10px 14px}
+.siparis-duzen .fm-baslik{padding:6px 12px;font-size:15px;margin:0 0 8px;flex:none}
+.siparis-duzen .fm-kart{flex:none;padding:8px 12px;margin-bottom:8px}
+.siparis-duzen .sm-satir{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.siparis-duzen .sm-satir+.sm-satir{margin-top:8px}
+.siparis-duzen .fm-kart .fld input,.siparis-duzen .fm-kart .fld select{height:32px;padding-top:3px;padding-bottom:3px;font-size:13px}
+.siparis-duzen .fm-kart .fld label{font-size:10.5px;margin-bottom:2px}
+.siparis-duzen .sm-w-belge{flex:0 0 112px}
+.siparis-duzen .sm-w-durum{flex:0 0 130px}
+.siparis-duzen .sm-w-tarih{flex:0 0 190px}
+.siparis-duzen .sm-w-vade{flex:0 0 140px}
+.siparis-duzen .sm-w-cari{flex:1 1 300px;min-width:240px}
+.siparis-duzen .sm-w-odeme{flex:0 0 140px}
+.siparis-duzen .sm-w-proje{flex:0 0 140px}
+.siparis-duzen .sm-w-ftip{flex:0 0 120px}
+.siparis-duzen .sm-w-kk{flex:0 0 220px}
+.siparis-duzen .sm-w-tahsil{flex:0 0 190px}
+.siparis-duzen .sm-liste-alan{flex:1 1 auto;min-height:0;overflow:auto;border:1px solid var(--rp-th-bd,var(--border));border-radius:8px;padding:0 6px 4px;background:var(--rp-alan,var(--bg2))}
+.siparis-duzen .sm-liste-alan .satis-kalem-basliklar{position:sticky;top:0;z-index:4;margin:0 -6px 6px;padding:6px 6px;border-radius:0}
+.siparis-duzen .satis-kalem-satir{scroll-margin-bottom:0;margin-bottom:4px}
+.siparis-duzen .sm-liste-alt{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:6px}
+.siparis-duzen .sm-alt-serit{position:static;flex:none;margin-top:8px;padding:8px 0 2px}
+.siparis-duzen .fm-aksiyon{flex:none;margin-top:8px}
+.siparis-duzen #sm-aciklama{height:32px;box-sizing:border-box}
+.siparis-duzen .sm-alt-serit .fld input[type=text],.siparis-duzen .sm-alt-serit .fld input[type=number]{height:32px;box-sizing:border-box;padding:3px 8px;font-size:13px}
+.siparis-duzen .sm-alt-serit .fld label{font-size:11px;margin-bottom:2px}
+.siparis-duzen .satis-toplam-detay{padding:6px 14px}
+.siparis-duzen .satis-toplam-satir{padding:2px 0;font-size:13px}
+.siparis-duzen .satis-toplam-satir.genel{padding:5px 10px;margin-top:4px}
+.siparis-duzen .sm-liste-alt .btn{padding:5px 12px}
+.siparis-duzen .sm-agirlik-bar{padding:3px 10px;font-size:12.5px}
+
 </style>
 
 <div id="ak-overlay" class="ak-overlay" style="display:none" onclick="if(event.target===this) akKapat()">
