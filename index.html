@@ -1133,6 +1133,15 @@ setInterval(topbarSaatGuncelle, 10000);
           <input type="checkbox" id="bfm-yanda-ac-tik" style="width:auto" onchange="bfmFaturaYandaAyarKaydet(this.checked)">
           📄 Fatura görselini yanda aç <span style="color:var(--text3)">(işaretli değilse yeni sekmede açılır)</span>
         </label>
+        <div id="bfm-tarama-kutu" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border:1px solid var(--border,#ddd);border-radius:8px">
+          <button class="btn btn-primary" id="bfm-tarama-btn" onclick="bfmTaramaYap()" style="margin:0">🔄 Tarama Yap</button>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);margin:0">
+            ⏰ Otomatik tarama saatleri:
+            <input id="bfm-tarama-saatler" placeholder="09:00, 17:00" style="width:150px;margin:0">
+          </label>
+          <button class="btn" onclick="bfmTaramaAyarKaydet()" style="margin:0">Saati Kaydet</button>
+          <span id="bfm-tarama-bilgi" style="font-size:12px;color:var(--text3)"></span>
+        </div>
         <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
           <input id="alis-bekleyen-ara" placeholder="Tedarikçi, fatura no veya ürün adına göre ara..." oninput="alisBekleyenListesiCiz()" style="flex:1;min-width:220px;margin:0">
           <select id="alis-bekleyen-firma-filtre" onchange="alisBekleyenListesiCiz()" style="min-width:220px;margin:0">
@@ -8414,7 +8423,62 @@ function bfmYanPanelKapat(){
   if(eski) eski.remove();
 }
 
+// ── E-fatura tarama (Gmail → fatura okuma otomasyonu) ──
+// Otomasyonun web uygulamasına doğrudan istek atılır (tarama dakikalarca sürebildiği için ERP sunucusundan geçmez).
+function bfmTaramaIstek_(action, ekstra){
+  const p = Object.assign({action}, ekstra||{});
+  const q = Object.keys(p).map(k=>encodeURIComponent(k)+"="+encodeURIComponent(p[k])).join("&");
+  return fetch(FATURA_OKUMA_WEBAPP_URL+"?"+q).then(r=>r.json());
+}
+function bfmTaramaBilgiYaz_(d, ek){
+  const b = document.getElementById("bfm-tarama-bilgi"); if(!b) return;
+  const parca = [];
+  if(ek) parca.push(ek);
+  if(d && d.sonTarama) parca.push("Son tarama: "+d.sonTarama);
+  if(d && d.sonSonuc) parca.push(d.sonSonuc);
+  if(d && d.sonraki) parca.push("Sonraki planlı: "+d.sonraki);
+  b.textContent = parca.join(" · ");
+}
+function bfmTaramaDurumYukle(){
+  bfmTaramaIstek_("taramaDurum").then(d=>{
+    if(!d || !d.ok) return;
+    const i = document.getElementById("bfm-tarama-saatler");
+    if(i && document.activeElement!==i) i.value = d.saatler||"";
+    bfmTaramaBilgiYaz_(d);
+  }).catch(()=>{});
+}
+async function bfmTaramaYap(){
+  const btn = document.getElementById("bfm-tarama-btn");
+  btn.disabled = true; const eski = btn.textContent; btn.textContent = "⏳ Taranıyor...";
+  let toplamYeni = 0, hata = "";
+  try{
+    for(let tur=0; tur<6; tur++){
+      const r = await bfmTaramaIstek_("taramaYap");
+      if(!r || r.ok===false){ hata = (r&&r.hata)||"Tarama başarısız"; break; }
+      toplamYeni += (r.yeni||0);
+      bfmTaramaBilgiYaz_(null, "Taranıyor... "+toplamYeni+" yeni fatura");
+      if(!r.devam) break;
+    }
+  }catch(e){ hata = "Bağlantı hatası: "+e.message; }
+  btn.disabled = false; btn.textContent = eski;
+  if(hata){ alert(hata); }
+  bfmTaramaDurumYukle();
+  if(!hata){
+    try{ localStorage.removeItem("fincanlar_onbellek_bekleyenAlisFaturalari"); }catch(e){}
+    alisBekleyenListesiYukle();
+  }
+}
+function bfmTaramaAyarKaydet(){
+  const v = document.getElementById("bfm-tarama-saatler").value;
+  bfmTaramaIstek_("taramaAyarKaydet",{saatler:v}).then(d=>{
+    if(!d || d.ok===false){ alert((d&&d.hata)||"Kaydedilemedi"); return; }
+    document.getElementById("bfm-tarama-saatler").value = d.saatler;
+    bfmTaramaBilgiYaz_(d, "✓ Saatler kaydedildi");
+  }).catch(e=>alert("Bağlantı hatası: "+e.message));
+}
+
 function alisBekleyenListesiYukle(){
+  bfmTaramaDurumYukle();
   bfmFaturaYandaTikSenkronize();
   const listEl = document.getElementById("alis-bekleyen-list");
   // ★ Önbellekteki son liste ANINDA gösterilir, arkadan tazelenir (19 Eyl 2026) — bu ekran dış
