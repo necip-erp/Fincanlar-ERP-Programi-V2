@@ -386,6 +386,26 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .rehber-ac-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--bg3);border:1px solid var(--border);border-radius:6px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;transition:background var(--t),border-color var(--t)}
 .rehber-ac-btn:hover{background:var(--blue-l);border-color:var(--blue)}
 .modal-box-xwide{max-width:1180px}
+/* ⚡ Hızlı Satış (6 Eki 2026): görselli ürün kartları, adet doğrudan kartın üzerine yazılır */
+.hs-kutu{max-width:1240px;height:92vh;display:flex;flex-direction:column;padding:14px 16px}
+.hs-ust{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.hs-ust h3{margin:0;white-space:nowrap}
+.hs-ust #hs-ara{flex:1;min-width:220px;padding:9px 12px;font-size:15px}
+.hs-sadece{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);white-space:nowrap}
+.hs-sadece input{width:auto}
+.hs-grid{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;align-content:start;padding:2px}
+.hs-kart{background:var(--bg2);border:2px solid var(--border);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:4px;transition:border-color var(--t),box-shadow var(--t)}
+.hs-kart.hs-secili{border-color:var(--green);box-shadow:0 0 0 3px var(--green-l);background:var(--green-l)}
+.hs-resim{position:relative;width:100%;aspect-ratio:1/1;border-radius:8px;overflow:hidden;background:var(--bg3);display:flex;align-items:center;justify-content:center}
+.hs-resim img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hs-yer{font-size:34px;opacity:.35}
+.hs-ad{font-size:12.5px;font-weight:700;line-height:1.25;height:2.5em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.hs-kod{font-size:10.5px;color:var(--text3)}
+.hs-fiyat{font-size:12px;font-weight:700;color:var(--accent)}
+.hs-adet{width:100%;box-sizing:border-box;text-align:center;font-size:18px;font-weight:800;padding:7px 6px}
+.hs-daha,.hs-bos{grid-column:1/-1;text-align:center;padding:14px;color:var(--text3)}
+.hs-alt{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.hs-alt #hs-ozet{flex:1;font-size:13px;font-weight:700;color:var(--text2)}
 .modal-box-onay2col{width:100%;max-width:none;max-height:97vh;padding:14px 16px;display:flex;flex-direction:column}
 .modal-box-onay2col > h3, .modal-box-onay2col > p{flex-shrink:0}
 .bfm-2col{display:flex;gap:18px;align-items:stretch;flex:1;min-height:0}
@@ -1175,7 +1195,8 @@ setInterval(topbarSaatGuncelle, 10000);
           <button class="belge-tab" data-tip="Teklif" onclick="satisBelgeTipiDegistir('Teklif')">Teklif</button>
           <button class="belge-tab" data-tip="Sipariş" onclick="satisBelgeTipiDegistir('Sipariş')">Sipariş</button>
         </div>
-        <button class="btn btn-primary" id="sr-yeni-btn" style="margin-left:auto" onclick="satisRaporYeni()">➕ Yeni</button>
+        <button class="btn" id="sr-hizli-btn" style="margin-left:auto" onclick="hizliSatisAc()" title="Görselli ürün kartlarına adet yazarak hızlı satış">⚡ Hızlı Satış</button>
+        <button class="btn btn-primary" id="sr-yeni-btn" onclick="satisRaporYeni()">➕ Yeni</button>
         <button class="btn" onclick="satisRaporYazdir()" title="Listeyi yazdır">🖨 Yazdır</button>
         <button class="btn" onclick="satisListesiYukle()" title="Listeyi sunucudan yenile">↻</button>
       </div>
@@ -1217,6 +1238,7 @@ setInterval(topbarSaatGuncelle, 10000);
         <div class="cari-list-head">
           <input id="satis-ara" placeholder="Satış ara (müşteri, sipariş no...)..." autocomplete="off" oninput="satisAramaFiltrele(this.value)" onkeydown="listeKlavyeYonet(event,'satis-ara','satis-items')">
           <span class="liste-sonuc-sayisi" id="satis-sonuc-sayisi"></span>
+          <button class="cari-add-btn" onclick="hizliSatisAc()" title="Hızlı Satış — görselli ürün kartlarına adet yaz, satışa ekle" style="font-size:15px">⚡</button>
           <button class="cari-add-btn" onclick="satisModalAc()" title="Yeni ekle">+</button>
         </div>
         <!-- 2. kademe (alt) filtre: Cari sayfasındaki "Sırala" ile aynı mantık -->
@@ -2073,6 +2095,7 @@ function hizliErisimKatalogUret(){
   ekle("yeni-masraf","Yeni Kayıt","➕","Masraf İşle",()=>{modulAc("finans"); bankaMasrafEkleAc();});
   ekle("yeni-toplu-masraf","Yeni Kayıt","➕","Toplu Masraf İşle",()=>{modulAc("finans"); topluMasrafAc();});
   ekle("yeni-pos-isle","Yeni Kayıt","➕","Poslar İşle",()=>{modulAc("finans"); posBankaAktarModalAc();});
+  ekle("yeni-hizli-satis","Yeni Kayıt","⚡","Hızlı Satış",()=>{modulAc("satis"); satisAltModulAc("Fatura"); hizliSatisAc();});
   ekle("yeni-satis-teklif","Yeni Kayıt","➕","Yeni Satış Teklifi",()=>{modulAc("satis"); satisAltModulAc("Teklif"); satisModalAc();});
   ekle("yeni-cari-virman","Yeni Kayıt","➕","Cari Virman",()=>{modulAc("cvirman");});
   ekle("yeni-odeme","Yeni Kayıt","➕","Yeni Ödeme",()=>{modulAc("odeme"); odemeModalAc();});
@@ -6241,6 +6264,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       </div>
       <div class="sm-liste-alt">
         <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
+        <button class="btn" onclick="hizliSatisAc(hizliSatisFormaEkle_)" title="Görselli ürün kartlarından adet yazarak hızlıca ürün ekle">⚡ Hızlı Satış</button>
         <div id="sm-agirlik-bar" class="sm-agirlik-bar"></div>
       </div>
 
@@ -6482,6 +6506,182 @@ function satisKalemEkleUI(){
   _yeniSatisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""});
   satisKalemlerCiz();
   satisSonSatiraKaydir_();
+}
+
+// ════════════════════════════════════════════════
+// ⚡ HIZLI SATIŞ (6 Eki 2026) — kasadaki hızlı satış ekranı gibi: ürünler görselleriyle kart olarak gelir,
+// adet doğrudan kartın üzerine yazılır; "Satışa Ekle" ile adet girilen tüm ürünler satış formundaki
+// kalem listesine yazılan adetleriyle eklenir. Akış (klavye): ara → Enter (ilk ürünün adedi) → adet → Enter
+// (arama kutusuna döner) → sıradaki ürünü ara … → Ctrl+Enter. Tab: sıradaki kartın adedine geçer.
+// ════════════════════════════════════════════════
+let _hsMiktar = {};      // stok kartı id → girilen adet
+let _hsLimit = 60;
+let _hsGorunen = [];
+let _hsOnTamam = null;
+
+function hizliSatisAc(onTamam){
+  if(document.getElementById("hs-overlay")) return;
+  _hsMiktar = {}; _hsLimit = 60; _hsGorunen = [];
+  _hsOnTamam = (typeof onTamam === "function") ? onTamam : hizliSatisYeniSatisAc_;
+  if(!_stokTanimYuklendi) stokTanimListesiYukle();
+  // Liste her açılışta arka planda tazelenir (yeni görsel/fiyat gelmiş olabilir); adetler korunur.
+  cariApi("getStokTanimListesi").then(r=>{
+    if(r.ok){ _stokTanimListe = r.kalemler; if(document.getElementById("hs-grid")) hizliSatisCiz(); }
+  }).catch(()=>{});
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay";
+  ov.id = "hs-overlay";
+  ov.dataset.escKapat = "hizliSatisKapat";
+  ov.dataset.escUyarisiz = "1";
+  ov.innerHTML = `
+    <div class="modal-box hs-kutu">
+      <div class="hs-ust">
+        <h3>⚡ Hızlı Satış</h3>
+        <input id="hs-ara" type="text" autocomplete="off" placeholder="Ürün ara (ad, kod, barkod) — Enter: ilk ürünün adedine geç"
+               oninput="hizliSatisAra()" onkeydown="hizliSatisAraTus(event)">
+        <label class="hs-sadece"><input type="checkbox" id="hs-sadece" onchange="hizliSatisCiz()"> Yalnız adet girilenler</label>
+        <button class="btn" onclick="hizliSatisKapat()" title="Kapat (Esc)">✕</button>
+      </div>
+      <div class="hs-grid" id="hs-grid"></div>
+      <div class="hs-alt">
+        <span id="hs-ozet"></span>
+        <button class="btn" onclick="hizliSatisTemizle()">Temizle</button>
+        <button class="btn btn-primary" onclick="hizliSatisTamam()" title="Ctrl+Enter">✔ Satışa Ekle (Ctrl+Enter)</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  hizliSatisCiz();
+  setTimeout(()=>{ const a = document.getElementById("hs-ara"); if(a) a.focus(); }, 50);
+}
+
+function hizliSatisAdetSayi_(v){
+  const n = parseFloat(String(v==null?"":v).replace(",", "."));
+  return (isFinite(n) && n > 0) ? n : 0;
+}
+
+function hizliSatisAra(){ _hsLimit = 60; hizliSatisCiz(); }
+
+function hizliSatisCiz(){
+  const grid = document.getElementById("hs-grid");
+  if(!grid) return;
+  const q = (document.getElementById("hs-ara")||{}).value || "";
+  const sadece = !!(document.getElementById("hs-sadece")||{}).checked;
+  const liste = (_stokTanimListe||[]).filter(s => (!sadece || _hsMiktar[s.id] > 0) && (!q || stokEslesirMi(s, q)));
+  _hsGorunen = liste;
+  if(!liste.length){
+    grid.innerHTML = '<div class="hs-bos">' + ((_stokTanimListe||[]).length ? "Eşleşen ürün yok." : "Ürünler yükleniyor...") + '</div>';
+    hizliSatisOzet_();
+    return;
+  }
+  grid.innerHTML = liste.slice(0, _hsLimit).map(s=>{
+    const m = _hsMiktar[s.id] || 0;
+    const resim = s.gorselUrl ? `<img src="${htmlKacis(s.gorselUrl)}" loading="lazy" referrerpolicy="no-referrer" alt="" onerror="this.remove()">` : "";
+    return `<div class="hs-kart ${m>0?'hs-secili':''}" id="hs-k-${s.id}">
+      <div class="hs-resim"><span class="hs-yer">📦</span>${resim}</div>
+      <div class="hs-ad" title="${htmlKacis(s.stokAdi)}">${htmlKacis(s.stokAdi)}</div>
+      <div class="hs-kod">${htmlKacis(s.stokKodu||"")}</div>
+      <div class="hs-fiyat">${paraFormat(s.satisFiyati)} / ${htmlKacis(s.birim1||"adet")}</div>
+      <input class="hs-adet" id="hs-q-${s.id}" type="text" inputmode="decimal" autocomplete="off" placeholder="Adet" value="${m>0?m:''}"
+             onfocus="this.select()" oninput="hizliSatisAdet('${s.id}', this.value)" onkeydown="hizliSatisAdetTus(event)">
+    </div>`;
+  }).join("") + (liste.length > _hsLimit
+    ? `<button class="btn hs-daha" onclick="_hsLimit+=60; hizliSatisCiz()">Daha fazla göster (${liste.length-_hsLimit} ürün daha)</button>` : "");
+  hizliSatisOzet_();
+}
+
+function hizliSatisAdet(id, v){
+  const m = hizliSatisAdetSayi_(v);
+  if(m > 0) _hsMiktar[id] = m; else delete _hsMiktar[id];
+  const kart = document.getElementById("hs-k-"+id);
+  if(kart) kart.classList.toggle("hs-secili", m > 0);
+  hizliSatisOzet_();
+}
+
+function hizliSatisOzet_(){
+  const el = document.getElementById("hs-ozet");
+  if(!el) return;
+  let kalem = 0, ara = 0, kdvli = 0;
+  (_stokTanimListe||[]).forEach(s=>{
+    const m = _hsMiktar[s.id]; if(!m) return;
+    kalem++;
+    const tutar = m * (s.satisFiyati||0) * (1 - (s.satisIskontosu||0)/100);
+    ara += tutar;
+    kdvli += tutar * (1 + ((s.kdvSatis===undefined||s.kdvSatis===null)?20:s.kdvSatis)/100);
+  });
+  el.textContent = kalem ? `${kalem} ürün · Ara Toplam: ${paraFormat(ara)} · KDV Dahil: ${paraFormat(kdvli)}` : "Henüz adet girilmedi.";
+}
+
+function hizliSatisAraTus(e){
+  if(e.key === "Enter" && (e.ctrlKey || e.metaKey)){ e.preventDefault(); hizliSatisTamam(); return; }
+  if(e.key === "Enter" || e.key === "ArrowDown"){
+    e.preventDefault();
+    const ilk = _hsGorunen[0];
+    const g = ilk ? document.getElementById("hs-q-"+ilk.id) : null;
+    if(g) g.focus();
+  }
+}
+
+function hizliSatisAdetTus(e){
+  if(e.key === "Enter" && (e.ctrlKey || e.metaKey)){ e.preventDefault(); hizliSatisTamam(); return; }
+  if(e.key === "Enter"){
+    e.preventDefault();
+    const a = document.getElementById("hs-ara");
+    if(a){ a.focus(); a.select(); }   // sıradaki ürünü aramak için
+  }
+}
+
+function hizliSatisTemizle(){
+  if(!Object.keys(_hsMiktar).length) return;
+  if(!confirm("Girilen tüm adetler silinsin mi?")) return;
+  _hsMiktar = {};
+  hizliSatisCiz();
+}
+
+function hizliSatisKapat(){
+  if(Object.keys(_hsMiktar).length && !confirm("Girilen adetler silinecek. Hızlı Satış kapatılsın mı?")) return;
+  const ov = document.getElementById("hs-overlay");
+  if(ov) ov.remove();
+  _hsMiktar = {};
+}
+
+function hizliSatisTamam(){
+  const harita = {};
+  (_stokTanimListe||[]).forEach(s=>{ harita[s.id] = s; });
+  const kalemler = [];
+  Object.keys(_hsMiktar).forEach(id=>{
+    const s = harita[id]; if(!s) return;
+    kalemler.push({
+      urunAdi: s.stokAdi, miktar: _hsMiktar[id], birim: s.birim1 || "adet", birimFiyat: s.satisFiyati || 0,
+      iskontoYuzde: s.satisIskontosu || 0, kdvOrani: (s.kdvSatis===undefined||s.kdvSatis===null) ? 20 : s.kdvSatis, stokKodu: s.stokKodu || ""
+    });
+  });
+  if(!kalemler.length){ alert("Önce en az bir ürüne adet yazın."); return; }
+  const cb = _hsOnTamam;
+  const ov = document.getElementById("hs-overlay");
+  if(ov) ov.remove();
+  _hsMiktar = {}; _hsOnTamam = null;
+  if(cb) cb(kalemler);
+}
+
+// Satış listesinden açıldıysa: yeni satış formu açılır ve ürünler adetleriyle kalem listesine yazılır.
+function hizliSatisYeniSatisAc_(kalemler){
+  satisModalAc();
+  hizliSatisFormaEkle_(kalemler);
+}
+
+// Açık satış formunun kalem listesine ekler (aynı stok kodu varsa adedi artırır; boş ilk satır silinir).
+function hizliSatisFormaEkle_(kalemler){
+  if(!document.getElementById("sm-kalemler")) return;
+  const bos = _yeniSatisKalemleri.length === 1 && !_yeniSatisKalemleri[0].urunAdi && !_yeniSatisKalemleri[0].stokKodu;
+  if(bos) _yeniSatisKalemleri = [];
+  kalemler.forEach(k=>{
+    const mevcut = k.stokKodu ? _yeniSatisKalemleri.find(x => x.stokKodu === k.stokKodu) : null;
+    if(mevcut) mevcut.miktar = (parseFloat(mevcut.miktar)||0) + k.miktar;
+    else _yeniSatisKalemleri.push(k);
+  });
+  if(!_yeniSatisKalemleri.length) _yeniSatisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""});
+  satisKalemlerCiz();
+  satisSonSatiraKaydir_(true);
 }
 
 // Liste uzadıkça pencere en alta kayar: üstteki belge tipi alanı yukarıda kalır, son satır ve alt şerit görünür.
@@ -16675,6 +16875,7 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
   ["urunGrubu","altUrunGrubu","ebat","renk","ambalaj"].forEach(tip=>{ if(!_tanimListeYuklendi[tip]) tanimListesiYukle(tip); });
   const k = editId ? _stokTanimListe.find(x=>x.id===editId) : null;
   window._stokTanimModalK = k;
+  window._stGorselBekleyen = null; window._stGorselSil = false;   // ürün görseli (Hızlı Satış) — kayıtta yüklenir
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "stoktanim-modal-overlay";
@@ -16694,6 +16895,16 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
         <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Barkod</label><input id="st-barkod" type="text" value="${k?k.barkod||'':''}" placeholder="İsteğe bağlı"></div>
       </div>
       <div class="fld" style="margin-bottom:12px"><label>Stok Adı *</label><input id="st-stokadi" type="text" style="width:100%;box-sizing:border-box" value="${k?k.stokAdi:_stokTanimSonAd}" ${k?'':'oninput="_stokTanimSonAd=this.value"'}></div>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
+        <div id="st-gorsel-onizleme" style="width:84px;height:84px;flex:0 0 auto;border-radius:10px;background:var(--bg3);border:1px solid var(--border);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:30px;opacity:1">${k && k.gorselUrl ? `<img src="${htmlKacis(k.gorselUrl)}" referrerpolicy="no-referrer" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.textContent='📦'">` : '📦'}</div>
+        <div class="fld" style="margin-bottom:0"><label>Ürün Görseli (Hızlı Satış ekranında görünür)</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="btn" onclick="document.getElementById('st-gorsel-dosya').click()">📷 Görsel Seç / Çek</button>
+            <button type="button" class="btn" id="st-gorsel-kaldir" style="${k && k.gorselUrl ? '' : 'display:none'}" onclick="stokGorselKaldir()">Görseli Kaldır</button>
+          </div>
+          <input type="file" id="st-gorsel-dosya" accept="image/*" style="display:none" onchange="stokGorselSecildi(this)">
+        </div>
+      </div>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
         <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>1. Birim</label>
           <select id="st-birim1">
@@ -16744,6 +16955,36 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
 // Marka + Ürün Grubu + Alt Ürün Grubu seçiliyse, şirketin 12 haneli stok kodu şemasına göre
 // (2 marka + 2 grup + 2 alt grup + 5 firma kodu + 1 kalite="1") otomatik bir kod üretip
 // Stok Kodu kutusuna yazar. Üretilen kod yine de elle değiştirilebilir — sadece bir öneridir.
+// Seçilen/çekilen fotoğraf tarayıcıda küçültülür (en çok 600 px, JPEG) — Drive'a hafif yüklenir, kartlar hızlı açılır.
+function stokGorselSecildi(inp){
+  const f = inp.files && inp.files[0];
+  if(!f) return;
+  const okuyucu = new FileReader();
+  okuyucu.onload = ()=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const oran = Math.min(1, 600 / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(img.width * oran)); c.height = Math.max(1, Math.round(img.height * oran));
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      window._stGorselBekleyen = c.toDataURL("image/jpeg", 0.82);
+      window._stGorselSil = false;
+      const on = document.getElementById("st-gorsel-onizleme");
+      if(on) on.innerHTML = `<img src="${window._stGorselBekleyen}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+      const kb = document.getElementById("st-gorsel-kaldir"); if(kb) kb.style.display = "";
+    };
+    img.onerror = ()=>alert("Görsel okunamadı, başka bir dosya deneyin.");
+    img.src = okuyucu.result;
+  };
+  okuyucu.readAsDataURL(f);
+  inp.value = "";
+}
+function stokGorselKaldir(){
+  window._stGorselBekleyen = null; window._stGorselSil = true;
+  const on = document.getElementById("st-gorsel-onizleme"); if(on) on.textContent = "📦";
+  const kb = document.getElementById("st-gorsel-kaldir"); if(kb) kb.style.display = "none";
+}
+
 function stokKoduOnerUygula(){
   const markaId = document.getElementById("st-marka").value;
   const urunGrubuId = document.getElementById("st-urungrubu").value;
@@ -16808,6 +17049,17 @@ function stokTanimKaydet(id){
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("stoktanim-modal-overlay").remove();
     stokTanimListesiYukle();
+    // Ürün görseli: seçildiyse yüklenir, kaldırıldıysa silinir (kart kaydı bittikten sonra, id belli olunca)
+    const gorselId = res.id || id;
+    if(gorselId && window._stGorselBekleyen){
+      const dosya = window._stGorselBekleyen; window._stGorselBekleyen = null;
+      cariApi("stokGorselKaydet", {id: gorselId, dosyaBase64: dosya, mimeType: "image/jpeg", dosyaAdi: (body.stokKodu||gorselId)+".jpg"})
+        .then(r=>{ if(!r.ok) alert("Stok kaydedildi ama görsel yüklenemedi: "+(r.hata||"bilinmiyor")); stokTanimListesiYukle(); })
+        .catch(err=>alert("Stok kaydedildi ama görsel yüklenemedi: "+err.message));
+    } else if(gorselId && window._stGorselSil && id){
+      window._stGorselSil = false;
+      cariApi("stokGorselKaydet", {id: gorselId, sil: true}).then(()=>stokTanimListesiYukle()).catch(()=>{});
+    }
     // Kayıt başarıyla tamamlandı — bir sonraki "Yeni Stok Tanımı" açılışında eski
     // yapıştırılan kod/ad önerilmesin diye önbellek temizlenir.
     if(!id){ _stokTanimSonKod = ""; _stokTanimSonAd = ""; }

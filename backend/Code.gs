@@ -1195,6 +1195,7 @@ function handleRequest(e) {
       case "eskiYildanPlasiyerAktar": result = eskiYildanPlasiyerAktar(body); break;
       case "stokTanimOlcuBirimIsleToplu": result = stokTanimOlcuBirimIsleToplu(body); break;
       case "stokAgirlikTopluKaydet": result = stokAgirlikTopluKaydet(body); break;
+      case "stokGorselKaydet":    result = stokGorselKaydet(body); break;
       case "stokKdvTopluKaydet": result = stokKdvTopluKaydet(body); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
       case "getBirimListesi": result = getBirimListesi(); break;
@@ -7168,7 +7169,8 @@ const STOK_TANIM_BASLIKLAR = ["ID","STOK_KODU","STOK_ADI","BIRIM1","AMBALAJ_MIKT
 function ensureStokTanimEkColonlari_orj_(sheet) {
   // AGIRLIK (4 Eki 2026): 1. birim başına ağırlık (kg) — siparişte toplam ağırlık için. STOK_TANIM_BASLIKLAR'a EKLENMEZ
   // (toplu yazan fonksiyonlar 20 sütunluk satır yazıyor); sütun yalnızca bu göç adımıyla eklenir.
-  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK"];
+  // GORSEL_URL (6 Eki 2026): Hızlı Satış ekranındaki ürün görseli (Drive linki, 22. sütun) — aynı şekilde yalnızca göç adımıyla eklenir.
+  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK","GORSEL_URL"];
   eklenecek.forEach((baslik, idx) => {
     const kolonNo = 12 + idx;
     const mevcut = sheet.getRange(1, kolonNo).getValue();
@@ -7204,7 +7206,52 @@ function stokTanimSatiriNesneYap(row) {
     kdvAlis: (row[18] === "" || row[18] === undefined || row[18] === null) ? 20 : (parseFloat(row[18]) || 0),
     kdvSatis: (row[19] === "" || row[19] === undefined || row[19] === null) ? 20 : (parseFloat(row[19]) || 0),
     agirlik: parseFloat(row[20]) || 0,   // kg / 1. birim
+    gorselUrl: String(row[21] || ""),    // Hızlı Satış ürün görseli (Drive)
   };
+}
+
+// ★ (6 Eki 2026) Stok kartı görseli: Hızlı Satış ekranında ürünün resmi gösterilir.
+// body: { id (stok kartı ID), dosyaBase64 (data:image/... öneki olabilir), mimeType, dosyaAdi } ya da { id, sil:true }
+// Dosya Drive'da ayrı klasörde tutulur, yalnızca linki StokTanimlari 22. sütununa (GORSEL_URL) yazılır.
+var STOK_GORSEL_KLASOR_ADI = "Fincanlar ERP - Stok Gorselleri";
+function stokGorselKaydet(body) {
+  const id = String((body && body.id) || "").trim();
+  if (!id) return { ok: false, hata: "Stok kartı id gerekli" };
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  ensureStokTanimEkColonlari(sheet);
+  const data = sheet.getDataRange().getValues();
+  let satir = -1;
+  for (let i = 1; i < data.length; i++) { if (String(data[i][0]) === id) { satir = i + 1; break; } }
+  if (satir < 0) return { ok: false, hata: "Stok kartı bulunamadı" };
+
+  if (body.sil) {
+    sheet.getRange(satir, 22).setValue("");
+    cacheTemizle(["stokTanimListesi"]);
+    return { ok: true, gorselUrl: "" };
+  }
+  let base64 = String(body.dosyaBase64 || "");
+  if (!base64) return { ok: false, hata: "Dosya verisi gerekli" };
+  let mimeType = String(body.mimeType || "image/jpeg");
+  const virgul = base64.indexOf(",");
+  if (base64.startsWith("data:") && virgul > -1) {
+    mimeType = base64.substring(5, base64.indexOf(";"));
+    base64 = base64.substring(virgul + 1);
+  }
+  let dosya;
+  try {
+    const blob = Utilities.newBlob(Utilities.base64Decode(base64), mimeType, String(body.dosyaAdi || ("stok_" + id + ".jpg")));
+    const klasorler = DriveApp.getFoldersByName(STOK_GORSEL_KLASOR_ADI);
+    const klasor = klasorler.hasNext() ? klasorler.next() : DriveApp.createFolder(STOK_GORSEL_KLASOR_ADI);
+    dosya = klasor.createFile(blob);
+    dosya.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (e) {
+    return { ok: false, hata: "Görsel yüklenemedi: " + e.message };
+  }
+  const url = "https://drive.google.com/thumbnail?id=" + dosya.getId() + "&sz=w500";
+  sheet.getRange(satir, 22).setValue(url);
+  cacheTemizle(["stokTanimListesi"]);
+  return { ok: true, gorselUrl: url };
 }
 
 // Bir ürünün StokHareketleri defterindeki Giriş-Çıkış toplamından güncel stok
@@ -10566,7 +10613,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20261004a";
+const ENSURE_SURUM_ = "20261006a";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}
