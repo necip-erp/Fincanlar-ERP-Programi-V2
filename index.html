@@ -386,26 +386,42 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .rehber-ac-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--bg3);border:1px solid var(--border);border-radius:6px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;transition:background var(--t),border-color var(--t)}
 .rehber-ac-btn:hover{background:var(--blue-l);border-color:var(--blue)}
 .modal-box-xwide{max-width:1180px}
-/* ⚡ Hızlı Satış (6 Eki 2026): görselli ürün kartları, adet doğrudan kartın üzerine yazılır */
-.hs-kutu{max-width:1240px;height:92vh;display:flex;flex-direction:column;padding:14px 16px}
-.hs-ust{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+/* ⚡ Hızlı Satış (6 Eki 2026): sekmeli, görselli ürün kartları; miktar + Ekle kartın altında */
+.hs-kutu{max-width:1320px;height:92vh;display:flex;flex-direction:column;padding:14px 16px}
+.hs-ust{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .hs-ust h3{margin:0;white-space:nowrap}
 .hs-ust #hs-ara{flex:1;min-width:220px;padding:9px 12px;font-size:15px}
-.hs-sadece{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);white-space:nowrap}
-.hs-sadece input{width:auto}
-.hs-grid{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;align-content:start;padding:2px}
-.hs-kart{background:var(--bg2);border:2px solid var(--border);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:4px;transition:border-color var(--t),box-shadow var(--t)}
-.hs-kart.hs-secili{border-color:var(--green);box-shadow:0 0 0 3px var(--green-l);background:var(--green-l)}
+.hs-boy{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);white-space:nowrap}
+.hs-boy input{width:90px;padding:0}
+.hs-sekmeler{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:6px;border-bottom:1px solid var(--border)}
+.hs-sekme{flex:0 0 auto;border:1px solid var(--border);background:var(--bg3);color:var(--text2);border-radius:20px;padding:7px 14px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
+.hs-sekme:hover{border-color:var(--blue)}
+.hs-sekme.aktif{background:var(--blue);border-color:var(--blue);color:#fff}
+.hs-say{font-weight:600;opacity:.7;font-size:11px;margin-left:3px}
+.hs-grid{--hs-w:170px;flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--hs-w),1fr));grid-auto-flow:dense;gap:10px;align-content:start;padding:2px}
+.hs-kart{background:var(--bg2);border:2px solid var(--border);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:4px;transition:border-color var(--t),box-shadow var(--t),background var(--t)}
+.hs-kart.hs-eklendi{border-color:var(--green);background:var(--green-l);box-shadow:0 0 0 3px var(--green-l)}
+.hs-kart.hs-suruk{opacity:.45}
 .hs-resim{position:relative;width:100%;aspect-ratio:1/1;border-radius:8px;overflow:hidden;background:var(--bg3);display:flex;align-items:center;justify-content:center}
 .hs-resim img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .hs-yer{font-size:34px;opacity:.35}
+.hs-tut,.hs-boyutbtn{position:absolute;top:5px;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,.88);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;padding:0;color:var(--text2)}
+.hs-tut{left:5px;cursor:grab}
+.hs-boyutbtn{right:5px}
 .hs-ad{font-size:12.5px;font-weight:700;line-height:1.25;height:2.5em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .hs-kod{font-size:10.5px;color:var(--text3)}
-.hs-fiyat{font-size:12px;font-weight:700;color:var(--accent)}
-.hs-adet{width:100%;box-sizing:border-box;text-align:center;font-size:18px;font-weight:800;padding:7px 6px}
-.hs-daha,.hs-bos{grid-column:1/-1;text-align:center;padding:14px;color:var(--text3)}
-.hs-alt{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-.hs-alt #hs-ozet{flex:1;font-size:13px;font-weight:700;color:var(--text2)}
+.hs-fiyat{font-size:12px;font-weight:700;color:var(--blue)}
+.hs-hizli{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text2);cursor:pointer}
+.hs-hizli input{width:auto;margin:0}
+.hs-mik{display:flex;gap:5px}
+.hs-adet{flex:1;min-width:0;box-sizing:border-box;text-align:center;font-size:16px;font-weight:800;padding:6px 4px}
+.hs-ekle{padding:6px 10px;white-space:nowrap}
+.hs-b2 .hs-ad,.hs-b3 .hs-ad{font-size:14px}
+.hs-b3 .hs-ad{font-size:16px}
+.hs-daha,.hs-bos,.hs-bilgi{grid-column:1/-1;text-align:center;padding:14px;color:var(--text3)}
+.hs-bilgi{padding:0 0 4px;font-size:12px;font-weight:700;text-align:left}
+.hs-alt{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.hs-alt #hs-ozet{flex:1;font-size:12.5px;font-weight:600;color:var(--text2)}
 .modal-box-onay2col{width:100%;max-width:none;max-height:97vh;padding:14px 16px;display:flex;flex-direction:column}
 .modal-box-onay2col > h3, .modal-box-onay2col > p{flex-shrink:0}
 .bfm-2col{display:flex;gap:18px;align-items:stretch;flex:1;min-height:0}
@@ -1195,8 +1211,7 @@ setInterval(topbarSaatGuncelle, 10000);
           <button class="belge-tab" data-tip="Teklif" onclick="satisBelgeTipiDegistir('Teklif')">Teklif</button>
           <button class="belge-tab" data-tip="Sipariş" onclick="satisBelgeTipiDegistir('Sipariş')">Sipariş</button>
         </div>
-        <button class="btn" id="sr-hizli-btn" style="margin-left:auto" onclick="hizliSatisAc()" title="Görselli ürün kartlarına adet yazarak hızlı satış">⚡ Hızlı Satış</button>
-        <button class="btn btn-primary" id="sr-yeni-btn" onclick="satisRaporYeni()">➕ Yeni</button>
+        <button class="btn btn-primary" id="sr-yeni-btn" style="margin-left:auto" onclick="satisRaporYeni()">➕ Yeni</button>
         <button class="btn" onclick="satisRaporYazdir()" title="Listeyi yazdır">🖨 Yazdır</button>
         <button class="btn" onclick="satisListesiYukle()" title="Listeyi sunucudan yenile">↻</button>
       </div>
@@ -1238,7 +1253,6 @@ setInterval(topbarSaatGuncelle, 10000);
         <div class="cari-list-head">
           <input id="satis-ara" placeholder="Satış ara (müşteri, sipariş no...)..." autocomplete="off" oninput="satisAramaFiltrele(this.value)" onkeydown="listeKlavyeYonet(event,'satis-ara','satis-items')">
           <span class="liste-sonuc-sayisi" id="satis-sonuc-sayisi"></span>
-          <button class="cari-add-btn" onclick="hizliSatisAc()" title="Hızlı Satış — görselli ürün kartlarına adet yaz, satışa ekle" style="font-size:15px">⚡</button>
           <button class="cari-add-btn" onclick="satisModalAc()" title="Yeni ekle">+</button>
         </div>
         <!-- 2. kademe (alt) filtre: Cari sayfasındaki "Sırala" ile aynı mantık -->
@@ -2095,7 +2109,6 @@ function hizliErisimKatalogUret(){
   ekle("yeni-masraf","Yeni Kayıt","➕","Masraf İşle",()=>{modulAc("finans"); bankaMasrafEkleAc();});
   ekle("yeni-toplu-masraf","Yeni Kayıt","➕","Toplu Masraf İşle",()=>{modulAc("finans"); topluMasrafAc();});
   ekle("yeni-pos-isle","Yeni Kayıt","➕","Poslar İşle",()=>{modulAc("finans"); posBankaAktarModalAc();});
-  ekle("yeni-hizli-satis","Yeni Kayıt","⚡","Hızlı Satış",()=>{modulAc("satis"); satisAltModulAc("Fatura"); hizliSatisAc();});
   ekle("yeni-satis-teklif","Yeni Kayıt","➕","Yeni Satış Teklifi",()=>{modulAc("satis"); satisAltModulAc("Teklif"); satisModalAc();});
   ekle("yeni-cari-virman","Yeni Kayıt","➕","Cari Virman",()=>{modulAc("cvirman");});
   ekle("yeni-odeme","Yeni Kayıt","➕","Yeni Ödeme",()=>{modulAc("odeme"); odemeModalAc();});
@@ -6264,7 +6277,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       </div>
       <div class="sm-liste-alt">
         <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
-        <button class="btn" onclick="hizliSatisAc(hizliSatisFormaEkle_)" title="Görselli ürün kartlarından adet yazarak hızlıca ürün ekle">⚡ Hızlı Satış</button>
+        <button class="btn" onclick="hizliSatisToggle()" title="Hızlı Satış listesini aç/kapat (F12)">⚡ Hızlı Satış (F12)</button>
         <div id="sm-agirlik-bar" class="sm-agirlik-bar"></div>
       </div>
 
@@ -6509,25 +6522,51 @@ function satisKalemEkleUI(){
 }
 
 // ════════════════════════════════════════════════
-// ⚡ HIZLI SATIŞ (6 Eki 2026) — kasadaki hızlı satış ekranı gibi: ürünler görselleriyle kart olarak gelir,
-// adet doğrudan kartın üzerine yazılır; "Satışa Ekle" ile adet girilen tüm ürünler satış formundaki
-// kalem listesine yazılan adetleriyle eklenir. Akış (klavye): ara → Enter (ilk ürünün adedi) → adet → Enter
-// (arama kutusuna döner) → sıradaki ürünü ara … → Ctrl+Enter. Tab: sıradaki kartın adedine geçer.
+// ⚡ HIZLI SATIŞ (6 Eki 2026) — Sipariş / Fatura / Teklif formu açıkken F12 ile açılıp kapanır.
+// Üstte sekmeler: ⭐ Hızlı Ürünler + stok kartındaki her Ürün Grubu. Ürün kartında görsel, ad, kod, fiyat,
+// "Hızlı ürün" tiki (işaretliyse Hızlı Ürünler sekmesinde de görünür), Miktar + Ekle (Enter de ekler).
+// Ekle'ye basınca ürün formun kalem listesine yazılır, ekran açık kalır. Kapatıp açınca kalınan yerden
+// (sekme, arama, kaydırma, girilmiş miktarlar, eklenenler) devam edilir; form kapanınca durum sıfırlanır.
+// Düzen (tarayıcıda saklanır): kart genişliği çubuğu, ürün başına boyut (⤢), sürükle-bırak yer değiştirme (⠿),
+// sekme başına sıralama seçimi (elle / ad / kod / fiyat).
 // ════════════════════════════════════════════════
-let _hsMiktar = {};      // stok kartı id → girilen adet
-let _hsLimit = 60;
+let _hsDurum = { form:null, sekme:"hizli", ara:"", kaydirma:0, eklenenler:[] };
+let _hsMiktar = {};      // stok kartı id → yazılmış (henüz eklenmemiş) miktar
+let _hsLimit = 80;
 let _hsGorunen = [];
-let _hsOnTamam = null;
+let _hsSurukle = null;
+let _hsAyar = null;
 
-function hizliSatisAc(onTamam){
+function hsAyar_(){
+  if(_hsAyar) return _hsAyar;
+  let a = {};
+  try{ a = JSON.parse(localStorage.getItem("hs_ayar") || "{}") || {}; }catch(e){ a = {}; }
+  a.w = a.w || 170; a.boyut = a.boyut || {}; a.sira = a.sira || {}; a.sirala = a.sirala || {};
+  _hsAyar = a;
+  return a;
+}
+function hsAyarYaz_(){ try{ localStorage.setItem("hs_ayar", JSON.stringify(hsAyar_())); }catch(e){} }
+
+function hizliSatisToggle(){
+  if(document.getElementById("hs-overlay")){ hizliSatisKapat(); return; }
+  hizliSatisAc();
+}
+
+function hizliSatisAc(){
+  const form = document.getElementById("satis-modal-overlay");
+  if(!form){ alert("Hızlı Satış, Sipariş / Fatura / Teklif ekranı açıkken kullanılır. Önce ➕ Yeni ile bir belge açın."); return; }
   if(document.getElementById("hs-overlay")) return;
-  _hsMiktar = {}; _hsLimit = 60; _hsGorunen = [];
-  _hsOnTamam = (typeof onTamam === "function") ? onTamam : hizliSatisYeniSatisAc_;
+  if(_hsDurum.form !== form){ _hsDurum = { form:form, sekme:"hizli", ara:"", kaydirma:0, eklenenler:[] }; _hsMiktar = {}; }
+  _hsLimit = 80;
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
-  // Liste her açılışta arka planda tazelenir (yeni görsel/fiyat gelmiş olabilir); adetler korunur.
+  // Stok listesi ve ürün grupları her açılışta arka planda tazelenir; ekran açık kalır, miktarlar korunur.
   cariApi("getStokTanimListesi").then(r=>{
     if(r.ok){ _stokTanimListe = r.kalemler; if(document.getElementById("hs-grid")) hizliSatisCiz(); }
   }).catch(()=>{});
+  cariApi("getBasitTanimListesi", {tip:"urunGrubu"}).then(r=>{
+    if(r.ok){ _tanimListeCache.urunGrubu = r.kalemler; _tanimListeYuklendi.urunGrubu = true; if(document.getElementById("hs-grid")) hizliSatisCiz(); }
+  }).catch(()=>{});
+  const ay = hsAyar_();
   const ov = document.createElement("div");
   ov.className = "modal-overlay";
   ov.id = "hs-overlay";
@@ -6537,21 +6576,34 @@ function hizliSatisAc(onTamam){
     <div class="modal-box hs-kutu">
       <div class="hs-ust">
         <h3>⚡ Hızlı Satış</h3>
-        <input id="hs-ara" type="text" autocomplete="off" placeholder="Ürün ara (ad, kod, barkod) — Enter: ilk ürünün adedine geç"
+        <input id="hs-ara" type="text" autocomplete="off" placeholder="Ara (tüm ürünlerde: ad, kod, barkod) — Enter: ilk ürünün miktarına geç" value="${htmlKacis(_hsDurum.ara)}"
                oninput="hizliSatisAra()" onkeydown="hizliSatisAraTus(event)">
-        <label class="hs-sadece"><input type="checkbox" id="hs-sadece" onchange="hizliSatisCiz()"> Yalnız adet girilenler</label>
-        <button class="btn" onclick="hizliSatisKapat()" title="Kapat (Esc)">✕</button>
+        <select id="hs-sirala" title="Bu sekmedeki ürünlerin sıralaması" onchange="hizliSatisSirala(this.value)"></select>
+        <label class="hs-boy" title="Kart genişliği">Boyut <input type="range" id="hs-w" min="110" max="300" step="10" value="${ay.w}" oninput="hizliSatisBoyut(this.value)"></label>
+        <button class="btn" onclick="hizliSatisDuzenSifirla()" title="Bu sekmenin elle sıralamasını ve ürün boyutlarını sıfırla">Düzeni Sıfırla</button>
+        <button class="btn" onclick="hizliSatisKapat()" title="Kapat — forma dön (F12 / Esc)">✕ Kapat (F12)</button>
       </div>
+      <div class="hs-sekmeler" id="hs-sekmeler"></div>
       <div class="hs-grid" id="hs-grid"></div>
-      <div class="hs-alt">
-        <span id="hs-ozet"></span>
-        <button class="btn" onclick="hizliSatisTemizle()">Temizle</button>
-        <button class="btn btn-primary" onclick="hizliSatisTamam()" title="Ctrl+Enter">✔ Satışa Ekle (Ctrl+Enter)</button>
-      </div>
+      <div class="hs-alt"><span id="hs-ozet"></span></div>
     </div>`;
   document.body.appendChild(ov);
   hizliSatisCiz();
-  setTimeout(()=>{ const a = document.getElementById("hs-ara"); if(a) a.focus(); }, 50);
+  const grid = document.getElementById("hs-grid");
+  if(grid) grid.scrollTop = _hsDurum.kaydirma || 0;
+  setTimeout(()=>{ const a = document.getElementById("hs-ara"); if(a){ a.focus(); a.select(); } }, 50);
+}
+
+function hizliSatisKapat(){
+  const ov = document.getElementById("hs-overlay");
+  if(!ov) return;
+  const grid = document.getElementById("hs-grid");
+  _hsDurum.kaydirma = grid ? grid.scrollTop : 0;
+  _hsDurum.ara = (document.getElementById("hs-ara")||{}).value || "";
+  ov.remove();   // durum (_hsDurum, _hsMiktar) saklanır; F12 ile kaldığın yerden açılır
+  const f = _hsDurum.form;
+  const ilk = f && document.body.contains(f) ? f.querySelector(".satis-kalem-satir:last-child .satis-kalem-stokkodu") : null;
+  if(ilk){ try{ ilk.focus({preventScroll:true}); }catch(e){} }
 }
 
 function hizliSatisAdetSayi_(v){
@@ -6559,60 +6611,195 @@ function hizliSatisAdetSayi_(v){
   return (isFinite(n) && n > 0) ? n : 0;
 }
 
-function hizliSatisAra(){ _hsLimit = 60; hizliSatisCiz(); }
+function hsSekmeler_(){
+  const gruplar = _tanimListeCache.urunGrubu || [];
+  const stoklar = _stokTanimListe || [];
+  const idler = {}; gruplar.forEach(g=>{ idler[g.id] = true; });
+  const sekmeler = [{ id:"hizli", ad:"⭐ Hızlı Ürünler", n: stoklar.filter(s=>s.hizli).length }];
+  gruplar.forEach(g=>{ sekmeler.push({ id:g.id, ad:g.ad, n: stoklar.filter(s=>s.urunGrubuId===g.id).length }); });
+  const diger = stoklar.filter(s=>!s.urunGrubuId || !idler[s.urunGrubuId]).length;
+  if(diger) sekmeler.push({ id:"diger", ad:"Diğer", n:diger });
+  return sekmeler;
+}
+
+function hsSekmeStoklari_(sekme){
+  const stoklar = _stokTanimListe || [];
+  if(sekme === "hizli") return stoklar.filter(s=>s.hizli);
+  if(sekme === "diger"){ const idler = {}; (_tanimListeCache.urunGrubu||[]).forEach(g=>{ idler[g.id] = true; }); return stoklar.filter(s=>!s.urunGrubuId || !idler[s.urunGrubuId]); }
+  return stoklar.filter(s=>s.urunGrubuId === sekme);
+}
+
+function hsSirala_(liste, sekme, mod){
+  const ad = (a,b)=>(a.stokAdi||"").localeCompare(b.stokAdi||"", "tr");
+  const k = liste.slice();
+  if(mod === "ad") return k.sort(ad);
+  if(mod === "adz") return k.sort((a,b)=>ad(b,a));
+  if(mod === "kod") return k.sort((a,b)=>(a.stokKodu||"").localeCompare(b.stokKodu||""));
+  if(mod === "fiyat") return k.sort((a,b)=>(a.satisFiyati||0)-(b.satisFiyati||0));
+  if(mod === "fiyatz") return k.sort((a,b)=>(b.satisFiyati||0)-(a.satisFiyati||0));
+  // elle: kaydedilmiş sıra önce, kaydedilmemişler ad sırasıyla sona
+  const sira = hsAyar_().sira[sekme] || [];
+  const idx = {}; sira.forEach((id,i)=>{ idx[id] = i; });
+  return k.sort((a,b)=>{
+    const ia = idx[a.id], ib = idx[b.id];
+    if(ia !== undefined && ib !== undefined) return ia - ib;
+    if(ia !== undefined) return -1;
+    if(ib !== undefined) return 1;
+    return ad(a,b);
+  });
+}
 
 function hizliSatisCiz(){
   const grid = document.getElementById("hs-grid");
   if(!grid) return;
-  const q = (document.getElementById("hs-ara")||{}).value || "";
-  const sadece = !!(document.getElementById("hs-sadece")||{}).checked;
-  const liste = (_stokTanimListe||[]).filter(s => (!sadece || _hsMiktar[s.id] > 0) && (!q || stokEslesirMi(s, q)));
+  if(_hsDurum.form && !document.body.contains(_hsDurum.form)){ const o = document.getElementById("hs-overlay"); if(o) o.remove(); return; }
+  const ay = hsAyar_();
+  const q = ((document.getElementById("hs-ara")||{}).value || "").trim();
+  const sekmeler = hsSekmeler_();
+  if(!sekmeler.some(t=>t.id === _hsDurum.sekme)) _hsDurum.sekme = "hizli";
+  const sekme = _hsDurum.sekme;
+  const sekmeEl = document.getElementById("hs-sekmeler");
+  if(sekmeEl) sekmeEl.innerHTML = sekmeler.map(t=>
+    `<button type="button" class="hs-sekme ${(!q && t.id===sekme)?'aktif':''}" onclick="hizliSatisSekme('${t.id}')">${htmlKacis(t.ad)} <span class="hs-say">${t.n}</span></button>`).join("");
+  // sıralama seçimi bu sekmeye göre
+  const mod = ay.sirala[sekme] || "elle";
+  const sel = document.getElementById("hs-sirala");
+  if(sel){
+    sel.innerHTML = [["elle","Sıralama: Elle (sürükle-bırak)"],["ad","Ad (A → Z)"],["adz","Ad (Z → A)"],["kod","Stok kodu"],["fiyat","Fiyat (artan)"],["fiyatz","Fiyat (azalan)"]]
+      .map(o=>`<option value="${o[0]}" ${o[0]===mod?'selected':''}>${o[1]}</option>`).join("");
+    sel.disabled = !!q;
+  }
+  const kaynak = q ? (_stokTanimListe||[]).filter(s=>stokEslesirMi(s, q)) : hsSekmeStoklari_(sekme);
+  const liste = q ? hsSirala_(kaynak, "arama", "ad") : hsSirala_(kaynak, sekme, mod);
   _hsGorunen = liste;
+  grid.style.setProperty("--hs-w", ay.w + "px");
+  const kaydirma = grid.scrollTop;
   if(!liste.length){
-    grid.innerHTML = '<div class="hs-bos">' + ((_stokTanimListe||[]).length ? "Eşleşen ürün yok." : "Ürünler yükleniyor...") + '</div>';
+    grid.innerHTML = '<div class="hs-bos">' + (q ? "Eşleşen ürün yok." : (sekme==="hizli" ? "Henüz hızlı ürün yok. Başka bir sekmede ürünün altındaki “Hızlı ürün” kutusunu işaretleyin." : ((_stokTanimListe||[]).length ? "Bu grupta ürün yok." : "Ürünler yükleniyor..."))) + '</div>';
     hizliSatisOzet_();
     return;
   }
-  grid.innerHTML = liste.slice(0, _hsLimit).map(s=>{
-    const m = _hsMiktar[s.id] || 0;
+  const surukleAcik = !q && mod === "elle";
+  grid.innerHTML = (q ? '<div class="hs-bilgi">Arama sonuçları (tüm ürünler)</div>' : '') + liste.slice(0, _hsLimit).map(s=>{
+    const m = _hsMiktar[s.id] || "";
+    const boyut = Math.min(3, Math.max(1, ay.boyut[s.id] || 1));
     const resim = s.gorselUrl ? `<img src="${htmlKacis(s.gorselUrl)}" loading="lazy" referrerpolicy="no-referrer" alt="" onerror="this.remove()">` : "";
-    return `<div class="hs-kart ${m>0?'hs-secili':''}" id="hs-k-${s.id}">
-      <div class="hs-resim"><span class="hs-yer">📦</span>${resim}</div>
+    return `<div class="hs-kart ${boyut>1?'hs-b'+boyut:''}" id="hs-k-${s.id}" style="grid-column:span ${boyut}" ondragover="hsSurukleUstunde(event)" ondrop="hsSurukleBirak(event,'${s.id}')">
+      <div class="hs-resim"><span class="hs-yer">📦</span>${resim}
+        ${surukleAcik ? `<span class="hs-tut" draggable="true" title="Tutup sürükleyerek yerini değiştir" ondragstart="hsSurukleBasla(event,'${s.id}')" ondragend="hsSurukleBitti()">⠿</span>` : ''}
+        <button type="button" tabindex="-1" class="hs-boyutbtn" title="Bu ürünün kart boyutunu değiştir (küçük → orta → büyük)" onclick="hizliSatisUrunBoyut('${s.id}')">⤢</button>
+      </div>
       <div class="hs-ad" title="${htmlKacis(s.stokAdi)}">${htmlKacis(s.stokAdi)}</div>
       <div class="hs-kod">${htmlKacis(s.stokKodu||"")}</div>
       <div class="hs-fiyat">${paraFormat(s.satisFiyati)} / ${htmlKacis(s.birim1||"adet")}</div>
-      <input class="hs-adet" id="hs-q-${s.id}" type="text" inputmode="decimal" autocomplete="off" placeholder="Adet" value="${m>0?m:''}"
-             onfocus="this.select()" oninput="hizliSatisAdet('${s.id}', this.value)" onkeydown="hizliSatisAdetTus(event)">
+      <label class="hs-hizli"><input type="checkbox" tabindex="-1" ${s.hizli?'checked':''} onchange="hizliSatisHizliIsaret('${s.id}', this.checked)"> Hızlı ürün</label>
+      <div class="hs-mik">
+        <input class="hs-adet" id="hs-q-${s.id}" type="text" inputmode="decimal" autocomplete="off" placeholder="Miktar" value="${m}"
+               onfocus="this.select()" oninput="_hsMiktar['${s.id}']=this.value" onkeydown="hizliSatisAdetTus(event,'${s.id}')">
+        <button type="button" tabindex="-1" class="btn btn-primary hs-ekle" onclick="hizliSatisEkle('${s.id}')">Ekle</button>
+      </div>
     </div>`;
   }).join("") + (liste.length > _hsLimit
-    ? `<button class="btn hs-daha" onclick="_hsLimit+=60; hizliSatisCiz()">Daha fazla göster (${liste.length-_hsLimit} ürün daha)</button>` : "");
+    ? `<button class="btn hs-daha" onclick="_hsLimit+=80; hizliSatisCiz()">Daha fazla göster (${liste.length-_hsLimit} ürün daha)</button>` : "");
+  grid.scrollTop = kaydirma;
   hizliSatisOzet_();
 }
 
-function hizliSatisAdet(id, v){
-  const m = hizliSatisAdetSayi_(v);
-  if(m > 0) _hsMiktar[id] = m; else delete _hsMiktar[id];
+function hizliSatisSekme(id){
+  _hsDurum.sekme = id; _hsLimit = 80;
+  const a = document.getElementById("hs-ara"); if(a) a.value = "";
+  _hsDurum.ara = "";
+  hizliSatisCiz();
+  const g = document.getElementById("hs-grid"); if(g) g.scrollTop = 0;
+}
+function hizliSatisAra(){ _hsLimit = 80; hizliSatisCiz(); }
+function hizliSatisSirala(mod){
+  const ay = hsAyar_();
+  ay.sirala[_hsDurum.sekme] = mod;
+  // "elle"ye geçerken o anki görünüm başlangıç sırası olarak saklanır (boşsa)
+  if(mod === "elle" && !(ay.sira[_hsDurum.sekme]||[]).length) ay.sira[_hsDurum.sekme] = _hsGorunen.map(s=>s.id);
+  hsAyarYaz_(); hizliSatisCiz();
+}
+function hizliSatisBoyut(w){
+  const ay = hsAyar_(); ay.w = parseInt(w,10) || 170; hsAyarYaz_();
+  const g = document.getElementById("hs-grid"); if(g) g.style.setProperty("--hs-w", ay.w + "px");
+}
+function hizliSatisUrunBoyut(id){
+  const ay = hsAyar_();
+  const simdi = ay.boyut[id] || 1;
+  const yeni = simdi >= 3 ? 1 : simdi + 1;
+  if(yeni === 1) delete ay.boyut[id]; else ay.boyut[id] = yeni;
+  hsAyarYaz_(); hizliSatisCiz();
+}
+function hizliSatisDuzenSifirla(){
+  if(!confirm("Bu sekmenin elle sıralaması ve tüm ürün boyutları sıfırlansın mı?")) return;
+  const ay = hsAyar_();
+  delete ay.sira[_hsDurum.sekme]; delete ay.sirala[_hsDurum.sekme]; ay.boyut = {};
+  hsAyarYaz_(); hizliSatisCiz();
+}
+
+// Sürükle-bırak: ⠿ tutamacından tutulur, hedef kartın üstüne bırakılır (aşağı doğru taşınırsa hedefin ardına, yukarı doğru ise önüne).
+function hsSurukleBasla(e, id){
+  _hsSurukle = id;
+  try{ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", id); const k = document.getElementById("hs-k-"+id); if(k) e.dataTransfer.setDragImage(k, 20, 20); }catch(x){}
+  const k = document.getElementById("hs-k-"+id); if(k) k.classList.add("hs-suruk");
+}
+function hsSurukleBitti(){ _hsSurukle = null; document.querySelectorAll(".hs-suruk").forEach(k=>k.classList.remove("hs-suruk")); }
+function hsSurukleUstunde(e){ if(_hsSurukle) e.preventDefault(); }
+function hsSurukleBirak(e, hedefId){
+  e.preventDefault();
+  const kaynakId = _hsSurukle; _hsSurukle = null;
+  if(!kaynakId || kaynakId === hedefId) { hsSurukleBitti(); return; }
+  const ids = _hsGorunen.map(s=>s.id);
+  const kIdx = ids.indexOf(kaynakId), hIdx = ids.indexOf(hedefId);
+  if(kIdx < 0 || hIdx < 0) return;
+  ids.splice(kIdx, 1);
+  const yeniH = ids.indexOf(hedefId);
+  ids.splice(kIdx < hIdx ? yeniH + 1 : yeniH, 0, kaynakId);
+  const ay = hsAyar_();
+  ay.sira[_hsDurum.sekme] = ids; ay.sirala[_hsDurum.sekme] = "elle";
+  hsAyarYaz_(); hizliSatisCiz();
+}
+
+function hizliSatisHizliIsaret(id, v){
+  const s = (_stokTanimListe||[]).find(x=>x.id === id);
+  if(!s) return;
+  s.hizli = !!v;
+  cariApi("stokHizliKaydet", {id, hizli: !!v}).then(r=>{
+    if(!r.ok){ s.hizli = !v; alert("Hızlı ürün işareti kaydedilemedi: " + (r.hata||"bilinmiyor")); hizliSatisCiz(); }
+  }).catch(err=>{ s.hizli = !v; alert("Bağlantı hatası: " + err.message); hizliSatisCiz(); });
+  hizliSatisCiz();
+}
+
+function hizliSatisEkle(id){
+  const s = (_stokTanimListe||[]).find(x=>x.id === id);
+  if(!s) return;
+  const inp = document.getElementById("hs-q-"+id);
+  const m = hizliSatisAdetSayi_(inp ? inp.value : _hsMiktar[id]);
+  if(!m){ if(inp) inp.focus(); return; }
+  hizliSatisFormaEkle_([{
+    urunAdi: s.stokAdi, miktar: m, birim: s.birim1 || "adet", birimFiyat: s.satisFiyati || 0,
+    iskontoYuzde: s.satisIskontosu || 0, kdvOrani: (s.kdvSatis===undefined||s.kdvSatis===null) ? 20 : s.kdvSatis, stokKodu: s.stokKodu || ""
+  }]);
+  _hsDurum.eklenenler.push({ ad: s.stokAdi, miktar: m, birim: s.birim1 || "adet" });
+  delete _hsMiktar[id];
+  if(inp) inp.value = "";
   const kart = document.getElementById("hs-k-"+id);
-  if(kart) kart.classList.toggle("hs-secili", m > 0);
+  if(kart){ kart.classList.add("hs-eklendi"); setTimeout(()=>kart.classList.remove("hs-eklendi"), 700); }
   hizliSatisOzet_();
+  const a = document.getElementById("hs-ara"); if(a){ a.focus(); a.select(); }   // sıradaki ürünü aramak için
 }
 
 function hizliSatisOzet_(){
   const el = document.getElementById("hs-ozet");
   if(!el) return;
-  let kalem = 0, ara = 0, kdvli = 0;
-  (_stokTanimListe||[]).forEach(s=>{
-    const m = _hsMiktar[s.id]; if(!m) return;
-    kalem++;
-    const tutar = m * (s.satisFiyati||0) * (1 - (s.satisIskontosu||0)/100);
-    ara += tutar;
-    kdvli += tutar * (1 + ((s.kdvSatis===undefined||s.kdvSatis===null)?20:s.kdvSatis)/100);
-  });
-  el.textContent = kalem ? `${kalem} ürün · Ara Toplam: ${paraFormat(ara)} · KDV Dahil: ${paraFormat(kdvli)}` : "Henüz adet girilmedi.";
+  const e = _hsDurum.eklenenler;
+  if(!e.length){ el.textContent = "Henüz forma ürün eklenmedi. Miktarı yazıp Enter'a (ya da Ekle'ye) basın."; return; }
+  const son = e.slice(-5).map(x=>`${htmlKacis(x.ad)} × ${x.miktar} ${htmlKacis(x.birim)}`).join(" · ");
+  el.innerHTML = `✔ Forma eklenen: <b>${e.length}</b> işlem — son: ${son}`;
 }
 
 function hizliSatisAraTus(e){
-  if(e.key === "Enter" && (e.ctrlKey || e.metaKey)){ e.preventDefault(); hizliSatisTamam(); return; }
   if(e.key === "Enter" || e.key === "ArrowDown"){
     e.preventDefault();
     const ilk = _hsGorunen[0];
@@ -6620,53 +6807,9 @@ function hizliSatisAraTus(e){
     if(g) g.focus();
   }
 }
-
-function hizliSatisAdetTus(e){
-  if(e.key === "Enter" && (e.ctrlKey || e.metaKey)){ e.preventDefault(); hizliSatisTamam(); return; }
-  if(e.key === "Enter"){
-    e.preventDefault();
-    const a = document.getElementById("hs-ara");
-    if(a){ a.focus(); a.select(); }   // sıradaki ürünü aramak için
-  }
-}
-
-function hizliSatisTemizle(){
-  if(!Object.keys(_hsMiktar).length) return;
-  if(!confirm("Girilen tüm adetler silinsin mi?")) return;
-  _hsMiktar = {};
-  hizliSatisCiz();
-}
-
-function hizliSatisKapat(){
-  if(Object.keys(_hsMiktar).length && !confirm("Girilen adetler silinecek. Hızlı Satış kapatılsın mı?")) return;
-  const ov = document.getElementById("hs-overlay");
-  if(ov) ov.remove();
-  _hsMiktar = {};
-}
-
-function hizliSatisTamam(){
-  const harita = {};
-  (_stokTanimListe||[]).forEach(s=>{ harita[s.id] = s; });
-  const kalemler = [];
-  Object.keys(_hsMiktar).forEach(id=>{
-    const s = harita[id]; if(!s) return;
-    kalemler.push({
-      urunAdi: s.stokAdi, miktar: _hsMiktar[id], birim: s.birim1 || "adet", birimFiyat: s.satisFiyati || 0,
-      iskontoYuzde: s.satisIskontosu || 0, kdvOrani: (s.kdvSatis===undefined||s.kdvSatis===null) ? 20 : s.kdvSatis, stokKodu: s.stokKodu || ""
-    });
-  });
-  if(!kalemler.length){ alert("Önce en az bir ürüne adet yazın."); return; }
-  const cb = _hsOnTamam;
-  const ov = document.getElementById("hs-overlay");
-  if(ov) ov.remove();
-  _hsMiktar = {}; _hsOnTamam = null;
-  if(cb) cb(kalemler);
-}
-
-// Satış listesinden açıldıysa: yeni satış formu açılır ve ürünler adetleriyle kalem listesine yazılır.
-function hizliSatisYeniSatisAc_(kalemler){
-  satisModalAc();
-  hizliSatisFormaEkle_(kalemler);
+function hizliSatisAdetTus(e, id){
+  if(e.key === "Enter"){ e.preventDefault(); hizliSatisEkle(id); }
+  else if(e.key === "Escape"){ e.stopPropagation(); const a = document.getElementById("hs-ara"); if(a){ a.focus(); a.select(); } }
 }
 
 // Açık satış formunun kalem listesine ekler (aynı stok kodu varsa adedi artırır; boş ilk satır silinir).
@@ -6683,6 +6826,16 @@ function hizliSatisFormaEkle_(kalemler){
   satisKalemlerCiz();
   satisSonSatiraKaydir_(true);
 }
+
+// F12: Sipariş / Fatura / Teklif formu açıkken Hızlı Satış'ı açar-kapatır (form yokken tarayıcının kendi F12'si çalışır).
+document.addEventListener("keydown", function(e){
+  if(e.key === "F12" && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey){
+    if(document.getElementById("hs-overlay") || document.getElementById("satis-modal-overlay")){
+      e.preventDefault(); e.stopPropagation();
+      hizliSatisToggle();
+    }
+  }
+}, true);
 
 // Liste uzadıkça pencere en alta kayar: üstteki belge tipi alanı yukarıda kalır, son satır ve alt şerit görünür.
 function satisSonSatiraKaydir_(odakYok){

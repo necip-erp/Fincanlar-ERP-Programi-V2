@@ -1196,6 +1196,7 @@ function handleRequest(e) {
       case "stokTanimOlcuBirimIsleToplu": result = stokTanimOlcuBirimIsleToplu(body); break;
       case "stokAgirlikTopluKaydet": result = stokAgirlikTopluKaydet(body); break;
       case "stokGorselKaydet":    result = stokGorselKaydet(body); break;
+      case "stokHizliKaydet":     result = stokHizliKaydet(body); break;
       case "stokKdvTopluKaydet": result = stokKdvTopluKaydet(body); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
       case "getBirimListesi": result = getBirimListesi(); break;
@@ -7170,7 +7171,7 @@ function ensureStokTanimEkColonlari_orj_(sheet) {
   // AGIRLIK (4 Eki 2026): 1. birim başına ağırlık (kg) — siparişte toplam ağırlık için. STOK_TANIM_BASLIKLAR'a EKLENMEZ
   // (toplu yazan fonksiyonlar 20 sütunluk satır yazıyor); sütun yalnızca bu göç adımıyla eklenir.
   // GORSEL_URL (6 Eki 2026): Hızlı Satış ekranındaki ürün görseli (Drive linki, 22. sütun) — aynı şekilde yalnızca göç adımıyla eklenir.
-  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK","GORSEL_URL"];
+  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK","GORSEL_URL","HIZLI_URUN"];
   eklenecek.forEach((baslik, idx) => {
     const kolonNo = 12 + idx;
     const mevcut = sheet.getRange(1, kolonNo).getValue();
@@ -7207,7 +7208,27 @@ function stokTanimSatiriNesneYap(row) {
     kdvSatis: (row[19] === "" || row[19] === undefined || row[19] === null) ? 20 : (parseFloat(row[19]) || 0),
     agirlik: parseFloat(row[20]) || 0,   // kg / 1. birim
     gorselUrl: String(row[21] || ""),    // Hızlı Satış ürün görseli (Drive)
+    hizli: String(row[22] || "") === "1", // Hızlı Satış > "Hızlı Ürünler" sekmesinde de görünsün
   };
+}
+
+// ★ (6 Eki 2026) Hızlı Satış: ürün "hızlı ürün" işareti (StokTanimlari 23. sütun HIZLI_URUN = "1").
+// body: { id, hizli: true/false }
+function stokHizliKaydet(body) {
+  const id = String((body && body.id) || "").trim();
+  if (!id) return { ok: false, hata: "Stok kartı id gerekli" };
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  ensureStokTanimEkColonlari(sheet);
+  const ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+  for (let i = 1; i < ids.length; i++) {
+    if (String(ids[i][0]) === id) {
+      sheet.getRange(i + 1, 23).setValue(body.hizli ? "1" : "");
+      cacheTemizle(["stokTanimListesi"]);
+      return { ok: true };
+    }
+  }
+  return { ok: false, hata: "Stok kartı bulunamadı" };
 }
 
 // ★ (6 Eki 2026) Stok kartı görseli: Hızlı Satış ekranında ürünün resmi gösterilir.
@@ -10613,7 +10634,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20261006a";
+const ENSURE_SURUM_ = "20261006b";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}
