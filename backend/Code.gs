@@ -1197,6 +1197,7 @@ function handleRequest(e) {
       case "stokAgirlikTopluKaydet": result = stokAgirlikTopluKaydet(body); break;
       case "stokGorselKaydet":    result = stokGorselKaydet(body); break;
       case "stokHizliKaydet":     result = stokHizliKaydet(body); break;
+      case "stokGrupKaydet":      result = stokGrupKaydet(body); break;
       case "stokKdvTopluKaydet": result = stokKdvTopluKaydet(body); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
       case "getBirimListesi": result = getBirimListesi(); break;
@@ -7210,6 +7211,25 @@ function stokTanimSatiriNesneYap(row) {
     gorselUrl: String(row[21] || ""),    // Hızlı Satış ürün görseli (Drive)
     hizli: String(row[22] || "") === "1", // Hızlı Satış > "Hızlı Ürünler" sekmesinde de görünsün
   };
+}
+
+// ★ (6 Eki 2026) Hızlı Satış > "Ürün Ekle": mevcut bir stok kartını bir ürün grubuna (sekmeye) atar. body: { id, urunGrubuId }
+// Yalnızca URUN_GRUBU_ID (13. sütun) değişir; stok kodu ve diğer alanlara dokunulmaz.
+function stokGrupKaydet(body) {
+  const id = String((body && body.id) || "").trim();
+  const grupId = String((body && body.urunGrubuId) || "").trim();
+  if (!id || !grupId) return { ok: false, hata: "Stok kartı ve ürün grubu gerekli" };
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  const ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+  for (let i = 1; i < ids.length; i++) {
+    if (String(ids[i][0]) === id) {
+      sheet.getRange(i + 1, 13).setValue(grupId);
+      cacheTemizle(["stokTanimListesi"]);
+      return { ok: true };
+    }
+  }
+  return { ok: false, hata: "Stok kartı bulunamadı" };
 }
 
 // ★ (6 Eki 2026) Hızlı Satış: ürün "hızlı ürün" işareti (StokTanimlari 23. sütun HIZLI_URUN = "1").

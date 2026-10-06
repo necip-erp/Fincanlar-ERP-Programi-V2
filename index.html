@@ -418,6 +418,11 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-ekle{padding:6px 10px;white-space:nowrap}
 .hs-b2 .hs-ad,.hs-b3 .hs-ad{font-size:14px}
 .hs-b3 .hs-ad{font-size:16px}
+.hs-sec-kutu{max-width:720px;height:80vh;display:flex;flex-direction:column;padding:14px 16px}
+.hs-sec-kutu #hs-sec-ara{flex:1;min-width:200px;padding:9px 12px}
+.hs-sec-liste{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.hs-sec-satir{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:10px;padding:7px 10px;background:var(--bg2)}
+.hs-sec-ad{font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hs-daha,.hs-bos,.hs-bilgi{grid-column:1/-1;text-align:center;padding:14px;color:var(--text3)}
 .hs-bilgi{padding:0 0 4px;font-size:12px;font-weight:700;text-align:left}
 .hs-alt{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
@@ -6580,6 +6585,7 @@ function hizliSatisAc(){
                oninput="hizliSatisAra()" onkeydown="hizliSatisAraTus(event)">
         <select id="hs-sirala" title="Bu sekmedeki ürünlerin sıralaması" onchange="hizliSatisSirala(this.value)"></select>
         <label class="hs-boy" title="Kart genişliği">Boyut <input type="range" id="hs-w" min="110" max="300" step="10" value="${ay.w}" oninput="hizliSatisBoyut(this.value)"></label>
+        <button class="btn btn-primary" onclick="hizliSatisUrunEkleAc()" title="Seçili sekmeye ürün ekle (stok kartından seç)">➕ Ürün Ekle</button>
         <button class="btn" onclick="hizliSatisDuzenSifirla()" title="Bu sekmenin elle sıralamasını ve ürün boyutlarını sıfırla">Düzeni Sıfırla</button>
         <button class="btn" onclick="hizliSatisKapat()" title="Kapat — forma dön (F12 / Esc)">✕ Kapat (F12)</button>
       </div>
@@ -6769,6 +6775,63 @@ function hizliSatisHizliIsaret(id, v){
     if(!r.ok){ s.hizli = !v; alert("Hızlı ürün işareti kaydedilemedi: " + (r.hata||"bilinmiyor")); hizliSatisCiz(); }
   }).catch(err=>{ s.hizli = !v; alert("Bağlantı hatası: " + err.message); hizliSatisCiz(); });
   hizliSatisCiz();
+}
+
+// ➕ Ürün Ekle: açık sekmeye mevcut bir stok kartını ekler (grup sekmesinde ürün grubu o grup olur, Hızlı Ürünler'de hızlı işareti konur).
+function hizliSatisUrunEkleAc(){
+  const sekme = _hsDurum.sekme;
+  if(sekme === "diger"){ alert("“Diğer” sekmesine ürün eklenemez. Önce bir grup sekmesi ya da Hızlı Ürünler'i seçin."); return; }
+  if(document.getElementById("hs-sec-overlay")) return;
+  const t = hsSekmeler_().find(x=>x.id === sekme);
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay"; ov.id = "hs-sec-overlay";
+  ov.dataset.escKapat = "hizliSatisUrunEkleKapat"; ov.dataset.escUyarisiz = "1";
+  ov.innerHTML = `<div class="modal-box hs-sec-kutu">
+    <div class="hs-ust"><h3>➕ “${htmlKacis(t ? t.ad.replace("⭐ ","") : "")}” sekmesine ürün ekle</h3>
+      <input id="hs-sec-ara" type="text" autocomplete="off" placeholder="Stok ara (ad, kod, barkod)…" oninput="hizliSatisUrunEkleCiz()">
+      <button class="btn" onclick="hizliSatisYeniStokAc()" title="Stok kartı henüz yoksa yeni kart aç">+ Yeni Stok Kartı</button>
+      <button class="btn" onclick="hizliSatisUrunEkleKapat()">✕ Kapat</button></div>
+    <div id="hs-sec-liste" class="hs-sec-liste"></div></div>`;
+  document.body.appendChild(ov);
+  hizliSatisUrunEkleCiz();
+  setTimeout(()=>{ const a = document.getElementById("hs-sec-ara"); if(a) a.focus(); }, 50);
+}
+function hizliSatisUrunEkleKapat(){ const o = document.getElementById("hs-sec-overlay"); if(o) o.remove(); const a = document.getElementById("hs-ara"); if(a) a.focus(); }
+function hizliSatisUrunEkleCiz(){
+  const el = document.getElementById("hs-sec-liste"); if(!el) return;
+  const sekme = _hsDurum.sekme;
+  const q = ((document.getElementById("hs-sec-ara")||{}).value || "").trim();
+  const zaten = {}; hsSekmeStoklari_(sekme).forEach(s=>{ zaten[s.id] = true; });
+  const gAd = id => { const g = (_tanimListeCache.urunGrubu||[]).find(x=>x.id === id); return g ? g.ad : ""; };
+  const liste = (_stokTanimListe||[]).filter(s=>!zaten[s.id] && (!q || stokEslesirMi(s, q))).slice(0, 60);
+  el.innerHTML = liste.length ? liste.map(s=>`<div class="hs-sec-satir">
+      <div style="flex:1;min-width:0"><div class="hs-sec-ad">${htmlKacis(s.stokAdi)}</div><div class="hs-kod">${htmlKacis(s.stokKodu||"")} · ${gAd(s.urunGrubuId) ? "Grubu: "+htmlKacis(gAd(s.urunGrubuId)) : "Grubu yok"}</div></div>
+      <button class="btn btn-primary" onclick="hizliSatisUrunSekmeyeEkle('${s.id}')">Ekle</button></div>`).join("")
+    : '<div class="hs-bos">Eklenecek ürün bulunamadı.</div>';
+}
+function hizliSatisUrunSekmeyeEkle(id){
+  const s = (_stokTanimListe||[]).find(x=>x.id === id); if(!s) return;
+  const sekme = _hsDurum.sekme;
+  if(sekme === "hizli"){
+    hizliSatisHizliIsaret(id, true);
+  } else {
+    const eskiAd = (_tanimListeCache.urunGrubu||[]).find(g=>g.id === s.urunGrubuId);
+    const yeniAd = (_tanimListeCache.urunGrubu||[]).find(g=>g.id === sekme);
+    if(s.urunGrubuId && s.urunGrubuId !== sekme && !confirm(`“${s.stokAdi}” şu an “${eskiAd ? eskiAd.ad : "başka"}” grubunda.\n“${yeniAd ? yeniAd.ad : "bu"}” grubuna taşınsın mı?`)) return;
+    const eski = s.urunGrubuId; s.urunGrubuId = sekme;
+    cariApi("stokGrupKaydet", {id, urunGrubuId: sekme}).then(r=>{
+      if(!r.ok){ s.urunGrubuId = eski; alert("Kaydedilemedi: "+(r.hata||"bilinmiyor")); hizliSatisCiz(); hizliSatisUrunEkleCiz(); }
+    }).catch(err=>{ s.urunGrubuId = eski; alert("Bağlantı hatası: "+err.message); hizliSatisCiz(); hizliSatisUrunEkleCiz(); });
+  }
+  hizliSatisCiz(); hizliSatisUrunEkleCiz();
+}
+function hizliSatisYeniStokAc(){
+  const sekme = _hsDurum.sekme;
+  stokTanimModalAc(null, function(r){
+    const bitir = ()=>{ if(sekme === "hizli" && r && r.id) hizliSatisHizliIsaret(r.id, true); hizliSatisCiz(); hizliSatisUrunEkleCiz(); };
+    cariApi("getStokTanimListesi").then(x=>{ if(x.ok) _stokTanimListe = x.kalemler; bitir(); }).catch(bitir);
+  });
+  if(sekme !== "hizli") setTimeout(()=>{ const sel = document.getElementById("st-urungrubu"); if(sel) sel.value = sekme; }, 120);
 }
 
 function hizliSatisEkle(id){
