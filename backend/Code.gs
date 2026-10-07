@@ -7172,7 +7172,7 @@ function ensureStokTanimEkColonlari_orj_(sheet) {
   // AGIRLIK (4 Eki 2026): 1. birim başına ağırlık (kg) — siparişte toplam ağırlık için. STOK_TANIM_BASLIKLAR'a EKLENMEZ
   // (toplu yazan fonksiyonlar 20 sütunluk satır yazıyor); sütun yalnızca bu göç adımıyla eklenir.
   // GORSEL_URL (6 Eki 2026): Hızlı Satış ekranındaki ürün görseli (Drive linki, 22. sütun) — aynı şekilde yalnızca göç adımıyla eklenir.
-  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK","GORSEL_URL","HIZLI_URUN","HIZLI_RENK"];
+  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK","GORSEL_URL","HIZLI_URUN","HIZLI_RENK","KISA_AD"];
   eklenecek.forEach((baslik, idx) => {
     const kolonNo = 12 + idx;
     const mevcut = sheet.getRange(1, kolonNo).getValue();
@@ -7211,6 +7211,7 @@ function stokTanimSatiriNesneYap(row) {
     gorselUrl: String(row[21] || ""),    // Hızlı Satış ürün görseli (Drive)
     hizli: String(row[22] || "") === "1", // Hızlı Satış > "Hızlı Ürünler" sekmesinde de görünsün
     hizliRenk: renkTemizle_(row[23]),     // Hızlı Satış'ta ürüne özel renk (#rrggbb ya da "")
+    kisaAd: String(row[24] || ""),        // Hızlı Satış'ta tam ad yerine gösterilen kısa ad (KISA_AD, 25. sütun)
   };
 }
 
@@ -7240,7 +7241,7 @@ function renkTemizle_(v) {
   return /^#[0-9a-fA-F]{6}$/.test(t) ? t.toLowerCase() : "";
 }
 
-// body: { id, hizli?: true/false, renk?: "#rrggbb" ya da "" }  (gönderilmeyen alana dokunulmaz)
+// body: { id, hizli?: true/false, renk?: "#rrggbb" ya da "", kisaAd?: "kısa ad" }  (gönderilmeyen alana dokunulmaz)
 function stokHizliKaydet(body) {
   const id = String((body && body.id) || "").trim();
   if (!id) return { ok: false, hata: "Stok kartı id gerekli" };
@@ -7252,6 +7253,7 @@ function stokHizliKaydet(body) {
     if (String(ids[i][0]) === id) {
       if (body.hizli !== undefined) sheet.getRange(i + 1, 23).setValue(body.hizli ? "1" : "");
       if (body.renk !== undefined) sheet.getRange(i + 1, 24).setValue(renkTemizle_(body.renk));   // HIZLI_RENK
+      if (body.kisaAd !== undefined) sheet.getRange(i + 1, 25).setValue(String(body.kisaAd || "").trim().slice(0, 40));   // KISA_AD
       cacheTemizle(["stokTanimListesi"]);
       return { ok: true };
     }
@@ -10666,7 +10668,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20261007a";
+const ENSURE_SURUM_ = "20261007b";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}
