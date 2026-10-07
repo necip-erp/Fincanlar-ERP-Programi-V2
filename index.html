@@ -6750,10 +6750,13 @@ function hsAyar_(){
   let a = {};
   try{ a = JSON.parse(localStorage.getItem("hs_ayar") || "{}") || {}; }catch(e){ a = {}; }
   a.w = a.w || 170; a.boyut = a.boyut || {}; a.sira = a.sira || {}; a.sirala = a.sirala || {};
-  a.kolonSira = a.kolonSira || {}; a.altGrup = a.altGrup || {}; a.urunAlt = a.urunAlt || {}; a.hizliGrup = a.hizliGrup || {}; a.araGrup = a.araGrup || {}; a.kolonGen = a.kolonGen || {}; a.araSecili = a.araSecili || {}; a.yuk = a.yuk || {}; a.altSecili = a.altSecili || {}; a.yukToplu = a.yukToplu || 0; a.miktarRenk = a.miktarRenk || ""; if(a.serbest === undefined) a.serbest = true;
+  a.kolonSira = a.kolonSira || {}; a.altGrup = a.altGrup || {}; a.urunAlt = a.urunAlt || {}; a.hizliGrup = a.hizliGrup || {}; a.araGrup = a.araGrup || {}; a.kolonGen = a.kolonGen || {}; a.araSecili = a.araSecili || {}; a.yuk = a.yuk || {}; a.altSecili = a.altSecili || {}; a.yukToplu = a.yukToplu || 0; a.wSekme = a.wSekme || {}; a.yukSekme = a.yukSekme || {}; a.miktarRenk = a.miktarRenk || ""; if(a.serbest === undefined) a.serbest = true;
   _hsAyar = a;
   return a;
 }
+// Boyut (sütun genişliği) ve Yükseklik kaydırıcıları her sekme/grup için ayrıdır; ayarlanmamış sekme genel değeri kullanır.
+function hsW_(sekme){ const ay = hsAyar_(); return ay.wSekme[sekme] !== undefined ? ay.wSekme[sekme] : ay.w; }
+function hsYukToplu_(sekme){ const ay = hsAyar_(); return ay.yukSekme[sekme] !== undefined ? ay.yukSekme[sekme] : (ay.yukToplu || 0); }
 function hsAyarYaz_(){ try{ localStorage.setItem("hs_ayar", JSON.stringify(hsAyar_())); }catch(e){} }
 
 function hizliSatisToggle(){
@@ -6790,8 +6793,8 @@ function hizliSatisAc(){
         <input id="hs-ara" type="text" autocomplete="off" placeholder="Ara (tüm ürünlerde: ad, kod, barkod) — Enter: ilk ürünün miktarına geç" value="${htmlKacis(_hsDurum.ara)}"
                oninput="hizliSatisAra()" onkeydown="hizliSatisAraTus(event)">
         <select id="hs-sirala" title="Bu sekmedeki ürünlerin sıralaması" onchange="hizliSatisSirala(this.value)"></select>
-        <label class="hs-boy" title="Kart genişliği">Boyut <input type="range" id="hs-w" min="110" max="360" step="10" value="${ay.w}" oninput="hizliSatisBoyut(this.value)"></label>
-        <label class="hs-boy" title="Tüm karelerin yüksekliği (sola: otomatik). Tek bir kareyi üzerine gelince çıkan ↕+ / ↕− ile ayrıca ayarlarsın">Yükseklik <input type="range" id="hs-yuk" min="0" max="100" step="4" value="${ay.yukToplu||0}" oninput="hizliSatisYukseklik(this.value)"></label>
+        <label class="hs-boy" title="Kart genişliği (bu sekmeye özel)">Boyut <input type="range" id="hs-w" min="110" max="360" step="10" value="${hsW_(_hsDurum.sekme)}" oninput="hizliSatisBoyut(this.value)"></label>
+        <label class="hs-boy" title="Bu sekmedeki tüm karelerin yüksekliği (sola: otomatik). Tek bir kareyi üzerine gelince çıkan ↕+ / ↕− ile ayrıca ayarlarsın">Yükseklik <input type="range" id="hs-yuk" min="0" max="100" step="4" value="${hsYukToplu_(_hsDurum.sekme)}" oninput="hizliSatisYukseklik(this.value)"></label>
         <label class="hs-boy" title="Açıkken ürünü taşıdığında eski yeri boş kalır, boş yere bırakabilirsin (boşluk dolmaz). Kapalıyken liste sıkışır."><input type="checkbox" id="hs-serbest" ${ay.serbest?'checked':''} onchange="hizliSatisSerbest(this.checked)"> Serbest taşıma</label>
         <label class="hs-boy" title="Miktar kutularının çerçeve rengi">Miktar rengi <input type="color" id="hs-mr" value="${ay.miktarRenk||'#2563eb'}" oninput="hizliSatisMiktarRenk(this.value)"></label>
         <button class="btn btn-primary" onclick="hizliSatisUrunEkleAc()" title="Seçili sekmeye ürün ekle (stok kartından seç)">➕ Ürün Ekle</button>
@@ -6860,7 +6863,7 @@ function hsSatirHtml_(s, k, mod, kRenk){
   const m = _hsMiktar[s.id] || "";
   const birak = mod === "alt" ? "hsAltBirak" : "hsKolonBirak";
   const birim = htmlKacis(s.birim1 || "adet");
-  const ay = hsAyar_(), yk = ay.yuk[s.id] !== undefined ? ay.yuk[s.id] : (ay.yukToplu || 0);
+  const ay = hsAyar_(), yk = ay.yuk[s.id] !== undefined ? ay.yuk[s.id] : hsYukToplu_(_hsDurum.sekme);
   return `<div class="hs-satir hs-kmp ${(hsHex_(s.hizliRenk)||kRenk)?'hs-renkli':''}" id="hs-k-${s.id}" style="${hsRenkStil_(s.hizliRenk)}--yk:${yk}px;" onclick="hsSatirTik(event,'${s.id}')" ondragover="hsSatirUstunde(event,this)" ondragleave="hsSatirAyrildi(event,this)" ondrop="${birak}(event,'${k.id}','${s.id}')">
     ${hsNokta_(s.id)}${hsSariNokta_(s.id)}
     <div class="hs-s-ust">
@@ -6877,7 +6880,7 @@ function hsSatirHtml_(s, k, mod, kRenk){
 }
 function hsBosHucreHtml_(c, k, mod){
   const birak = mod === "alt" ? "hsAltBirak" : "hsKolonBirak", ay = hsAyar_();
-  return `<div class="hs-bos-hucre" id="hs-k-${c.id}" style="--yk:${ay.yukToplu||0}px" title="Boş yer: ürünü buraya bırak" ondragover="hsSatirUstunde(event,this)" ondragleave="hsSatirAyrildi(event,this)" ondrop="${birak}(event,'${k.id}','${c.id}')"><b title="Bu boş yeri kaldır" onclick="hsBosSil('${k.id}','${c.id}')">✕</b></div>`;
+  return `<div class="hs-bos-hucre" id="hs-k-${c.id}" style="--yk:${hsYukToplu_(_hsDurum.sekme)}px" title="Boş yer: ürünü buraya bırak" ondragover="hsSatirUstunde(event,this)" ondragleave="hsSatirAyrildi(event,this)" ondrop="${birak}(event,'${k.id}','${c.id}')"><b title="Bu boş yeri kaldır" onclick="hsBosSil('${k.id}','${c.id}')">✕</b></div>`;
 }
 function hsUid_(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function hsBosEkle(kolonId, id){
@@ -7396,7 +7399,9 @@ function hizliSatisCiz(){
   const kaynak = q ? (_stokTanimListe||[]).filter(s=>stokEslesirMi(s, q)) : hsSekmeStoklari_(sekme);
   const liste = q ? hsSirala_(kaynak, "arama", "ad") : hsSirala_(kaynak, sekme, mod);
   _hsGorunen = liste;
-  grid.style.setProperty("--hs-w", ay.w + "px");
+  grid.style.setProperty("--hs-w", hsW_(sekme) + "px");
+  const wEl = document.getElementById("hs-w"); if(wEl) wEl.value = hsW_(sekme);                 // kaydırıcılar sekmeye göre güncellenir
+  const yEl = document.getElementById("hs-yuk"); if(yEl) yEl.value = hsYukToplu_(sekme);
   const kaydirma = grid.scrollTop;
   if(!liste.length){
     grid.innerHTML = '<div class="hs-bos">' + (q ? "Eşleşen ürün yok." : (sekme==="hizli" ? "Henüz hızlı ürün yok. Başka bir sekmede ürünün altındaki “Hızlı ürün” kutusunu işaretleyin." : ((_stokTanimListe||[]).length ? "Bu grupta ürün yok." : "Ürünler yükleniyor..."))) + '</div>';
@@ -7449,12 +7454,12 @@ function hizliSatisSirala(mod){
   hsAyarYaz_(); hizliSatisCiz();
 }
 function hizliSatisBoyut(w){
-  const ay = hsAyar_(); ay.w = parseInt(w,10) || 170; hsAyarYaz_();
-  const g = document.getElementById("hs-grid"); if(g) g.style.setProperty("--hs-w", ay.w + "px");
+  const ay = hsAyar_(), v = parseInt(w,10) || 170; ay.wSekme[_hsDurum.sekme] = v; hsAyarYaz_();
+  const g = document.getElementById("hs-grid"); if(g) g.style.setProperty("--hs-w", v + "px");
 }
 function hizliSatisYukseklik(v){
-  const ay = hsAyar_(); ay.yukToplu = Math.max(0, parseInt(v,10) || 0); hsAyarYaz_();
-  document.querySelectorAll(".hs-satir.hs-kmp").forEach(el=>{ const id = el.id.slice(5); if(ay.yuk[id] === undefined) el.style.setProperty("--yk", ay.yukToplu + "px"); });
+  const ay = hsAyar_(), yv = Math.max(0, parseInt(v,10) || 0); ay.yukSekme[_hsDurum.sekme] = yv; hsAyarYaz_();
+  document.querySelectorAll(".hs-satir.hs-kmp, .hs-bos-hucre").forEach(el=>{ const id = el.id.slice(5); if(ay.yuk[id] === undefined) el.style.setProperty("--yk", yv + "px"); });
 }
 // Tek karenin yüksekliği (toplu ayarın üstüne yazar; toplu değere eşitlenince tekrar topluya bağlanır)
 // ➜ Başka alt gruba taşı: alt grup listesini açar (başka sayfaya/ara gruba sürüklemek gerekmez)
@@ -7493,9 +7498,9 @@ function hsSatirGrupCikar(id){
 }
 function hsSatirYuk(id, d){
   const ay = hsAyar_();
-  const simdi = ay.yuk[id] !== undefined ? ay.yuk[id] : ay.yukToplu;
+  const toplu = hsYukToplu_(_hsDurum.sekme), simdi = ay.yuk[id] !== undefined ? ay.yuk[id] : toplu;
   const yeni = Math.max(0, Math.min(100, simdi + d));
-  if(yeni === ay.yukToplu) delete ay.yuk[id]; else ay.yuk[id] = yeni;
+  if(yeni === toplu) delete ay.yuk[id]; else ay.yuk[id] = yeni;
   hsAyarYaz_();
   const el = document.getElementById("hs-k-" + id); if(el) el.style.setProperty("--yk", yeni + "px");
 }
@@ -7512,9 +7517,10 @@ function hizliSatisUrunBoyut(id){
   hsAyarYaz_(); hizliSatisCiz();
 }
 function hizliSatisDuzenSifirla(){
-  if(!confirm("Bu sekmenin elle sıralaması ve tüm ürün boyutları sıfırlansın mı?")) return;
+  if(!confirm("Bu sekmenin elle sıralaması, boyut ve yükseklik ayarları sıfırlansın mı?")) return;
   const ay = hsAyar_();
-  delete ay.sira[_hsDurum.sekme]; delete ay.sirala[_hsDurum.sekme]; ay.boyut = {}; ay.yuk = {}; ay.yukToplu = 0;
+  delete ay.sira[_hsDurum.sekme]; delete ay.sirala[_hsDurum.sekme]; delete ay.wSekme[_hsDurum.sekme]; delete ay.yukSekme[_hsDurum.sekme];
+  hsSekmeStoklari_(_hsDurum.sekme).forEach(x=>{ delete ay.boyut[x.id]; delete ay.yuk[x.id]; });   // yalnız bu sekmenin ürünleri
   const gp = _hsDurum.sekme === "hizli" ? "hizli:" : "alt:" + _hsDurum.sekme + ":";
   Object.keys(ay.kolonGen).forEach(k=>{ if(k.indexOf(gp) === 0) delete ay.kolonGen[k]; });
   if(_hsDurum.sekme === "hizli"){ Object.keys(ay.sira).forEach(k=>{ if(k.indexOf("hizli:") === 0) delete ay.sira[k]; }); delete ay.kolonSira.hizli; }
