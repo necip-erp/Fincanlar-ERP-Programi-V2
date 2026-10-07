@@ -423,6 +423,22 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-sec-liste{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:6px}
 .hs-sec-satir{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:10px;padding:7px 10px;background:var(--bg2)}
 .hs-sec-ad{font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hs-grid.hs-kolonlu{grid-template-columns:repeat(auto-fill,minmax(calc(var(--hs-w) + 130px),1fr));grid-auto-flow:row;align-items:start;gap:12px}
+.hs-kolon{display:flex;flex-direction:column;gap:6px;background:var(--bg3);border-radius:12px;padding:8px}
+.hs-kolon-baslik{font-weight:800;font-size:13px;color:var(--blue);padding:2px 4px 4px;border-bottom:2px solid var(--blue);margin-bottom:2px}
+.hs-satir{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:6px 8px;display:flex;flex-direction:column;gap:5px}
+.hs-satir.hs-suruk{opacity:.45}
+.hs-satir.hs-eklendi{border-color:var(--green);background:var(--green-l)}
+.hs-satir-ust{display:flex;align-items:center;gap:6px}
+.hs-satir .hs-tut{position:static;flex:0 0 auto;width:22px;height:22px;font-size:13px}
+.hs-satir-ad{flex:1;min-width:0;font-weight:700;font-size:12.5px;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.hs-oklar{display:flex;flex-direction:column;gap:1px;flex:0 0 auto}
+.hs-oklar b{cursor:pointer;font-size:10px;line-height:1;padding:2px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg3);color:var(--text2)}
+.hs-oklar b:hover{background:var(--blue-l);border-color:var(--blue)}
+.hs-satir-alt{display:flex;align-items:center;gap:5px}
+.hs-satir-alt .hs-fiyat{flex:1;min-width:0;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hs-satir-alt .hs-adet{flex:0 0 64px;font-size:14px;padding:5px 3px}
+.hs-cikar{padding:5px 8px;color:var(--text3)}
 .hs-daha,.hs-bos,.hs-bilgi{grid-column:1/-1;text-align:center;padding:14px;color:var(--text3)}
 .hs-bilgi{padding:0 0 4px;font-size:12px;font-weight:700;text-align:left}
 .hs-alt{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
@@ -6600,6 +6616,63 @@ function hizliSatisAc(){
   setTimeout(()=>{ const a = document.getElementById("hs-ara"); if(a){ a.focus(); a.select(); } }, 50);
 }
 
+// ⭐ Hızlı Ürünler sekmesi: görselsiz, ürün grupları DİKEY sütunlar halinde; her sütunda ürünler ▲▼ ya da ⠿ sürükleyerek yukarı-aşağı taşınır.
+let _hsKolonlar = {};   // sütun (grup) id → o anki ürün id sırası
+function hsHizliKolonCiz_(liste, grid, kaydirma){
+  const gruplar = _tanimListeCache.urunGrubu || [];
+  const idler = {}; gruplar.forEach(g=>{ idler[g.id] = true; });
+  const kolonlar = [];
+  gruplar.forEach(g=>{ const it = liste.filter(s=>s.urunGrubuId === g.id); if(it.length) kolonlar.push({id:g.id, ad:g.ad, it}); });
+  const diger = liste.filter(s=>!s.urunGrubuId || !idler[s.urunGrubuId]);
+  if(diger.length) kolonlar.push({id:"diger", ad:"Diğer", it:diger});
+  _hsKolonlar = {}; const sirali = [];
+  kolonlar.forEach(k=>{ k.it = hsSirala_(k.it, "hizli:"+k.id, "elle"); _hsKolonlar[k.id] = k.it.map(s=>s.id); k.it.forEach(s=>sirali.push(s)); });
+  _hsGorunen = sirali;
+  grid.classList.add("hs-kolonlu");
+  grid.innerHTML = kolonlar.map(k=>`<div class="hs-kolon">
+    <div class="hs-kolon-baslik">${htmlKacis(k.ad)} <span class="hs-say">${k.it.length}</span></div>
+    ${k.it.map((s,i)=>{
+      const m = _hsMiktar[s.id] || "";
+      return `<div class="hs-satir" id="hs-k-${s.id}" ondragover="hsSurukleUstunde(event)" ondrop="hsKolonBirak(event,'${k.id}','${s.id}')">
+        <div class="hs-satir-ust">
+          <span class="hs-tut" draggable="true" title="Tutup yukarı-aşağı sürükle" ondragstart="hsSurukleBasla(event,'${s.id}')" ondragend="hsSurukleBitti()">⠿</span>
+          <div class="hs-satir-ad" title="${htmlKacis(s.stokAdi)}">${htmlKacis(s.stokAdi)}</div>
+          <span class="hs-oklar"><b title="Yukarı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',-1)">▲</b><b title="Aşağı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',1)">▼</b></span>
+        </div>
+        <div class="hs-satir-alt">
+          <span class="hs-fiyat">${paraFormat(s.satisFiyati)} / ${htmlKacis(s.birim1||"adet")}</span>
+          <input class="hs-adet" id="hs-q-${s.id}" type="text" inputmode="decimal" autocomplete="off" placeholder="Miktar" value="${m}"
+                 onfocus="this.select()" oninput="_hsMiktar['${s.id}']=this.value" onkeydown="hizliSatisAdetTus(event,'${s.id}')">
+          <button type="button" tabindex="-1" class="btn btn-primary hs-ekle" onclick="hizliSatisEkle('${s.id}')">Ekle</button>
+          <button type="button" tabindex="-1" class="btn hs-cikar" title="Hızlı ürünlerden çıkar" onclick="hizliSatisHizliIsaret('${s.id}', false)">✕</button>
+        </div>
+      </div>`; }).join("")}
+  </div>`).join("");
+  grid.scrollTop = kaydirma;
+  hizliSatisOzet_();
+}
+function hizliSatisKolonTasi(kolonId, id, yon){
+  const ids = (_hsKolonlar[kolonId] || []).slice();
+  const i = ids.indexOf(id), j = i + yon;
+  if(i < 0 || j < 0 || j >= ids.length) return;
+  ids.splice(i, 1); ids.splice(j, 0, id);
+  const ay = hsAyar_(); ay.sira["hizli:"+kolonId] = ids; hsAyarYaz_();
+  hizliSatisCiz();
+}
+function hsKolonBirak(e, kolonId, hedefId){
+  e.preventDefault();
+  const kaynakId = _hsSurukle; hsSurukleBitti();
+  if(!kaynakId || kaynakId === hedefId) return;
+  const ids = (_hsKolonlar[kolonId] || []).slice();
+  const kIdx = ids.indexOf(kaynakId), hIdx = ids.indexOf(hedefId);
+  if(kIdx < 0 || hIdx < 0) return;   // başka sütundan sürüklemeye izin yok (ürünün grubu stok kartından/➕ Ürün Ekle'den değişir)
+  ids.splice(kIdx, 1);
+  const yeniH = ids.indexOf(hedefId);
+  ids.splice(kIdx < hIdx ? yeniH + 1 : yeniH, 0, kaynakId);
+  const ay = hsAyar_(); ay.sira["hizli:"+kolonId] = ids; hsAyarYaz_();
+  hizliSatisCiz();
+}
+
 function hizliSatisKapat(){
   const ov = document.getElementById("hs-overlay");
   if(!ov) return;
@@ -6673,7 +6746,8 @@ function hizliSatisCiz(){
   if(sel){
     sel.innerHTML = [["elle","Sıralama: Elle (sürükle-bırak)"],["ad","Ad (A → Z)"],["adz","Ad (Z → A)"],["kod","Stok kodu"],["fiyat","Fiyat (artan)"],["fiyatz","Fiyat (azalan)"]]
       .map(o=>`<option value="${o[0]}" ${o[0]===mod?'selected':''}>${o[1]}</option>`).join("");
-    sel.disabled = !!q;
+    sel.disabled = !!q || sekme === "hizli";
+    sel.title = sekme === "hizli" ? "Hızlı Ürünler sekmesinde ürünler ▲▼ düğmeleri ya da ⠿ ile sürüklenerek sıralanır" : "Bu sekmedeki ürünlerin sıralaması";
   }
   const kaynak = q ? (_stokTanimListe||[]).filter(s=>stokEslesirMi(s, q)) : hsSekmeStoklari_(sekme);
   const liste = q ? hsSirala_(kaynak, "arama", "ad") : hsSirala_(kaynak, sekme, mod);
@@ -6685,6 +6759,8 @@ function hizliSatisCiz(){
     hizliSatisOzet_();
     return;
   }
+  if(sekme === "hizli" && !q){ hsHizliKolonCiz_(liste, grid, kaydirma); return; }
+  grid.classList.remove("hs-kolonlu");
   const surukleAcik = !q && mod === "elle";
   grid.innerHTML = (q ? '<div class="hs-bilgi">Arama sonuçları (tüm ürünler)</div>' : '') + liste.slice(0, _hsLimit).map(s=>{
     const m = _hsMiktar[s.id] || "";
@@ -6741,6 +6817,7 @@ function hizliSatisDuzenSifirla(){
   if(!confirm("Bu sekmenin elle sıralaması ve tüm ürün boyutları sıfırlansın mı?")) return;
   const ay = hsAyar_();
   delete ay.sira[_hsDurum.sekme]; delete ay.sirala[_hsDurum.sekme]; ay.boyut = {};
+  if(_hsDurum.sekme === "hizli") Object.keys(ay.sira).forEach(k=>{ if(k.indexOf("hizli:") === 0) delete ay.sira[k]; });
   hsAyarYaz_(); hizliSatisCiz();
 }
 
