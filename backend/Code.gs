@@ -7172,7 +7172,7 @@ function ensureStokTanimEkColonlari_orj_(sheet) {
   // AGIRLIK (4 Eki 2026): 1. birim başına ağırlık (kg) — siparişte toplam ağırlık için. STOK_TANIM_BASLIKLAR'a EKLENMEZ
   // (toplu yazan fonksiyonlar 20 sütunluk satır yazıyor); sütun yalnızca bu göç adımıyla eklenir.
   // GORSEL_URL (6 Eki 2026): Hızlı Satış ekranındaki ürün görseli (Drive linki, 22. sütun) — aynı şekilde yalnızca göç adımıyla eklenir.
-  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK","GORSEL_URL","HIZLI_URUN"];
+  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK","GORSEL_URL","HIZLI_URUN","HIZLI_RENK"];
   eklenecek.forEach((baslik, idx) => {
     const kolonNo = 12 + idx;
     const mevcut = sheet.getRange(1, kolonNo).getValue();
@@ -7210,6 +7210,7 @@ function stokTanimSatiriNesneYap(row) {
     agirlik: parseFloat(row[20]) || 0,   // kg / 1. birim
     gorselUrl: String(row[21] || ""),    // Hızlı Satış ürün görseli (Drive)
     hizli: String(row[22] || "") === "1", // Hızlı Satış > "Hızlı Ürünler" sekmesinde de görünsün
+    hizliRenk: renkTemizle_(row[23]),     // Hızlı Satış'ta ürüne özel renk (#rrggbb ya da "")
   };
 }
 
@@ -7233,7 +7234,13 @@ function stokGrupKaydet(body) {
 }
 
 // ★ (6 Eki 2026) Hızlı Satış: ürün "hızlı ürün" işareti (StokTanimlari 23. sütun HIZLI_URUN = "1").
-// body: { id, hizli: true/false }
+// Renk değeri yalnızca #rrggbb olabilir (başka bir şey boş sayılır).
+function renkTemizle_(v) {
+  const t = String(v || "").trim();
+  return /^#[0-9a-fA-F]{6}$/.test(t) ? t.toLowerCase() : "";
+}
+
+// body: { id, hizli?: true/false, renk?: "#rrggbb" ya da "" }  (gönderilmeyen alana dokunulmaz)
 function stokHizliKaydet(body) {
   const id = String((body && body.id) || "").trim();
   if (!id) return { ok: false, hata: "Stok kartı id gerekli" };
@@ -7243,7 +7250,8 @@ function stokHizliKaydet(body) {
   const ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
   for (let i = 1; i < ids.length; i++) {
     if (String(ids[i][0]) === id) {
-      sheet.getRange(i + 1, 23).setValue(body.hizli ? "1" : "");
+      if (body.hizli !== undefined) sheet.getRange(i + 1, 23).setValue(body.hizli ? "1" : "");
+      if (body.renk !== undefined) sheet.getRange(i + 1, 24).setValue(renkTemizle_(body.renk));   // HIZLI_RENK
       cacheTemizle(["stokTanimListesi"]);
       return { ok: true };
     }
@@ -8895,7 +8903,7 @@ const BASIT_TANIM_CACHE_ANAHTARI = {
   faturaTipi: "faturaTipiListesi",
   virmanTipi: "virmanTipiListesi",
 };
-const BASIT_TANIM_BASLIKLAR = ["ID", "AD", "UST_ID", "SIRA", "KOD"];
+const BASIT_TANIM_BASLIKLAR = ["ID", "AD", "UST_ID", "SIRA", "KOD", "RENK"];
 // Stok Kodu'nun otomatik üretimi için hangi basit tanım tiplerinin 2 haneli bir KOD'a
 // sahip olması ZORUNLU — diğer tipler (Ebat, Renk, Ambalaj, Gider grupları) kod kullanmaz,
 // bu alan onlarda her zaman boş kalır.
@@ -8905,6 +8913,8 @@ const TANIM_KOD_ZORUNLU = { urunGrubu: true, altUrunGrubu: true };
 // gerektiğinde tamamlar, mevcut veriye dokunmaz.
 function ensureBasitTanimKodKolonu_orj_(sheet) {
   if (sheet.getLastColumn() < 5) sheet.getRange(1, 5).setValue("KOD");
+  // RENK (7 Eki 2026): Ürün Grubu rengi (Hızlı Satış ekranı) — 6. sütun
+  if (sheet.getLastColumn() < 6) sheet.getRange(1, 6).setValue("RENK");
 }
 
 function getBasitTanimListesi(tip) {
@@ -8918,7 +8928,7 @@ function getBasitTanimListesi(tip) {
     const sonuc = [];
     for (let i = 1; i < data.length; i++) {
       if (!data[i][0]) continue;
-      sonuc.push({ id: String(data[i][0]), ad: metinOku_(data[i][1]), ustId: String(data[i][2] || ""), sira: parseFloat(data[i][3]) || 0, kod: metinOku_(data[i][4], 2) });
+      sonuc.push({ id: String(data[i][0]), ad: metinOku_(data[i][1]), ustId: String(data[i][2] || ""), sira: parseFloat(data[i][3]) || 0, kod: metinOku_(data[i][4], 2), renk: renkTemizle_(data[i][5]) });
     }
     return { ok: true, kalemler: siraliDizile(sonuc) };
   });
@@ -8950,6 +8960,7 @@ function saveBasitTanim(body) {
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === id) {
         metinliSatirYaz_(sheet, i + 1, [id, ad, ustId, data[i][3], kod], [2, 5]);
+        if (body.renk !== undefined) sheet.getRange(i + 1, 6).setValue(renkTemizle_(body.renk));   // RENK (6. sütun); gönderilmediyse dokunulmaz
         cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]);
         return { ok: true, id: id };
       }
@@ -8958,6 +8969,7 @@ function saveBasitTanim(body) {
   const maxSira = data.slice(1).reduce((m, r) => Math.max(m, parseFloat(r[3]) || 0), 0);
   id = tip.slice(0, 3) + "_" + Date.now();
   metinliSatirEkle_(sheet, [id, ad, ustId, maxSira + 1, kod], [2, 5]);
+  if (body.renk !== undefined && renkTemizle_(body.renk)) sheet.getRange(sheet.getLastRow(), 6).setValue(renkTemizle_(body.renk));
   cacheTemizle([BASIT_TANIM_CACHE_ANAHTARI[tip]]);
   return { ok: true, id: id };
 }
@@ -10654,7 +10666,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20261006b";
+const ENSURE_SURUM_ = "20261007a";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}
