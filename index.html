@@ -7439,6 +7439,14 @@ function hizliSatisUrunSekmeyeEkle(id){
       if(!r.ok){ s.urunGrubuId = eski; alert("Kaydedilemedi: "+(r.hata||"bilinmiyor")); hizliSatisCiz(); hizliSatisUrunEkleCiz(); }
     }).catch(err=>{ s.urunGrubuId = eski; alert("Bağlantı hatası: "+err.message); hizliSatisCiz(); hizliSatisUrunEkleCiz(); });
   }
+  if(sekme !== "hizli"){   // alt grup görünümündeyse ürün açık ara grubun ilk alt grubuna düşsün ("Alt grupsuz"da kaybolmasın)
+    const ay = hsAyar_();
+    if(ay.hizliGrup[sekme]){
+      const ara = hsAktifAra_(sekme);
+      const hedef = ara ? (ay.altGrup[sekme]||[]).find(a=>a.ara === ara) : null;
+      if(hedef){ ay.urunAlt[id] = hedef.id; hsAyarYaz_(); }
+    }
+  }
   hizliSatisCiz(); hizliSatisUrunEkleCiz();
 }
 function hizliSatisYeniStokAc(){
