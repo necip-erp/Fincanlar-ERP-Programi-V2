@@ -473,7 +473,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-alt #hs-ozet{flex:1;font-size:12.5px;font-weight:600;color:var(--text2)}
 
 /* ★ (7 Eki 2026, 2) Kompakt satır, bırakma göstergesi, sarı nokta, ara grup bölümleri */
-.hs-grid.hs-kolonlu{grid-template-columns:repeat(auto-fill,minmax(calc(var(--hs-w) + 70px),1fr));gap:8px}
+.hs-grid.hs-kolonlu{grid-template-columns:repeat(auto-fill,minmax(calc(var(--hs-w) + 70px),calc(var(--hs-w) + 70px)));justify-content:start;gap:8px}
 .hs-kolonlu .hs-kolon,.hs-bolumlu .hs-kolon{gap:3px;padding:5px;position:relative}
 .hs-kolon-baslik{font-size:12.5px}
 .hs-satir.hs-kmp{display:flex;flex-direction:column;align-items:stretch;gap:3px;padding:4px 6px;position:relative}
@@ -481,7 +481,11 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-s-alt{display:flex;align-items:center;gap:5px}
 .hs-satir.hs-kmp .hs-satir-ad{flex:1;min-width:0;font-size:12px;font-weight:700;line-height:1.25;-webkit-line-clamp:3}
 .hs-birim{font-style:normal;font-size:9.5px;font-weight:800;color:var(--blue);margin-left:4px;white-space:nowrap;opacity:.9}
-.hs-satir.hs-kmp .hs-adet{width:76px;flex:0 1 76px;font-size:13px;padding:4px 3px}
+.hs-satir.hs-kmp .hs-adet{width:auto;flex:1 1 60px;min-width:0;font-size:13px;padding:4px 3px}
+.hs-kutu.hs-mrx .hs-adet{border:2px solid var(--hs-mr)}
+.hs-satir.hs-kmp{padding-top:calc(4px + var(--yk,0px)/2);padding-bottom:calc(4px + var(--yk,0px)/2);justify-content:center}
+.hs-kolon .hs-kolon{margin-top:4px;background:rgba(255,255,255,.6);border:1px solid var(--border);border-radius:9px}
+.hs-kolon .hs-kolon .hs-kolon-baslik{font-size:12px;opacity:.95}
 .hs-satir.hs-kmp .hs-ekle{padding:4px 10px;font-size:12px}
 .hs-satir,.hs-kart{user-select:none;-webkit-user-select:none}
 .hs-satir input,.hs-kart input{user-select:text;-webkit-user-select:text}
@@ -6740,7 +6744,7 @@ function hsAyar_(){
   let a = {};
   try{ a = JSON.parse(localStorage.getItem("hs_ayar") || "{}") || {}; }catch(e){ a = {}; }
   a.w = a.w || 170; a.boyut = a.boyut || {}; a.sira = a.sira || {}; a.sirala = a.sirala || {};
-  a.kolonSira = a.kolonSira || {}; a.altGrup = a.altGrup || {}; a.urunAlt = a.urunAlt || {}; a.hizliGrup = a.hizliGrup || {}; a.araGrup = a.araGrup || {}; a.kolonGen = a.kolonGen || {}; a.araSecili = a.araSecili || {};
+  a.kolonSira = a.kolonSira || {}; a.altGrup = a.altGrup || {}; a.urunAlt = a.urunAlt || {}; a.hizliGrup = a.hizliGrup || {}; a.araGrup = a.araGrup || {}; a.kolonGen = a.kolonGen || {}; a.araSecili = a.araSecili || {}; a.yuk = a.yuk || {}; a.yukToplu = a.yukToplu || 0; a.miktarRenk = a.miktarRenk || "";
   _hsAyar = a;
   return a;
 }
@@ -6774,13 +6778,15 @@ function hizliSatisAc(){
   ov.onmousedown = e=>{ ov._md = (e.target === ov); };                       // yalnızca boşlukta başlayan tıklama kapatır (içeriden sürüklemeyle çıkınca kapanmasın)
   ov.onclick = e=>{ if(e.target === ov && ov._md) hizliSatisKapat(); };
   ov.innerHTML = `
-    <div class="modal-box hs-kutu">
+    <div class="modal-box hs-kutu ${ay.miktarRenk?'hs-mrx':''}" style="${ay.miktarRenk?'--hs-mr:'+ay.miktarRenk:''}">
       <div class="hs-ust">
         <h3>⚡ Hızlı Satış</h3>
         <input id="hs-ara" type="text" autocomplete="off" placeholder="Ara (tüm ürünlerde: ad, kod, barkod) — Enter: ilk ürünün miktarına geç" value="${htmlKacis(_hsDurum.ara)}"
                oninput="hizliSatisAra()" onkeydown="hizliSatisAraTus(event)">
         <select id="hs-sirala" title="Bu sekmedeki ürünlerin sıralaması" onchange="hizliSatisSirala(this.value)"></select>
-        <label class="hs-boy" title="Kart genişliği">Boyut <input type="range" id="hs-w" min="110" max="300" step="10" value="${ay.w}" oninput="hizliSatisBoyut(this.value)"></label>
+        <label class="hs-boy" title="Kart genişliği">Boyut <input type="range" id="hs-w" min="110" max="360" step="10" value="${ay.w}" oninput="hizliSatisBoyut(this.value)"></label>
+        <label class="hs-boy" title="Tüm karelerin yüksekliği (sola: otomatik). Tek bir kareyi üzerine gelince çıkan ↕+ / ↕− ile ayrıca ayarlarsın">Yükseklik <input type="range" id="hs-yuk" min="0" max="100" step="4" value="${ay.yukToplu||0}" oninput="hizliSatisYukseklik(this.value)"></label>
+        <label class="hs-boy" title="Miktar kutularının çerçeve rengi">Miktar rengi <input type="color" id="hs-mr" value="${ay.miktarRenk||'#2563eb'}" oninput="hizliSatisMiktarRenk(this.value)"></label>
         <button class="btn btn-primary" onclick="hizliSatisUrunEkleAc()" title="Seçili sekmeye ürün ekle (stok kartından seç)">➕ Ürün Ekle</button>
         <button class="btn" onclick="hizliSatisDuzenSifirla()" title="Bu sekmenin elle sıralamasını ve ürün boyutlarını sıfırla">Düzeni Sıfırla</button>
         <button class="btn" onclick="hizliSatisKapat()" title="Kapat — forma dön (F12 / Esc)">✕ Kapat (F12)</button>
@@ -6846,7 +6852,8 @@ function hsSatirHtml_(s, k, mod, kRenk){
   const m = _hsMiktar[s.id] || "";
   const birak = mod === "alt" ? "hsAltBirak" : "hsKolonBirak";
   const birim = htmlKacis(s.birim1 || "adet");
-  return `<div class="hs-satir hs-kmp ${(hsHex_(s.hizliRenk)||kRenk)?'hs-renkli':''}" id="hs-k-${s.id}" style="${hsRenkStil_(s.hizliRenk)}" onclick="hsSatirTik(event,'${s.id}')" ondragover="hsSatirUstunde(event,this)" ondragleave="hsSatirAyrildi(event,this)" ondrop="${birak}(event,'${k.id}','${s.id}')">
+  const ay = hsAyar_(), yk = ay.yuk[s.id] !== undefined ? ay.yuk[s.id] : (ay.yukToplu || 0);
+  return `<div class="hs-satir hs-kmp ${(hsHex_(s.hizliRenk)||kRenk)?'hs-renkli':''}" id="hs-k-${s.id}" style="${hsRenkStil_(s.hizliRenk)}--yk:${yk}px;" onclick="hsSatirTik(event,'${s.id}')" ondragover="hsSatirUstunde(event,this)" ondragleave="hsSatirAyrildi(event,this)" ondrop="${birak}(event,'${k.id}','${s.id}')">
     ${hsNokta_(s.id)}${hsSariNokta_(s.id)}
     <div class="hs-s-ust">
       <span class="hs-tut" draggable="true" title="Tutup sürükle${mod==='alt'?' (başka alt gruba da bırakabilirsin)':''}" ondragstart="hsSurukleBasla(event,'${s.id}')" ondragend="hsSurukleBitti()">⠿</span>
@@ -6857,20 +6864,21 @@ function hsSatirHtml_(s, k, mod, kRenk){
              onfocus="this.select()" oninput="hsMiktarYaz_('${s.id}',this.value)" onkeydown="hizliSatisAdetTus(event,'${s.id}')">
       <button type="button" tabindex="-1" class="btn btn-primary hs-ekle" onclick="hizliSatisEkle('${s.id}')">Ekle</button>
     </div>
-    <span class="hs-aksiyon"><b title="Kısa ad ver / değiştir" onclick="hsKisaAdDuzenle('${s.id}')">✎</b><b title="Bu ürüne renk seç" onclick="hizliSatisUrunRenk(event,'${s.id}')">🎨</b><b title="Yukarı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',-1)">▲</b><b title="Aşağı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',1)">▼</b>${mod==='hizli'?`<b title="Hızlı ürünlerden çıkar" onclick="hizliSatisHizliIsaret('${s.id}', false)">✕</b>`:''}</span>
+    <span class="hs-aksiyon"><b title="Kısa ad ver / değiştir" onclick="hsKisaAdDuzenle('${s.id}')">✎</b><b title="Bu ürüne renk seç" onclick="hizliSatisUrunRenk(event,'${s.id}')">🎨</b><b title="Bu kareyi yükselt" onclick="hsSatirYuk('${s.id}',8)">↕+</b><b title="Bu kareyi alçalt" onclick="hsSatirYuk('${s.id}',-8)">↕−</b><b title="Yukarı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',-1)">▲</b><b title="Aşağı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',1)">▼</b>${mod==='hizli'?`<b title="Hızlı ürünlerden çıkar" onclick="hizliSatisHizliIsaret('${s.id}', false)">✕</b>`:''}</span>
   </div>`;
 }
-function hsKolonHtml_(k, mod, kRenk){
+function hsKolonHtml_(k, mod, kRenk, ic){
   const n = hsKolonGen_(k.id);
   const genBtn = `<b title="Sütun genişliği: ${n} yan yana — tıkla: ${n>=3?1:n+1} yan yana" onclick="hsKolonGenislet('${k.id}')">⇔${n>1?n:''}</b>`;
   const basIslem = (mod === "alt" && !k.sabit)
-    ? `<span class="hs-bas-islem">${genBtn}<b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b><b title="Alt grup adını değiştir" onclick="hsAltGrupAdlandir('${k.id}')">✎</b><b title="Alt grubu sil (ürünler “Alt grupsuz”a geçer)" onclick="hsAltGrupSil('${k.id}')">✕</b></span>`
+    ? `<span class="hs-bas-islem">${genBtn}<b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b><b title="Bu alt grubun içine bir alt grup daha ekle" onclick="hsAltGrupEkle(undefined,'${k.id}')">↳</b><b title="Alt grup adını değiştir" onclick="hsAltGrupAdlandir('${k.id}')">✎</b><b title="Alt grubu sil (ürünler “Alt grupsuz”a geçer)" onclick="hsAltGrupSil('${k.id}')">✕</b></span>`
     : (mod === "hizli" ? `<span class="hs-bas-islem">${genBtn}<b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b></span>` : `<span class="hs-bas-islem">${genBtn}</span>`);
   return `<div class="hs-kolon ${kRenk?'hs-renkli':''}" style="--n:${n};${hsRenkStil_(kRenk)}" data-kolon="${k.id}" ondragover="hsKolonUstunde(event,this)" ondragleave="hsKolonAyrildi(event,this)" ondrop="hsKolonBirak2(event,'${k.id}')">
     <div class="hs-kolon-baslik" ${k.sabit?'':`draggable="true" ondragstart="hsKolonBasSurukle(event,'${k.id}')" ondragend="hsKolonBasBitti()" title="Tutup sürükleyerek sütunun yerini değiştir (ara grup başlığına da bırakabilirsin)"`}>
       <span class="hs-bas-ad">${htmlKacis(k.ad)}</span> <span class="hs-say">${k.it.length}</span>${basIslem}
     </div>
-    ${k.it.length ? `<div class="hs-kolon-satirlar" data-n="${n}">${k.it.map(s=>hsSatirHtml_(s, k, mod, kRenk)).join("")}</div>` : '<div class="hs-bos hs-bos-kolon">Ürünü buraya sürükle</div>'}
+    ${k.it.length ? `<div class="hs-kolon-satirlar" data-n="${n}">${k.it.map(s=>hsSatirHtml_(s, k, mod, kRenk)).join("")}</div>` : ((k.alt||[]).length ? '' : '<div class="hs-bos hs-bos-kolon">Ürünü buraya sürükle</div>')}
+    ${(k.alt||[]).map(c=>hsKolonHtml_(c, mod, kRenk, true)).join("")}
   </div>`;
 }
 // Sütun genişliği: 1, 2 ya da 3 ürün yan yana (sütun/ekran başına tarayıcıda saklanır)
@@ -6897,9 +6905,13 @@ function hsKolonCiz_(liste, grid, kaydirma, mod, grupId){
     const alts = ay.altGrup[grupId] || [], aralar = ay.araGrup[grupId] || [];
     const gecerli = {}; alts.forEach(a=>{ gecerli[a.id] = true; });
     const araVar = {}; aralar.forEach(a=>{ araVar[a.id] = true; });
-    const seri = alts.map(a=>({ id:a.id, ad:a.ad, ara: araVar[a.ara] ? a.ara : "", it: liste.filter(s=>ay.urunAlt[s.id] === a.id) }));   // boş alt grup da görünür (ürün bırakmak için)
+    const nodes = {};
+    alts.forEach(a=>{ nodes[a.id] = { id:a.id, ad:a.ad, ara: araVar[a.ara] ? a.ara : "", ust:a.ust||"", it: liste.filter(s=>ay.urunAlt[s.id] === a.id), alt:[] }; });   // boş alt grup da görünür (ürün bırakmak için)
+    const seri = [];
+    alts.forEach(a=>{ const n = nodes[a.id], p = (n.ust && n.ust !== n.id) ? nodes[n.ust] : null; if(p) p.alt.push(n); else seri.push(n); });   // "ust": alt grubun altındaki alt grup
+    const topla = c=>c.it.length + c.alt.reduce((t,x)=>t + topla(x), 0);
     const diger = liste.filter(s=>!gecerli[ay.urunAlt[s.id]]);
-    const sonKolon = (diger.length || !alts.length) ? { id:"-", ad:"Alt grupsuz", it:diger, sabit:true, ara:"" } : null;
+    const sonKolon = (diger.length || !alts.length) ? { id:"-", ad:"Alt grupsuz", it:diger, sabit:true, ara:"", alt:[] } : null;
     if(aralar.length){
       // Ara grup SEKME gibi çalışır: yalnız seçili ara grubun alt grup sütunları ve ürünleri görünür.
       const bol = aralar.map(a=>({ id:a.id, ad:a.ad, cols:seri.filter(c=>c.ara === a.id) }));
@@ -6907,7 +6919,7 @@ function hsKolonCiz_(liste, grid, kaydirma, mod, grupId){
       if(digerCols.length) bol.push({ id:"", ad:"Diğer", cols:digerCols });
       const istenen = hsAktifAra_(grupId);
       const sec = bol.find(x=>x.id === istenen) || bol[0];
-      araCubuk = { aktif: sec.id, chipler: bol.map(x=>({ id:x.id, ad:x.ad, say:x.cols.reduce((t,c)=>t + c.it.length, 0) })) };
+      araCubuk = { aktif: sec.id, chipler: bol.map(x=>({ id:x.id, ad:x.ad, say:x.cols.reduce((t,c)=>t + topla(c), 0) })) };
       kolonlar = sec.cols.slice();
     } else {
       kolonlar = seri.slice(); if(sonKolon) kolonlar.push(sonKolon);
@@ -6922,10 +6934,12 @@ function hsKolonCiz_(liste, grid, kaydirma, mod, grupId){
     if(sr.length){ const pos = id=>{ const i = sr.indexOf(id); return i < 0 ? 1e6 : i; }; kolonlar = kolonlar.map((k,i)=>({k,i})).sort((a,b)=>(pos(a.k.id)-pos(b.k.id))||(a.i-b.i)).map(x=>x.k); }
   }
   _hsKolonCfg = { mod, grupId, idler: kolonlar.filter(k=>!k.sabit).map(k=>k.id) };
-  _hsKolonlar = {}; const sirali = [];
-  kolonlar.forEach(k=>{ k.it = hsSirala_(k.it, hsSiraAnahtar_(k.id), "elle"); _hsKolonlar[k.id] = k.it.map(s=>s.id); });
+  _hsKolonlar = {}; const sirali = [], tum = [];
+  const yuru = k=>{ tum.push(k); (k.alt||[]).forEach(yuru); };
+  kolonlar.forEach(yuru);
+  tum.forEach(k=>{ k.it = hsSirala_(k.it, hsSiraAnahtar_(k.id), "elle"); _hsKolonlar[k.id] = k.it.map(s=>s.id); });
   const renkOf = k=>mod === "alt" ? hsGrupRenk_(grupId) : hsGrupRenk_(k.id);
-  kolonlar.forEach(k=>k.it.forEach(s=>sirali.push(s)));
+  tum.forEach(k=>k.it.forEach(s=>sirali.push(s)));
   grid.classList.remove("hs-bolumlu"); grid.classList.add("hs-kolonlu");
   grid.innerHTML = kolonlar.map(k=>hsKolonHtml_(k, mod, renkOf(k))).join("");
   hsAraCubukCiz_(araCubuk);
@@ -6985,13 +6999,13 @@ function hsHedefTemizle_(){ document.querySelectorAll(".hs-kolon-hedef,.hs-son-e
 function hsKolonBasBitti(){ _hsKolTutulan = null; hsHedefTemizle_(); }
 function hsKolonUstunde(e, el){
   if(_hsKolTutulan){
-    e.preventDefault();
+    e.preventDefault(); e.stopPropagation();
     const once = hsDropOnce_({ currentTarget: el, clientX: e.clientX }, "x");
     el.classList.toggle("hs-kol-once", once); el.classList.toggle("hs-kol-sonra", !once);
     return;
   }
   if(_hsSurukle && _hsKolonCfg.mod === "alt"){
-    e.preventDefault(); el.classList.add("hs-kolon-hedef");
+    e.preventDefault(); e.stopPropagation(); el.classList.add("hs-kolon-hedef");
     const satirda = !!(e.target && e.target.closest && e.target.closest(".hs-satir"));
     el.classList.toggle("hs-son-ekle", !satirda);     // satırın üstünde değilse ürün sütunun SONUNA gider
   }
@@ -6999,6 +7013,7 @@ function hsKolonUstunde(e, el){
 function hsKolonAyrildi(e, el){ if(!el.contains(e.relatedTarget)) el.classList.remove("hs-kolon-hedef", "hs-son-ekle", "hs-kol-once", "hs-kol-sonra", "hs-bol-once", "hs-bol-sonra"); }
 // Sütunun kendisine bırakma: başlık bırakıldıysa sütun yeri değişir; ürün bırakıldıysa (alt grup görünümü) sütunun sonuna eklenir.
 function hsKolonBirak2(e, kolonId){
+  e.stopPropagation();
   if(_hsKolTutulan){ hsKolonBasBirak(e, kolonId); return; }
   if(_hsSurukle && _hsKolonCfg.mod === "alt") hsAltBirak(e, kolonId, "");
 }
@@ -7012,7 +7027,9 @@ function hsKolonBasBirak(e, hedefId){
     const liste = ay.altGrup[_hsKolonCfg.grupId] || [];
     const kk = liste.find(a=>a.id === k), t = liste.find(a=>a.id === hedefId);
     if(!kk || !t) return;                                  // "Alt grupsuz" sütunu sabit
+    if(hsAltTorun_(liste, k, hedefId)){ alert("Bir alt grup kendi içindeki alt grubun yanına taşınamaz."); return; }
     liste.splice(liste.indexOf(kk), 1);
+    kk.ust = t.ust || "";
     kk.ara = t.ara || "";                                  // hedef sütun hangi ara gruptaysa sütun da oraya geçer
     const ti = liste.indexOf(t);
     liste.splice(once ? ti : ti + 1, 0, kk);
@@ -7031,7 +7048,7 @@ function hsKolonBasTasi(id, yon){
   if(_hsKolonCfg.mod === "alt"){
     const liste = ay.altGrup[_hsKolonCfg.grupId] || [];
     const k = liste.find(a=>a.id === id); if(!k) return;
-    const kardes = liste.filter(a=>(a.ara||"") === (k.ara||""));
+    const kardes = liste.filter(a=> k.ust ? a.ust === k.ust : (!a.ust && (a.ara||"") === (k.ara||"")));
     const diger = kardes[kardes.indexOf(k) + yon]; if(!diger) return;
     const i = liste.indexOf(k), j = liste.indexOf(diger); liste[i] = diger; liste[j] = k;
   } else {
@@ -7081,7 +7098,7 @@ function hsBolumBirak(e, bolumId){
     const liste = ay.altGrup[g] || [];
     const kk = liste.find(a=>a.id === k); if(!kk) return;
     liste.splice(liste.indexOf(kk), 1);
-    kk.ara = bolumId;
+    kk.ust = ""; kk.ara = bolumId;
     let son = -1; liste.forEach((a,i)=>{ if((a.ara||"") === bolumId) son = i; });
     liste.splice(son < 0 ? liste.length : son + 1, 0, kk);
     hsAyarYaz_(); hizliSatisCiz();
@@ -7149,15 +7166,33 @@ function hsGrupHizliToggle(v){
   if(v) ay.hizliGrup[g] = true; else delete ay.hizliGrup[g];
   hsAyarYaz_(); hizliSatisCiz();
 }
-function hsAltGrupEkle(araId){
-  const g = _hsDurum.sekme;
-  if(araId === undefined) araId = hsAktifAra_(g);          // araç çubuğundaki ➕: açık olan ara gruba eklenir
-  const ad = (prompt("Yeni alt grup adı (örn. 20mm dişsiz, 25mm dişli, Borular, Çiftli):", "") || "").trim();
+function hsAltGrupEkle(araId, ustId){
+  const g = _hsDurum.sekme, ay = hsAyar_(); const liste = (ay.altGrup[g] = ay.altGrup[g] || []);
+  let ust = ustId || "", p = null;
+  if(ust){ p = liste.find(a=>a.id === ust); if(!p) return; araId = p.ara || ""; }
+  else if(araId === undefined) araId = hsAktifAra_(g);     // araç çubuğundaki ➕: açık olan ara gruba eklenir
+  const ad = (prompt(p ? "“" + p.ad + "” alt grubunun içine yeni alt grup adı (örn. dişli, dişsiz):" : "Yeni alt grup adı (örn. 20mm dişsiz, 25mm dişli, Borular, Çiftli):", "") || "").trim();
   if(!ad) return;
-  const ay = hsAyar_(); const liste = (ay.altGrup[g] = ay.altGrup[g] || []);
-  if(liste.some(a=>a.ad.toLocaleLowerCase("tr") === ad.toLocaleLowerCase("tr") && (a.ara||"") === (araId||""))){ alert("Bu adda bir alt grup zaten var."); return; }
-  liste.push({ id:"a" + Date.now().toString(36) + Math.random().toString(36).slice(2,5), ad, ara: araId || "" });
+  if(liste.some(a=>a.ad.toLocaleLowerCase("tr") === ad.toLocaleLowerCase("tr") && (a.ust||"") === ust && (ust || (a.ara||"") === (araId||"")))){ alert("Bu adda bir alt grup zaten var."); return; }
+  liste.push({ id:"a" + Date.now().toString(36) + Math.random().toString(36).slice(2,5), ad, ara: araId || "", ust });
   hsAyarYaz_(); hizliSatisCiz();
+}
+// ancestorId'nin altında (herhangi derinlikte) id var mı?
+function hsAltTorun_(liste, ancestorId, id){
+  let n = 0, c = liste.find(a=>a.id === id);
+  while(c && n++ < 20){ if(c.id === ancestorId) return true; c = c.ust ? liste.find(a=>a.id === c.ust) : null; }
+  return false;
+}
+// Ürün Ekle penceresindeki alt grup seçimi için düz liste (ara grup › alt grup › iç alt grup)
+function hsAltDuz_(g){
+  const ay = hsAyar_(), alts = ay.altGrup[g] || [], aralar = ay.araGrup[g] || [];
+  const var_ = {}; alts.forEach(a=>{ var_[a.id] = true; });
+  const sonuc = [];
+  const yuru = (a, yol)=>{ const y = yol.concat(a.ad); sonuc.push({ id:a.id, etiket:y.join(" › ") }); alts.filter(c=>c.ust === a.id).forEach(c=>yuru(c, y)); };
+  const kok = a=>!a.ust || !var_[a.ust];
+  aralar.forEach(r=>alts.filter(a=>kok(a) && a.ara === r.id).forEach(a=>yuru(a, [r.ad])));
+  alts.filter(a=>kok(a) && !aralar.some(r=>r.id === a.ara)).forEach(a=>yuru(a, []));
+  return sonuc;
 }
 function hsAltGrupAdlandir(id){
   const ay = hsAyar_(), a = (ay.altGrup[_hsDurum.sekme] || []).find(x=>x.id === id); if(!a) return;
@@ -7169,6 +7204,7 @@ function hsAltGrupSil(id){
   const g = _hsDurum.sekme, ay = hsAyar_();
   const a = (ay.altGrup[g] || []).find(x=>x.id === id); if(!a) return;
   if(!confirm("“" + a.ad + "” alt grubu silinsin mi?\nİçindeki ürünler silinmez, “Alt grupsuz” sütununa geçer.")) return;
+  ay.altGrup[g].forEach(c=>{ if(c.ust === id){ c.ust = a.ust || ""; c.ara = a.ara || ""; } });   // içindeki alt gruplar bir üst seviyeye çıkar
   ay.altGrup[g] = ay.altGrup[g].filter(x=>x.id !== id);
   Object.keys(ay.urunAlt).forEach(sid=>{ if(ay.urunAlt[sid] === id) delete ay.urunAlt[sid]; });
   delete ay.sira["alt:" + g + ":" + id];
@@ -7340,6 +7376,24 @@ function hizliSatisBoyut(w){
   const ay = hsAyar_(); ay.w = parseInt(w,10) || 170; hsAyarYaz_();
   const g = document.getElementById("hs-grid"); if(g) g.style.setProperty("--hs-w", ay.w + "px");
 }
+function hizliSatisYukseklik(v){
+  const ay = hsAyar_(); ay.yukToplu = Math.max(0, parseInt(v,10) || 0); hsAyarYaz_();
+  document.querySelectorAll(".hs-satir.hs-kmp").forEach(el=>{ const id = el.id.slice(5); if(ay.yuk[id] === undefined) el.style.setProperty("--yk", ay.yukToplu + "px"); });
+}
+// Tek karenin yüksekliği (toplu ayarın üstüne yazar; toplu değere eşitlenince tekrar topluya bağlanır)
+function hsSatirYuk(id, d){
+  const ay = hsAyar_();
+  const simdi = ay.yuk[id] !== undefined ? ay.yuk[id] : ay.yukToplu;
+  const yeni = Math.max(0, Math.min(100, simdi + d));
+  if(yeni === ay.yukToplu) delete ay.yuk[id]; else ay.yuk[id] = yeni;
+  hsAyarYaz_();
+  const el = document.getElementById("hs-k-" + id); if(el) el.style.setProperty("--yk", yeni + "px");
+}
+function hizliSatisMiktarRenk(v){
+  const ay = hsAyar_(); ay.miktarRenk = hsHex_(v) || ""; hsAyarYaz_();
+  const k = document.querySelector(".hs-kutu"); if(!k) return;
+  k.classList.toggle("hs-mrx", !!ay.miktarRenk); if(ay.miktarRenk) k.style.setProperty("--hs-mr", ay.miktarRenk);
+}
 function hizliSatisUrunBoyut(id){
   const ay = hsAyar_();
   const simdi = ay.boyut[id] || 1;
@@ -7350,7 +7404,7 @@ function hizliSatisUrunBoyut(id){
 function hizliSatisDuzenSifirla(){
   if(!confirm("Bu sekmenin elle sıralaması ve tüm ürün boyutları sıfırlansın mı?")) return;
   const ay = hsAyar_();
-  delete ay.sira[_hsDurum.sekme]; delete ay.sirala[_hsDurum.sekme]; ay.boyut = {};
+  delete ay.sira[_hsDurum.sekme]; delete ay.sirala[_hsDurum.sekme]; ay.boyut = {}; ay.yuk = {}; ay.yukToplu = 0;
   const gp = _hsDurum.sekme === "hizli" ? "hizli:" : "alt:" + _hsDurum.sekme + ":";
   Object.keys(ay.kolonGen).forEach(k=>{ if(k.indexOf(gp) === 0) delete ay.kolonGen[k]; });
   if(_hsDurum.sekme === "hizli"){ Object.keys(ay.sira).forEach(k=>{ if(k.indexOf("hizli:") === 0) delete ay.sira[k]; }); delete ay.kolonSira.hizli; }
@@ -7397,6 +7451,12 @@ function hizliSatisUrunEkleAc(){
   if(sekme === "diger"){ alert("“Diğer” sekmesine ürün eklenemez. Önce bir grup sekmesi ya da Hızlı Ürünler'i seçin."); return; }
   if(document.getElementById("hs-sec-overlay")) return;
   const t = hsSekmeler_().find(x=>x.id === sekme);
+  let altSecim = "";
+  if(sekme !== "hizli" && hsAyar_().hizliGrup[sekme]){      // alt grup görünümü: ürünün hangi alt gruba gireceği sorulur
+    const duz = hsAltDuz_(sekme), ay0 = hsAyar_(), ara0 = hsAktifAra_(sekme);
+    const vars = ara0 ? (ay0.altGrup[sekme]||[]).find(a=>a.ara === ara0 && !a.ust) : null;
+    altSecim = `<label class="hs-boy" title="Eklenecek ürünler hangi alt gruba girsin?">Alt grup <select id="hs-sec-alt">${duz.map(x=>`<option value="${x.id}" ${vars && vars.id===x.id?'selected':''}>${htmlKacis(x.etiket)}</option>`).join("")}<option value="">Alt grupsuz</option></select></label>`;
+  }
   const ov = document.createElement("div");
   ov.className = "modal-overlay"; ov.id = "hs-sec-overlay";
   ov.dataset.escKapat = "hizliSatisUrunEkleKapat"; ov.dataset.escUyarisiz = "1";
@@ -7404,6 +7464,7 @@ function hizliSatisUrunEkleAc(){
   ov.onclick = e=>{ if(e.target === ov && ov._md) hizliSatisUrunEkleKapat(); };
   ov.innerHTML = `<div class="modal-box hs-sec-kutu">
     <div class="hs-ust"><h3>➕ “${htmlKacis(t ? t.ad.replace("⭐ ","").replace("⚡ ","") : "")}” sekmesine ürün ekle</h3>
+      ${altSecim}
       <input id="hs-sec-ara" type="text" autocomplete="off" placeholder="Stok ara (ad, kod, barkod)…" oninput="hizliSatisUrunEkleCiz()">
       <button class="btn" onclick="hizliSatisYeniStokAc()" title="Stok kartı henüz yoksa yeni kart aç">+ Yeni Stok Kartı</button>
       <button class="btn" onclick="hizliSatisUrunEkleKapat()">✕ Kapat</button></div>
@@ -7439,20 +7500,20 @@ function hizliSatisUrunSekmeyeEkle(id){
       if(!r.ok){ s.urunGrubuId = eski; alert("Kaydedilemedi: "+(r.hata||"bilinmiyor")); hizliSatisCiz(); hizliSatisUrunEkleCiz(); }
     }).catch(err=>{ s.urunGrubuId = eski; alert("Bağlantı hatası: "+err.message); hizliSatisCiz(); hizliSatisUrunEkleCiz(); });
   }
-  if(sekme !== "hizli"){   // alt grup görünümündeyse ürün açık ara grubun ilk alt grubuna düşsün ("Alt grupsuz"da kaybolmasın)
-    const ay = hsAyar_();
-    if(ay.hizliGrup[sekme]){
-      const ara = hsAktifAra_(sekme);
-      const hedef = ara ? (ay.altGrup[sekme]||[]).find(a=>a.ara === ara) : null;
-      if(hedef){ ay.urunAlt[id] = hedef.id; hsAyarYaz_(); }
-    }
-  }
+  hsAltAta_(id);
   hizliSatisCiz(); hizliSatisUrunEkleCiz();
+}
+// Ürün Ekle penceresinde seçili alt gruba ürünü yerleştirir (alt grup görünümü değilse bir şey yapmaz)
+function hsAltAta_(id){
+  const sel = document.getElementById("hs-sec-alt"); if(!sel || !id) return;
+  const ay = hsAyar_();
+  if(sel.value) ay.urunAlt[id] = sel.value; else delete ay.urunAlt[id];
+  hsAyarYaz_();
 }
 function hizliSatisYeniStokAc(){
   const sekme = _hsDurum.sekme;
   stokTanimModalAc(null, function(r){
-    const bitir = ()=>{ if(sekme === "hizli" && r && r.id) hizliSatisHizliIsaret(r.id, true); hizliSatisCiz(); hizliSatisUrunEkleCiz(); };
+    const bitir = ()=>{ if(sekme === "hizli" && r && r.id) hizliSatisHizliIsaret(r.id, true); else if(r && r.id) hsAltAta_(r.id); hizliSatisCiz(); hizliSatisUrunEkleCiz(); };
     cariApi("getStokTanimListesi").then(x=>{ if(x.ok) _stokTanimListe = x.kalemler; bitir(); }).catch(bitir);
   });
   if(sekme !== "hizli") setTimeout(()=>{ const sel = document.getElementById("st-urungrubu"); if(sel) sel.value = sekme; }, 120);
