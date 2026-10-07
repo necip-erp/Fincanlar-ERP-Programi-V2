@@ -4525,6 +4525,7 @@ function cariDetayCiz(res){
       <div class="cari-info-item"><div class="k">Adres</div><div class="v">${c.adres||"—"}</div></div>
       <div class="cari-info-item"><div class="k">İl / İlçe</div><div class="v">${[c.il,c.ilce].filter(Boolean).join(" / ")||"—"}</div></div>
       <div class="cari-info-item"><div class="k">Vergi No</div><div class="v">${c.vergiNo||"—"}</div></div>
+      <div class="cari-info-item"><div class="k">Vergi Dairesi</div><div class="v">${htmlKacis(c.vergiDairesi||"")||"—"}</div></div>
       <div class="cari-info-item"><div class="k">E-Fatura</div><div class="v" style="font-weight:800;color:${c.eFatura==='Evet'?'#15803d':'#b91c1c'}">${c.eFatura==='Evet'?'Evet (mükellef)':'Hayır'}</div></div>
       <div class="cari-info-item"><div class="k">E-Arşiv</div><div class="v" style="font-weight:800;color:${c.eArsiv==='Evet'?'#15803d':'#b91c1c'}">${c.eArsiv==='Evet'?'Evet (mükellef)':'Hayır'}</div></div>
       <div class="cari-info-item cari-limit-item"><div class="k">Kredi Limiti</div><div class="v">${c.krediLimiti>0 ? paraFormat(c.krediLimiti) + `<div class="cari-limit-kalan ${bakiye>c.krediLimiti?'hk-borc':'hk-alacak'}">${bakiye>c.krediLimiti ? 'Limit aşıldı: '+paraFormat(bakiye-c.krediLimiti) : 'Kalan: '+paraFormat(c.krediLimiti-Math.max(bakiye,0))}</div>` : "Limitsiz"}</div></div>
@@ -4906,6 +4907,11 @@ function cariIlDegisti(){
 
 // ── Yeni/Düzenle modal ──
 function cariModalAc(editId, onKaydedildi, adIpucu){
+  // ★ (7 Eki 2026) Yavaş açılırken tekrar tıklanınca ikinci bir cari kartı açılmasın: açık pencere varsa yenisi yapılmaz.
+  const acik = document.getElementById("cari-modal-overlay");
+  if(acik){ const e = document.getElementById("cm-ad"); if(e) e.focus(); return; }
+  window._cariYeniId = editId ? null : ("cr_" + Date.now() + "_" + Math.random().toString(36).slice(2,6));   // aynı pencereden tekrar kaydetme aynı kaydı günceller
+  window._cariKaydediliyor = false;
   window._cariKaydedildiCB = (!editId && onKaydedildi) ? onKaydedildi : null;
   const duzenle = !!editId;
   const c = duzenle ? _cariListe.find(x=>x.id===editId) : null;
@@ -4951,6 +4957,7 @@ function cariModalAc(editId, onKaydedildi, adIpucu){
             </div>
             <div id="cm-kimlik-ipucu" style="font-size:11.5px;margin-top:3px;min-height:15px"></div>
           </div>
+          <div class="fld"><label>Vergi Dairesi</label><input id="cm-vergidairesi" type="text" value="${c?htmlKacis(c.vergiDairesi||''):''}" placeholder="Örn. Osmangazi"></div>
           <div class="fld om-tam"><label>Adres</label><input id="cm-adres" type="text" value="${c?c.adres:''}"></div>
           <div class="fld"><label>İl</label>
             <select id="cm-il" onchange="cariIlDegisti()">
@@ -5038,12 +5045,13 @@ function cariSonrakiNoKullan(tipParam){
 }
 
 function cariKaydet(id){
+  if(window._cariKaydediliyor) return;      // ★ işlem sürerken tekrar tıklama yok sayılır (birden fazla cari oluşmasın)
   const ad = document.getElementById("cm-ad").value.trim();
   if(!ad){ alert("Ad zorunlu"); return; }
   const kimlikHam = document.getElementById("cm-vergino").value.trim().replace(/\D/g,"");
   if(kimlikHam && kimlikHam.length!==10 && kimlikHam.length!==11 && !confirm("Vergi No / TCKN "+kimlikHam.length+" haneli. VKN 10, TCKN 11 haneli olmalı; bu haliyle e-Fatura/e-Arşiv gönderilemez.\n\nYine de kaydedilsin mi?")) return;
   const body = {
-    id: id || undefined,
+    id: id || window._cariYeniId || undefined,
     ad,
     cariKodu: document.getElementById("cm-carikodu").value,
     tip: (document.querySelector('input[name="cm-tip"]:checked')||{}).value || "Müşteri",
@@ -5052,6 +5060,7 @@ function cariKaydet(id){
     il: (document.getElementById("cm-il")||{}).value || "",
     ilce: document.getElementById("cm-ilce").value,
     vergiNo: document.getElementById("cm-vergino").value,
+    vergiDairesi: (document.getElementById("cm-vergidairesi")||{}).value || "",
     eFatura: (document.getElementById("cm-efatura")||{}).value || "Hayır",
     eArsiv: (document.getElementById("cm-earsiv")||{}).value || "Hayır",
     plasiyerId: (document.getElementById("cm-plasiyer")||{}).value || "",
@@ -5059,9 +5068,15 @@ function cariKaydet(id){
     krediLimiti: document.getElementById("cm-kredilimiti").value,
     not: document.getElementById("cm-not").value,
   };
+  const kaydetBtn = document.querySelector("#cari-modal-overlay .om-aksiyon .btn-primary");
+  const btnMetin = kaydetBtn ? kaydetBtn.textContent : "";
+  const serbest = ()=>{ window._cariKaydediliyor = false; if(kaydetBtn){ kaydetBtn.disabled = false; kaydetBtn.textContent = btnMetin; } };
+  window._cariKaydediliyor = true;
+  if(kaydetBtn){ kaydetBtn.disabled = true; kaydetBtn.textContent = "⏳ Kaydediliyor…"; }
   cariApi("saveCari", body).then(res=>{
-    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
-    document.getElementById("cari-modal-overlay").remove();
+    if(!res.ok){ serbest(); alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    window._cariKaydediliyor = false;
+    const ov = document.getElementById("cari-modal-overlay"); if(ov) ov.remove();
     // ★ (1 Eki 2026) F1 Cari Rehberi / Bekleyen Fatura'dan açılan yeni cari: ekran değişmez, kart ilgili alana seçilir.
     const cb = window._cariKaydedildiCB; window._cariKaydedildiCB = null;
     if(cb && !id){
@@ -5074,7 +5089,7 @@ function cariKaydet(id){
     }
     cariListesiYukle();
     if(id) cariAc(id); else cariAc(res.id);
-  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  }).catch(err=>{ serbest(); alert("Bağlantı hatası: "+err.message); });
 }
 
 // Cari modalındaki "🔍 Sistemden Veri Çek" butonu: mevcut (Akınsoft) sistemdeki
@@ -6214,6 +6229,7 @@ function belgeFormuHTMLOlustur(s, kalemler, t, c){
         <tr><td style="padding:2px 10px 2px 0;color:#555;vertical-align:top">ADRES</td><td>: ${c.adres||'—'}</td></tr>
         <tr><td style="padding:2px 10px 2px 0;color:#555">TELEFON / GSM</td><td>: ${c.telefon||'—'}</td></tr>
         <tr><td style="padding:2px 10px 2px 0;color:#555">VERGİ D-NO</td><td>: <b>${c.vergiNo||'—'}</b></td></tr>
+        <tr><td style="padding:2px 10px 2px 0;color:#555">VERGİ DAİRESİ</td><td>: <b>${htmlKacis(c.vergiDairesi||'')||'—'}</b></td></tr>
       </table>
       <table style="border-collapse:collapse;align-self:flex-start">
         ${tip === "Sipariş" ? `<tr><td style="padding:2px 10px 2px 0;color:#555">SİPARİŞ NO</td><td>: <b>${s.siparisNo||'—'}</b></td></tr>` : ""}

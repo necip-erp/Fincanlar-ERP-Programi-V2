@@ -466,7 +466,8 @@ function ensureCariPlasiyerColonu_orj_(sheet) {
 // Davranış aynı; sadece Cari sayfası açılışında (liste/detay/kayıt) daha az servis çağrısı.
 // IL/ILCE (15,16. kolonlar): cari adres bilgisine il/ilçe eklendi (Yeni Cari Ekle formu).
 function ensureCariEkKolonlariHepsi(sheet) {
-  const beklenen = ["CARI_KODU", "ISKONTO_ORANI", "KREDI_LIMITI", "E_FATURA", "E_ARSIV", "PLASIYER_ID", "IL", "ILCE", "AKTIF"];
+  const beklenen = ["CARI_KODU", "ISKONTO_ORANI", "KREDI_LIMITI", "E_FATURA", "E_ARSIV", "PLASIYER_ID", "IL", "ILCE", "AKTIF", "VERGI_DAIRESI"];
+  // VERGI_DAIRESI (18. kolon, 7 Eki 2026): carinin vergi dairesi (serbest metin).
   // AKTIF (17. kolon, 29 Eyl 2026): "Hayır" = pasif cari (F1 rehberinde/arama kutularında çıkmaz); boş/"Evet" = aktif.
   const gerekenKolon = 8 + beklenen.length;
   if (sheet.getMaxColumns() < gerekenKolon) sheet.insertColumnsAfter(sheet.getMaxColumns(), gerekenKolon - sheet.getMaxColumns());
@@ -1378,6 +1379,7 @@ function getCariListesi() {
         plasiyerId: String(row[13] || ""),
         il: String(row[14] || ""),
         ilce: String(row[15] || ""),
+        vergiDairesi: String(row[17] || ""),
         aktif: String(row[16] || "Evet") !== "Hayır",
         bakiye: bakiyeMap[id] || 0,
         sonIslemTarihi: sonIslemMap[id] || "",
@@ -1516,6 +1518,8 @@ function saveCari(body) {
   ];
   if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
   else sheet.appendRow(satir);
+  // VERGI_DAIRESI (18. kolon): yalnızca bu hücre yazılır (17. kolon AKTIF'e dokunulmaz)
+  sheet.getRange(satirIdx > 0 ? satirIdx : sheet.getLastRow(), 18).setValue(String(body.vergiDairesi || "").trim());
 
   cacheTemizle(["cariListesi_v4"]);
   return { ok: true, id: id };
