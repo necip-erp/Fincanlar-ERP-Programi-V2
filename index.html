@@ -6867,12 +6867,12 @@ function hsSatirHtml_(s, k, mod, kRenk){
              onfocus="this.select()" oninput="hsMiktarYaz_('${s.id}',this.value)" onkeydown="hizliSatisAdetTus(event,'${s.id}')">
       <button type="button" tabindex="-1" class="btn btn-primary hs-ekle" onclick="hizliSatisEkle('${s.id}')">Ekle</button>
     </div>
-    <span class="hs-aksiyon"><b title="Kısa ad ver / değiştir" onclick="hsKisaAdDuzenle('${s.id}')">✎</b><b title="Bu ürüne renk seç" onclick="hizliSatisUrunRenk(event,'${s.id}')">🎨</b><b title="Bu kareyi yükselt" onclick="hsSatirYuk('${s.id}',8)">↕+</b><b title="Bu kareyi alçalt" onclick="hsSatirYuk('${s.id}',-8)">↕−</b><b title="Yukarı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',-1)">▲</b><b title="Aşağı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',1)">▼</b>${mod==='hizli'?`<b title="Hızlı ürünlerden çıkar" onclick="hizliSatisHizliIsaret('${s.id}', false)">✕</b>`:''}</span>
+    <span class="hs-aksiyon"><b title="Kısa ad ver / değiştir" onclick="hsKisaAdDuzenle('${s.id}')">✎</b><b title="Bu ürüne renk seç" onclick="hizliSatisUrunRenk(event,'${s.id}')">🎨</b><b title="Bu kareyi yükselt" onclick="hsSatirYuk('${s.id}',8)">↕+</b><b title="Bu kareyi alçalt" onclick="hsSatirYuk('${s.id}',-8)">↕−</b><b title="Yukarı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',-1)">▲</b><b title="Aşağı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',1)">▼</b>${mod==='hizli'?`<b title="Hızlı ürünlerden çıkar" onclick="hizliSatisHizliIsaret('${s.id}', false)">✕</b>`:`<b title="Başka alt gruba taşı" onclick="hsSatirTasi(event,'${s.id}')">➜</b><b title="Bu ürün grubundan çıkar (stok kartı silinmez)" onclick="hsSatirGrupCikar('${s.id}')">✕</b>`}</span>
   </div>`;
 }
 function hsKolonHtml_(k, mod, kRenk, ic){
   const n = hsKolonGen_(k.id);
-  const genBtn = `<b title="Sütun genişliği: ${n} yan yana — tıkla: ${n>=3?1:n+1} yan yana" onclick="hsKolonGenislet('${k.id}')">⇔${n>1?n:''}</b>`;
+  const genBtn = `<b title="Sütun genişliği: ${n} yan yana — tıkla: ${n+1} yan yana (sınır yok)" onclick="hsKolonGenislet('${k.id}',1)">⇔${n>1?n:''}</b>${n>1?`<b title="Daralt: ${n-1} yan yana" onclick="hsKolonGenislet('${k.id}',-1)">⇐</b>`:''}`;
   const basIslem = (mod === "alt" && !k.sabit)
     ? `<span class="hs-bas-islem">${genBtn}<b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b><b title="Bu alt grubun içine bir alt grup daha ekle" onclick="hsAltGrupEkle(undefined,'${k.id}')">↳</b><b title="Alt grup adını değiştir" onclick="hsAltGrupAdlandir('${k.id}')">✎</b><b title="Alt grubu sil (ürünler “Alt grupsuz”a geçer)" onclick="hsAltGrupSil('${k.id}')">✕</b></span>`
     : (mod === "hizli" ? `<span class="hs-bas-islem">${genBtn}<b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b></span>` : `<span class="hs-bas-islem">${genBtn}</span>`);
@@ -6885,9 +6885,9 @@ function hsKolonHtml_(k, mod, kRenk, ic){
   </div>`;
 }
 // Sütun genişliği: 1, 2 ya da 3 ürün yan yana (sütun/ekran başına tarayıcıda saklanır)
-function hsKolonGen_(kolonId){ const v = hsAyar_().kolonGen[hsSiraAnahtar_(kolonId)]; return v >= 2 ? Math.min(3, v) : 1; }
-function hsKolonGenislet(kolonId){
-  const ay = hsAyar_(), key = hsSiraAnahtar_(kolonId), n = hsKolonGen_(kolonId), yeni = n >= 3 ? 1 : n + 1;
+function hsKolonGen_(kolonId){ const v = hsAyar_().kolonGen[hsSiraAnahtar_(kolonId)]; return v >= 2 ? Math.min(99, v) : 1; }
+function hsKolonGenislet(kolonId, d){
+  const ay = hsAyar_(), key = hsSiraAnahtar_(kolonId), n = hsKolonGen_(kolonId), yeni = Math.max(1, n + (d || 1));
   if(yeni === 1) delete ay.kolonGen[key]; else ay.kolonGen[key] = yeni;
   hsAyarYaz_(); hizliSatisCiz();
 }
@@ -7350,7 +7350,7 @@ function hizliSatisCiz(){
       const acik = !!ay.hizliGrup[sekme];
       araEl.style.display = "";
       araEl.innerHTML = `<label><input type="checkbox" ${acik?'checked':''} onchange="hsGrupHizliToggle(this.checked)"> ⚡ Hızlı satış görünümü</label>` +
-        (acik ? `<button type="button" class="btn btn-primary" onclick="hsAltGrupEkle()">➕ Alt Grup</button><button type="button" class="btn btn-primary" onclick="hsAraGrupEkle()" title="Alt grupları toplayan başlık (örn. PPRC, PVC)">➕ Ara Grup</button><span class="hs-ipucu">Ara grup (PPRC, PVC…) ve alt grup (20mm, 25mm…) birer sayfadır: seçince yalnız onun içeriği görünür; alt grubun içine ↳ ile eklediklerin o sayfada sütun olur. Ürünü alt grup çipine sürükleyip bırakınca o alt gruba geçer. Başlıkları ve ürünleri tutup sürükle (mavi çizgi bırakılacak yeri gösterir). Ürüne Shift+tık: stok kartı · çift tık: kısa ad · başlıktaki ⇔: sütunda 2-3 ürün yan yana.</span>`
+        (acik ? `<button type="button" class="btn btn-primary" onclick="hsAltGrupEkle()">➕ Alt Grup</button><button type="button" class="btn btn-primary" onclick="hsAraGrupEkle()" title="Alt grupları toplayan başlık (örn. PPRC, PVC)">➕ Ara Grup</button><span class="hs-ipucu">Ara grup (PPRC, PVC…) ve alt grup (20mm, 25mm…) birer sayfadır: seçince yalnız onun içeriği görünür; alt grubun içine ↳ ile eklediklerin o sayfada sütun olur. Ürünü alt grup çipine sürükleyip bırakınca o alt gruba geçer. Başlıkları ve ürünleri tutup sürükle (mavi çizgi bırakılacak yeri gösterir). Ürüne Shift+tık: stok kartı · çift tık: kısa ad · başlıktaki ⇔: sütunda istediğin kadar ürün yan yana (⇐ daraltır).</span>`
               : `<span class="hs-ipucu">İşaretlersen bu grup Hızlı Ürünler gibi sütunlu görünür ve kendi alt gruplarını oluşturabilirsin.</span>`);
     }
   }
@@ -7418,6 +7418,39 @@ function hizliSatisYukseklik(v){
   document.querySelectorAll(".hs-satir.hs-kmp").forEach(el=>{ const id = el.id.slice(5); if(ay.yuk[id] === undefined) el.style.setProperty("--yk", ay.yukToplu + "px"); });
 }
 // Tek karenin yüksekliği (toplu ayarın üstüne yazar; toplu değere eşitlenince tekrar topluya bağlanır)
+// ➜ Başka alt gruba taşı: alt grup listesini açar (başka sayfaya/ara gruba sürüklemek gerekmez)
+function hsSatirTasi(e, id){
+  e.stopPropagation();
+  const g = _hsDurum.sekme, ay = hsAyar_();
+  const eski = document.getElementById("hs-renk-pop"); if(eski) eski.remove();
+  const pop = document.createElement("div"); pop.id = "hs-renk-pop"; pop.className = "hs-renk-pop";
+  pop.style.cssText = "width:260px;max-height:60vh;overflow:auto;display:flex;flex-direction:column;gap:4px";
+  const sec = hsAltDuz_(g).concat([{ id:"", etiket:"Alt grupsuz" }]);
+  pop.innerHTML = '<div style="font-weight:800;font-size:12px;margin-bottom:2px">Hangi alt gruba taşınsın?</div>' + sec.map(x=>`<button type="button" class="btn" style="text-align:left" data-alt="${x.id}">${htmlKacis(x.etiket)}</button>`).join("");
+  document.body.appendChild(pop);
+  const r = e.currentTarget.getBoundingClientRect();
+  pop.style.left = Math.max(6, Math.min(window.innerWidth - pop.offsetWidth - 6, r.left)) + "px";
+  pop.style.top = Math.max(6, Math.min(window.innerHeight - pop.offsetHeight - 6, r.bottom + 6)) + "px";
+  const kapat = ()=>{ pop.remove(); document.removeEventListener("mousedown", disTik, true); };
+  const disTik = ev=>{ if(!pop.contains(ev.target)) kapat(); };
+  setTimeout(()=>document.addEventListener("mousedown", disTik, true), 0);
+  pop.addEventListener("click", ev=>{
+    const b = ev.target.closest("[data-alt]"); if(!b) return;
+    kapat();
+    if(b.dataset.alt) ay.urunAlt[id] = b.dataset.alt; else delete ay.urunAlt[id];
+    hsAyarYaz_(); hizliSatisCiz();
+  });
+}
+// ✕ Ürünü bu ürün grubundan çıkarır (stok kartı silinmez; grubu boşalır, "Diğer" sekmesinde görünür)
+function hsSatirGrupCikar(id){
+  const s = (_stokTanimListe||[]).find(x=>x.id === id); if(!s) return;
+  if(!confirm("“" + (s.kisaAd || s.stokAdi) + "” bu ürün grubundan çıkarılsın mı?\nStok kartı silinmez; ürünün grubu boşalır ve Hızlı Satış'ta “Diğer” sekmesine geçer.")) return;
+  const eski = s.urunGrubuId, ay = hsAyar_(), eskiAlt = ay.urunAlt[id];
+  s.urunGrubuId = ""; delete ay.urunAlt[id]; hsAyarYaz_(); hizliSatisCiz();
+  cariApi("stokGrupKaydet", { id, urunGrubuId:"", bosalt:true }).then(r=>{
+    if(!r.ok){ s.urunGrubuId = eski; if(eskiAlt) ay.urunAlt[id] = eskiAlt; hsAyarYaz_(); hizliSatisCiz(); alert("Kaydedilemedi: " + (r.hata||"bilinmiyor")); }
+  }).catch(err=>{ s.urunGrubuId = eski; if(eskiAlt) ay.urunAlt[id] = eskiAlt; hsAyarYaz_(); hizliSatisCiz(); alert("Bağlantı hatası: " + err.message); });
+}
 function hsSatirYuk(id, d){
   const ay = hsAyar_();
   const simdi = ay.yuk[id] !== undefined ? ay.yuk[id] : ay.yukToplu;

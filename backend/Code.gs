@@ -7224,7 +7224,7 @@ function stokTanimSatiriNesneYap(row) {
 function stokGrupKaydet(body) {
   const id = String((body && body.id) || "").trim();
   const grupId = String((body && body.urunGrubuId) || "").trim();
-  if (!id || !grupId) return { ok: false, hata: "Stok kartı ve ürün grubu gerekli" };
+  if (!id || (!grupId && !(body && body.bosalt))) return { ok: false, hata: "Stok kartı ve ürün grubu gerekli" };   // bosalt: ürünü gruptan çıkar
   const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
   const ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
