@@ -510,6 +510,17 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-bolum.hs-bol-sonra{box-shadow:6px 0 0 #2563eb}
 .hs-bolum.hs-kolon-hedef{outline:3px dashed #2563eb;outline-offset:2px}
 /* ara grup bölümleri: tek ekranda yan yana, sığmayan alt satıra geçer */
+.hs-arabar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 8px}
+.hs-ara{border:2px solid var(--blue);background:color-mix(in srgb,var(--blue) 8%,var(--bg2));color:var(--blue);border-radius:10px;padding:6px 16px;font-weight:800;font-size:14px;cursor:pointer}
+.hs-ara:hover{background:color-mix(in srgb,var(--blue) 18%,var(--bg2))}
+.hs-ara.aktif{background:var(--blue);color:#fff}
+.hs-ara .hs-say{color:inherit;opacity:.8}
+.hs-ara.hs-kolon-hedef{outline:3px dashed #2563eb;outline-offset:2px}
+.hs-ara.hs-bol-once{box-shadow:-6px 0 0 #2563eb}
+.hs-ara.hs-bol-sonra{box-shadow:6px 0 0 #2563eb}
+.hs-ara-ops{display:flex;gap:4px;margin-left:6px}
+.hs-ara-ops b{cursor:pointer;font-size:12px;line-height:1;padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text)}
+.hs-ara-ops b:hover{border-color:var(--blue);background:var(--blue-l)}
 .hs-grid.hs-bolumlu{display:flex;flex-wrap:wrap;align-items:flex-start;align-content:flex-start;gap:10px}
 .hs-bolum{display:flex;flex-direction:column;gap:6px;max-width:100%}
 .hs-bolum-baslikli{border:2px solid var(--blue);border-radius:12px;padding:6px;background:color-mix(in srgb,var(--blue) 6%,var(--bg2))}
@@ -6729,7 +6740,7 @@ function hsAyar_(){
   let a = {};
   try{ a = JSON.parse(localStorage.getItem("hs_ayar") || "{}") || {}; }catch(e){ a = {}; }
   a.w = a.w || 170; a.boyut = a.boyut || {}; a.sira = a.sira || {}; a.sirala = a.sirala || {};
-  a.kolonSira = a.kolonSira || {}; a.altGrup = a.altGrup || {}; a.urunAlt = a.urunAlt || {}; a.hizliGrup = a.hizliGrup || {}; a.araGrup = a.araGrup || {}; a.kolonGen = a.kolonGen || {};
+  a.kolonSira = a.kolonSira || {}; a.altGrup = a.altGrup || {}; a.urunAlt = a.urunAlt || {}; a.hizliGrup = a.hizliGrup || {}; a.araGrup = a.araGrup || {}; a.kolonGen = a.kolonGen || {}; a.araSecili = a.araSecili || {};
   _hsAyar = a;
   return a;
 }
@@ -6776,6 +6787,7 @@ function hizliSatisAc(){
       </div>
       <div class="hs-sekmeler" id="hs-sekmeler"></div>
       <div class="hs-gruparaclar" id="hs-gruparaclar" style="display:none"></div>
+      <div class="hs-arabar" id="hs-arabar" style="display:none"></div>
       <div class="hs-grid" id="hs-grid"></div>
       <div class="hs-alt"><span id="hs-ozet"></span><span class="hs-not" title="Kısayollar">💡 Shift + tıkla: stok kartını aç · Çift tıkla: kısa ad ver · ⇔ ile sütunu genişlet</span><button type="button" class="btn btn-primary hs-toplu" id="hs-toplu" onclick="hizliSatisTopluEkle()" title="Miktar yazdığın tüm ürünleri forma ekler (Ctrl+Enter)">➕ Toplu Ekle</button></div>
     </div>`;
@@ -6880,7 +6892,7 @@ function hsSatirTik(e, id){
 function hsSatirEksen_(el){ const n = parseInt((el && el.parentElement && el.parentElement.dataset && el.parentElement.dataset.n) || "1", 10); return n > 1 ? "x" : "y"; }
 function hsKolonCiz_(liste, grid, kaydirma, mod, grupId){
   const ay = hsAyar_();
-  let kolonlar = [], bolumler = null;
+  let kolonlar = [], araCubuk = null;
   if(mod === "alt"){
     const alts = ay.altGrup[grupId] || [], aralar = ay.araGrup[grupId] || [];
     const gecerli = {}; alts.forEach(a=>{ gecerli[a.id] = true; });
@@ -6889,12 +6901,14 @@ function hsKolonCiz_(liste, grid, kaydirma, mod, grupId){
     const diger = liste.filter(s=>!gecerli[ay.urunAlt[s.id]]);
     const sonKolon = (diger.length || !alts.length) ? { id:"-", ad:"Alt grupsuz", it:diger, sabit:true, ara:"" } : null;
     if(aralar.length){
-      bolumler = [];
-      const basliksiz = seri.filter(c=>!c.ara);
-      if(basliksiz.length) bolumler.push({ id:"", ad:"", cols:basliksiz });
-      aralar.forEach(a=>bolumler.push({ id:a.id, ad:a.ad, cols:seri.filter(c=>c.ara === a.id) }));
-      if(sonKolon) bolumler.push({ id:"-", ad:"", cols:[sonKolon] });
-      bolumler.forEach(b=>b.cols.forEach(c=>kolonlar.push(c)));
+      // Ara grup SEKME gibi çalışır: yalnız seçili ara grubun alt grup sütunları ve ürünleri görünür.
+      const bol = aralar.map(a=>({ id:a.id, ad:a.ad, cols:seri.filter(c=>c.ara === a.id) }));
+      const digerCols = seri.filter(c=>!c.ara).concat(sonKolon ? [sonKolon] : []);
+      if(digerCols.length) bol.push({ id:"", ad:"Diğer", cols:digerCols });
+      const istenen = hsAktifAra_(grupId);
+      const sec = bol.find(x=>x.id === istenen) || bol[0];
+      araCubuk = { aktif: sec.id, chipler: bol.map(x=>({ id:x.id, ad:x.ad, say:x.cols.reduce((t,c)=>t + c.it.length, 0) })) };
+      kolonlar = sec.cols.slice();
     } else {
       kolonlar = seri.slice(); if(sonKolon) kolonlar.push(sonKolon);
     }
@@ -6911,23 +6925,10 @@ function hsKolonCiz_(liste, grid, kaydirma, mod, grupId){
   _hsKolonlar = {}; const sirali = [];
   kolonlar.forEach(k=>{ k.it = hsSirala_(k.it, hsSiraAnahtar_(k.id), "elle"); _hsKolonlar[k.id] = k.it.map(s=>s.id); });
   const renkOf = k=>mod === "alt" ? hsGrupRenk_(grupId) : hsGrupRenk_(k.id);
-  if(bolumler){
-    grid.classList.remove("hs-kolonlu"); grid.classList.add("hs-bolumlu");
-    grid.innerHTML = bolumler.map(b=>{
-      b.cols.forEach(c=>c.it.forEach(s=>sirali.push(s)));
-      const say = b.cols.reduce((t,c)=>t + c.it.length, 0);
-      const baslik = b.ad ? `<div class="hs-bolum-baslik" draggable="true" ondragstart="hsBolumSurukle(event,'${b.id}')" ondragend="hsBolumBitti()" title="Ara grup başlığı — tutup sürükleyerek yerini değiştir">
-          <span class="hs-bas-ad">${htmlKacis(b.ad)}</span> <span class="hs-say">${say}</span>
-          <span class="hs-bas-islem"><b title="Bu ara grubun altına alt grup ekle" onclick="hsAltGrupEkle('${b.id}')">➕</b><b title="Sola taşı" onclick="hsAraGrupTasi('${b.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsAraGrupTasi('${b.id}',1)">▶</b><b title="Ara grup adını değiştir" onclick="hsAraGrupAdlandir('${b.id}')">✎</b><b title="Ara grubu sil (alt gruplar silinmez, başlıksız kalır)" onclick="hsAraGrupSil('${b.id}')">✕</b></span>
-        </div>` : "";
-      return `<div class="hs-bolum ${b.ad?'hs-bolum-baslikli':''}" data-bolum="${b.id}" ondragover="hsBolumUstunde(event,this)" ondragleave="hsKolonAyrildi(event,this)" ondrop="hsBolumBirak(event,'${b.id}')">${baslik}
-        <div class="hs-bolum-kolonlar">${b.cols.map(c=>hsKolonHtml_(c, mod, renkOf(c))).join("")}</div></div>`;
-    }).join("");
-  } else {
-    kolonlar.forEach(k=>k.it.forEach(s=>sirali.push(s)));
-    grid.classList.remove("hs-bolumlu"); grid.classList.add("hs-kolonlu");
-    grid.innerHTML = kolonlar.map(k=>hsKolonHtml_(k, mod, renkOf(k))).join("");
-  }
+  kolonlar.forEach(k=>k.it.forEach(s=>sirali.push(s)));
+  grid.classList.remove("hs-bolumlu"); grid.classList.add("hs-kolonlu");
+  grid.innerHTML = kolonlar.map(k=>hsKolonHtml_(k, mod, renkOf(k))).join("");
+  hsAraCubukCiz_(araCubuk);
   _hsGorunen = sirali;
   grid.scrollTop = kaydirma;
   hizliSatisOzet_();
@@ -7086,13 +7087,38 @@ function hsBolumBirak(e, bolumId){
     hsAyarYaz_(); hizliSatisCiz();
   }
 }
+function hsAktifAra_(g){
+  const ay = hsAyar_(), aralar = ay.araGrup[g] || [];
+  if(!aralar.length) return "";
+  const v = ay.araSecili[g];
+  if(v === "" ) return "";                                   // "Diğer"
+  return aralar.some(a=>a.id === v) ? v : aralar[0].id;
+}
+function hsAraSec(id){
+  const ay = hsAyar_(); ay.araSecili[_hsDurum.sekme] = id; hsAyarYaz_();
+  hizliSatisCiz();
+  const g = document.getElementById("hs-grid"); if(g) g.scrollTop = 0;
+}
+// Ara grup çubuğu: PPRC | PVC | Diğer — tıklayınca yalnız o ara grubun alt grupları/ürünleri görünür.
+// Çubuktaki öğeler sürüklenerek sıralanır; sütun başlığı bir ara grubun üstüne bırakılınca sütun o ara gruba geçer.
+function hsAraCubukCiz_(c){
+  const el = document.getElementById("hs-arabar"); if(!el) return;
+  if(!c){ el.style.display = "none"; el.innerHTML = ""; return; }
+  el.style.display = "";
+  const ops = c.aktif !== ""
+    ? `<span class="hs-ara-ops"><b title="Bu ara grubun altına alt grup ekle" onclick="hsAltGrupEkle('${c.aktif}')">➕ Alt grup</b><b title="Sola taşı" onclick="hsAraGrupTasi('${c.aktif}',-1)">◀</b><b title="Sağa taşı" onclick="hsAraGrupTasi('${c.aktif}',1)">▶</b><b title="Ara grup adını değiştir" onclick="hsAraGrupAdlandir('${c.aktif}')">✎</b><b title="Ara grubu sil (alt gruplar silinmez, “Diğer”e geçer)" onclick="hsAraGrupSil('${c.aktif}')">✕</b></span>`
+    : `<span class="hs-ara-ops"><b title="Başlıksız (ara grubu olmayan) alt grup ekle" onclick="hsAltGrupEkle('')">➕ Alt grup</b></span>`;
+  el.innerHTML = c.chipler.map(x=>`<button type="button" class="hs-ara ${x.id===c.aktif?'aktif':''}" data-bolum="${x.id}" ${x.id?`draggable="true" ondragstart="hsBolumSurukle(event,'${x.id}')" ondragend="hsBolumBitti()" title="Tıkla: bu ara grubu aç · tutup sürükle: yerini değiştir"`:'title="Ara grubu olmayan alt gruplar ve alt grupsuz ürünler"'} ondragover="hsBolumUstunde(event,this)" ondragleave="hsKolonAyrildi(event,this)" ondrop="hsBolumBirak(event,'${x.id}')" onclick="hsAraSec('${x.id}')">${htmlKacis(x.ad)} <span class="hs-say">${x.say}</span></button>`).join("") + ops;
+}
 function hsAraGrupEkle(){
   const g = _hsDurum.sekme;
   const ad = (prompt("Yeni ara grup adı (örn. PPRC, PVC):", "") || "").trim();
   if(!ad) return;
   const ay = hsAyar_(); const liste = (ay.araGrup[g] = ay.araGrup[g] || []);
   if(liste.some(a=>a.ad.toLocaleLowerCase("tr") === ad.toLocaleLowerCase("tr"))){ alert("Bu adda bir ara grup zaten var."); return; }
-  liste.push({ id:"r" + Date.now().toString(36) + Math.random().toString(36).slice(2,5), ad });
+  const yeniId = "r" + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  liste.push({ id:yeniId, ad });
+  ay.araSecili[g] = yeniId;                                  // yeni ara grup hemen açılır
   hsAyarYaz_(); hizliSatisCiz();
 }
 function hsAraGrupAdlandir(id){
@@ -7125,6 +7151,7 @@ function hsGrupHizliToggle(v){
 }
 function hsAltGrupEkle(araId){
   const g = _hsDurum.sekme;
+  if(araId === undefined) araId = hsAktifAra_(g);          // araç çubuğundaki ➕: açık olan ara gruba eklenir
   const ad = (prompt("Yeni alt grup adı (örn. 20mm dişsiz, 25mm dişli, Borular, Çiftli):", "") || "").trim();
   if(!ad) return;
   const ay = hsAyar_(); const liste = (ay.altGrup[g] = ay.altGrup[g] || []);
@@ -7243,13 +7270,14 @@ function hizliSatisCiz(){
     sel.title = (sekme === "hizli" || ay.hizliGrup[sekme]) ? "Bu görünümde ürünler ▲▼ düğmeleri ya da ⠿ ile sürüklenerek sıralanır" : "Bu sekmedeki ürünlerin sıralaması";
   }
   const araEl = document.getElementById("hs-gruparaclar");
+  const araBarEl = document.getElementById("hs-arabar"); if(araBarEl) araBarEl.style.display = "none";   // yalnız alt grup görünümünde (hsKolonCiz_) açılır
   if(araEl){
     if(q || sekme === "hizli" || sekme === "diger") araEl.style.display = "none";
     else {
       const acik = !!ay.hizliGrup[sekme];
       araEl.style.display = "";
       araEl.innerHTML = `<label><input type="checkbox" ${acik?'checked':''} onchange="hsGrupHizliToggle(this.checked)"> ⚡ Hızlı satış görünümü</label>` +
-        (acik ? `<button type="button" class="btn btn-primary" onclick="hsAltGrupEkle('')">➕ Alt Grup</button><button type="button" class="btn btn-primary" onclick="hsAraGrupEkle()" title="Alt grupları toplayan başlık (örn. PPRC, PVC)">➕ Ara Grup</button><span class="hs-ipucu">Başlıkları ve ürünleri tutup sürükle (mavi çizgi bırakılacak yeri gösterir). Ürüne Shift+tık: stok kartı · çift tık: kısa ad · başlıktaki ⇔: sütunda 2-3 ürün yan yana.</span>`
+        (acik ? `<button type="button" class="btn btn-primary" onclick="hsAltGrupEkle()">➕ Alt Grup</button><button type="button" class="btn btn-primary" onclick="hsAraGrupEkle()" title="Alt grupları toplayan başlık (örn. PPRC, PVC)">➕ Ara Grup</button><span class="hs-ipucu">Ara grup (PPRC, PVC…) seçince yalnız onun alt grupları görünür. Başlıkları ve ürünleri tutup sürükle (mavi çizgi bırakılacak yeri gösterir). Ürüne Shift+tık: stok kartı · çift tık: kısa ad · başlıktaki ⇔: sütunda 2-3 ürün yan yana.</span>`
               : `<span class="hs-ipucu">İşaretlersen bu grup Hızlı Ürünler gibi sütunlu görünür ve kendi alt gruplarını oluşturabilirsin.</span>`);
     }
   }
