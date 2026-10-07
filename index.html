@@ -476,14 +476,19 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-grid.hs-kolonlu{grid-template-columns:repeat(auto-fill,minmax(calc(var(--hs-w) + 70px),1fr));gap:8px}
 .hs-kolonlu .hs-kolon,.hs-bolumlu .hs-kolon{gap:3px;padding:5px;position:relative}
 .hs-kolon-baslik{font-size:12.5px}
-.hs-satir.hs-kmp{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto 56px auto;align-items:center;column-gap:4px;padding:3px 6px;gap:4px;position:relative}
-.hs-satir.hs-kmp .hs-satir-ad{font-size:12px;font-weight:700;line-height:1.2;-webkit-line-clamp:2}
-.hs-satir.hs-kmp .hs-fiyat{font-size:11px;white-space:nowrap;color:var(--blue);font-weight:700}
-.hs-satir.hs-kmp .hs-fiyat i{font-style:normal;font-weight:600;opacity:.7;font-size:10px}
-.hs-satir.hs-kmp .hs-adet{width:56px;flex:none;font-size:13px;padding:4px 2px}
-.hs-satir.hs-kmp .hs-ekle{padding:4px 7px;font-size:12px}
-.hs-kart-ac{cursor:pointer;font-size:12px;opacity:.55;line-height:1;padding:1px 2px;border-radius:4px}
-.hs-kart-ac:hover{opacity:1;background:var(--blue-l)}
+.hs-satir.hs-kmp{display:flex;flex-direction:column;align-items:stretch;gap:3px;padding:4px 6px;position:relative}
+.hs-s-ust{display:flex;align-items:flex-start;gap:5px;min-width:0}
+.hs-s-alt{display:flex;align-items:center;gap:5px}
+.hs-satir.hs-kmp .hs-satir-ad{flex:1;min-width:0;font-size:12px;font-weight:700;line-height:1.25;-webkit-line-clamp:3}
+.hs-birim{font-style:normal;font-size:9.5px;font-weight:800;color:var(--blue);margin-left:4px;white-space:nowrap;opacity:.9}
+.hs-satir.hs-kmp .hs-adet{width:76px;flex:0 1 76px;font-size:13px;padding:4px 3px}
+.hs-satir.hs-kmp .hs-ekle{padding:4px 10px;font-size:12px}
+.hs-satir,.hs-kart{user-select:none;-webkit-user-select:none}
+.hs-satir input,.hs-kart input{user-select:text;-webkit-user-select:text}
+.hs-not{font-size:11.5px;color:var(--text3);font-weight:600;white-space:nowrap}
+.hs-kolon-satirlar{display:grid;grid-template-columns:repeat(var(--n,1),minmax(0,1fr));gap:3px}
+.hs-kolon{--n:1}
+.hs-kolonlu .hs-kolon{grid-column:span var(--n);min-width:0}
 .hs-aksiyon{position:absolute;right:4px;top:-12px;display:none;gap:2px;z-index:4;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:1px 3px;box-shadow:0 2px 6px rgba(0,0,0,.18)}
 .hs-satir:hover .hs-aksiyon{display:flex}
 .hs-aksiyon b{cursor:pointer;font-size:11px;line-height:1;padding:3px 4px;border-radius:4px}
@@ -494,6 +499,9 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-satir.hs-ekle-ust::before,.hs-satir.hs-ekle-alt::after{content:"";position:absolute;left:-2px;right:-2px;height:5px;border-radius:3px;background:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.28);z-index:5;pointer-events:none}
 .hs-satir.hs-ekle-ust::before{top:-5px}
 .hs-satir.hs-ekle-alt::after{bottom:-5px}
+.hs-satir.hs-ekle-sol::before,.hs-satir.hs-ekle-sag::after{content:"";position:absolute;top:-2px;bottom:-2px;width:5px;border-radius:3px;background:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.28);z-index:5;pointer-events:none}
+.hs-satir.hs-ekle-sol::before{left:-5px}
+.hs-satir.hs-ekle-sag::after{right:-5px}
 .hs-kolon.hs-kolon-hedef{outline:3px dashed #2563eb;outline-offset:-3px;background:color-mix(in srgb,#2563eb 8%,var(--bg3))}
 .hs-kolon.hs-son-ekle::after{content:"▼ buraya (sona) eklenir";display:block;margin-top:2px;padding:4px;border-radius:5px;background:#2563eb;color:#fff;font-size:11.5px;font-weight:800;text-align:center}
 .hs-kolon.hs-kol-once{box-shadow:inset 7px 0 0 #2563eb}
@@ -509,7 +517,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-bolum-baslik .hs-bas-ad{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hs-bolum-baslik .hs-say{color:inherit}
 .hs-bolum-kolonlar{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
-.hs-bolumlu .hs-kolon{width:calc(var(--hs-w) + 70px);flex:0 0 auto}
+.hs-bolumlu .hs-kolon{width:calc((var(--hs-w) + 70px) * var(--n) + (var(--n) - 1) * 3px);max-width:100%;flex:0 0 auto}
 
 /* ★ (7 Eki 2026) Kutuya uymayan miktar uyarısı: ekranın üstünde, kırmızı, dikkat çekici */
 .kutu-uyari{position:fixed;top:14px;left:50%;transform:translate(-50%,-30px);z-index:100002;background:#dc2626;color:#fff;border:3px solid #7f1d1d;border-radius:14px;padding:14px 22px;max-width:min(92vw,640px);box-shadow:0 10px 30px rgba(127,29,29,.45);font-size:16px;font-weight:800;line-height:1.35;text-align:center;opacity:0;transition:opacity .18s,transform .18s;cursor:pointer}
@@ -6721,7 +6729,7 @@ function hsAyar_(){
   let a = {};
   try{ a = JSON.parse(localStorage.getItem("hs_ayar") || "{}") || {}; }catch(e){ a = {}; }
   a.w = a.w || 170; a.boyut = a.boyut || {}; a.sira = a.sira || {}; a.sirala = a.sirala || {};
-  a.kolonSira = a.kolonSira || {}; a.altGrup = a.altGrup || {}; a.urunAlt = a.urunAlt || {}; a.hizliGrup = a.hizliGrup || {}; a.araGrup = a.araGrup || {};
+  a.kolonSira = a.kolonSira || {}; a.altGrup = a.altGrup || {}; a.urunAlt = a.urunAlt || {}; a.hizliGrup = a.hizliGrup || {}; a.araGrup = a.araGrup || {}; a.kolonGen = a.kolonGen || {};
   _hsAyar = a;
   return a;
 }
@@ -6769,7 +6777,7 @@ function hizliSatisAc(){
       <div class="hs-sekmeler" id="hs-sekmeler"></div>
       <div class="hs-gruparaclar" id="hs-gruparaclar" style="display:none"></div>
       <div class="hs-grid" id="hs-grid"></div>
-      <div class="hs-alt"><span id="hs-ozet"></span><button type="button" class="btn btn-primary hs-toplu" id="hs-toplu" onclick="hizliSatisTopluEkle()" title="Miktar yazdığın tüm ürünleri forma ekler (Ctrl+Enter)">➕ Toplu Ekle</button></div>
+      <div class="hs-alt"><span id="hs-ozet"></span><span class="hs-not" title="Kısayollar">💡 Shift + tıkla: stok kartını aç · Çift tıkla: kısa ad ver · ⇔ ile sütunu genişlet</span><button type="button" class="btn btn-primary hs-toplu" id="hs-toplu" onclick="hizliSatisTopluEkle()" title="Miktar yazdığın tüm ürünleri forma ekler (Ctrl+Enter)">➕ Toplu Ekle</button></div>
     </div>`;
   document.body.appendChild(ov);
   hizliSatisCiz();
@@ -6826,29 +6834,50 @@ function hsSatirHtml_(s, k, mod, kRenk){
   const m = _hsMiktar[s.id] || "";
   const birak = mod === "alt" ? "hsAltBirak" : "hsKolonBirak";
   const birim = htmlKacis(s.birim1 || "adet");
-  return `<div class="hs-satir hs-kmp ${(hsHex_(s.hizliRenk)||kRenk)?'hs-renkli':''}" id="hs-k-${s.id}" style="${hsRenkStil_(s.hizliRenk)}" ondragover="hsSatirUstunde(event,this)" ondragleave="hsSatirAyrildi(event,this)" ondrop="${birak}(event,'${k.id}','${s.id}')">
+  return `<div class="hs-satir hs-kmp ${(hsHex_(s.hizliRenk)||kRenk)?'hs-renkli':''}" id="hs-k-${s.id}" style="${hsRenkStil_(s.hizliRenk)}" onclick="hsSatirTik(event,'${s.id}')" ondragover="hsSatirUstunde(event,this)" ondragleave="hsSatirAyrildi(event,this)" ondrop="${birak}(event,'${k.id}','${s.id}')">
     ${hsNokta_(s.id)}${hsSariNokta_(s.id)}
-    <span class="hs-tut" draggable="true" title="Tutup sürükle${mod==='alt'?' (başka alt gruba da bırakabilirsin)':''}" ondragstart="hsSurukleBasla(event,'${s.id}')" ondragend="hsSurukleBitti()">⠿</span>
-    <div class="hs-satir-ad" title="${htmlKacis(s.stokAdi)}${s.kisaAd?'\n(kısa ad: '+htmlKacis(s.kisaAd)+')':''}\nKısa ad vermek için çift tıkla" ondblclick="hsKisaAdDuzenle('${s.id}')">${htmlKacis(s.kisaAd || s.stokAdi)}</div>
-    <span class="hs-kart-ac" title="Stok kartını aç" onclick="hsStokKartiAc('${s.id}')">📇</span>
-    <span class="hs-fiyat" title="Satış fiyatı / ${birim}">${paraFormat(s.satisFiyati)}<i>/${birim}</i></span>
-    <input class="hs-adet" id="hs-q-${s.id}" type="text" inputmode="decimal" autocomplete="off" placeholder="Mik." value="${m}"
-           onfocus="this.select()" oninput="hsMiktarYaz_('${s.id}',this.value)" onkeydown="hizliSatisAdetTus(event,'${s.id}')">
-    <button type="button" tabindex="-1" class="btn btn-primary hs-ekle" onclick="hizliSatisEkle('${s.id}')">Ekle</button>
+    <div class="hs-s-ust">
+      <span class="hs-tut" draggable="true" title="Tutup sürükle${mod==='alt'?' (başka alt gruba da bırakabilirsin)':''}" ondragstart="hsSurukleBasla(event,'${s.id}')" ondragend="hsSurukleBitti()">⠿</span>
+      <div class="hs-satir-ad" title="${htmlKacis(s.stokAdi)}${s.kisaAd?'\n(kısa ad: '+htmlKacis(s.kisaAd)+')':''}\nSatış fiyatı: ${paraFormat(s.satisFiyati)} / ${birim}\nÇift tıkla: kısa ad ver · Shift+tık: stok kartını aç" ondblclick="hsKisaAdDuzenle('${s.id}')">${htmlKacis(s.kisaAd || s.stokAdi)}<i class="hs-birim">${birim}</i></div>
+    </div>
+    <div class="hs-s-alt">
+      <input class="hs-adet" id="hs-q-${s.id}" type="text" inputmode="decimal" autocomplete="off" placeholder="Miktar" value="${m}"
+             onfocus="this.select()" oninput="hsMiktarYaz_('${s.id}',this.value)" onkeydown="hizliSatisAdetTus(event,'${s.id}')">
+      <button type="button" tabindex="-1" class="btn btn-primary hs-ekle" onclick="hizliSatisEkle('${s.id}')">Ekle</button>
+    </div>
     <span class="hs-aksiyon"><b title="Kısa ad ver / değiştir" onclick="hsKisaAdDuzenle('${s.id}')">✎</b><b title="Bu ürüne renk seç" onclick="hizliSatisUrunRenk(event,'${s.id}')">🎨</b><b title="Yukarı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',-1)">▲</b><b title="Aşağı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',1)">▼</b>${mod==='hizli'?`<b title="Hızlı ürünlerden çıkar" onclick="hizliSatisHizliIsaret('${s.id}', false)">✕</b>`:''}</span>
   </div>`;
 }
 function hsKolonHtml_(k, mod, kRenk){
+  const n = hsKolonGen_(k.id);
+  const genBtn = `<b title="Sütun genişliği: ${n} yan yana — tıkla: ${n>=3?1:n+1} yan yana" onclick="hsKolonGenislet('${k.id}')">⇔${n>1?n:''}</b>`;
   const basIslem = (mod === "alt" && !k.sabit)
-    ? `<span class="hs-bas-islem"><b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b><b title="Alt grup adını değiştir" onclick="hsAltGrupAdlandir('${k.id}')">✎</b><b title="Alt grubu sil (ürünler “Alt grupsuz”a geçer)" onclick="hsAltGrupSil('${k.id}')">✕</b></span>`
-    : (mod === "hizli" ? `<span class="hs-bas-islem"><b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b></span>` : "");
-  return `<div class="hs-kolon ${kRenk?'hs-renkli':''}" style="${hsRenkStil_(kRenk)}" data-kolon="${k.id}" ondragover="hsKolonUstunde(event,this)" ondragleave="hsKolonAyrildi(event,this)" ondrop="hsKolonBirak2(event,'${k.id}')">
+    ? `<span class="hs-bas-islem">${genBtn}<b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b><b title="Alt grup adını değiştir" onclick="hsAltGrupAdlandir('${k.id}')">✎</b><b title="Alt grubu sil (ürünler “Alt grupsuz”a geçer)" onclick="hsAltGrupSil('${k.id}')">✕</b></span>`
+    : (mod === "hizli" ? `<span class="hs-bas-islem">${genBtn}<b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b></span>` : `<span class="hs-bas-islem">${genBtn}</span>`);
+  return `<div class="hs-kolon ${kRenk?'hs-renkli':''}" style="--n:${n};${hsRenkStil_(kRenk)}" data-kolon="${k.id}" ondragover="hsKolonUstunde(event,this)" ondragleave="hsKolonAyrildi(event,this)" ondrop="hsKolonBirak2(event,'${k.id}')">
     <div class="hs-kolon-baslik" ${k.sabit?'':`draggable="true" ondragstart="hsKolonBasSurukle(event,'${k.id}')" ondragend="hsKolonBasBitti()" title="Tutup sürükleyerek sütunun yerini değiştir (ara grup başlığına da bırakabilirsin)"`}>
       <span class="hs-bas-ad">${htmlKacis(k.ad)}</span> <span class="hs-say">${k.it.length}</span>${basIslem}
     </div>
-    ${k.it.length ? k.it.map(s=>hsSatirHtml_(s, k, mod, kRenk)).join("") : '<div class="hs-bos hs-bos-kolon">Ürünü buraya sürükle</div>'}
+    ${k.it.length ? `<div class="hs-kolon-satirlar" data-n="${n}">${k.it.map(s=>hsSatirHtml_(s, k, mod, kRenk)).join("")}</div>` : '<div class="hs-bos hs-bos-kolon">Ürünü buraya sürükle</div>'}
   </div>`;
 }
+// Sütun genişliği: 1, 2 ya da 3 ürün yan yana (sütun/ekran başına tarayıcıda saklanır)
+function hsKolonGen_(kolonId){ const v = hsAyar_().kolonGen[hsSiraAnahtar_(kolonId)]; return v >= 2 ? Math.min(3, v) : 1; }
+function hsKolonGenislet(kolonId){
+  const ay = hsAyar_(), key = hsSiraAnahtar_(kolonId), n = hsKolonGen_(kolonId), yeni = n >= 3 ? 1 : n + 1;
+  if(yeni === 1) delete ay.kolonGen[key]; else ay.kolonGen[key] = yeni;
+  hsAyarYaz_(); hizliSatisCiz();
+}
+// Shift + tıkla: o ürünün stok kartını açar (kutu/düğme/liste üzerindeyse yok sayılır)
+function hsSatirTik(e, id){
+  if(!e.shiftKey) return;
+  if(e.target && e.target.closest && e.target.closest("input,button,select,.hs-aksiyon,.hs-tut")) return;
+  e.preventDefault();
+  try{ const sel = window.getSelection && window.getSelection(); if(sel) sel.removeAllRanges(); }catch(x){}
+  hsStokKartiAc(id);
+}
+// Satırlar yan yana (n>1) dizilmişse bırakma yeri soldan/sağdan, tek sütunsa üstten/alttan belirlenir
+function hsSatirEksen_(el){ const n = parseInt((el && el.parentElement && el.parentElement.dataset && el.parentElement.dataset.n) || "1", 10); return n > 1 ? "x" : "y"; }
 function hsKolonCiz_(liste, grid, kaydirma, mod, grupId){
   const ay = hsAyar_();
   let kolonlar = [], bolumler = null;
@@ -6915,13 +6944,15 @@ function hizliSatisKolonTasi(kolonId, id, yon){
 function hsSatirUstunde(e, el){
   if(!_hsSurukle) return;
   e.preventDefault();
-  const once = hsDropOnce_({ currentTarget: el, clientY: e.clientY }, "y");
-  el.classList.toggle("hs-ekle-ust", once); el.classList.toggle("hs-ekle-alt", !once);
+  const x = hsSatirEksen_(el) === "x";
+  const once = hsDropOnce_({ currentTarget: el, clientY: e.clientY, clientX: e.clientX }, x ? "x" : "y");
+  el.classList.remove("hs-ekle-ust", "hs-ekle-alt", "hs-ekle-sol", "hs-ekle-sag");
+  el.classList.add(x ? (once ? "hs-ekle-sol" : "hs-ekle-sag") : (once ? "hs-ekle-ust" : "hs-ekle-alt"));
 }
-function hsSatirAyrildi(e, el){ if(!el.contains(e.relatedTarget)) el.classList.remove("hs-ekle-ust", "hs-ekle-alt"); }
+function hsSatirAyrildi(e, el){ if(!el.contains(e.relatedTarget)) el.classList.remove("hs-ekle-ust", "hs-ekle-alt", "hs-ekle-sol", "hs-ekle-sag"); }
 function hsKolonBirak(e, kolonId, hedefId){
   e.preventDefault(); e.stopPropagation();
-  const once = hsDropOnce_(e, "y");
+  const once = hsDropOnce_(e, hsSatirEksen_(e.currentTarget));
   const kaynakId = _hsSurukle; hsSurukleBitti();
   if(!kaynakId || kaynakId === hedefId) return;
   const eski = (_hsKolonlar[kolonId] || []);
@@ -6935,7 +6966,7 @@ function hsKolonBirak(e, kolonId, hedefId){
 // Alt grup görünümü: ürünü aynı sütunda yeniden sıralar ya da başka alt gruba taşır (hedefId boşsa sütunun sonuna).
 function hsAltBirak(e, kolonId, hedefId){
   e.preventDefault(); e.stopPropagation();
-  const once = hsDropOnce_(e, "y");
+  const once = hsDropOnce_(e, hsSatirEksen_(e.currentTarget));
   const kaynakId = _hsSurukle; hsSurukleBitti();
   if(!kaynakId || kaynakId === hedefId || _hsKolonCfg.mod !== "alt") return;
   const ay = hsAyar_();
@@ -6949,7 +6980,7 @@ function hsAltBirak(e, kolonId, hedefId){
 }
 // Sütun başlığı sürükleme (bırakılacak yer sütunun solunda/sağında mavi çubukla görünür)
 function hsKolonBasSurukle(e, id){ _hsKolTutulan = id; _hsBolTutulan = null; try{ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "kolon:"+id); }catch(x){} }
-function hsHedefTemizle_(){ document.querySelectorAll(".hs-kolon-hedef,.hs-son-ekle,.hs-kol-once,.hs-kol-sonra,.hs-ekle-ust,.hs-ekle-alt,.hs-bol-once,.hs-bol-sonra").forEach(x=>x.classList.remove("hs-kolon-hedef","hs-son-ekle","hs-kol-once","hs-kol-sonra","hs-ekle-ust","hs-ekle-alt","hs-bol-once","hs-bol-sonra")); }
+function hsHedefTemizle_(){ document.querySelectorAll(".hs-kolon-hedef,.hs-son-ekle,.hs-kol-once,.hs-kol-sonra,.hs-ekle-ust,.hs-ekle-alt,.hs-ekle-sol,.hs-ekle-sag,.hs-bol-once,.hs-bol-sonra").forEach(x=>x.classList.remove("hs-kolon-hedef","hs-son-ekle","hs-kol-once","hs-kol-sonra","hs-ekle-ust","hs-ekle-alt","hs-ekle-sol","hs-ekle-sag","hs-bol-once","hs-bol-sonra")); }
 function hsKolonBasBitti(){ _hsKolTutulan = null; hsHedefTemizle_(); }
 function hsKolonUstunde(e, el){
   if(_hsKolTutulan){
@@ -7218,7 +7249,7 @@ function hizliSatisCiz(){
       const acik = !!ay.hizliGrup[sekme];
       araEl.style.display = "";
       araEl.innerHTML = `<label><input type="checkbox" ${acik?'checked':''} onchange="hsGrupHizliToggle(this.checked)"> ⚡ Hızlı satış görünümü</label>` +
-        (acik ? `<button type="button" class="btn btn-primary" onclick="hsAltGrupEkle('')">➕ Alt Grup</button><button type="button" class="btn btn-primary" onclick="hsAraGrupEkle()" title="Alt grupları toplayan başlık (örn. PPRC, PVC)">➕ Ara Grup</button><span class="hs-ipucu">Başlıkları ve ürünleri tutup sürükle (mavi çizgi bırakılacak yeri gösterir). Ürün adına çift tıkla: kısa ad ver.</span>`
+        (acik ? `<button type="button" class="btn btn-primary" onclick="hsAltGrupEkle('')">➕ Alt Grup</button><button type="button" class="btn btn-primary" onclick="hsAraGrupEkle()" title="Alt grupları toplayan başlık (örn. PPRC, PVC)">➕ Ara Grup</button><span class="hs-ipucu">Başlıkları ve ürünleri tutup sürükle (mavi çizgi bırakılacak yeri gösterir). Ürüne Shift+tık: stok kartı · çift tık: kısa ad · başlıktaki ⇔: sütunda 2-3 ürün yan yana.</span>`
               : `<span class="hs-ipucu">İşaretlersen bu grup Hızlı Ürünler gibi sütunlu görünür ve kendi alt gruplarını oluşturabilirsin.</span>`);
     }
   }
@@ -7240,14 +7271,14 @@ function hizliSatisCiz(){
     const m = _hsMiktar[s.id] || "";
     const boyut = Math.min(3, Math.max(1, ay.boyut[s.id] || 1));
     const resim = s.gorselUrl ? `<img src="${htmlKacis(s.gorselUrl)}" loading="lazy" referrerpolicy="no-referrer" alt="" onerror="this.remove()">` : "";
-    return `<div class="hs-kart ${boyut>1?'hs-b'+boyut:''} ${hsUrunRenk_(s)?'hs-renkli':''}" id="hs-k-${s.id}" style="grid-column:span ${boyut};${hsRenkStil_(hsUrunRenk_(s))}" ondragover="hsSurukleUstunde(event)" ondrop="hsSurukleBirak(event,'${s.id}')">
+    return `<div class="hs-kart ${boyut>1?'hs-b'+boyut:''} ${hsUrunRenk_(s)?'hs-renkli':''}" id="hs-k-${s.id}" style="grid-column:span ${boyut};${hsRenkStil_(hsUrunRenk_(s))}" onclick="hsSatirTik(event,'${s.id}')" ondragover="hsSurukleUstunde(event)" ondrop="hsSurukleBirak(event,'${s.id}')">
       ${hsNokta_(s.id)}${hsSariNokta_(s.id)}<div class="hs-resim"><span class="hs-yer">📦</span>${resim}
         ${surukleAcik ? `<span class="hs-tut" draggable="true" title="Tutup sürükleyerek yerini değiştir" ondragstart="hsSurukleBasla(event,'${s.id}')" ondragend="hsSurukleBitti()">⠿</span>` : ''}
         <button type="button" tabindex="-1" class="hs-boyutbtn" title="Bu ürünün kart boyutunu değiştir (küçük → orta → büyük)" onclick="hizliSatisUrunBoyut('${s.id}')">⤢</button>
       </div>
       <div class="hs-ad" title="${htmlKacis(s.stokAdi)}
-Kısa ad vermek için çift tıkla" ondblclick="hsKisaAdDuzenle('${s.id}')">${htmlKacis(s.kisaAd || s.stokAdi)}</div>
-      <div class="hs-kod">${htmlKacis(s.stokKodu||"")} <span class="hs-kart-ac" title="Stok kartını aç" onclick="hsStokKartiAc('${s.id}')">📇</span></div>
+Çift tıkla: kısa ad ver · Shift+tık: stok kartını aç" ondblclick="hsKisaAdDuzenle('${s.id}')">${htmlKacis(s.kisaAd || s.stokAdi)}</div>
+      <div class="hs-kod">${htmlKacis(s.stokKodu||"")}</div>
       <div class="hs-fiyat">${paraFormat(s.satisFiyati)} / ${htmlKacis(s.birim1||"adet")}</div>
       <label class="hs-hizli"><input type="checkbox" tabindex="-1" ${s.hizli?'checked':''} onchange="hizliSatisHizliIsaret('${s.id}', this.checked)"> Hızlı ürün</label>
       <div class="hs-mik">
@@ -7292,6 +7323,8 @@ function hizliSatisDuzenSifirla(){
   if(!confirm("Bu sekmenin elle sıralaması ve tüm ürün boyutları sıfırlansın mı?")) return;
   const ay = hsAyar_();
   delete ay.sira[_hsDurum.sekme]; delete ay.sirala[_hsDurum.sekme]; ay.boyut = {};
+  const gp = _hsDurum.sekme === "hizli" ? "hizli:" : "alt:" + _hsDurum.sekme + ":";
+  Object.keys(ay.kolonGen).forEach(k=>{ if(k.indexOf(gp) === 0) delete ay.kolonGen[k]; });
   if(_hsDurum.sekme === "hizli"){ Object.keys(ay.sira).forEach(k=>{ if(k.indexOf("hizli:") === 0) delete ay.sira[k]; }); delete ay.kolonSira.hizli; }
   else Object.keys(ay.sira).forEach(k=>{ if(k.indexOf("alt:" + _hsDurum.sekme + ":") === 0) delete ay.sira[k]; });
   hsAyarYaz_(); hizliSatisCiz();
