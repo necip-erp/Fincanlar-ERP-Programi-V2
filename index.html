@@ -499,6 +499,8 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-aksiyon b:hover{background:var(--blue-l)}
 .hs-nokta-sari{position:absolute;top:-6px;left:-6px;width:15px;height:15px;border-radius:50%;background:#facc15;border:2px solid #fff;box-shadow:0 0 0 2px #ca8a04,0 1px 4px rgba(0,0,0,.35);pointer-events:none;z-index:3}
 .hs-kisayol{font-style:normal;font-size:10px}
+.hs-hayalet{min-height:calc(40px + var(--yk,0px)/2);border:2px dashed var(--border);border-radius:9px;opacity:.35;display:flex;align-items:center;justify-content:center;color:var(--text3);font-weight:800;font-size:16px}
+.hs-hayalet:hover,.hs-hayalet.hs-kolon-hedef{opacity:1;border-color:#2563eb;background:rgba(37,99,235,.12);color:#2563eb}
 .hs-bos-hucre{position:relative;min-height:calc(54px + var(--yk,0px));border:2px dashed var(--border);border-radius:9px;background:rgba(0,0,0,.025)}
 .hs-bos-hucre b{display:none;position:absolute;top:2px;right:4px;cursor:pointer;font-size:11px;padding:2px 5px;border-radius:5px;background:var(--bg2);border:1px solid var(--border)}
 .hs-bos-hucre:hover b{display:block}
@@ -6905,6 +6907,32 @@ function hsYerTasi_(g, s, eskiKol, yeniKol){
   } else { const i = ekl.indexOf(eski); if(i >= 0) ekl[i] = yeni; }
 }
 function hsKartKolonu_(g, s){ const a = hsAsilAlt_(g, s); return a === null ? "" : (a || "-"); }
+// Serbest taşıma + sütunda yan yana dizilim (n>1): yarım kalan satırın boş yerleri ve bir sonraki satır "hayalet" hücre olarak çıkar;
+// ürün bunların herhangi birine bırakılabilir (önündeki boşluklar otomatik boş yer olur) — satır dolmadan alt satıra geçebilirsin.
+function hsHayaletHtml_(k, n){
+  if(!(n > 1) || !hsAyar_().serbest) return "";
+  const len = (k.cells||k.it).length, adet = ((n - len % n) % n) + n;
+  let h = "";
+  for(let i = 0; i < adet; i++) h += `<div class="hs-hayalet" title="Boş yer: ürünü buraya bırak (serbest yerleşim)" ondragover="if(_hsSurukle){event.preventDefault();this.classList.add('hs-kolon-hedef')}" ondragleave="this.classList.remove('hs-kolon-hedef')" ondrop="hsHayaletBirak(event,'${k.id}',${len + i})">+</div>`;
+  return h;
+}
+function hsHayaletBirak(e, kolonId, poz){
+  e.preventDefault(); e.stopPropagation();
+  const kaynakId = _hsSurukle, eskiKol = _hsSurukleKol; hsSurukleBitti();
+  if(!kaynakId) return;
+  const g = _hsDurum.sekme;
+  if(_hsKolonCfg.mod === "alt"){
+    const st = (_stokTanimListe||[]).find(x=>x.id === kaynakId); if(!st) return;
+    const hedefAlt = kolonId === "-" ? "" : kolonId, kaynakKol = eskiKol || hsKartKolonu_(g, st) || kolonId;
+    if(hsYerler_(g, st).indexOf(hedefAlt) >= 0 && kaynakKol !== kolonId){ alert("Bu ürün zaten o alt grupta var."); return; }
+    if(!hsYerlestir_(kaynakId, kolonId, "", false, kaynakKol, poz)) return;
+    hsYerTasi_(g, st, kaynakKol, kolonId);
+  } else {
+    if((_hsKolonlar[kolonId]||[]).indexOf(kaynakId) < 0) return;
+    if(!hsYerlestir_(kaynakId, kolonId, "", false, null, poz)) return;
+  }
+  hsAyarYaz_(); hizliSatisCiz();
+}
 function hsBosHucreHtml_(c, k, mod){
   const birak = mod === "alt" ? "hsAltBirak" : "hsKolonBirak", ay = hsAyar_();
   return `<div class="hs-bos-hucre" id="hs-k-${c.id}" style="--yk:${hsYukToplu_(_hsDurum.sekme)}px" title="Boş yer: ürünü buraya bırak" ondragover="hsSatirUstunde(event,this)" ondragleave="hsSatirAyrildi(event,this)" ondrop="${birak}(event,'${k.id}','${c.id}')"><b title="Bu boş yeri kaldır" onclick="hsBosSil('${k.id}','${c.id}')">✕</b></div>`;
@@ -6921,7 +6949,7 @@ function hsBosSil(kolonId, id){
 }
 function hizliSatisSerbest(v){ const ay = hsAyar_(); ay.serbest = !!v; hsAyarYaz_(); }
 // Ürünü sürükleyip bırakma (aynı/başka sütun). Serbest taşıma açıksa eski yeri boş kalır; boş yere bırakılırsa onun yerine geçer.
-function hsYerlestir_(kaynakId, kolonId, hedefId, once, srcKol){
+function hsYerlestir_(kaynakId, kolonId, hedefId, once, srcKol, poz){
   const ay = hsAyar_(), serbest = !!ay.serbest;
   const L = {}; Object.keys(_hsKolonlar).forEach(k=>{ L[k] = _hsKolonlar[k].slice(); });
   let srcK = null, eskiYer = -1;
@@ -6932,7 +6960,10 @@ function hsYerlestir_(kaynakId, kolonId, hedefId, once, srcKol){
   const T = L[kolonId] || [];
   let yer = T.length, degis = false;
   if(hedefId){ const h = T.indexOf(hedefId); if(serbest && String(hedefId).charAt(0) === "~"){ yer = h; degis = true; } else yer = once ? h : h + 1; }
-  if(degis) T.splice(yer, 1, kaynakId); else T.splice(yer, 0, kaynakId);
+  if(poz !== undefined){                                   // belirli hücreye bırakma: öndeki boşluklar boş yerle doldurulur
+    while(T.length < poz) T.push("~" + hsUid_());
+    if(T.length > poz && String(T[poz]).charAt(0) === "~") T.splice(poz, 1, kaynakId); else T.splice(poz, 0, kaynakId);
+  } else if(degis) T.splice(yer, 1, kaynakId); else T.splice(yer, 0, kaynakId);
   if(srcK) ay.sira[hsSiraAnahtar_(srcK)] = L[srcK];
   if(L[kolonId]) ay.sira[hsSiraAnahtar_(kolonId)] = T;   // sayfada görünmeyen (çipe bırakılan) alt grubun sırasına dokunulmaz
   return true;
@@ -6947,7 +6978,7 @@ function hsKolonHtml_(k, mod, kRenk, ic){
     <div class="hs-kolon-baslik" ${k.sabit?'':`draggable="true" ondragstart="hsKolonBasSurukle(event,'${k.id}')" ondragend="hsKolonBasBitti()" title="Tutup sürükleyerek sütunun yerini değiştir (ara grup başlığına da bırakabilirsin)"`}>
       <span class="hs-bas-ad">${htmlKacis(k.ad)}</span> <span class="hs-say">${k.it.length}</span>${basIslem}
     </div>
-    ${(k.cells||k.it).length ? `<div class="hs-kolon-satirlar" data-n="${n}">${(k.cells||k.it).map(s=>s.bos ? hsBosHucreHtml_(s, k, mod) : hsSatirHtml_(s, k, mod, kRenk)).join("")}</div>` : ((k.alt||[]).length ? '' : '<div class="hs-bos hs-bos-kolon">Ürünü buraya sürükle</div>')}
+    ${(k.cells||k.it).length ? `<div class="hs-kolon-satirlar" data-n="${n}">${(k.cells||k.it).map(s=>s.bos ? hsBosHucreHtml_(s, k, mod) : hsSatirHtml_(s, k, mod, kRenk)).join("")}${hsHayaletHtml_(k, n)}</div>` : ((k.alt||[]).length ? '' : '<div class="hs-bos hs-bos-kolon">Ürünü buraya sürükle</div>')}
     ${(k.alt||[]).map(c=>hsKolonHtml_(c, mod, kRenk, true)).join("")}
   </div>`;
 }
