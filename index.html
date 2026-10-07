@@ -471,6 +471,25 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-bilgi{padding:0 0 4px;font-size:12px;font-weight:700;text-align:left}
 .hs-alt{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
 .hs-alt #hs-ozet{flex:1;font-size:12.5px;font-weight:600;color:var(--text2)}
+
+/* ★ (7 Eki 2026) Kutuya uymayan miktar uyarısı: ekranın üstünde, kırmızı, dikkat çekici */
+.kutu-uyari{position:fixed;top:14px;left:50%;transform:translate(-50%,-30px);z-index:100002;background:#dc2626;color:#fff;border:3px solid #7f1d1d;border-radius:14px;padding:14px 22px;max-width:min(92vw,640px);box-shadow:0 10px 30px rgba(127,29,29,.45);font-size:16px;font-weight:800;line-height:1.35;text-align:center;opacity:0;transition:opacity .18s,transform .18s;cursor:pointer}
+.kutu-uyari.gorunur{opacity:1;transform:translate(-50%,0);animation:kutuUyariTitre .45s ease-out 1}
+.kutu-uyari small{display:block;font-size:13px;font-weight:700;opacity:.95;margin-top:4px}
+@keyframes kutuUyariTitre{0%,100%{margin-left:0}20%{margin-left:-8px}40%{margin-left:8px}60%{margin-left:-5px}80%{margin-left:5px}}
+/* Hızlı Satış: grup bazlı hızlı görünüm + alt gruplar */
+.hs-gruparaclar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px;padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;font-size:12.5px}
+.hs-gruparaclar label{display:flex;align-items:center;gap:6px;font-weight:700;cursor:pointer}
+.hs-gruparaclar input[type=checkbox]{width:auto;margin:0}
+.hs-gruparaclar .hs-ipucu{color:var(--text3);font-weight:600}
+.hs-kolon-baslik{display:flex;align-items:center;gap:6px}
+.hs-kolon-baslik .hs-bas-ad{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hs-kolon-baslik[draggable=true]{cursor:grab}
+.hs-bas-islem{display:flex;gap:2px;flex:0 0 auto}
+.hs-bas-islem b{cursor:pointer;font-size:11px;line-height:1;padding:3px 5px;border:1px solid rgba(0,0,0,.2);border-radius:5px;background:rgba(255,255,255,.75);color:var(--text)}
+.hs-bas-islem b:hover{background:#fff;border-color:var(--blue)}
+.hs-kolon.hs-kolon-hedef{outline:3px dashed var(--blue);outline-offset:-3px}
+.hs-altsec{flex:0 0 auto;max-width:92px;padding:4px 2px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text2)}
 .modal-box-onay2col{width:100%;max-width:none;max-height:97vh;padding:14px 16px;display:flex;flex-direction:column}
 .modal-box-onay2col > h3, .modal-box-onay2col > p{flex-shrink:0}
 .bfm-2col{display:flex;gap:18px;align-items:stretch;flex:1;min-height:0}
@@ -6647,6 +6666,7 @@ function hsAyar_(){
   let a = {};
   try{ a = JSON.parse(localStorage.getItem("hs_ayar") || "{}") || {}; }catch(e){ a = {}; }
   a.w = a.w || 170; a.boyut = a.boyut || {}; a.sira = a.sira || {}; a.sirala = a.sirala || {};
+  a.kolonSira = a.kolonSira || {}; a.altGrup = a.altGrup || {}; a.urunAlt = a.urunAlt || {}; a.hizliGrup = a.hizliGrup || {};
   _hsAyar = a;
   return a;
 }
@@ -6692,6 +6712,7 @@ function hizliSatisAc(){
         <button class="btn" onclick="hizliSatisKapat()" title="Kapat — forma dön (F12 / Esc)">✕ Kapat (F12)</button>
       </div>
       <div class="hs-sekmeler" id="hs-sekmeler"></div>
+      <div class="hs-gruparaclar" id="hs-gruparaclar" style="display:none"></div>
       <div class="hs-grid" id="hs-grid"></div>
       <div class="hs-alt"><span id="hs-ozet"></span><button type="button" class="btn btn-primary hs-toplu" id="hs-toplu" onclick="hizliSatisTopluEkle()" title="Miktar yazdığın tüm ürünleri forma ekler (Ctrl+Enter)">➕ Toplu Ekle</button></div>
     </div>`;
@@ -6702,26 +6723,55 @@ function hizliSatisAc(){
   setTimeout(()=>{ const a = document.getElementById("hs-ara"); if(a){ a.focus(); a.select(); } }, 50);
 }
 
-// ⭐ Hızlı Ürünler sekmesi: görselsiz, ürün grupları DİKEY sütunlar halinde; her sütunda ürünler ▲▼ ya da ⠿ sürükleyerek yukarı-aşağı taşınır.
-let _hsKolonlar = {};   // sütun (grup) id → o anki ürün id sırası
-function hsHizliKolonCiz_(liste, grid, kaydirma){
-  const gruplar = _tanimListeCache.urunGrubu || [];
-  const idler = {}; gruplar.forEach(g=>{ idler[g.id] = true; });
-  const kolonlar = [];
-  gruplar.forEach(g=>{ const it = liste.filter(s=>s.urunGrubuId === g.id); if(it.length) kolonlar.push({id:g.id, ad:g.ad, it}); });
-  const diger = liste.filter(s=>!s.urunGrubuId || !idler[s.urunGrubuId]);
-  if(diger.length) kolonlar.push({id:"diger", ad:"Diğer", it:diger});
+// ⭐ Sütunlu (görselsiz) görünüm: iki yerde kullanılır —
+//   mod "hizli": Hızlı Ürünler sekmesi, sütunlar = ürün grupları.
+//   mod "alt":   "⚡ Hızlı satış görünümü" işaretli bir ürün grubu, sütunlar = o grubun kendi oluşturduğun ALT GRUPLARI (örn. 20mm dişsiz, 20mm dişli, Borular, Çiftli).
+// Sütun başlıkları tutulup sürüklenerek, ürünler ⠿ ile sürüklenerek (alt grup görünümünde sütunlar arası da) ya da ▲▼ ile yer değiştirir. Düzen bu tarayıcıda saklanır.
+let _hsKolonlar = {};   // sütun id → o anki ürün id sırası
+let _hsKolonCfg = { mod:"hizli", grupId:"", idler:[] };
+let _hsKolTutulan = null;
+function hsSiraAnahtar_(kolonId){ return _hsKolonCfg.mod === "alt" ? "alt:" + _hsKolonCfg.grupId + ":" + kolonId : "hizli:" + kolonId; }
+function hsKolonCiz_(liste, grid, kaydirma, mod, grupId){
+  const ay = hsAyar_();
+  let kolonlar = [];
+  if(mod === "alt"){
+    const alts = ay.altGrup[grupId] || [];
+    const gecerli = {}; alts.forEach(a=>{ gecerli[a.id] = true; });
+    alts.forEach(a=>kolonlar.push({ id:a.id, ad:a.ad, it: liste.filter(s=>ay.urunAlt[s.id] === a.id) }));   // boş alt grup da görünür (ürün sürükleyip bırakmak için)
+    const diger = liste.filter(s=>!gecerli[ay.urunAlt[s.id]]);
+    if(diger.length || !alts.length) kolonlar.push({ id:"-", ad:"Alt grupsuz", it:diger, sabit:true });
+  } else {
+    const gruplar = _tanimListeCache.urunGrubu || [];
+    const idler = {}; gruplar.forEach(g=>{ idler[g.id] = true; });
+    gruplar.forEach(g=>{ const it = liste.filter(s=>s.urunGrubuId === g.id); if(it.length) kolonlar.push({id:g.id, ad:g.ad, it}); });
+    const diger = liste.filter(s=>!s.urunGrubuId || !idler[s.urunGrubuId]);
+    if(diger.length) kolonlar.push({id:"diger", ad:"Diğer", it:diger});
+    const sr = ay.kolonSira.hizli || [];      // başlıkları sürükleyerek verdiğin sıra
+    if(sr.length){ const pos = id=>{ const i = sr.indexOf(id); return i < 0 ? 1e6 : i; }; kolonlar = kolonlar.map((k,i)=>({k,i})).sort((a,b)=>(pos(a.k.id)-pos(b.k.id))||(a.i-b.i)).map(x=>x.k); }
+  }
+  _hsKolonCfg = { mod, grupId, idler: kolonlar.filter(k=>!k.sabit).map(k=>k.id) };
   _hsKolonlar = {}; const sirali = [];
-  kolonlar.forEach(k=>{ k.it = hsSirala_(k.it, "hizli:"+k.id, "elle"); _hsKolonlar[k.id] = k.it.map(s=>s.id); k.it.forEach(s=>sirali.push(s)); });
+  kolonlar.forEach(k=>{ k.it = hsSirala_(k.it, hsSiraAnahtar_(k.id), "elle"); _hsKolonlar[k.id] = k.it.map(s=>s.id); k.it.forEach(s=>sirali.push(s)); });
   _hsGorunen = sirali;
+  const altSecenek = mod === "alt" ? (ay.altGrup[grupId] || []) : [];
   grid.classList.add("hs-kolonlu");
-  grid.innerHTML = kolonlar.map(k=>{ const kRenk = hsGrupRenk_(k.id); return `<div class="hs-kolon ${kRenk?'hs-renkli':''}" style="${hsRenkStil_(kRenk)}">
-    <div class="hs-kolon-baslik">${htmlKacis(k.ad)} <span class="hs-say">${k.it.length}</span></div>
-    ${k.it.map((s,i)=>{
+  grid.innerHTML = kolonlar.map(k=>{
+    const kRenk = mod === "alt" ? hsGrupRenk_(grupId) : hsGrupRenk_(k.id);
+    const basIslem = (mod === "alt" && !k.sabit)
+      ? `<span class="hs-bas-islem"><b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b><b title="Alt grup adını değiştir" onclick="hsAltGrupAdlandir('${k.id}')">✎</b><b title="Alt grubu sil (ürünler “Alt grupsuz”a geçer)" onclick="hsAltGrupSil('${k.id}')">✕</b></span>`
+      : (mod === "hizli" ? `<span class="hs-bas-islem"><b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b></span>` : "");
+    return `<div class="hs-kolon ${kRenk?'hs-renkli':''}" style="${hsRenkStil_(kRenk)}" data-kolon="${k.id}" ondragover="hsKolonUstunde(event,this)" ondragleave="hsKolonAyrildi(event,this)" ondrop="hsKolonBirak2(event,'${k.id}')">
+    <div class="hs-kolon-baslik" ${k.sabit?'':`draggable="true" ondragstart="hsKolonBasSurukle(event,'${k.id}')" ondragend="hsKolonBasBitti()" title="Tutup sürükleyerek sütunun yerini değiştir"`}>
+      <span class="hs-bas-ad">${htmlKacis(k.ad)}</span> <span class="hs-say">${k.it.length}</span>${basIslem}
+    </div>
+    ${k.it.length ? k.it.map(s=>{
       const m = _hsMiktar[s.id] || "";
-      return `<div class="hs-satir ${(hsHex_(s.hizliRenk)||kRenk)?'hs-renkli':''}" id="hs-k-${s.id}" style="${hsRenkStil_(s.hizliRenk)}" ondragover="hsSurukleUstunde(event)" ondrop="hsKolonBirak(event,'${k.id}','${s.id}')">
+      const sag = mod === "alt"
+        ? `<select class="hs-altsec" tabindex="-1" title="Bu ürünün alt grubu" onchange="hsUrunAltSec('${s.id}',this.value)"><option value="">Alt grupsuz</option>${altSecenek.map(a=>`<option value="${a.id}" ${ay.urunAlt[s.id]===a.id?'selected':''}>${htmlKacis(a.ad)}</option>`).join("")}</select>`
+        : `<button type="button" tabindex="-1" class="btn hs-cikar" title="Hızlı ürünlerden çıkar" onclick="hizliSatisHizliIsaret('${s.id}', false)">✕</button>`;
+      return `<div class="hs-satir ${(hsHex_(s.hizliRenk)||kRenk)?'hs-renkli':''}" id="hs-k-${s.id}" style="${hsRenkStil_(s.hizliRenk)}" ondragover="hsSurukleUstunde(event)" ondrop="${mod==='alt'?'hsAltBirak':'hsKolonBirak'}(event,'${k.id}','${s.id}')">
         ${hsNokta_(s.id)}<div class="hs-satir-ust">
-          <span class="hs-tut" draggable="true" title="Tutup yukarı-aşağı sürükle" ondragstart="hsSurukleBasla(event,'${s.id}')" ondragend="hsSurukleBitti()">⠿</span>
+          <span class="hs-tut" draggable="true" title="Tutup sürükle${mod==='alt'?' (başka alt gruba da bırakabilirsin)':''}" ondragstart="hsSurukleBasla(event,'${s.id}')" ondragend="hsSurukleBitti()">⠿</span>
           <div class="hs-satir-ad" title="${htmlKacis(s.stokAdi)}">${htmlKacis(s.stokAdi)}</div>
           <span class="hs-oklar"><b title="Yukarı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',-1)">▲</b><b title="Aşağı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',1)">▼</b></span>
         </div>
@@ -6731,9 +6781,9 @@ function hsHizliKolonCiz_(liste, grid, kaydirma){
                  onfocus="this.select()" oninput="_hsMiktar['${s.id}']=this.value; hizliSatisSayac_()" onkeydown="hizliSatisAdetTus(event,'${s.id}')">
           <button type="button" tabindex="-1" class="btn btn-primary hs-ekle" onclick="hizliSatisEkle('${s.id}')">Ekle</button>
           <button type="button" tabindex="-1" class="btn hs-renkbtn" title="Bu ürüne renk seç" onclick="hizliSatisUrunRenk(event,'${s.id}')">🎨</button>
-          <button type="button" tabindex="-1" class="btn hs-cikar" title="Hızlı ürünlerden çıkar" onclick="hizliSatisHizliIsaret('${s.id}', false)">✕</button>
+          ${sag}
         </div>
-      </div>`; }).join("")}
+      </div>`; }).join("") : '<div class="hs-bos" style="padding:10px">Ürünü buraya sürükle ya da satırdaki listeden bu alt grubu seç.</div>'}
   </div>`; }).join("");
   grid.scrollTop = kaydirma;
   hizliSatisOzet_();
@@ -6743,21 +6793,115 @@ function hizliSatisKolonTasi(kolonId, id, yon){
   const i = ids.indexOf(id), j = i + yon;
   if(i < 0 || j < 0 || j >= ids.length) return;
   ids.splice(i, 1); ids.splice(j, 0, id);
-  const ay = hsAyar_(); ay.sira["hizli:"+kolonId] = ids; hsAyarYaz_();
+  const ay = hsAyar_(); ay.sira[hsSiraAnahtar_(kolonId)] = ids; hsAyarYaz_();
   hizliSatisCiz();
 }
 function hsKolonBirak(e, kolonId, hedefId){
-  e.preventDefault();
+  e.preventDefault(); e.stopPropagation();
   const kaynakId = _hsSurukle; hsSurukleBitti();
   if(!kaynakId || kaynakId === hedefId) return;
   const ids = (_hsKolonlar[kolonId] || []).slice();
   const kIdx = ids.indexOf(kaynakId), hIdx = ids.indexOf(hedefId);
-  if(kIdx < 0 || hIdx < 0) return;   // başka sütundan sürüklemeye izin yok (ürünün grubu stok kartından/➕ Ürün Ekle'den değişir)
+  if(kIdx < 0 || hIdx < 0) return;   // Hızlı Ürünler'de başka sütundan sürüklemeye izin yok (ürünün grubu stok kartından/➕ Ürün Ekle'den değişir)
   ids.splice(kIdx, 1);
   const yeniH = ids.indexOf(hedefId);
   ids.splice(kIdx < hIdx ? yeniH + 1 : yeniH, 0, kaynakId);
-  const ay = hsAyar_(); ay.sira["hizli:"+kolonId] = ids; hsAyarYaz_();
+  const ay = hsAyar_(); ay.sira[hsSiraAnahtar_(kolonId)] = ids; hsAyarYaz_();
   hizliSatisCiz();
+}
+// Alt grup görünümü: ürünü aynı sütunda yeniden sıralar ya da başka alt gruba taşır (hedefId boşsa sütunun sonuna).
+function hsAltBirak(e, kolonId, hedefId){
+  e.preventDefault(); e.stopPropagation();
+  const kaynakId = _hsSurukle; hsSurukleBitti();
+  document.querySelectorAll(".hs-kolon-hedef").forEach(x=>x.classList.remove("hs-kolon-hedef"));
+  if(!kaynakId || kaynakId === hedefId || _hsKolonCfg.mod !== "alt") return;
+  const ay = hsAyar_();
+  const eski = (_hsKolonlar[kolonId] || []);
+  const kIdx = eski.indexOf(kaynakId), eskiH = hedefId ? eski.indexOf(hedefId) : -1;
+  if(hedefId && eskiH < 0) return;
+  const ids = eski.filter(x=>x !== kaynakId);
+  const hIdx = hedefId ? ids.indexOf(hedefId) : ids.length;
+  ids.splice(hedefId ? ((kIdx >= 0 && kIdx < eskiH) ? hIdx + 1 : hIdx) : ids.length, 0, kaynakId);
+  if(kolonId === "-") delete ay.urunAlt[kaynakId]; else ay.urunAlt[kaynakId] = kolonId;
+  ay.sira[hsSiraAnahtar_(kolonId)] = ids;
+  hsAyarYaz_(); hizliSatisCiz();
+}
+// Sütun başlığı sürükleme
+function hsKolonBasSurukle(e, id){ _hsKolTutulan = id; try{ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "kolon:"+id); }catch(x){} }
+function hsKolonBasBitti(){ _hsKolTutulan = null; document.querySelectorAll(".hs-kolon-hedef").forEach(x=>x.classList.remove("hs-kolon-hedef")); }
+function hsKolonUstunde(e, el){
+  if(_hsKolTutulan || (_hsSurukle && _hsKolonCfg.mod === "alt")){ e.preventDefault(); el.classList.add("hs-kolon-hedef"); }
+}
+function hsKolonAyrildi(e, el){ if(!el.contains(e.relatedTarget)) el.classList.remove("hs-kolon-hedef"); }
+// Sütunun kendisine bırakma: başlık bırakıldıysa sütun yeri değişir; ürün bırakıldıysa (alt grup görünümü) sütunun sonuna eklenir.
+function hsKolonBirak2(e, kolonId){
+  if(_hsKolTutulan){ hsKolonBasBirak(e, kolonId); return; }
+  if(_hsSurukle && _hsKolonCfg.mod === "alt") hsAltBirak(e, kolonId, "");
+}
+function hsKolonSiraYaz_(ids){
+  const ay = hsAyar_();
+  if(_hsKolonCfg.mod === "alt"){
+    const alts = ay.altGrup[_hsKolonCfg.grupId] || [];
+    const harita = {}; alts.forEach(a=>{ harita[a.id] = a; });
+    ay.altGrup[_hsKolonCfg.grupId] = ids.filter(id=>harita[id]).map(id=>harita[id]);
+  } else {
+    ay.kolonSira.hizli = ids;
+  }
+  hsAyarYaz_(); hizliSatisCiz();
+}
+function hsKolonBasBirak(e, hedefId){
+  e.preventDefault(); e.stopPropagation();
+  const k = _hsKolTutulan; hsKolonBasBitti();
+  if(!k || k === hedefId) return;
+  const ids = _hsKolonCfg.idler.slice();
+  const kIdx = ids.indexOf(k), hIdx = ids.indexOf(hedefId);
+  if(kIdx < 0 || hIdx < 0) return;     // "Alt grupsuz" sütunu sabit, yeri değişmez
+  ids.splice(kIdx, 1);
+  ids.splice(ids.indexOf(hedefId) + (kIdx < hIdx ? 1 : 0), 0, k);
+  hsKolonSiraYaz_(ids);
+}
+function hsKolonBasTasi(id, yon){
+  const ids = _hsKolonCfg.idler.slice();
+  const i = ids.indexOf(id), j = i + yon;
+  if(i < 0 || j < 0 || j >= ids.length) return;
+  ids.splice(i, 1); ids.splice(j, 0, id);
+  hsKolonSiraYaz_(ids);
+}
+
+// ⚡ Hızlı satış görünümü (ürün grubu bazlı) + alt gruplar
+function hsGrupHizliToggle(v){
+  const ay = hsAyar_(), g = _hsDurum.sekme;
+  if(v) ay.hizliGrup[g] = true; else delete ay.hizliGrup[g];
+  hsAyarYaz_(); hizliSatisCiz();
+}
+function hsAltGrupEkle(){
+  const g = _hsDurum.sekme;
+  const ad = (prompt("Yeni alt grup adı (örn. 20mm dişsiz, 25mm dişli, Borular, Çiftli):", "") || "").trim();
+  if(!ad) return;
+  const ay = hsAyar_(); const liste = (ay.altGrup[g] = ay.altGrup[g] || []);
+  if(liste.some(a=>a.ad.toLocaleLowerCase("tr") === ad.toLocaleLowerCase("tr"))){ alert("Bu adda bir alt grup zaten var."); return; }
+  liste.push({ id:"a" + Date.now().toString(36) + Math.random().toString(36).slice(2,5), ad });
+  hsAyarYaz_(); hizliSatisCiz();
+}
+function hsAltGrupAdlandir(id){
+  const ay = hsAyar_(), a = (ay.altGrup[_hsDurum.sekme] || []).find(x=>x.id === id); if(!a) return;
+  const ad = (prompt("Alt grup adı:", a.ad) || "").trim();
+  if(!ad || ad === a.ad) return;
+  a.ad = ad; hsAyarYaz_(); hizliSatisCiz();
+}
+function hsAltGrupSil(id){
+  const g = _hsDurum.sekme, ay = hsAyar_();
+  const a = (ay.altGrup[g] || []).find(x=>x.id === id); if(!a) return;
+  if(!confirm("“" + a.ad + "” alt grubu silinsin mi?\nİçindeki ürünler silinmez, “Alt grupsuz” sütununa geçer.")) return;
+  ay.altGrup[g] = ay.altGrup[g].filter(x=>x.id !== id);
+  Object.keys(ay.urunAlt).forEach(sid=>{ if(ay.urunAlt[sid] === id) delete ay.urunAlt[sid]; });
+  delete ay.sira["alt:" + g + ":" + id];
+  hsAyarYaz_(); hizliSatisCiz();
+}
+function hsUrunAltSec(stokId, altId){
+  const ay = hsAyar_();
+  if(altId) ay.urunAlt[stokId] = altId; else delete ay.urunAlt[stokId];
+  hsAyarYaz_(); hizliSatisCiz();
 }
 
 function hizliSatisKapat(){
@@ -6782,7 +6926,7 @@ function hsSekmeler_(){
   const stoklar = _stokTanimListe || [];
   const idler = {}; gruplar.forEach(g=>{ idler[g.id] = true; });
   const sekmeler = [{ id:"hizli", ad:"⭐ Hızlı Ürünler", n: stoklar.filter(s=>s.hizli).length }];
-  gruplar.forEach(g=>{ sekmeler.push({ id:g.id, ad:g.ad, renk:g.renk, n: stoklar.filter(s=>s.urunGrubuId===g.id).length }); });
+  gruplar.forEach(g=>{ sekmeler.push({ id:g.id, ad:(hsAyar_().hizliGrup[g.id] ? "⚡ " : "") + g.ad, renk:g.renk, n: stoklar.filter(s=>s.urunGrubuId===g.id).length }); });
   const diger = stoklar.filter(s=>!s.urunGrubuId || !idler[s.urunGrubuId]).length;
   if(diger) sekmeler.push({ id:"diger", ad:"Diğer", n:diger });
   const sr = hsAyar_().sekmeSira || [];       // kullanıcının sürükleyerek verdiği sıra (bu tarayıcıda)
@@ -6851,8 +6995,19 @@ function hizliSatisCiz(){
   if(sel){
     sel.innerHTML = [["elle","Sıralama: Elle (sürükle-bırak)"],["ad","Ad (A → Z)"],["adz","Ad (Z → A)"],["kod","Stok kodu"],["fiyat","Fiyat (artan)"],["fiyatz","Fiyat (azalan)"]]
       .map(o=>`<option value="${o[0]}" ${o[0]===mod?'selected':''}>${o[1]}</option>`).join("");
-    sel.disabled = !!q || sekme === "hizli";
-    sel.title = sekme === "hizli" ? "Hızlı Ürünler sekmesinde ürünler ▲▼ düğmeleri ya da ⠿ ile sürüklenerek sıralanır" : "Bu sekmedeki ürünlerin sıralaması";
+    sel.disabled = !!q || sekme === "hizli" || !!ay.hizliGrup[sekme];
+    sel.title = (sekme === "hizli" || ay.hizliGrup[sekme]) ? "Bu görünümde ürünler ▲▼ düğmeleri ya da ⠿ ile sürüklenerek sıralanır" : "Bu sekmedeki ürünlerin sıralaması";
+  }
+  const araEl = document.getElementById("hs-gruparaclar");
+  if(araEl){
+    if(q || sekme === "hizli" || sekme === "diger") araEl.style.display = "none";
+    else {
+      const acik = !!ay.hizliGrup[sekme];
+      araEl.style.display = "";
+      araEl.innerHTML = `<label><input type="checkbox" ${acik?'checked':''} onchange="hsGrupHizliToggle(this.checked)"> ⚡ Hızlı satış görünümü</label>` +
+        (acik ? `<button type="button" class="btn btn-primary" onclick="hsAltGrupEkle()">➕ Alt Grup Ekle</button><span class="hs-ipucu">Başlıkları ve ürünleri sürükleyerek yerini değiştir; ürünü başka alt gruba sürükle ya da satırdaki listeden seç.</span>`
+              : `<span class="hs-ipucu">İşaretlersen bu grup Hızlı Ürünler gibi sütunlu görünür ve kendi alt gruplarını oluşturabilirsin.</span>`);
+    }
   }
   const kaynak = q ? (_stokTanimListe||[]).filter(s=>stokEslesirMi(s, q)) : hsSekmeStoklari_(sekme);
   const liste = q ? hsSirala_(kaynak, "arama", "ad") : hsSirala_(kaynak, sekme, mod);
@@ -6864,7 +7019,8 @@ function hizliSatisCiz(){
     hizliSatisOzet_();
     return;
   }
-  if(sekme === "hizli" && !q){ hsHizliKolonCiz_(liste, grid, kaydirma); return; }
+  if(sekme === "hizli" && !q){ hsKolonCiz_(liste, grid, kaydirma, "hizli", ""); return; }
+  if(!q && sekme !== "diger" && ay.hizliGrup[sekme]){ hsKolonCiz_(liste, grid, kaydirma, "alt", sekme); return; }
   grid.classList.remove("hs-kolonlu");
   const surukleAcik = !q && mod === "elle";
   grid.innerHTML = (q ? '<div class="hs-bilgi">Arama sonuçları (tüm ürünler)</div>' : '') + liste.slice(0, _hsLimit).map(s=>{
@@ -6922,7 +7078,8 @@ function hizliSatisDuzenSifirla(){
   if(!confirm("Bu sekmenin elle sıralaması ve tüm ürün boyutları sıfırlansın mı?")) return;
   const ay = hsAyar_();
   delete ay.sira[_hsDurum.sekme]; delete ay.sirala[_hsDurum.sekme]; ay.boyut = {};
-  if(_hsDurum.sekme === "hizli") Object.keys(ay.sira).forEach(k=>{ if(k.indexOf("hizli:") === 0) delete ay.sira[k]; });
+  if(_hsDurum.sekme === "hizli"){ Object.keys(ay.sira).forEach(k=>{ if(k.indexOf("hizli:") === 0) delete ay.sira[k]; }); delete ay.kolonSira.hizli; }
+  else Object.keys(ay.sira).forEach(k=>{ if(k.indexOf("alt:" + _hsDurum.sekme + ":") === 0) delete ay.sira[k]; });
   hsAyarYaz_(); hizliSatisCiz();
 }
 
@@ -6971,7 +7128,7 @@ function hizliSatisUrunEkleAc(){
   ov.onmousedown = e=>{ ov._md = (e.target === ov); };
   ov.onclick = e=>{ if(e.target === ov && ov._md) hizliSatisUrunEkleKapat(); };
   ov.innerHTML = `<div class="modal-box hs-sec-kutu">
-    <div class="hs-ust"><h3>➕ “${htmlKacis(t ? t.ad.replace("⭐ ","") : "")}” sekmesine ürün ekle</h3>
+    <div class="hs-ust"><h3>➕ “${htmlKacis(t ? t.ad.replace("⭐ ","").replace("⚡ ","") : "")}” sekmesine ürün ekle</h3>
       <input id="hs-sec-ara" type="text" autocomplete="off" placeholder="Stok ara (ad, kod, barkod)…" oninput="hizliSatisUrunEkleCiz()">
       <button class="btn" onclick="hizliSatisYeniStokAc()" title="Stok kartı henüz yoksa yeni kart aç">+ Yeni Stok Kartı</button>
       <button class="btn" onclick="hizliSatisUrunEkleKapat()">✕ Kapat</button></div>
@@ -7035,6 +7192,7 @@ function hizliSatisEkle(id){
   const m = hizliSatisAdetSayi_(inp ? inp.value : _hsMiktar[id]);
   if(!m){ if(inp) inp.focus(); return; }
   hizliSatisFormaEkle_([hsKalem_(s, m)]);
+  kutuMiktarUyumKontrol(s.stokKodu, m);
   _hsDurum.eklenenler.push({ id, ad: s.stokAdi, miktar: m, birim: s.birim1 || "adet" });
   delete _hsMiktar[id];
   _hsYeni = [id];
@@ -7053,6 +7211,8 @@ function hizliSatisTopluEkle(){
   });
   if(!kalemler.length){ alert("Önce en az bir ürüne miktar yazın."); return; }
   hizliSatisFormaEkle_(kalemler);
+  let _kutuIlk = false;
+  kalemler.forEach(k=>{ if(!_kutuIlk && kutuMiktarUyumKontrol(k.stokKodu, k.miktar)) _kutuIlk = true; });   // birden fazlaysa ilk uyumsuzu gösterir
   ekle.forEach(x=>{ _hsDurum.eklenenler.push(x); delete _hsMiktar[x.id]; });
   _hsYeni = ekle.map(x=>x.id);
   hizliSatisCiz();
@@ -7210,13 +7370,37 @@ function satisKalemStokKartiAc(idx){
 function kutuMiktarUyumKontrol(kod, miktar){
   const k = String(kod||"").trim();
   const m = parseFloat(miktar)||0;
-  if(!k || m<=0) return;
+  if(!k || m<=0) return false;
   const s = (_stokTanimListe||[]).find(x=>x.stokKodu===k);
-  if(!s || !(s.ambalajMiktari>0)) return;
+  if(!s || !(s.ambalajMiktari>0)) return false;
   const kat = m / s.ambalajMiktari;
   if(Math.abs(kat - Math.round(kat)) > 1e-6){
-    toastGoster("⚠️ Kutuya uymayan miktar (1 "+(s.ambalajBirimi||"paket")+" = "+miktarFormat(s.ambalajMiktari)+" "+(s.birim1||s.birim||"")+")");
+    const amb = s.ambalajBirimi || "paket", birim = s.birim1 || s.birim || "";
+    const alt = Math.floor(kat), ust = Math.ceil(kat);
+    const yuvarla = x => Math.round(x*10000)/10000;
+    const oneri = (alt >= 1 ? miktarFormat(yuvarla(alt*s.ambalajMiktari)) + " " + birim + " (" + alt + " " + amb + ")  veya  " : "")
+                + miktarFormat(yuvarla(ust*s.ambalajMiktari)) + " " + birim + " (" + ust + " " + amb + ")";
+    kutuUyariGoster_("⚠️ KUTUYA UYMAYAN MİKTAR: " + miktarFormat(m) + " " + birim,
+      (s.stokAdi ? s.stokAdi + " — " : "") + "1 " + amb + " = " + miktarFormat(s.ambalajMiktari) + " " + birim + ". En yakın: " + oneri);
+    return true;
   }
+  return false;
+}
+
+// Kırmızı, ekranın üstünde (üstteki Hızlı Satış penceresinin de önünde) görünen uyarı; tıklayınca ya da ~7 sn sonra kapanır.
+let _kutuUyariTimer = null;
+function kutuUyariGoster_(baslik, altMetin){
+  let el = document.getElementById("kutu-uyari");
+  if(el) el.remove();
+  el = document.createElement("div");
+  el.id = "kutu-uyari"; el.className = "kutu-uyari";
+  el.title = "Kapatmak için tıkla";
+  el.innerHTML = htmlKacis(baslik) + (altMetin ? "<small>" + htmlKacis(altMetin) + "</small>" : "");
+  el.onclick = ()=>{ clearTimeout(_kutuUyariTimer); el.remove(); };
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>el.classList.add("gorunur"));
+  clearTimeout(_kutuUyariTimer);
+  _kutuUyariTimer = setTimeout(()=>{ if(el.isConnected) el.remove(); }, 7000);
 }
 
 function satisKalemAlanDegisti(idx, alan, deger){
