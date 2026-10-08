@@ -387,7 +387,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .rehber-ac-btn:hover{background:var(--blue-l);border-color:var(--blue)}
 .modal-box-xwide{max-width:1180px}
 /* ⚡ Hızlı Satış (6 Eki 2026): sekmeli, görselli ürün kartları; miktar + Ekle kartın altında */
-.hs-kutu{max-width:none;width:96vw;height:94vh;display:flex;flex-direction:column;padding:14px 16px}
+.hs-kutu{max-width:none;width:98vw;height:98vh;display:flex;flex-direction:column;padding:10px 14px}
 .hs-overlay-pad{padding:2vh 2vw}
 .hs-ust{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .hs-ust h3{margin:0;white-space:nowrap}
@@ -531,6 +531,7 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-ara.hs-bol-sonra{box-shadow:6px 0 0 #2563eb}
 .hs-ara-ops{display:flex;gap:4px;margin-left:6px}
 .hs-altbar .hs-ara{border-width:1.5px;padding:4px 12px;font-size:13px;border-radius:8px}
+.hs-altbar .hs-ara-ops{margin-left:auto}
 .hs-altbar{padding-bottom:6px;border-bottom:1px dashed var(--border)}
 .hs-ara-ops b{cursor:pointer;font-size:12px;line-height:1;padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text)}
 .hs-ara-ops b:hover{border-color:var(--blue);background:var(--blue-l)}
@@ -6975,9 +6976,9 @@ function hsKolonHtml_(k, mod, kRenk, ic){
     ? `<span class="hs-bas-islem">${genBtn}<b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b><b title="Bu alt grubun içine bir alt grup daha ekle" onclick="hsAltGrupEkle(undefined,'${k.id}')">↳</b><b title="Alt grup adını değiştir" onclick="hsAltGrupAdlandir('${k.id}')">✎</b><b title="Alt grubu sil (ürünler “Alt grupsuz”a geçer)" onclick="hsAltGrupSil('${k.id}')">✕</b></span>`
     : (mod === "hizli" ? `<span class="hs-bas-islem">${genBtn}<b title="Sola taşı" onclick="hsKolonBasTasi('${k.id}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${k.id}',1)">▶</b></span>` : `<span class="hs-bas-islem">${genBtn}</span>`);
   return `<div class="hs-kolon ${kRenk?'hs-renkli':''}" style="--n:${n};${hsRenkStil_(kRenk)}" data-kolon="${k.id}" ondragover="hsKolonUstunde(event,this)" ondragleave="hsKolonAyrildi(event,this)" ondrop="hsKolonBirak2(event,'${k.id}')">
-    <div class="hs-kolon-baslik" ${k.sabit?'':`draggable="true" ondragstart="hsKolonBasSurukle(event,'${k.id}')" ondragend="hsKolonBasBitti()" title="Tutup sürükleyerek sütunun yerini değiştir (ara grup başlığına da bırakabilirsin)"`}>
+    ${k.baslikGizli ? '' : `<div class="hs-kolon-baslik" ${k.sabit?'':`draggable="true" ondragstart="hsKolonBasSurukle(event,'${k.id}')" ondragend="hsKolonBasBitti()" title="Tutup sürükleyerek sütunun yerini değiştir (ara grup başlığına da bırakabilirsin)"`}>
       <span class="hs-bas-ad">${htmlKacis(k.ad)}</span> <span class="hs-say">${k.it.length}</span>${basIslem}
-    </div>
+    </div>`}
     ${(k.cells||k.it).length ? `<div class="hs-kolon-satirlar" data-n="${n}">${(k.cells||k.it).map(s=>s.bos ? hsBosHucreHtml_(s, k, mod) : hsSatirHtml_(s, k, mod, kRenk)).join("")}${hsHayaletHtml_(k, n)}</div>` : ((k.alt||[]).length ? '' : '<div class="hs-bos hs-bos-kolon">Ürünü buraya sürükle</div>')}
     ${(k.alt||[]).map(c=>hsKolonHtml_(c, mod, kRenk, true)).join("")}
   </div>`;
@@ -7032,9 +7033,9 @@ function hsKolonCiz_(liste, grid, kaydirma, mod, grupId){
     _hsAltAktif = secAlt ? secAlt.id : "";
     altCubuk = { aktif:_hsAltAktif, chipler: topCols.map(c=>({ id:c.id, ad:c.ad, say:topla(c), sabit:!!c.sabit })) };
     if(secAlt){
-      if(secAlt.sabit) kolonlar = [secAlt];
+      if(secAlt.sabit){ secAlt.baslikGizli = true; kolonlar = [secAlt]; }
       else {
-        const kendi = { id:secAlt.id, ad:secAlt.ad, it:secAlt.it, alt:[] };
+        const kendi = { id:secAlt.id, ad:secAlt.ad, it:secAlt.it, alt:[], baslikGizli:true };
         kolonlar = (secAlt.it.length || !secAlt.alt.length) ? [kendi] : [];
         kolonlar = kolonlar.concat(secAlt.alt);
       }
@@ -7240,8 +7241,10 @@ function hsAltCubukCiz_(c){
   const el = document.getElementById("hs-altbar"); if(!el) return;
   if(!c || !c.chipler.length){ el.style.display = "none"; el.innerHTML = ""; return; }
   el.style.display = "";
+  const gn = hsKolonGen_(c.aktif || "-");
+  const gen = `<b title="Sütunda yan yana ürün sayısı: ${gn} — tıkla: ${gn+1} (sınır yok)" onclick="hsKolonGenislet('${c.aktif||'-'}',1)">⇔${gn>1?gn:''}</b>${gn>1?`<b title="Daralt: ${gn-1} yan yana" onclick="hsKolonGenislet('${c.aktif||'-'}',-1)">⇐</b>`:''}`;
   const ops = (c.aktif && c.aktif !== "-")
-    ? `<span class="hs-ara-ops"><b title="Bu alt grubun içine alt grup ekle (sayfada sütun olur)" onclick="hsAltGrupEkle(undefined,'${c.aktif}')">↳ İç grup</b><b title="Sola taşı" onclick="hsKolonBasTasi('${c.aktif}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${c.aktif}',1)">▶</b><b title="Alt grup adını değiştir" onclick="hsAltGrupAdlandir('${c.aktif}')">✎</b><b title="Alt grubu sil" onclick="hsAltGrupSil('${c.aktif}')">✕</b></span>` : "";
+    ? `<span class="hs-ara-ops">${gen}<b title="Bu alt grubun içine alt grup ekle (sayfada sütun olur)" onclick="hsAltGrupEkle(undefined,'${c.aktif}')">↳ İç grup</b><b title="Sola taşı" onclick="hsKolonBasTasi('${c.aktif}',-1)">◀</b><b title="Sağa taşı" onclick="hsKolonBasTasi('${c.aktif}',1)">▶</b><b title="Alt grup adını değiştir" onclick="hsAltGrupAdlandir('${c.aktif}')">✎</b><b title="Alt grubu sil" onclick="hsAltGrupSil('${c.aktif}')">✕</b></span>` : `<span class="hs-ara-ops">${gen}</span>`;
   el.innerHTML = c.chipler.map(x=>`<button type="button" class="hs-ara ${x.id===c.aktif?'aktif':''}" ${x.sabit?'':`draggable="true" ondragstart="hsKolonBasSurukle(event,'${x.id}')" ondragend="hsKolonBasBitti()"`} title="Tıkla: bu alt grubun sayfasını aç · ürünü buraya sürükle: alt grubu değişir" ondragover="hsKolonUstunde(event,this)" ondragleave="hsKolonAyrildi(event,this)" ondrop="hsKolonBirak2(event,'${x.id}')" onclick="hsAltSec('${x.id}')">${htmlKacis(x.ad)} <span class="hs-say">${x.say}</span></button>`).join("") + ops;
 }
 function hsAktifAra_(g){
@@ -7460,7 +7463,7 @@ function hizliSatisCiz(){
       const acik = hsAltGor_(sekme);
       araEl.style.display = "";
       araEl.innerHTML = `<label><input type="checkbox" ${acik?'checked':''} onchange="hsGrupHizliToggle(this.checked)"> ⚡ Hızlı satış görünümü</label>` +
-        (acik ? `<button type="button" class="btn btn-primary" onclick="hsAltGrupEkle()">➕ Alt Grup</button><button type="button" class="btn btn-primary" onclick="hsAraGrupEkle()" title="Alt grupları toplayan başlık (örn. PPRC, PVC)">➕ Ara Grup</button><span class="hs-ipucu">Ara grup (PPRC, PVC…) ve alt grup (20mm, 25mm…) birer sayfadır: seçince yalnız onun içeriği görünür; alt grubun içine ↳ ile eklediklerin o sayfada sütun olur. Ürünü alt grup çipine sürükleyip bırakınca o alt gruba geçer. Başlıkları ve ürünleri tutup sürükle (mavi çizgi bırakılacak yeri gösterir). Ürüne Shift+tık: stok kartı · çift tık: kısa ad · başlıktaki ⇔: sütunda istediğin kadar ürün yan yana (⇐ daraltır).</span>`
+        (acik ? `<button type="button" class="btn btn-primary" onclick="hsAltGrupEkle()">➕ Alt Grup</button><button type="button" class="btn btn-primary" onclick="hsAraGrupEkle()" title="Alt grupları toplayan başlık (örn. PPRC, PVC)">➕ Ara Grup</button>`
               : `<span class="hs-ipucu">İşaretlersen bu grup Hızlı Ürünler gibi sütunlu görünür ve kendi alt gruplarını oluşturabilirsin.</span>`);
     }
   }
