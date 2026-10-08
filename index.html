@@ -478,6 +478,8 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-kolon-baslik{font-size:12.5px}
 .hs-satir.hs-kmp{display:flex;flex-direction:column;align-items:stretch;gap:3px;padding:4px 6px;position:relative}
 .hs-s-ust{display:flex;align-items:flex-start;gap:5px;min-width:0}
+.hs-s-resim{width:100%;height:72px;border-radius:6px;overflow:hidden;background:var(--bg3,#f1f5f9);flex:0 0 auto}
+.hs-s-resim img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
 .hs-s-alt{display:flex;align-items:center;gap:5px}
 .hs-satir.hs-kmp .hs-satir-ad{flex:1;min-width:0;font-size:12px;font-weight:700;line-height:1.25;-webkit-line-clamp:3}
 .hs-birim{font-style:normal;font-size:9.5px;font-weight:800;color:var(--blue);margin-left:4px;white-space:nowrap;opacity:.9}
@@ -6863,6 +6865,41 @@ function hsKisaAdDuzenle(id){
     if(!r.ok){ s.kisaAd = eski; hizliSatisCiz(); alert("Kısa ad kaydedilemedi: " + (r.hata||"bilinmiyor")); }
   }).catch(err=>{ s.kisaAd = eski; hizliSatisCiz(); alert("Bağlantı hatası: " + err.message); });
 }
+// ── Kutucuğun en üstüne resim: yalnızca resim eklenen ürünlerde görünür (stok kartındaki görselle aynıdır).
+function hsGorselSec(id){
+  const s = (_stokTanimListe||[]).find(x=>x.id === id); if(!s) return;
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*";
+  inp.onchange = ()=>{
+    const f = inp.files && inp.files[0]; if(!f) return;
+    const okuyucu = new FileReader();
+    okuyucu.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const oran = Math.min(1, 600 / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.width * oran)); c.height = Math.max(1, Math.round(img.height * oran));
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        if(typeof toastGoster === "function") toastGoster("Resim yükleniyor…");
+        cariApi("stokGorselKaydet", {id:id, dosyaBase64:c.toDataURL("image/jpeg", 0.82), mimeType:"image/jpeg", dosyaAdi:(s.stokKodu||id)+".jpg"}).then(r=>{
+          if(!r.ok){ alert("Resim yüklenemedi: " + (r.hata||"bilinmiyor")); return; }
+          s.gorselUrl = r.gorselUrl; hizliSatisCiz();
+        }).catch(err=>alert("Bağlantı hatası: " + err.message));
+      };
+      img.onerror = ()=>alert("Resim okunamadı, başka bir dosya deneyin.");
+      img.src = okuyucu.result;
+    };
+    okuyucu.readAsDataURL(f);
+  };
+  inp.click();
+}
+function hsGorselKaldir(id){
+  const s = (_stokTanimListe||[]).find(x=>x.id === id); if(!s || !s.gorselUrl) return;
+  const eski = s.gorselUrl; s.gorselUrl = ""; hizliSatisCiz();
+  cariApi("stokGorselKaydet", {id:id, sil:true}).then(r=>{
+    if(!r.ok){ s.gorselUrl = eski; hizliSatisCiz(); alert("Resim kaldırılamadı: " + (r.hata||"bilinmiyor")); }
+  }).catch(err=>{ s.gorselUrl = eski; hizliSatisCiz(); alert("Bağlantı hatası: " + err.message); });
+}
 function hsSatirHtml_(s, k, mod, kRenk){
   const m = _hsMiktar[s.id] || "";
   const birak = mod === "alt" ? "hsAltBirak" : "hsKolonBirak";
@@ -6871,6 +6908,7 @@ function hsSatirHtml_(s, k, mod, kRenk){
   const ay = hsAyar_(), yk = ay.yuk[s.id] !== undefined ? ay.yuk[s.id] : hsYukToplu_(_hsDurum.sekme);
   return `<div class="hs-satir hs-kmp ${(hsHex_(s.hizliRenk)||kRenk)?'hs-renkli':''}" id="hs-k-${s.id}" style="${hsRenkStil_(s.hizliRenk)}--yk:${yk}px;" onclick="hsSatirTik(event,'${s.id}')" ondragover="hsSatirUstunde(event,this)" ondragleave="hsSatirAyrildi(event,this)" ondrop="${birak}(event,'${k.id}','${s.id}')">
     ${hsNokta_(s.id)}${hsSariNokta_(s.id)}
+    ${s.gorselUrl ? `<div class="hs-s-resim" title="Resmi değiştirmek için üstteki 🖼 düğmesi"><img src="${htmlKacis(s.gorselUrl)}" loading="lazy" referrerpolicy="no-referrer" alt="" draggable="false" onerror="this.parentNode.remove()"></div>` : ""}
     <div class="hs-s-ust">
       <span class="hs-tut" draggable="true" title="Tutup sürükle${mod==='alt'?' (başka alt gruba da bırakabilirsin; Shift basılı bırakırsan taşımaz, kısayol ekler)':''}" ondragstart="hsSurukleBasla(event,'${s.id}','${k.id}')" ondragend="hsSurukleBitti()">⠿</span>
       <div class="hs-satir-ad" title="${ekstra?'🔗 Kısayol: ürünün ana yeri başka listede\n':''}${htmlKacis(s.stokAdi)}${s.kisaAd?'\n(kısa ad: '+htmlKacis(s.kisaAd)+')':''}\nSatış fiyatı: ${paraFormat(s.satisFiyati)} / ${birim}\nÇift tıkla: kısa ad ver · Shift+tık: stok kartını aç" ondblclick="hsKisaAdDuzenle('${s.id}')">${ekstra?'<i class="hs-kisayol" title="Kısayol">🔗</i> ':''}${htmlKacis(s.kisaAd || s.stokAdi)}<i class="hs-birim">${birim}</i></div>
@@ -6880,7 +6918,7 @@ function hsSatirHtml_(s, k, mod, kRenk){
              onfocus="this.select()" oninput="hsMiktarYaz_('${s.id}',this.value)" onkeydown="hizliSatisAdetTus(event,'${s.id}')">
       <button type="button" tabindex="-1" class="btn btn-primary hs-ekle" onclick="hizliSatisEkle('${s.id}')">Ekle</button>
     </div>
-    <span class="hs-aksiyon"><b title="Kısa ad ver / değiştir" onclick="hsKisaAdDuzenle('${s.id}')">✎</b><b title="Bu ürüne renk seç" onclick="hizliSatisUrunRenk(event,'${s.id}')">🎨</b><b title="Önüne boş yer ekle" onclick="hsBosEkle('${k.id}','${s.id}')">⬚</b><b title="Bu kareyi yükselt" onclick="hsSatirYuk('${s.id}',8)">↕+</b><b title="Bu kareyi alçalt" onclick="hsSatirYuk('${s.id}',-8)">↕−</b><b title="Yukarı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',-1)">▲</b><b title="Aşağı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',1)">▼</b>${mod==='hizli'?`<b title="Hızlı ürünlerden çıkar" onclick="hizliSatisHizliIsaret('${s.id}', false)">✕</b>`:`<b title="Başka alt gruba taşı" onclick="hsSatirTasi(event,'${s.id}','${k.id}')">➜</b><b title="Başka alt grupta da göster (kısayol ekle)" onclick="hsSatirKopya(event,'${s.id}')">⧉</b>${ekstra?`<b title="Bu kısayolu kaldır (ürünün kendisi silinmez)" onclick="hsSatirKopyaSil('${s.id}','${k.id}')">✕</b>`:`<b title="Bu ürün grubundan çıkar (stok kartı silinmez)" onclick="hsSatirGrupCikar('${s.id}')">✕</b>`}`}</span>
+    <span class="hs-aksiyon"><b title="Kısa ad ver / değiştir" onclick="hsKisaAdDuzenle('${s.id}')">✎</b><b title="${s.gorselUrl?'Resmi değiştir':'Bu ürünün üstüne resim ekle'}" onclick="hsGorselSec('${s.id}')">🖼</b>${s.gorselUrl?`<b title="Resmi kaldır" onclick="hsGorselKaldir('${s.id}')">🖼✕</b>`:''}<b title="Bu ürüne renk seç" onclick="hizliSatisUrunRenk(event,'${s.id}')">🎨</b><b title="Önüne boş yer ekle" onclick="hsBosEkle('${k.id}','${s.id}')">⬚</b><b title="Bu kareyi yükselt" onclick="hsSatirYuk('${s.id}',8)">↕+</b><b title="Bu kareyi alçalt" onclick="hsSatirYuk('${s.id}',-8)">↕−</b><b title="Yukarı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',-1)">▲</b><b title="Aşağı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',1)">▼</b>${mod==='hizli'?`<b title="Hızlı ürünlerden çıkar" onclick="hizliSatisHizliIsaret('${s.id}', false)">✕</b>`:`<b title="Başka alt gruba taşı" onclick="hsSatirTasi(event,'${s.id}','${k.id}')">➜</b><b title="Başka alt grupta da göster (kısayol ekle)" onclick="hsSatirKopya(event,'${s.id}')">⧉</b>${ekstra?`<b title="Bu kısayolu kaldır (ürünün kendisi silinmez)" onclick="hsSatirKopyaSil('${s.id}','${k.id}')">✕</b>`:`<b title="Bu ürün grubundan çıkar (stok kartı silinmez)" onclick="hsSatirGrupCikar('${s.id}')">✕</b>`}`}</span>
   </div>`;
 }
 // ── KISAYOLLAR: bir ürün aynı grupta birden fazla alt grupta, ya da başka ürün grubunun sayfalarında da görünebilir.
