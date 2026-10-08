@@ -3468,6 +3468,23 @@ function cariApi(action, params, _tokenYenidenDenendi){
   const buyuk = govdeMetni.length > 6000; // GET adresine sığmayacak kadar büyükse (ör. fotoğraf) POST
   const url = buyuk ? CARI_API : CARI_API + "?payload=" + encodeURIComponent(govdeMetni);
   const postGovde = buyuk ? govdeMetni : undefined;
+  // ★ HIZ (8 Eki 2026): aynı OKUMA isteği (ör. getStokTanimListesi) henüz yanıtlanmamışken bir kez daha istenirse
+  // (sayfa açılışında birkaç bileşen aynı listeyi ister) ikinci sunucu çağrısı yapılmaz, mevcut istek beklenir.
+  // Her çağıran kendi kopyasını alır (liste üzerinde sıralama/değişiklik birbirini etkilemesin).
+  const _okuTekil = !postGovde && /^get/.test(action);
+  // Tanım listeleri (birim, banka yapısı, seri, grup, marka...) → yapı önbelleği (10 dk taze, değişince temizlenir)
+  if(!_yapiIcCagri_ && YAPI_OKUMA_.test(action)) return cariApiYapi(action, params);
+  // Sık istenen liste/özet okumaları: son 45 sn içinde alındıysa tekrar sunucuya gidilmez.
+  // Herhangi bir kaydetme/silme veya başka kullanıcının değişikliği algılanınca hafıza silinir (onbellekTemizleHepsi_).
+  const _ttl = _okuTekil ? OKUMA_TTL_[action] : 0;
+  const _surum0 = _okuSurum_;
+  if(_ttl){
+    const m = _okuMemo_[url];
+    if(m && Date.now() - m.t < _ttl) return Promise.resolve(yanitKopyala_(m.r));
+  }
+  if(_okuTekil && _okuUcusta_[url]){
+    return _okuUcusta_[url].then(r=> r && typeof r === "object" ? yanitKopyala_(r) : r);
+  }
   // "İşlem yapılıyor" bandı: istek boyunca gösterilir, bitince (başarı/hata fark etmeksizin)
   // sayaç sıfırlanınca gizlenir — kullanıcı beklerken tekrar tuşa/butona basmasın diye.
   // "İşlem yapılıyor" bandı sadece gerçek bir YAZMA/işlem çağrısında gösterilir — sekme
@@ -3476,13 +3493,6 @@ function cariApi(action, params, _tokenYenidenDenendi){
   // görünüyordu; artık sadece Kaydet/Sil/Onayla gibi asıl işlemlerde çıkıyor).
   const _bantGoster = window.islemYapiliyorGoster_ && (!CARI_API_YAZMA_DEGIL_.test(action) || CARI_API_BANT_OKUMA_.test(action));
   if(_bantGoster) window.islemYapiliyorGoster_();
-  // ★ HIZ (8 Eki 2026): aynı OKUMA isteği (ör. getStokTanimListesi) henüz yanıtlanmamışken bir kez daha istenirse
-  // (sayfa açılışında birkaç bileşen aynı listeyi ister) ikinci sunucu çağrısı yapılmaz, mevcut istek beklenir.
-  // Her çağıran kendi kopyasını alır (liste üzerinde sıralama/değişiklik birbirini etkilemesin).
-  const _okuTekil = !postGovde && /^get/.test(action);
-  if(_okuTekil && _okuUcusta_[url]){
-    return _okuUcusta_[url].then(r=> r && typeof r === "object" ? yanitKopyala_(r) : r);
-  }
   const _hizT0 = performance.now();
   const _istek = cariApiIstekYap_(url, postGovde).catch(err=>{
     if(!err.gecersizYanit) throw err; // ağ hatası (offline vb.) ise direkt fırlat, tekrar denemenin faydası yok
@@ -3514,6 +3524,7 @@ function cariApi(action, params, _tokenYenidenDenendi){
       const yeniDv = String(res.dv);
       if(window._sonDv_ && window._sonDv_ !== yeniDv && CARI_API_YAZMA_DEGIL_.test(action)){
         onbellekTemizleHepsi_();
+        yapiOnbellekTemizle_(); // başka kullanıcı tanım (banka/seri/grup...) değiştirmiş olabilir
         const simdi = Date.now();
         if(!window._dvUyariZamani_ || simdi - window._dvUyariZamani_ > 60000){
           window._dvUyariZamani_ = simdi;
@@ -3539,11 +3550,24 @@ function cariApi(action, params, _tokenYenidenDenendi){
   if(_okuTekil){
     _okuUcusta_[url] = _istek;
     const _temizle = ()=>{ if(_okuUcusta_[url] === _istek) delete _okuUcusta_[url]; };
-    _istek.then(_temizle, _temizle);
+    _istek.then(res=>{
+      if(_ttl && res && res.ok && _okuUcusta_[url] === _istek && _surum0 === _okuSurum_) _okuMemo_[url] = {t: Date.now(), r: yanitKopyala_(res)};
+      _temizle();
+    }, _temizle);
   }
   return _istek;
 }
 const _okuUcusta_ = {};
+const _okuMemo_ = {};
+let _okuSurum_ = 0; // her temizlikte artar: temizlikten ÖNCE başlayan okumanın bayat yanıtı hafızaya yazılmaz
+let _yapiIcCagri_ = false;
+const YAPI_TAZE_MS_ = 10 * 60 * 1000;
+const YAPI_OKUMA_ = /^(getBirimListesi|getBasitTanimListesi|getSiparisDurumlari|getSeriTanimlari|getBankaYapisi|getPlasiyerListesi|getMarkaListesi|getAciklamaSablonlari)$/;
+const OKUMA_TTL_ = {
+  getStokTanimListesi:45000, getCariListesi:45000, getSatisListesi:45000, getAlisListesi:45000, getTahsilatListesi:45000,
+  getOdemeListesi:45000, getSatisIadeListesi:45000, getAlisIadeListesi:45000, getCekSenetListesi:45000,
+  getBugunOzet:45000, getSonIslemler:45000, getBekleyenAlisFaturalari:45000, getStokPanelSnapshot:45000
+};
 function yanitKopyala_(r){
   try{ return (typeof structuredClone === "function") ? structuredClone(r) : JSON.parse(JSON.stringify(r)); }
   catch(e){ return JSON.parse(JSON.stringify(r)); }
@@ -4457,24 +4481,31 @@ function onbellekTemizleOnek_(onek){
   }catch(e){}
 }
 // Liste önbelleği (fincanlar_onbellek_*) — herhangi bir kaydetme/silme sonrası, giriş/çıkışta temizlenir.
-function onbellekTemizleHepsi_(){ onbellekTemizleOnek_("fincanlar_onbellek_"); }
+function onbellekTemizleHepsi_(){ onbellekTemizleOnek_("fincanlar_onbellek_"); _okuSurum_++; try{ for(const k in _okuMemo_) delete _okuMemo_[k]; }catch(e){} }
 // Yapı/tanım önbelleği (fincanlar_yapi_*: banka yapısı, seri, gider grupları...) — sadece ilgili
 // TANIM işlemleri (banka/seri/tanım/marka... kaydet-sil) ve giriş/çıkışta temizlenir; günlük
 // satış/alış kaydetmeleri bunu bozmaz, böylece bu veriler formlar açılırken beklenmez.
 function yapiOnbellekTemizle_(){ onbellekTemizleOnek_("fincanlar_yapi_"); }
 function cariApiYapi(action, params){
+  if(params && !Object.keys(params).length) params = undefined;
   const anahtar = "fincanlar_yapi_" + action + (params ? "_" + JSON.stringify(params) : "");
-  let kayit = null;
+  let kayit = null, kayitYasi = Infinity;
   try{
     const ham = localStorage.getItem(anahtar);
-    if(ham){ const k = JSON.parse(ham); if(Date.now() - k.t < 24*60*60*1000) kayit = k.veri; }
+    if(ham){ const k = JSON.parse(ham); kayitYasi = Date.now() - k.t; if(kayitYasi < 24*60*60*1000) kayit = k.veri; }
   }catch(e){}
-  const taze = ()=> cariApi(action, params).then(res=>{
-    if(res && res.ok){ try{ localStorage.setItem(anahtar, JSON.stringify({t: Date.now(), veri: res})); }catch(e){} }
-    return res;
-  });
+  const taze = ()=>{
+    _yapiIcCagri_ = true; // cariApi'nin bu çağrıyı tekrar yapı önbelleğine yönlendirmesini engelle
+    let p; try{ p = cariApi(action, params); } finally { _yapiIcCagri_ = false; }
+    return p.then(res=>{
+      if(res && res.ok){ try{ localStorage.setItem(anahtar, JSON.stringify({t: Date.now(), veri: res})); }catch(e){} }
+      return res;
+    });
+  };
   if(kayit){
-    // Önbellekten HEMEN dön; arka planda (aynı anahtar için tek istek) sessizce tazele.
+    // Önbellekten HEMEN dön. ★ HIZ (8 Eki 2026): tanım listeleri nadiren değişir (değişince yapı önbelleği
+    // zaten temizlenir) — 10 dakikadan tazeyse sunucuya hiç gidilmez; bayatsa arka planda sessizce tazelenir.
+    if(kayitYasi < YAPI_TAZE_MS_) return Promise.resolve(kayit);
     if(!cariApiYapi._bekleyen) cariApiYapi._bekleyen = {};
     if(!cariApiYapi._bekleyen[anahtar]){
       cariApiYapi._bekleyen[anahtar] = true;
