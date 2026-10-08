@@ -6340,8 +6340,8 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   // verisi bu oturumda DAHA SONRA girildiyse eski (paketsiz) hâl görünmeye devam
   // edebiliyordu. Bu yüzden Sipariş/Satış modalı her açıldığında stok tanım listesi
   // ayrıca arka planda tazelenip mevcut kalemler yeniden çiziliyor.
-  cariApi("getStokTanimListesi").then(r=>{
-    if(r.ok){ _stokTanimListe = r.kalemler; if(document.getElementById("sm-kalemler")) satisKalemlerCiz(); }
+  stokListesiIste_().then(r=>{
+    if(r.ok){ if(document.getElementById("sm-kalemler")) satisKalemlerCiz(); }
   }).catch(()=>{});
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -6765,6 +6765,34 @@ function hsW_(sekme){ const ay = hsAyar_(); return ay.wSekme[sekme] !== undefine
 function hsYukToplu_(sekme){ const ay = hsAyar_(); return ay.yukSekme[sekme] !== undefined ? ay.yukSekme[sekme] : (ay.yukToplu || 0); }
 function hsAyarYaz_(){ try{ localStorage.setItem("hs_ayar", JSON.stringify(hsAyar_())); }catch(e){} }
 
+// ── Stok listesi: tek istek + tarayıcı önbelleği ────────────────────────────────────────────
+// Satış formu açılışı, Stok Tanımları ve Hızlı Satış aynı listeyi ayrı ayrı istiyordu (3 istek birden).
+// Artık aynı anda yalnız tek istek gider, hepsi onu bekler. Hızlı Satış ilk açılışta listeyi tarayıcı önbelleğinden
+// ANINDA çizer, taze liste gelince (değiştiyse) sessizce günceller. Önbellek giriş/çıkışta temizlenir (yapı önbelleği).
+const HS_STOK_ANAHTAR_ = "fincanlar_yapi_hsStokListesi";
+let _stokIstek_ = null;
+function stokListesiIste_(){
+  if(_stokIstek_) return _stokIstek_;
+  _stokIstek_ = cariApi("getStokTanimListesi").then(r=>{
+    if(r && r.ok){
+      r.degisti = JSON.stringify(_stokTanimListe) !== JSON.stringify(r.kalemler);
+      _stokTanimListe = r.kalemler;
+      onbellekYaz("stokTanimListesi", r.kalemler);
+      try{ localStorage.setItem(HS_STOK_ANAHTAR_, JSON.stringify({t:Date.now(), veri:r.kalemler})); }catch(e){}
+    }
+    return r;
+  }).finally(()=>{ _stokIstek_ = null; });
+  return _stokIstek_;
+}
+function hsStokOnbellektenYukle_(){
+  if(_stokTanimListe && _stokTanimListe.length) return;
+  let l = onbellekOku("stokTanimListesi", ONBELLEK_MAX_YAS);
+  if(!l || !l.length){
+    try{ const k = JSON.parse(localStorage.getItem(HS_STOK_ANAHTAR_) || "null"); if(k && k.veri && Date.now() - k.t < 7*24*3600*1000) l = k.veri; }catch(e){}
+  }
+  if(l && l.length) _stokTanimListe = l;
+}
+
 function hizliSatisToggle(){
   if(document.getElementById("hs-overlay")){ hizliSatisKapat(); return; }
   hizliSatisAc();
@@ -6776,13 +6804,17 @@ function hizliSatisAc(){
   if(document.getElementById("hs-overlay")) return;
   if(_hsDurum.form !== form){ _hsDurum = { form:form, sekme:"hizli", ara:"", kaydirma:0, eklenenler:[] }; _hsMiktar = {}; }
   _hsLimit = 80;
-  if(!_stokTanimYuklendi) stokTanimListesiYukle();
-  // Stok listesi ve ürün grupları her açılışta arka planda tazelenir; ekran açık kalır, miktarlar korunur.
-  cariApi("getStokTanimListesi").then(r=>{
-    if(r.ok){ _stokTanimListe = r.kalemler; if(document.getElementById("hs-grid")) hizliSatisCiz(); }
+  // Önce önbellekteki liste/gruplar ANINDA çizilir; sonra arka planda tazelenir (değiştiyse ekran güncellenir, miktar yazarken bozulmaz).
+  hsStokOnbellektenYukle_();
+  stokListesiIste_().then(r=>{
+    if(r && r.ok && r.degisti && document.getElementById("hs-grid") && !(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("hs-adet"))) hizliSatisCiz();
   }).catch(()=>{});
-  cariApi("getBasitTanimListesi", {tip:"urunGrubu"}).then(r=>{
-    if(r.ok){ _tanimListeCache.urunGrubu = r.kalemler; _tanimListeYuklendi.urunGrubu = true; if(document.getElementById("hs-grid")) hizliSatisCiz(); }
+  const grupOnceki = JSON.stringify(_tanimListeCache.urunGrubu || []);
+  cariApiYapi("getBasitTanimListesi", {tip:"urunGrubu"}).then(r=>{
+    if(r && r.ok){
+      _tanimListeCache.urunGrubu = r.kalemler; _tanimListeYuklendi.urunGrubu = true;
+      if(JSON.stringify(r.kalemler) !== grupOnceki && document.getElementById("hs-grid")) hizliSatisCiz();
+    }
   }).catch(()=>{});
   const ay = hsAyar_();
   const ov = document.createElement("div");
@@ -17999,7 +18031,7 @@ function stokTanimListesiYukle(){
   const onbellek = onbellekOku("stokTanimListesi", ONBELLEK_MAX_YAS);
   if(onbellek){ _stokTanimListe = onbellek; _stokTanimGuncelAramaTerimiIleCiz(); bfmOnerileriGuncelle(); }
   else document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
-  cariApi("getStokTanimListesi").then(res=>{
+  stokListesiIste_().then(res=>{
     if(!res.ok){ if(!onbellek) document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Hata: '+(res.hata||res.error||"bilinmiyor")+'</div>'; return; }
     _stokTanimListe = res.kalemler;
     onbellekYaz("stokTanimListesi", res.kalemler);
