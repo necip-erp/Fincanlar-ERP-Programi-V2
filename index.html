@@ -3476,8 +3476,15 @@ function cariApi(action, params, _tokenYenidenDenendi){
   // görünüyordu; artık sadece Kaydet/Sil/Onayla gibi asıl işlemlerde çıkıyor).
   const _bantGoster = window.islemYapiliyorGoster_ && (!CARI_API_YAZMA_DEGIL_.test(action) || CARI_API_BANT_OKUMA_.test(action));
   if(_bantGoster) window.islemYapiliyorGoster_();
+  // ★ HIZ (8 Eki 2026): aynı OKUMA isteği (ör. getStokTanimListesi) henüz yanıtlanmamışken bir kez daha istenirse
+  // (sayfa açılışında birkaç bileşen aynı listeyi ister) ikinci sunucu çağrısı yapılmaz, mevcut istek beklenir.
+  // Her çağıran kendi kopyasını alır (liste üzerinde sıralama/değişiklik birbirini etkilemesin).
+  const _okuTekil = !postGovde && /^get/.test(action);
+  if(_okuTekil && _okuUcusta_[url]){
+    return _okuUcusta_[url].then(r=> r && typeof r === "object" ? yanitKopyala_(r) : r);
+  }
   const _hizT0 = performance.now();
-  return cariApiIstekYap_(url, postGovde).catch(err=>{
+  const _istek = cariApiIstekYap_(url, postGovde).catch(err=>{
     if(!err.gecersizYanit) throw err; // ağ hatası (offline vb.) ise direkt fırlat, tekrar denemenin faydası yok
     return new Promise(resolve=>setTimeout(resolve, 800)).then(()=>cariApiIstekYap_(url, postGovde));
   }).then(res=>{
@@ -3529,6 +3536,17 @@ function cariApi(action, params, _tokenYenidenDenendi){
   }).finally(()=>{
     if(_bantGoster && window.islemYapiliyorGizle_) window.islemYapiliyorGizle_();
   });
+  if(_okuTekil){
+    _okuUcusta_[url] = _istek;
+    const _temizle = ()=>{ if(_okuUcusta_[url] === _istek) delete _okuUcusta_[url]; };
+    _istek.then(_temizle, _temizle);
+  }
+  return _istek;
+}
+const _okuUcusta_ = {};
+function yanitKopyala_(r){
+  try{ return (typeof structuredClone === "function") ? structuredClone(r) : JSON.parse(JSON.stringify(r)); }
+  catch(e){ return JSON.parse(JSON.stringify(r)); }
 }
 
 // ══════ HIZ ÖLÇÜMÜ (1 Eki 2026) ══════

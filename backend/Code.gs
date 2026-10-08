@@ -151,13 +151,20 @@ const SHEETS = {
 // Bu fonksiyon her kalemin ya (a) gerçekten var olan bir Stok Koduna bağlı olmasını,
 // ya da (b) kullanıcının bilerek "Stoksuz" işaretlediği bir hizmet/masraf kalemi
 // olmasını zorunlu kılar — üçüncü bir sessiz seçenek bırakmaz.
+// ★ HIZ (8 Eki 2026): bir kayıt isteğinde (ör. Satış Faturası) doğrulama + stok hareketi yazımı StokTanimlari'nı
+// iki kez baştan sona okuyordu. Harita artık İSTEK BAŞINA bir kez okunur; stok tanım verisi değişince
+// (her yazma cacheTemizle çağırır) hemen düşürülür, böylece aynı istekte yeni açılan stok kartı da görülür.
+let _STOK_KOD_HARITASI_ISTEK_ = null, _STOK_KOD_HARITASI_ID_ = null;
 function stokKoduHaritasiOlustur(ss) {
+  const kimlik = aktifYil_();
+  if (_STOK_KOD_HARITASI_ISTEK_ && _STOK_KOD_HARITASI_ID_ === kimlik) return _STOK_KOD_HARITASI_ISTEK_;
   const data = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR).getDataRange().getValues();
   const harita = {};
   for (let i = 1; i < data.length; i++) {
     const kod = String(data[i][1] || "").trim();
     if (kod) harita[kod] = String(data[i][0] || "");
   }
+  _STOK_KOD_HARITASI_ISTEK_ = harita; _STOK_KOD_HARITASI_ID_ = kimlik;
   return harita;
 }
 
@@ -248,6 +255,7 @@ function cacheOkuVeyaHesapla(anahtar, saniyeTTL, hesaplaFn) {
 }
 
 function cacheTemizle(anahtarlar) {
+  _STOK_KOD_HARITASI_ISTEK_ = null; // istek içi stok kodu haritası bayatlamasın
   try {
     const tumu = [];
     const ekle = function (k) {
@@ -8021,12 +8029,7 @@ function stokHareketOtomatikYaz(ss, kalemler, tarih, hareketTipi, belgeTipi, bel
   ensureStokHareketBelgeColonlari(shSheet);
 
   // stokKodu -> StokTanimlari ID eşlemesi (ürün bazlı rapor filtresinin çalışabilmesi için).
-  const tanimData = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR).getDataRange().getValues();
-  const koduIdMap = {};
-  for (let i = 1; i < tanimData.length; i++) {
-    const kod = String(tanimData[i][1] || "").trim();
-    if (kod) koduIdMap[kod] = String(tanimData[i][0] || "");
-  }
+  const koduIdMap = stokKoduHaritasiOlustur(ss); // istek içinde doğrulama adımıyla paylaşılan tek okuma
 
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   const satirlar = [];
