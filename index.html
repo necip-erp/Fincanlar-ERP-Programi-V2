@@ -495,9 +495,16 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-kolon-satirlar{display:grid;grid-template-columns:repeat(var(--n,1),minmax(0,1fr));gap:3px}
 .hs-kolon{--n:1}
 .hs-kolonlu .hs-kolon{grid-column:span var(--n);min-width:0}
-.hs-aksiyon{position:absolute;right:4px;top:-12px;display:none;gap:2px;z-index:4;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:1px 3px;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+.hs-aksiyon{position:absolute;right:2px;top:2px;display:none;z-index:4;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:0 2px;box-shadow:0 1px 4px rgba(0,0,0,.18)}
 .hs-satir:hover .hs-aksiyon{display:flex}
-.hs-aksiyon b{cursor:pointer;font-size:11px;line-height:1;padding:3px 4px;border-radius:4px}
+.hs-aksiyon b{cursor:pointer;font-size:13px;line-height:1;padding:1px 5px;border-radius:4px;font-weight:900}
+.hs-umenu{position:fixed;z-index:100000;min-width:210px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 8px 24px rgba(0,0,0,.28);display:flex;flex-direction:column;gap:1px}
+.hs-umenu button{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;font-size:13px;font-weight:600;color:var(--text)}
+.hs-umenu button:hover{background:var(--blue-l)}
+.hs-umenu button.hs-um-kir{color:#b91c1c}
+.hs-umenu .hs-um-ayrac{height:1px;background:var(--border);margin:3px 2px}
+.hs-umenu .hs-um-cift{display:flex;gap:1px}
+.hs-umenu .hs-um-cift button{flex:1;justify-content:center}
 .hs-aksiyon b:hover{background:var(--blue-l)}
 .hs-nokta-sari{position:absolute;top:-6px;left:-6px;width:15px;height:15px;border-radius:50%;background:#facc15;border:2px solid #fff;box-shadow:0 0 0 2px #ca8a04,0 1px 4px rgba(0,0,0,.35);pointer-events:none;z-index:3}
 .hs-kisayol{font-style:normal;font-size:10px}
@@ -6897,6 +6904,61 @@ function hsKisaAdDuzenle(id){
     if(!r.ok){ s.kisaAd = eski; hizliSatisCiz(); alert("Kısa ad kaydedilemedi: " + (r.hata||"bilinmiyor")); }
   }).catch(err=>{ s.kisaAd = eski; hizliSatisCiz(); alert("Bağlantı hatası: " + err.message); });
 }
+// ── Ürün kutusu işlem menüsü: kutunun köşesindeki ⋯ ya da sağ tık. (Eskiden üstte 10+ küçük düğmeli çubuk açılıp ürünleri örtüyordu.)
+function hsUrunMenuKapat_(){ const m = document.getElementById("hs-umenu"); if(m) m.remove(); document.removeEventListener("mousedown", hsUrunMenuDis_, true); document.removeEventListener("keydown", hsUrunMenuTus_, true); }
+function hsUrunMenuDis_(e){ const m = document.getElementById("hs-umenu"); if(m && !m.contains(e.target)) hsUrunMenuKapat_(); }
+function hsUrunMenuTus_(e){ if(e.key === "Escape"){ e.stopPropagation(); e.preventDefault(); hsUrunMenuKapat_(); } }
+function hsUrunMenu(e, id, kolonId, mod){
+  if(e.type === "contextmenu" && e.target && e.target.closest && e.target.closest("input,textarea,select")) return;   // miktar kutusunda normal sağ tık
+  e.preventDefault(); e.stopPropagation();
+  hsUrunMenuKapat_();
+  const s = (_stokTanimListe||[]).find(x=>x.id === id); if(!s) return;
+  const gS = _hsDurum.sekme, ekstra = mod === "alt" && hsKartKolonu_(gS, s) !== kolonId;
+  const m = document.createElement("div"); m.id = "hs-umenu"; m.className = "hs-umenu";
+  const ekle = (etiket, fn, o)=>{   // o: {kir:true, acik:true (menü açık kalsın), pop:true (açılan küçük pencere düğmeye bağlanır)}
+    o = o || {};
+    const b = document.createElement("button"); b.type = "button"; b.textContent = etiket;
+    if(o.kir) b.className = "hs-um-kir";
+    b.addEventListener("click", ev=>{
+      ev.stopPropagation();
+      if(o.pop) m.style.visibility = "hidden"; else if(!o.acik) hsUrunMenuKapat_();
+      fn(ev);
+    });
+    (o.kap || m).appendChild(b); return b;
+  };
+  const ayrac = ()=>{ const d = document.createElement("div"); d.className = "hs-um-ayrac"; m.appendChild(d); };
+  const cift = ()=>{ const d = document.createElement("div"); d.className = "hs-um-cift"; m.appendChild(d); return d; };
+  ekle("✎  Kısa ad ver / değiştir", ()=>hsKisaAdDuzenle(id));
+  ekle(s.gorselUrl ? "🖼  Resmi değiştir" : "🖼  Üstüne resim ekle", ()=>hsGorselSec(id));
+  if(s.gorselUrl) ekle("🖼  Resmi kaldır", ()=>hsGorselKaldir(id));
+  ekle("🎨  Renk seç", ev=>hizliSatisUrunRenk(ev, id), {pop:true});
+  ayrac();
+  const c1 = cift();
+  ekle("▲ Yukarı", ()=>hizliSatisKolonTasi(kolonId, id, -1), {kap:c1});
+  ekle("▼ Aşağı", ()=>hizliSatisKolonTasi(kolonId, id, 1), {kap:c1});
+  const c2 = cift();
+  ekle("↕+ Yükselt", ()=>hsSatirYuk(id, 8), {kap:c2, acik:true});
+  ekle("↕− Alçalt", ()=>hsSatirYuk(id, -8), {kap:c2, acik:true});
+  ekle("⬚  Önüne boş yer ekle", ()=>hsBosEkle(kolonId, id));
+  ayrac();
+  if(mod === "hizli"){
+    ekle("✕  Hızlı ürünlerden çıkar", ()=>hizliSatisHizliIsaret(id, false), {kir:true});
+  } else {
+    ekle("➜  Başka alt gruba taşı", ev=>hsSatirTasi(ev, id, kolonId), {pop:true});
+    ekle("⧉  Başka grupta da göster (kısayol)", ev=>hsSatirKopya(ev, id), {pop:true});
+    if(ekstra) ekle("✕  Bu kısayolu kaldır", ()=>hsSatirKopyaSil(id, kolonId), {kir:true});
+    else ekle("✕  Bu ürün grubundan çıkar", ()=>hsSatirGrupCikar(id), {kir:true});
+  }
+  document.body.appendChild(m);
+  const r = (e.type === "contextmenu") ? {left:e.clientX, bottom:e.clientY, top:e.clientY, right:e.clientX} : e.currentTarget.getBoundingClientRect();
+  const w = m.offsetWidth, hh = m.offsetHeight;
+  let x = r.left, y = r.bottom + 4;
+  if(x + w > window.innerWidth - 6) x = Math.max(6, window.innerWidth - w - 6);
+  if(y + hh > window.innerHeight - 6) y = Math.max(6, r.top - hh - 4);
+  m.style.left = x + "px"; m.style.top = y + "px";
+  document.addEventListener("mousedown", hsUrunMenuDis_, true);
+  document.addEventListener("keydown", hsUrunMenuTus_, true);
+}
 // ── Kutucuğun en üstüne resim: yalnızca resim eklenen ürünlerde görünür (stok kartındaki görselle aynıdır).
 function hsGorselSec(id){
   const s = (_stokTanimListe||[]).find(x=>x.id === id); if(!s) return;
@@ -6938,9 +7000,9 @@ function hsSatirHtml_(s, k, mod, kRenk){
   const birim = htmlKacis(s.birim1 || "adet");
   const gS = _hsDurum.sekme, ekstra = mod === 'alt' && hsKartKolonu_(gS, s) !== k.id;
   const ay = hsAyar_(), yk = ay.yuk[s.id] !== undefined ? ay.yuk[s.id] : hsYukToplu_(_hsDurum.sekme);
-  return `<div class="hs-satir hs-kmp ${(hsHex_(s.hizliRenk)||kRenk)?'hs-renkli':''}" id="hs-k-${s.id}" style="${hsRenkStil_(s.hizliRenk)}--yk:${yk}px;" onclick="hsSatirTik(event,'${s.id}')" ondragover="hsSatirUstunde(event,this)" ondragleave="hsSatirAyrildi(event,this)" ondrop="${birak}(event,'${k.id}','${s.id}')">
+  return `<div class="hs-satir hs-kmp ${(hsHex_(s.hizliRenk)||kRenk)?'hs-renkli':''}" id="hs-k-${s.id}" style="${hsRenkStil_(s.hizliRenk)}--yk:${yk}px;" onclick="hsSatirTik(event,'${s.id}')" oncontextmenu="hsUrunMenu(event,'${s.id}','${k.id}','${mod}')" ondragover="hsSatirUstunde(event,this)" ondragleave="hsSatirAyrildi(event,this)" ondrop="${birak}(event,'${k.id}','${s.id}')">
     ${hsNokta_(s.id)}${hsSariNokta_(s.id)}
-    ${s.gorselUrl ? `<div class="hs-s-resim" title="Resmi değiştirmek için üstteki 🖼 düğmesi"><img src="${htmlKacis(s.gorselUrl)}" loading="lazy" referrerpolicy="no-referrer" alt="" draggable="false" onerror="this.parentNode.remove()"></div>` : ""}
+    ${s.gorselUrl ? `<div class="hs-s-resim" title="Resmi değiştirmek için ⋯ menüsü (ya da sağ tık)"><img src="${htmlKacis(s.gorselUrl)}" loading="lazy" referrerpolicy="no-referrer" alt="" draggable="false" onerror="this.parentNode.remove()"></div>` : ""}
     <div class="hs-s-ust">
       <span class="hs-tut" draggable="true" title="Tutup sürükle${mod==='alt'?' (başka alt gruba da bırakabilirsin; Shift basılı bırakırsan taşımaz, kısayol ekler)':''}" ondragstart="hsSurukleBasla(event,'${s.id}','${k.id}')" ondragend="hsSurukleBitti()">⠿</span>
       <div class="hs-satir-ad" title="${ekstra?'🔗 Kısayol: ürünün ana yeri başka listede\n':''}${htmlKacis(s.stokAdi)}${s.kisaAd?'\n(kısa ad: '+htmlKacis(s.kisaAd)+')':''}\nSatış fiyatı: ${paraFormat(s.satisFiyati)} / ${birim}\nÇift tıkla: kısa ad ver · Shift+tık: stok kartını aç" ondblclick="hsKisaAdDuzenle('${s.id}')">${ekstra?'<i class="hs-kisayol" title="Kısayol">🔗</i> ':''}${htmlKacis(s.kisaAd || s.stokAdi)}<i class="hs-birim">${birim}</i></div>
@@ -6950,7 +7012,7 @@ function hsSatirHtml_(s, k, mod, kRenk){
              onfocus="this.select()" oninput="hsMiktarYaz_('${s.id}',this.value)" onkeydown="hizliSatisAdetTus(event,'${s.id}')">
       <button type="button" tabindex="-1" class="btn btn-primary hs-ekle" onclick="hizliSatisEkle('${s.id}')">Ekle</button>
     </div>
-    <span class="hs-aksiyon"><b title="Kısa ad ver / değiştir" onclick="hsKisaAdDuzenle('${s.id}')">✎</b><b title="${s.gorselUrl?'Resmi değiştir':'Bu ürünün üstüne resim ekle'}" onclick="hsGorselSec('${s.id}')">🖼</b>${s.gorselUrl?`<b title="Resmi kaldır" onclick="hsGorselKaldir('${s.id}')">🖼✕</b>`:''}<b title="Bu ürüne renk seç" onclick="hizliSatisUrunRenk(event,'${s.id}')">🎨</b><b title="Önüne boş yer ekle" onclick="hsBosEkle('${k.id}','${s.id}')">⬚</b><b title="Bu kareyi yükselt" onclick="hsSatirYuk('${s.id}',8)">↕+</b><b title="Bu kareyi alçalt" onclick="hsSatirYuk('${s.id}',-8)">↕−</b><b title="Yukarı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',-1)">▲</b><b title="Aşağı taşı" onclick="hizliSatisKolonTasi('${k.id}','${s.id}',1)">▼</b>${mod==='hizli'?`<b title="Hızlı ürünlerden çıkar" onclick="hizliSatisHizliIsaret('${s.id}', false)">✕</b>`:`<b title="Başka alt gruba taşı" onclick="hsSatirTasi(event,'${s.id}','${k.id}')">➜</b><b title="Başka alt grupta da göster (kısayol ekle)" onclick="hsSatirKopya(event,'${s.id}')">⧉</b>${ekstra?`<b title="Bu kısayolu kaldır (ürünün kendisi silinmez)" onclick="hsSatirKopyaSil('${s.id}','${k.id}')">✕</b>`:`<b title="Bu ürün grubundan çıkar (stok kartı silinmez)" onclick="hsSatirGrupCikar('${s.id}')">✕</b>`}`}</span>
+    <span class="hs-aksiyon"><b title="İşlemler (sağ tık da açar)" onclick="hsUrunMenu(event,'${s.id}','${k.id}','${mod}')">⋯</b></span>
   </div>`;
 }
 // ── KISAYOLLAR: bir ürün aynı grupta birden fazla alt grupta, ya da başka ürün grubunun sayfalarında da görünebilir.
