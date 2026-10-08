@@ -507,6 +507,9 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-umenu .hs-um-cift button{flex:1;justify-content:center}
 .hs-aksiyon b:hover{background:var(--blue-l)}
 .hs-nokta-sari{position:absolute;top:-6px;left:-6px;width:15px;height:15px;border-radius:50%;background:#facc15;border:2px solid #fff;box-shadow:0 0 0 2px #ca8a04,0 1px 4px rgba(0,0,0,.35);pointer-events:none;z-index:3}
+/* Nokta ile birlikte kutunun çerçevesi de renklenir (nazik, ince halka): yeşil = forma eklendi, sarı = miktar yazıldı henüz eklenmedi (sarı önceliklidir). */
+.hs-satir:has(> .hs-nokta),.hs-kart:has(> .hs-nokta){box-shadow:0 0 0 2px rgba(22,163,74,.55),0 0 8px rgba(22,163,74,.22)}
+.hs-satir:has(> .hs-nokta-sari),.hs-kart:has(> .hs-nokta-sari){box-shadow:0 0 0 2px rgba(234,179,8,.75),0 0 8px rgba(234,179,8,.30)}
 .hs-kisayol{font-style:normal;font-size:10px}
 .hs-hayalet{min-height:calc(40px + var(--yk,0px)/2);border:2px dashed var(--border);border-radius:9px;opacity:.35;display:flex;align-items:center;justify-content:center;color:var(--text3);font-weight:800;font-size:16px}
 .hs-hayalet:hover,.hs-hayalet.hs-kolon-hedef{opacity:1;border-color:#2563eb;background:rgba(37,99,235,.12);color:#2563eb}
