@@ -804,6 +804,7 @@ body.giris-yapildi #login-ekran{display:none}
     <input id="global-ara" placeholder="Ürün ara (kod, isim, ebat)..." oninput="globalAraDegisti(this.value)">
   </div>
   <button class="homebtn" id="ak-btn" onclick="akAc()" title="Akıllı Arama: ne yapmak istediğini yaz, doğrudan işleme geç (Ctrl+K)">⚡ Ne yapmak istiyorsun? <span class="kisayol-ipucu" id="ak-btn-kisayol">Ctrl+K</span></button>
+  <button class="homebtn" id="yedek-rozet" style="display:none" onclick="modulAc('yedekleme')" title="Yedekleme durumu — tıklayınca Yedekleme modülü açılır">💾 …</button>
   <button class="homebtn" id="home-btn" onclick="gitAnaSayfa()" title="Ana Sayfa (Ctrl + sayı satırında 1'in solundaki tuş)">← Ana Sayfa <span class="kisayol-ipucu">Ctrl+"</span></button>
   <button class="homebtn" id="veri-yenile-btn" style="display:inline-block;margin-left:8px" onclick="verileriYenile()" title="Sayfayı yenile: sayfa yeniden yüklenmez, açık sekmeler ve pencereler kapanmaz (verileri sunucudan tazeler)">↻ Sayfayı Yenile <span class="kisayol-ipucu" id="veri-yenile-ipucu">Alt+V</span></button>
   <button class="homebtn" id="yenile-btn" style="display:inline-block;margin-left:6px" onclick="sayfayiYenile()" title="Sayfayı tamamen yeniden yükler (açık sekmeler kapanır, en güncel sürüm alınır)">⟳ Yeniden Yükle <span class="kisayol-ipucu" id="yenile-ipucu">Alt+R</span></button>
@@ -1689,6 +1690,36 @@ setInterval(topbarSaatGuncelle, 10000);
       </div>
     </div>
   </div>
+  <div class="modview" id="mod-yedekleme">
+    <div class="finans-panel" id="yedek-bolum">
+      <div class="rapor-baslik" style="margin-top:0">💾 Yedekleme</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Otomatik yedek her 6 saatte bir Drive'daki "Fincanlar ERP - Otomatik Yedekler" klasörüne alınır. Her turda <b>veri</b> (her yılın e-tablosu), <b>program kodu</b> (ZIP), <b>ayarlar</b> (EDM şifresi hariç) ve <b>geri yükleme rehberi</b> kaydedilir. Flash belleğe kaydetmek için aşağıdan indirin.</p>
+      <div id="yedek-durum"><div class="cari-empty">Yükleniyor...</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+        <button class="btn btn-primary" id="yedek-simdi-btn" onclick="yedekAlSimdiIste()">💾 Şimdi Yedek Al</button>
+        <button class="btn" onclick="yedekDurumuYukle(true)">↻ Yenile</button>
+        <button class="btn" onclick="yedekFlashIndir()" title="En son veri yedeklerini + program kodunu + ayarları + rehberi sırayla indirir; flash belleğe kopyalayın">⬇ Flash için hepsini indir</button>
+        <a class="btn" id="yedek-klasor-link" href="#" target="_blank" rel="noopener" style="text-decoration:none">📁 Drive klasörünü aç</a>
+      </div>
+      <div id="yedek-liste"></div>
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+        <div style="font-weight:700;margin-bottom:4px">📧 Başka hesaplara yedek (en fazla 3 adres)</div>
+        <p style="color:var(--text3);font-size:12.5px;margin:0 0 8px">Yedek paketi bu adreslere e-posta eki olarak gider (günde bir kez, "Şimdi Yedek Al" her seferinde). Kopya o hesabın kendi posta kutusunda durur; ana hesap ele geçirilse bile silinemez. Gmail'de ekin üzerindeki "Drive'a kaydet" ile alıcı kendi Drive'ına da alabilir.</p>
+        <div style="display:flex;flex-direction:column;gap:6px;max-width:420px">
+          <input type="email" id="yedek-eposta-1" placeholder="1. e-posta adresi" autocomplete="off">
+          <input type="email" id="yedek-eposta-2" placeholder="2. e-posta adresi" autocomplete="off">
+          <input type="email" id="yedek-eposta-3" placeholder="3. e-posta adresi" autocomplete="off">
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:6px;font-size:12.5px;margin:8px 0;cursor:pointer"><input type="checkbox" id="yedek-paylas-chk" style="width:auto;margin-top:2px" checked> <span>Yedek klasörünü bu adreslerle <b>yalnızca görüntüleme</b> olarak da paylaş (Drive'dan Drive'a kopyalama için; e-postaya sığmayan büyük dosyalar da buradan açılır)</span></label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="yedekEpostaKaydet()">Adresleri Kaydet</button>
+          <button class="btn" onclick="yedekEpostaGonderIste()">📧 Şimdi bu adreslere gönder</button>
+          <button class="btn" onclick="yedekCekiciKoduIndir()" title="Alıcı hesapta bir kez kurulur; paylaşılan klasördeki yeni yedekleri her gün o hesabın kendi Drive'ına kopyalar">⬇ Alıcı hesap için "Drive'a otomatik kopyala" kodu</button>
+        </div>
+        <div id="yedek-eposta-durum" style="font-size:12.5px;color:var(--text3);margin-top:6px"></div>
+      </div>
+    </div>
+  </div>
   <div class="modview" id="mod-kayitdefteri">
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">📒 Kayıt Defteri</div>
@@ -1733,35 +1764,6 @@ setInterval(topbarSaatGuncelle, 10000);
       </div>
       <div id="ayarlar-son-islemler-liste"><div class="cari-empty">Yükleniyor...</div></div>
       <div id="ayarlar-son-islemler-daha" style="display:none;margin-top:8px"><button class="btn" onclick="ayarlarSonIslemlerDahaFazla()">Daha fazla göster (+100)</button></div>
-    </div>
-
-    <div class="finans-panel" data-bolum-anahtar="ayarlar_bolum_yedekleme" id="yedek-bolum" style="display:none">
-      <div class="rapor-baslik" style="margin-top:0">💾 Yedekleme</div>
-      <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Otomatik yedek her 6 saatte bir Drive'daki "Fincanlar ERP - Otomatik Yedekler" klasörüne alınır. Her turda <b>veri</b> (her yılın e-tablosu), <b>program kodu</b> (ZIP), <b>ayarlar</b> (EDM şifresi hariç) ve <b>geri yükleme rehberi</b> kaydedilir. Flash belleğe kaydetmek için aşağıdan indirin.</p>
-      <div id="yedek-durum"><div class="cari-empty">Yükleniyor...</div></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
-        <button class="btn btn-primary" id="yedek-simdi-btn" onclick="yedekAlSimdiIste()">💾 Şimdi Yedek Al</button>
-        <button class="btn" onclick="yedekDurumuYukle(true)">↻ Yenile</button>
-        <button class="btn" onclick="yedekFlashIndir()" title="En son veri yedeklerini + program kodunu + ayarları + rehberi sırayla indirir; flash belleğe kopyalayın">⬇ Flash için hepsini indir</button>
-        <a class="btn" id="yedek-klasor-link" href="#" target="_blank" rel="noopener" style="text-decoration:none">📁 Drive klasörünü aç</a>
-      </div>
-      <div id="yedek-liste"></div>
-      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
-        <div style="font-weight:700;margin-bottom:4px">📧 Başka hesaplara yedek (en fazla 3 adres)</div>
-        <p style="color:var(--text3);font-size:12.5px;margin:0 0 8px">Yedek paketi bu adreslere e-posta eki olarak gider (günde bir kez, "Şimdi Yedek Al" her seferinde). Kopya o hesabın kendi posta kutusunda durur; ana hesap ele geçirilse bile silinemez. Gmail'de ekin üzerindeki "Drive'a kaydet" ile alıcı kendi Drive'ına da alabilir.</p>
-        <div style="display:flex;flex-direction:column;gap:6px;max-width:420px">
-          <input type="email" id="yedek-eposta-1" placeholder="1. e-posta adresi" autocomplete="off">
-          <input type="email" id="yedek-eposta-2" placeholder="2. e-posta adresi" autocomplete="off">
-          <input type="email" id="yedek-eposta-3" placeholder="3. e-posta adresi" autocomplete="off">
-        </div>
-        <label style="display:flex;align-items:flex-start;gap:6px;font-size:12.5px;margin:8px 0;cursor:pointer"><input type="checkbox" id="yedek-paylas-chk" style="width:auto;margin-top:2px" checked> <span>Yedek klasörünü bu adreslerle <b>yalnızca görüntüleme</b> olarak da paylaş (Drive'dan Drive'a kopyalama için; e-postaya sığmayan büyük dosyalar da buradan açılır)</span></label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="yedekEpostaKaydet()">Adresleri Kaydet</button>
-          <button class="btn" onclick="yedekEpostaGonderIste()">📧 Şimdi bu adreslere gönder</button>
-          <button class="btn" onclick="yedekCekiciKoduIndir()" title="Alıcı hesapta bir kez kurulur; paylaşılan klasördeki yeni yedekleri her gün o hesabın kendi Drive'ına kopyalar">⬇ Alıcı hesap için "Drive'a otomatik kopyala" kodu</button>
-        </div>
-        <div id="yedek-eposta-durum" style="font-size:12.5px;color:var(--text3);margin-top:6px"></div>
-      </div>
     </div>
 
     <div class="finans-panel" data-bolum-anahtar="ayarlar_bolum_hiz_olcumu">
@@ -2025,6 +2027,7 @@ const MODULLER = [
   {id:"rapor",    ic:"📈", lbl:"Rapor",     desc:"Raporlar",                renk:"blue"},
   {id:"silinenler", ic:"🗑️", lbl:"Silinenler", desc:"Silinen kayıtlar, geri al", renk:"neutral"},
   {id:"kayitdefteri", ic:"📒", lbl:"Kayıt Defteri", desc:"Numaralı işlem defteri, veri kaybı kontrolü", renk:"neutral", admin:true},
+  {id:"yedekleme", ic:"💾", lbl:"Yedekleme", desc:"Yedek durumu, flash indirme, e-posta, geri yükleme", renk:"green", admin:true},
   {id:"ayarlar",  ic:"⚙️", lbl:"Ayarlar",   desc:"Kısayollar ve düzen",     renk:"neutral"},
 ];
 
@@ -2777,6 +2780,7 @@ function modulAc(id){
   sekmeSeridiCiz();
   // Silinenler listesi her açılışta taze olmalı (stale cache burada yanıltıcı olur).
   if(id === "silinenler") silinenlerYukle();
+  if(id === "yedekleme") yedekDurumuYukle(true);
   if(id === "kayitdefteri") kayitDefteriAcildi_(); // artık her açılışta yenilemez
   if(id === "ceksenet" && (_cekModulGorunumKaydi === "rapor" || _cekRaporAcik)){ // rapordan açılan kayıt sekmesinden dönüş: rapor sayfası geri gelir
     _cekModulGorunumKaydi = null; delete _kayitSekmeGosterilen["ceksenet"];
@@ -3691,6 +3695,38 @@ function yedekSureMetni_(dk){
   if(dk < 1440) return Math.floor(dk/60) + " saat " + (dk%60) + " dk önce";
   return Math.floor(dk/1440) + " gün önce";
 }
+// Üst çubuktaki yedek rozeti: Admin'e her ekranda son yedek durumunu gösterir (yeşil/sarı/kırmızı), tıklayınca modülü açar.
+function yedekRozetCiz_(d){
+  const r = document.getElementById("yedek-rozet"); if(!r) return;
+  if(!yedekAdminMi_() || !d){ r.style.display = "none"; return; }
+  const dk = (d.klasorVar === false) ? null : d.sonVeriDakika;
+  let renk = "#1a8f3c", ikon = "✅", m;
+  if(dk === null || dk === undefined){ renk = "#c62828"; ikon = "❌"; m = "Yedek yok"; }
+  else if(dk > 13*60){ renk = "#c62828"; ikon = "⚠️"; m = yedekSureMetni_(dk); }
+  else if(dk > 8*60){ renk = "#b07a00"; ikon = "🟡"; m = yedekSureMetni_(dk); }
+  else m = yedekSureMetni_(dk);
+  r.style.display = "inline-block"; r.style.color = renk; r.style.borderColor = renk; r.style.fontWeight = "700";
+  r.textContent = "💾 " + ikon + " Yedek: " + m;
+  r.title = "Son yedek: " + m + " — tıklayınca Yedekleme modülü açılır";
+}
+function yedekRozetYenile_(zorla){
+  try{
+    if(!yedekAdminMi_()){ yedekRozetCiz_(null); return; }
+    let c = null; try{ c = JSON.parse(localStorage.getItem("fincanlar_yedek_rozet")||"null"); }catch(_){}
+    if(c && c.d){
+      // Önbellekteki dakika değeri, kayıttan beri geçen süreyle ilerletilir
+      const d = Object.assign({}, c.d); if(typeof d.sonVeriDakika === "number") d.sonVeriDakika += Math.floor((Date.now()-c.t)/60000);
+      yedekRozetCiz_(d);
+    }
+    if(!zorla && c && Date.now()-c.t < 20*60*1000) return;
+    cariApi("getYedekDurumu").then(res=>{
+      if(res && res.ok){ try{ localStorage.setItem("fincanlar_yedek_rozet", JSON.stringify({t:Date.now(), d:{klasorVar:res.klasorVar, sonVeriDakika:res.sonVeriDakika}})); }catch(_){}
+        yedekRozetCiz_(res); }
+    }).catch(()=>{});
+  }catch(_){}
+}
+setTimeout(yedekRozetYenile_, 6000);
+setInterval(()=>yedekRozetYenile_(false), 5*60*1000);
 function yedekDurumuYukle(){
   const bolum = document.getElementById("yedek-bolum");
   if(!bolum) return;
@@ -3704,6 +3740,7 @@ function yedekDurumuYukle(){
 }
 function yedekDurumuCiz_(d){
   _yedekDurum = d;
+  yedekRozetCiz_(d);
   const kap = document.getElementById("yedek-durum");
   yedekEpostaAlanlariDoldur_(d);
   const lnk = document.getElementById("yedek-klasor-link");
@@ -17138,7 +17175,6 @@ let _ayarlarTaslak = null; // kaydedilmeden önceki geçici değişiklikler
 function ayarlarYukle(){
   _ayarlarTaslak = Object.assign({}, kisayollariAl());
   hizPaneliCiz();
-  yedekDurumuYukle();
   { const hc = document.getElementById("hiz-rozet-chk"); if(hc) hc.checked = hizRozetAcikMi_(); }
   ayarlarSonIslemlerYukle(true);
   ayarlarListesiCiz();
@@ -20476,7 +20512,7 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
     koyu:   {ad:"Koyu", fon:"#151b28", kart:"#1f2738", yazi:"#e8ecf4", yazi2:"#9aa6bd", vurgu:"#60a5fa", kenar:"#2f3a52", stil:"yumusak", palet:"koyu"}
   };
   const ALANLAR = { fon:"--ah-fon", kart:"--ah-kart", yazi:"--ah-yazi", yazi2:"--ah-yazi2", vurgu:"--ah-vurgu", kenar:"--ah-kenar" };
-  const MOD_IDLER = ["stok","cari","tahsilat","odeme","cvirman","ceksenet","alis","satis","finans","rapor","silinenler","kayitdefteri","ayarlar"];
+  const MOD_IDLER = ["stok","cari","tahsilat","odeme","cvirman","ceksenet","alis","satis","finans","rapor","silinenler","kayitdefteri","yedekleme","ayarlar"];
   let ah = Object.assign({tema:"klasik"}, TEMA.klasik);
   try{ const k = JSON.parse(localStorage.getItem("fincanlar_ana_renk")||"null"); if(k && typeof k === "object") ah = Object.assign(ah, k); }catch(_){}
   function ahUygula(kaydet){
