@@ -9249,9 +9249,12 @@ const AR_SUTUNLAR = {
   tarih:   { baslik:"Tarih",        deger:a=>String(a.tarih||""),               hucre:a=>tarihGoster(a.tarih) },
   odeme:   { baslik:"Ödeme Tipi",   deger:a=>a.odemeTipi||"",                   hucre:a=>htmlKacis(a.odemeTipi||"") },
   aciklama:{ baslik:"Açıklama",     deger:a=>a.aciklama||"",                    hucre:a=>htmlKacis(a.aciklama||"") },
+  ara:     { baslik:"Ara Toplam",   deger:a=>arAra_(a)||0, sayi:true, sag:true, hucre:a=>arAra_(a)==null?"—":paraFormat(arAra_(a)) },
+  kdv:     { baslik:"Toplam KDV",   deger:a=>+a.kdvToplam||0, sayi:true, sag:true, hucre:a=>a.kdvToplam==null?"—":paraFormat(a.kdvToplam) },
   genel:   { baslik:"Genel Toplam", deger:a=>+a.toplamTutar||0, sayi:true, sag:true, hucre:a=>paraFormat(a.toplamTutar) },
 };
-const AR_VARSAYILAN_SIRA = ["cariKodu","cariAd","no","tarih","odeme","aciklama","genel"];
+const AR_VARSAYILAN_SIRA = ["cariKodu","cariAd","no","tarih","odeme","aciklama","ara","kdv","genel"];
+function arAra_(a){ return a.kdvToplam==null ? null : Math.round(((+a.toplamTutar||0) - (+a.kdvToplam||0))*100)/100; }
 function arSutunSirasiAl_(){
   let k = null; try{ k = JSON.parse(localStorage.getItem("alisRaporSutunSirasi")||"null"); }catch(e){}
   const sira = Array.isArray(k) ? k.filter(x=>AR_SUTUNLAR[x]) : [];
@@ -9367,7 +9370,7 @@ function alisRaporCiz_(){
   }
   const topla = f=>liste.reduce((t,a)=>t+(f(a)||0),0);
   document.getElementById("ar-alt").innerHTML =
-    `<span><b>${liste.length}</b> kayıt</span><span style="margin-left:auto">Genel Toplam: <b>${paraFormat(topla(a=>+a.toplamTutar))}</b></span>`;
+    `<span><b>${liste.length}</b> kayıt</span><span style="margin-left:auto">Ara Toplam: <b>${paraFormat(topla(a=>arAra_(a)))}</b></span><span>Toplam KDV: <b>${paraFormat(topla(a=>+a.kdvToplam))}</b></span><span>Genel Toplam: <b>${paraFormat(topla(a=>+a.toplamTutar))}</b></span>`;
 }
 
 function alisAc(id){

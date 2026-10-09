@@ -2969,6 +2969,22 @@ function getAlisListesi() {
   }
   const cariKoduMap = cariKoduHaritasiOlustur(ss);
 
+  // Rapor için Ara Toplam / KDV / Genel Toplam kırılımı: kalem KDV'si (miktar × net birim fiyat × KDV%)
+  // alış başına toplanır; belge düzeyi tutar iskontosu varsa KDV oransal küçültülür (genel toplam = TOPLAM_TUTAR).
+  const kdvHaritasi = {}, kalemGenelHaritasi = {};
+  const kSheetL = getOrCreateSheet(ss, SHEETS.alisKalemleri,
+    ["ID","ALIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","STOK_KODU"]);
+  const kDataL = kSheetL.getDataRange().getValues();
+  for (let i = 1; i < kDataL.length; i++) {
+    const kr = kDataL[i];
+    const aid = String(kr[1] || "");
+    if (!aid) continue;
+    const net = (parseFloat(kr[3]) || 0) * (parseFloat(kr[5]) || 0);
+    const kdvOr = parseFloat(kr[8]) || 0;
+    kdvHaritasi[aid] = (kdvHaritasi[aid] || 0) + net * kdvOr / 100;
+    kalemGenelHaritasi[aid] = (kalemGenelHaritasi[aid] || 0) + net * (1 + kdvOr / 100);
+  }
+
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
@@ -2989,6 +3005,11 @@ function getAlisListesi() {
       toplamTutar: parseFloat(row[4]) || 0, odemeTipi: String(row[5] || ""),
       aciklama: String(row[6] || ""), kayitTarihi: hucreTarihStr(row[7]),
       faturaNo: faturaNo,
+      kdvToplam: (function () {
+        const kdv = kdvHaritasi[id] || 0, kg = kalemGenelHaritasi[id] || 0, tt = parseFloat(row[4]) || 0;
+        const oran = kg > 0 ? Math.min(1, tt / kg) : 1;
+        return Math.round(kdv * oran * 100) / 100;
+      })(),
     });
   }
   sonuc.reverse();
