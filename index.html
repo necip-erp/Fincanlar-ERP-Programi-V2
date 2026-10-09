@@ -1746,6 +1746,22 @@ setInterval(topbarSaatGuncelle, 10000);
         <a class="btn" id="yedek-klasor-link" href="#" target="_blank" rel="noopener" style="text-decoration:none">📁 Drive klasörünü aç</a>
       </div>
       <div id="yedek-liste"></div>
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+        <div style="font-weight:700;margin-bottom:4px">📧 Başka hesaplara yedek (en fazla 3 adres)</div>
+        <p style="color:var(--text3);font-size:12.5px;margin:0 0 8px">Yedek paketi bu adreslere e-posta eki olarak gider (günde bir kez, "Şimdi Yedek Al" her seferinde). Kopya o hesabın kendi posta kutusunda durur; ana hesap ele geçirilse bile silinemez. Gmail'de ekin üzerindeki "Drive'a kaydet" ile alıcı kendi Drive'ına da alabilir.</p>
+        <div style="display:flex;flex-direction:column;gap:6px;max-width:420px">
+          <input type="email" id="yedek-eposta-1" placeholder="1. e-posta adresi" autocomplete="off">
+          <input type="email" id="yedek-eposta-2" placeholder="2. e-posta adresi" autocomplete="off">
+          <input type="email" id="yedek-eposta-3" placeholder="3. e-posta adresi" autocomplete="off">
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:6px;font-size:12.5px;margin:8px 0;cursor:pointer"><input type="checkbox" id="yedek-paylas-chk" style="width:auto;margin-top:2px" checked> <span>Yedek klasörünü bu adreslerle <b>yalnızca görüntüleme</b> olarak da paylaş (Drive'dan Drive'a kopyalama için; e-postaya sığmayan büyük dosyalar da buradan açılır)</span></label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="yedekEpostaKaydet()">Adresleri Kaydet</button>
+          <button class="btn" onclick="yedekEpostaGonderIste()">📧 Şimdi bu adreslere gönder</button>
+          <button class="btn" onclick="yedekCekiciKoduIndir()" title="Alıcı hesapta bir kez kurulur; paylaşılan klasördeki yeni yedekleri her gün o hesabın kendi Drive'ına kopyalar">⬇ Alıcı hesap için "Drive'a otomatik kopyala" kodu</button>
+        </div>
+        <div id="yedek-eposta-durum" style="font-size:12.5px;color:var(--text3);margin-top:6px"></div>
+      </div>
     </div>
 
     <div class="finans-panel" data-bolum-anahtar="ayarlar_bolum_hiz_olcumu">
@@ -3689,6 +3705,7 @@ function yedekDurumuYukle(){
 function yedekDurumuCiz_(d){
   _yedekDurum = d;
   const kap = document.getElementById("yedek-durum");
+  yedekEpostaAlanlariDoldur_(d);
   const lnk = document.getElementById("yedek-klasor-link");
   if(lnk){ lnk.href = d.klasorUrl || "#"; lnk.style.display = d.klasorUrl ? "" : "none"; }
   const dk = d.sonVeriDakika;
@@ -3719,6 +3736,67 @@ function yedekDurumuCiz_(d){
   document.getElementById("yedek-liste").innerHTML = sat
     ? `<div style="overflow-x:auto"><table class="rapor-tbl" style="width:100%;font-size:12.5px"><thead><tr><th>Tür</th><th>Dosya</th><th>Tarih</th><th>Boyut</th><th></th></tr></thead><tbody>${sat}</tbody></table></div><div style="font-size:12px;color:var(--text3);margin-top:6px">Son 40 dosya gösterilir. İndirme bağlantıları fincanlaryapi hesabıyla açık olan tarayıcıda çalışır.</div>`
     : '<div class="cari-empty">Henüz yedek dosyası yok. "Şimdi Yedek Al" ile ilk yedeği alın.</div>';
+}
+
+function yedekEpostaAlanlariDoldur_(d){
+  const e = (d && d.eposta) || {};
+  [1,2,3].forEach(i=>{ const el = document.getElementById("yedek-eposta-"+i); if(el && document.activeElement !== el) el.value = (e.adresler||[])[i-1] || ""; });
+  const c = document.getElementById("yedek-paylas-chk"); if(c) c.checked = e.paylas !== false;
+  const k = document.getElementById("yedek-eposta-durum");
+  if(k) k.textContent = (e.adresler||[]).length ? ("Tanımlı: " + e.adresler.length + " adres" + (e.sonGonderim ? " · son gönderim: " + e.sonGonderim : " · henüz gönderilmedi")) : "Henüz adres tanımlı değil.";
+}
+function yedekEpostaKaydet(){
+  const adresler = [1,2,3].map(i=>(document.getElementById("yedek-eposta-"+i).value||"").trim()).filter(Boolean);
+  const paylas = document.getElementById("yedek-paylas-chk").checked;
+  cariApi("saveYedekEpostalari", {adresler, paylas}).then(res=>{
+    if(!res || res.ok === false){ alert((res&&res.hata)||"Kaydedilemedi"); return; }
+    yedekDurumuCiz_(res);
+    toastGoster(res.uyari ? "Kaydedildi — uyarı: " + res.uyari : "Yedek e-posta adresleri kaydedildi");
+  }).catch(err=>alert("Bağlantı hatası: " + err.message));
+}
+function yedekEpostaGonderIste(){
+  if(!confirm("En yeni yedek dosyaları tanımlı adreslere şimdi e-postayla gönderilsin mi? (Birkaç on saniye sürebilir)")) return;
+  cariApi("yedekEpostaGonderSimdi").then(res=>{
+    if(!res || res.ok === false){ alert((res&&res.hata)||"Gönderilemedi"); return; }
+    yedekDurumuCiz_(res); toastGoster("E-posta: " + (res.epostaSonuc || "gönderildi"));
+  }).catch(err=>alert("Bağlantı hatası: " + err.message));
+}
+// Alıcı hesapta (Apps Script'te) bir kez kurulacak: paylaşılan klasördeki yedekleri o hesabın kendi Drive'ına kopyalar.
+function yedekCekiciKoduIndir(){
+  const id = _yedekDurum && _yedekDurum.klasorId;
+  if(!id){ alert("Önce yedek alınmalı (klasör henüz yok)."); return; }
+  const kod = [
+    "// Fincanlar ERP — YEDEK ÇEKİCİ (ALICI HESAPTA ÇALIŞIR)",
+    "// Kurulum (bir kez): bu hesapla script.google.com > Yeni proje > bu kodu yapıştır > kaydet >",
+    "// 'kur' fonksiyonunu seçip ▶ Çalıştır > izinleri onayla. Sonra her gün 04:00'te yeni yedekler bu hesabın",
+    "// kendi Drive'ındaki 'Fincanlar ERP Yedek KOPYA' klasörüne kopyalanır (ana hesap silse bile kalır).",
+    "var KAYNAK_KLASOR_ID = \"" + id + "\";",
+    "var HEDEF_KLASOR_ADI = \"Fincanlar ERP Yedek KOPYA\";",
+    "var GUN_SAYISI = 3; // son kaç günün dosyaları taranır",
+    "function yedegiCek() {",
+    "  var kaynak = DriveApp.getFolderById(KAYNAK_KLASOR_ID);",
+    "  var h = DriveApp.getFoldersByName(HEDEF_KLASOR_ADI);",
+    "  var hedef = h.hasNext() ? h.next() : DriveApp.createFolder(HEDEF_KLASOR_ADI);",
+    "  var var_ = {}, it = hedef.getFiles();",
+    "  while (it.hasNext()) var_[it.next().getName()] = true;",
+    "  var sinir = Date.now() - GUN_SAYISI * 86400000, f = kaynak.getFiles(), kopyalanan = 0;",
+    "  while (f.hasNext()) {",
+    "    var d = f.next();",
+    "    if (var_[d.getName()] || d.getDateCreated().getTime() < sinir) continue;",
+    "    d.makeCopy(d.getName(), hedef); kopyalanan++;",
+    "  }",
+    "  Logger.log(kopyalanan + \" dosya kopyalandı\");",
+    "}",
+    "function kur() {",
+    "  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'yedegiCek') ScriptApp.deleteTrigger(t); });",
+    "  ScriptApp.newTrigger('yedegiCek').timeBased().everyDays(1).atHour(4).create();",
+    "  yedegiCek();",
+    "}",
+    ""
+  ].join("\n");
+  const blob = new Blob([kod], {type:"text/plain;charset=utf-8"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "yedek-cekici.gs.txt";
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
 }
 function yedekAlSimdiIste(){
   if(!confirm("Şimdi tam yedek alınsın mı? (Veri + program kodu + ayarlar). Birkaç on saniye sürebilir.")) return;
@@ -3772,8 +3850,8 @@ function hizPaneliIndir(){
 // Veriyi DEĞİŞTİRMEYEN (ya da önbelleği ilgilendirmeyen) işlemler: bunlardan sonra önbellek temizlenmez.
 // ★ (1 Eki 2026) Okuma olsa da yavaş olduğu için "İşlem yapılıyor + geçen süre" bandı gösterilen çağrılar:
 // Bekleyen Alış Faturaları listesi (dış e-tablo + birkaç sayfa okuyor). Başka ekran eklemek için buraya ekle.
-const CARI_API_BANT_OKUMA_ = /^(getBekleyenAlisFaturalari|yedekAlSimdi|yedekTetikleyiciKurWeb)$/;
-const CARI_API_YAZMA_DEGIL_ = /^(get|yedekAlSimdi|yedekTetikleyiciKurWeb|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|edmOrtamDurumu|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
+const CARI_API_BANT_OKUMA_ = /^(getBekleyenAlisFaturalari|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi)$/;
+const CARI_API_YAZMA_DEGIL_ = /^(get|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|edmOrtamDurumu|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
 // Yapı/tanım verisini değiştiren işlemler (banka, hesap, pos, kart, seri, tanım, marka, plasiyer, birim...).
 const CARI_API_YAPI_ISLEMI_ = /(Banka|Hesap|Pos|KrediKart|Seri|BasitTanim|Marka|Plasiyer|Birim|AciklamaSablon|SiparisDurum|SiraGuncelle)/;
 

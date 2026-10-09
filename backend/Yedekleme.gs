@@ -44,6 +44,7 @@ function yedekCalistir_(kodZorla) {
   try { ozet.ayar = yedekAyarDosyasiYaz_(klasor, damga); } catch (e) { ozet.ayar = "HATA: " + e.message; }
   try { ozet.kod = yedekKodZipiAl_(klasor, damga, !!kodZorla); } catch (e) { ozet.kod = "HATA: " + e.message; }
   try { yedekRehberiYaz_(klasor); ozet.rehber = "tamam"; } catch (e) { ozet.rehber = "HATA: " + e.message; }
+  try { ozet.eposta = yedekEpostaGonder_(klasor, damga, !!kodZorla); } catch (e) { ozet.eposta = "HATA: " + e.message; }
   try { PropertiesService.getScriptProperties().setProperty("SON_YEDEK_OZET", JSON.stringify({ z: Date.now(), o: ozet })); } catch (e) {}
   return ozet;
 }
@@ -99,6 +100,7 @@ function yedekRehberMetni_() {
     "  * 'Fincanlar ERP Program Kodu - <zaman>.zip': programin tum kodu (on yuz + sunucu)",
     "  * 'Fincanlar ERP Ayarlar - <zaman>.json'    : Apps Script ozellikleri (EDM sifresi HARIC)",
     "  * Flash bellege kopyalamak icin: program icinde Ayarlar > Yedekleme > 'Hepsini indir'.",
+    "  * Ayni dosyalar tanimli diger e-posta adreslerine ek olarak da gider (ana hesap erisilemezse oradan alin).",
     "    (E-Tablolar Excel .xlsx olarak iner; Drive'a yukleyip Google E-Tablo olarak acilabilir.)",
     "",
     "ADIM 1 — VERIYI GERI GETIR",
@@ -141,7 +143,8 @@ function getYedekDurumu() {
   var klasor = yedekKlasoruBul_();
   var simdi = Date.now();
   var sonuc = {
-    ok: true, klasorVar: !!klasor, klasorUrl: klasor ? klasor.getUrl() : "",
+    ok: true, klasorVar: !!klasor, klasorUrl: klasor ? klasor.getUrl() : "", klasorId: klasor ? klasor.getId() : "",
+    eposta: yedekEpostaDurumu_(),
     yedekler: [], adet: { veri: 0, kod: 0, ayar: 0 }, sonVeriZamani: null, sonVeriDakika: null,
     sonKodZamani: null, tetikleyici: yedekTetikleyiciDurumu_(), sonTur: null,
   };
@@ -215,4 +218,138 @@ function yedekTetikleyiciKurWeb() {
   }
   var durum = getYedekDurumu();
   return durum;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// BAŞKA HESAPLARA YEDEK (8-9 Eki 2026) — en fazla 3 e-posta adresi.
+//  * Yedek paketi (veri .xlsx + program kodu ZIP + ayarlar + rehber) bu adreslere E-POSTA EKİ olarak gider:
+//    böylece kopya o hesabın kendi posta kutusunda durur; ana hesap ele geçirilse bile silinemez.
+//    (Gmail'de ek üzerindeki "Drive'a kaydet" ile alıcı kendi Drive'ına da alabilir.)
+//  * İsteğe bağlı: yedek klasörü bu adreslerle YALNIZCA GÖRÜNTÜLEME olarak paylaşılır; alıcı hesapta
+//    kurulacak "Yedek Çekici" betiği (ekrandan indirilir) her gün kopyaları kendi Drive'ına alır (Drive→Drive).
+//  * Zamanlanmış turda günde en çok bir kez gönderilir; "Şimdi Yedek Al" her seferinde gönderir.
+// ════════════════════════════════════════════════════════════════════════════
+var YEDEK_EPOSTA_ANAHTAR_ = "YEDEK_EPOSTALAR";
+var YEDEK_SON_EPOSTA_ANAHTAR_ = "YEDEK_SON_EPOSTA";
+var YEDEK_EPOSTA_SIKLIK_SAAT_ = 20;
+var YEDEK_EK_LIMIT_BAYT_ = 20 * 1024 * 1024; // tek e-postadaki toplam ek (Gmail sınırı 25 MB)
+
+function yedekEpostaAyariOku_() {
+  try {
+    var ham = PropertiesService.getScriptProperties().getProperty(YEDEK_EPOSTA_ANAHTAR_);
+    var a = ham ? JSON.parse(ham) : {};
+    return { adresler: Array.isArray(a.adresler) ? a.adresler.slice(0, 3) : [], paylas: a.paylas !== false };
+  } catch (e) { return { adresler: [], paylas: true }; }
+}
+
+function yedekEpostaDurumu_() {
+  var a = yedekEpostaAyariOku_();
+  var son = Number(PropertiesService.getScriptProperties().getProperty(YEDEK_SON_EPOSTA_ANAHTAR_) || 0);
+  return {
+    adresler: a.adresler, paylas: a.paylas,
+    sonGonderim: son ? Utilities.formatDate(new Date(son), "Europe/Istanbul", "dd.MM.yyyy HH:mm") : "",
+  };
+}
+
+// body: { adresler: ["a@x.com", ...], paylas: true|false }
+function saveYedekEpostalari(body) {
+  var ham = Array.isArray(body.adresler) ? body.adresler : [];
+  var temiz = [], gorulen = {};
+  for (var i = 0; i < ham.length; i++) {
+    var m = String(ham[i] || "").trim().toLowerCase();
+    if (!m) continue;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m)) return { ok: false, hata: "Geçersiz e-posta adresi: " + m };
+    if (gorulen[m]) continue;
+    gorulen[m] = true; temiz.push(m);
+  }
+  if (temiz.length > 3) return { ok: false, hata: "En fazla 3 adres tanımlanabilir." };
+  var onceki = yedekEpostaAyariOku_();
+  var paylas = body.paylas !== false;
+  PropertiesService.getScriptProperties().setProperty(YEDEK_EPOSTA_ANAHTAR_, JSON.stringify({ adresler: temiz, paylas: paylas }));
+  var uyari = "";
+  try {
+    var klasor = yedekKlasoruGetirVeyaOlustur_();
+    // Klasör paylaşımı: yalnızca GÖRÜNTÜLEME. Listeden çıkarılan/paylaşım kapatılan adreslerin erişimi kaldırılır.
+    var hedef = paylas ? temiz : [];
+    onceki.adresler.forEach(function (m) { if (hedef.indexOf(m) < 0) { try { klasor.removeViewer(m); } catch (e) {} } });
+    hedef.forEach(function (m) { try { klasor.addViewer(m); } catch (e) { uyari += " " + m + " ile paylaşılamadı (" + e.message + ")."; } });
+  } catch (e) { uyari = "Klasör paylaşımı güncellenemedi: " + e.message; }
+  var d = getYedekDurumu();
+  if (uyari) d.uyari = uyari.trim();
+  return d;
+}
+
+// Klasördeki her türün en yeni dosyası (her yıl için ayrı veri yedeği).
+function yedekEnYeniDosyalar_(klasor) {
+  var en = {}, it = klasor.getFiles();
+  while (it.hasNext()) {
+    var f = it.next(), ad = f.getName(), tur = yedekTurunuBul_(ad);
+    if (!tur) continue;
+    var anahtar = tur === "veri" ? "veri:" + (ad.split(" - ")[1] || "") : tur;
+    var t = tur === "rehber" ? f.getLastUpdated().getTime() : f.getDateCreated().getTime();
+    if (!en[anahtar] || t > en[anahtar].t) en[anahtar] = { f: f, tur: tur, t: t };
+  }
+  return Object.keys(en).sort().map(function (k) { return en[k]; });
+}
+
+function yedekEpostaGonder_(klasor, damga, zorla) {
+  var ayar = yedekEpostaAyariOku_();
+  if (!ayar.adresler.length) return "adres tanımlı değil";
+  var props = PropertiesService.getScriptProperties();
+  var son = Number(props.getProperty(YEDEK_SON_EPOSTA_ANAHTAR_) || 0);
+  if (!zorla && son && (Date.now() - son) < YEDEK_EPOSTA_SIKLIK_SAAT_ * 3600 * 1000) return "bugün gönderildi (atlandı)";
+
+  var dosyalar = yedekEnYeniDosyalar_(klasor);
+  var ekler = [], linkler = [];
+  dosyalar.forEach(function (d) {
+    var f = d.f;
+    try {
+      if (d.tur === "veri") {
+        var yanit = UrlFetchApp.fetch("https://docs.google.com/spreadsheets/d/" + f.getId() + "/export?format=xlsx",
+          { headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+        var blob = yanit.getResponseCode() === 200 ? yanit.getBlob().setName(f.getName() + ".xlsx") : null;
+        if (blob && blob.getBytes().length <= YEDEK_EK_LIMIT_BAYT_) { ekler.push(blob); return; }
+        linkler.push(f.getName() + " (çok büyük / dışa aktarılamadı): " + f.getUrl());
+      } else {
+        var b = f.getBlob();
+        if (b.getBytes().length <= YEDEK_EK_LIMIT_BAYT_) ekler.push(b.setName(f.getName())); else linkler.push(f.getName() + ": " + f.getUrl());
+      }
+    } catch (e) { linkler.push(f.getName() + " (eklenemedi: " + e.message + "): " + f.getUrl()); }
+  });
+
+  // Ekleri e-posta başına ~20 MB'ı aşmayacak şekilde parçalara böl.
+  var parcalar = [[]], boyut = 0;
+  ekler.forEach(function (b) {
+    var n = b.getBytes().length;
+    if (boyut + n > YEDEK_EK_LIMIT_BAYT_ && parcalar[parcalar.length - 1].length) { parcalar.push([]); boyut = 0; }
+    parcalar[parcalar.length - 1].push(b); boyut += n;
+  });
+  var toplamMail = parcalar.length * ayar.adresler.length;
+  if (MailApp.getRemainingDailyQuota() < toplamMail) throw new Error("Günlük e-posta kotası yetmiyor (" + toplamMail + " mail gerekli)");
+
+  ayar.adresler.forEach(function (adres) {
+    parcalar.forEach(function (ek, i) {
+      var govde = "Fincanlar ERP otomatik yedeği — " + damga + "\n\n" +
+        "Bu e-postadaki dosyaları saklayın (Gmail'de ek üzerindeki 'Drive'a kaydet' ile kendi Drive'ınıza da alabilirsiniz).\n" +
+        "Ekler: " + ek.map(function (b) { return b.getName(); }).join(", ") + "\n" +
+        (parcalar.length > 1 ? "\n(Bu " + (i + 1) + ". / " + parcalar.length + " e-posta; yedek birden fazla e-postaya bölündü.)\n" : "") +
+        (linkler.length && i === 0 ? "\nE-postaya sığmayan dosyalar (klasör bu hesapla paylaşıldıysa açılır):\n" + linkler.join("\n") + "\n" : "") +
+        "\nGeri yükleme adımları ektedeki GERI_YUKLEME_REHBERI.txt dosyasındadır.\nDrive klasörü: " + klasor.getUrl() + "\n";
+      MailApp.sendEmail({ to: adres, subject: "Fincanlar ERP Yedek — " + damga + (parcalar.length > 1 ? " (" + (i + 1) + "/" + parcalar.length + ")" : ""), body: govde, attachments: ek });
+    });
+  });
+  props.setProperty(YEDEK_SON_EPOSTA_ANAHTAR_, String(Date.now()));
+  return ayar.adresler.length + " adrese gönderildi (" + ekler.length + " ek" + (linkler.length ? ", " + linkler.length + " bağlantı" : "") + ")";
+}
+
+// Ekrandan: mevcut en yeni dosyaları yeni yedek almadan e-postayla gönder.
+function yedekEpostaGonderSimdi() {
+  var klasor = yedekKlasoruBul_();
+  if (!klasor) return { ok: false, hata: "Henüz yedek klasörü yok — önce 'Şimdi Yedek Al' ile yedek alın." };
+  var damga = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd_HH-mm");
+  var sonuc;
+  try { sonuc = yedekEpostaGonder_(klasor, damga, true); } catch (e) { return { ok: false, hata: "E-posta gönderilemedi: " + e.message }; }
+  var d = getYedekDurumu();
+  d.epostaSonuc = sonuc;
+  return d;
 }
