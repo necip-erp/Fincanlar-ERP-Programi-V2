@@ -1735,6 +1735,19 @@ setInterval(topbarSaatGuncelle, 10000);
       <div id="ayarlar-son-islemler-daha" style="display:none;margin-top:8px"><button class="btn" onclick="ayarlarSonIslemlerDahaFazla()">Daha fazla göster (+100)</button></div>
     </div>
 
+    <div class="finans-panel" data-bolum-anahtar="ayarlar_bolum_yedekleme" id="yedek-bolum" style="display:none">
+      <div class="rapor-baslik" style="margin-top:0">💾 Yedekleme</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Otomatik yedek her 6 saatte bir Drive'daki "Fincanlar ERP - Otomatik Yedekler" klasörüne alınır. Her turda <b>veri</b> (her yılın e-tablosu), <b>program kodu</b> (ZIP), <b>ayarlar</b> (EDM şifresi hariç) ve <b>geri yükleme rehberi</b> kaydedilir. Flash belleğe kaydetmek için aşağıdan indirin.</p>
+      <div id="yedek-durum"><div class="cari-empty">Yükleniyor...</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+        <button class="btn btn-primary" id="yedek-simdi-btn" onclick="yedekAlSimdiIste()">💾 Şimdi Yedek Al</button>
+        <button class="btn" onclick="yedekDurumuYukle(true)">↻ Yenile</button>
+        <button class="btn" onclick="yedekFlashIndir()" title="En son veri yedeklerini + program kodunu + ayarları + rehberi sırayla indirir; flash belleğe kopyalayın">⬇ Flash için hepsini indir</button>
+        <a class="btn" id="yedek-klasor-link" href="#" target="_blank" rel="noopener" style="text-decoration:none">📁 Drive klasörünü aç</a>
+      </div>
+      <div id="yedek-liste"></div>
+    </div>
+
     <div class="finans-panel" data-bolum-anahtar="ayarlar_bolum_hiz_olcumu">
       <div class="rapor-baslik" style="margin-top:0">⏱ Hız Ölçümü</div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Her işlemin kaç saniye sürdüğü ölçülür. <b>Sunucu</b> = Apps Script'in kendi işi, <b>Ağ/başlatma</b> = internet + Apps Script'in uyanma süresi, <b>Kilit bekleme</b> = başka kullanıcının yazma işleminin bitmesini bekleme. Ölçüm bu bilgisayarın tarayıcısında tutulur; sunucuya ek yük bindirmez.</p>
@@ -3652,6 +3665,95 @@ function hizPaneliCiz(){
     ${_hizYavaslar.length ? `<div style="margin-top:12px;font-weight:600;font-size:13px">Son yavaş çağrılar (2,5 sn üstü)</div>
       <div style="font-size:12px;color:var(--text2);max-height:180px;overflow:auto">${_hizYavaslar.slice(0,20).map(y=>`${new Date(y.z).toLocaleString("tr-TR")} — <b>${htmlKacis(y.a)}</b>: ${hizSn_(y.ms)} sn${y.s!==null?` (sunucu ${hizSn_(y.s)})`:''}`).join("<br>")}</div>` : ''}`;
 }
+
+// ══════ YEDEKLEME EKRANI (8 Eki 2026) ══════
+let _yedekDurum = null;
+function yedekAdminMi_(){ try{ return (JSON.parse(localStorage.getItem("fincanlar_oturum_kullanici")||"null")||{}).rol === "Admin"; }catch(e){ return false; } }
+function yedekSureMetni_(dk){
+  if(dk === null || dk === undefined) return "—";
+  if(dk < 60) return dk + " dk önce";
+  if(dk < 1440) return Math.floor(dk/60) + " saat " + (dk%60) + " dk önce";
+  return Math.floor(dk/1440) + " gün önce";
+}
+function yedekDurumuYukle(){
+  const bolum = document.getElementById("yedek-bolum");
+  if(!bolum) return;
+  if(!yedekAdminMi_()){ bolum.style.display = "none"; return; }
+  bolum.style.display = "";
+  const kap = document.getElementById("yedek-durum");
+  cariApi("getYedekDurumu").then(res=>{
+    if(!res || !res.ok){ kap.innerHTML = '<div class="cari-empty" style="color:var(--red)">'+htmlKacis((res&&res.hata)||"Yedek durumu alınamadı")+'</div>'; return; }
+    yedekDurumuCiz_(res);
+  }).catch(err=>{ kap.innerHTML = '<div class="cari-empty" style="color:var(--red)">Bağlantı hatası: '+htmlKacis(err.message)+'</div>'; });
+}
+function yedekDurumuCiz_(d){
+  _yedekDurum = d;
+  const kap = document.getElementById("yedek-durum");
+  const lnk = document.getElementById("yedek-klasor-link");
+  if(lnk){ lnk.href = d.klasorUrl || "#"; lnk.style.display = d.klasorUrl ? "" : "none"; }
+  const dk = d.sonVeriDakika;
+  let renk = "#1a8f3c", ikon = "✅", metin;
+  if(!d.klasorVar || dk === null){ renk = "#c62828"; ikon = "❌"; metin = "Hiç yedek bulunamadı — otomatik yedek çalışmıyor olabilir."; }
+  else if(dk > 13*60){ renk = "#c62828"; ikon = "⚠️"; metin = "Son yedek " + yedekSureMetni_(dk) + " — otomatik yedek durmuş olabilir!"; }
+  else if(dk > 8*60){ renk = "#b07a00"; ikon = "🟡"; metin = "Son yedek " + yedekSureMetni_(dk) + " (6 saatlik düzene göre biraz gecikmiş)."; }
+  else metin = "Son yedek " + yedekSureMetni_(dk) + ".";
+  const tt = d.tetikleyici || {};
+  let tetik;
+  if(tt.okunabildi === false) tetik = '<span style="color:var(--text3)">Otomatik yedek tetikleyicisi ekrandan okunamadı (yetki). Drive klasöründeki son yedek zamanına bakın.</span>';
+  else if(tt.yedekKurulu) tetik = '<span style="color:#1a8f3c">✔ Otomatik yedek tetikleyicisi kurulu (6 saatte bir)</span>';
+  else tetik = '<span style="color:#c62828">✖ Otomatik yedek tetikleyicisi KURULU DEĞİL</span> <button class="btn" onclick="yedekTetikleyiciKurIste()">Otomatik yedeği kur</button>';
+  const rapor = tt.okunabildi === false ? "" : (tt.raporKurulu ? '<span style="color:#1a8f3c">✔ Günlük işlem raporu tetikleyicisi kurulu</span>' : '<span style="color:var(--text3)">Günlük işlem raporu tetikleyicisi kurulu değil (isteğe bağlı)</span>');
+  const a = d.adet || {};
+  kap.innerHTML = `
+    <div style="border:1px solid ${renk};border-left-width:6px;border-radius:8px;padding:10px 12px;background:var(--bg3)">
+      <div style="font-size:15px;font-weight:700;color:${renk}">${ikon} ${htmlKacis(metin)}</div>
+      <div style="font-size:12.5px;color:var(--text3);margin-top:4px">Klasörde: ${a.veri||0} veri yedeği · ${a.kod||0} program kodu · ${a.ayar||0} ayar dosyası${d.sonKodZamani ? " · son program kodu: " + htmlKacis(new Date(d.sonKodZamani).toLocaleString("tr-TR")) : ""}</div>
+      <div style="font-size:12.5px;margin-top:6px">${tetik}</div>
+      ${rapor ? `<div style="font-size:12.5px;margin-top:2px">${rapor}</div>` : ""}
+    </div>`;
+  const tur = {veri:"📊 Veri", kod:"🧩 Program kodu", ayar:"⚙️ Ayarlar", rehber:"📖 Rehber"};
+  const sat = (d.yedekler||[]).map(y=>`<tr>
+      <td>${tur[y.tur]||y.tur}</td><td style="word-break:break-word">${htmlKacis(y.ad)}</td><td>${htmlKacis(y.zaman)}</td>
+      <td>${y.boyutKB ? y.boyutKB.toLocaleString("tr-TR") + " KB" : "—"}</td>
+      <td style="white-space:nowrap"><a href="${htmlKacis(y.indirUrl)}" target="_blank" rel="noopener">⬇ İndir${y.tur==="veri"?" (.xlsx)":""}</a> · <a href="${htmlKacis(y.acUrl)}" target="_blank" rel="noopener">Aç</a></td></tr>`).join("");
+  document.getElementById("yedek-liste").innerHTML = sat
+    ? `<div style="overflow-x:auto"><table class="rapor-tbl" style="width:100%;font-size:12.5px"><thead><tr><th>Tür</th><th>Dosya</th><th>Tarih</th><th>Boyut</th><th></th></tr></thead><tbody>${sat}</tbody></table></div><div style="font-size:12px;color:var(--text3);margin-top:6px">Son 40 dosya gösterilir. İndirme bağlantıları fincanlaryapi hesabıyla açık olan tarayıcıda çalışır.</div>`
+    : '<div class="cari-empty">Henüz yedek dosyası yok. "Şimdi Yedek Al" ile ilk yedeği alın.</div>';
+}
+function yedekAlSimdiIste(){
+  if(!confirm("Şimdi tam yedek alınsın mı? (Veri + program kodu + ayarlar). Birkaç on saniye sürebilir.")) return;
+  const b = document.getElementById("yedek-simdi-btn"); if(b){ b.disabled = true; b.textContent = "⏳ Yedek alınıyor..."; }
+  cariApi("yedekAlSimdi").then(res=>{
+    if(b){ b.disabled = false; b.textContent = "💾 Şimdi Yedek Al"; }
+    if(!res || !res.ok){ alert("Yedek alınamadı: " + ((res&&res.hata)||"bilinmiyor")); return; }
+    yedekDurumuCiz_(res);
+    const o = res.yeniTur || {};
+    const hata = [].concat(o.veri||[], [o.ayar, o.kod, o.rehber]).filter(x=>x && /HATA/.test(String(x)));
+    toastGoster(hata.length ? "Yedek alındı ama uyarı var: " + hata[0] : "Yedek alındı ✔ (veri + program kodu + ayarlar)");
+  }).catch(err=>{ if(b){ b.disabled = false; b.textContent = "💾 Şimdi Yedek Al"; } alert("Bağlantı hatası: " + err.message); });
+}
+function yedekTetikleyiciKurIste(){
+  if(!confirm("Otomatik yedek (6 saatte bir) kurulsun mu?")) return;
+  cariApi("yedekTetikleyiciKurWeb").then(res=>{
+    if(!res || res.ok === false){ alert((res&&res.hata)||"Kurulamadı"); return; }
+    yedekDurumuCiz_(res); toastGoster("Otomatik yedek kuruldu");
+  }).catch(err=>alert("Bağlantı hatası: " + err.message));
+}
+// Flash için: her yılın en yeni veri yedeği + en yeni program kodu + ayar + rehber sırayla indirilir.
+function yedekFlashIndir(){
+  const d = _yedekDurum;
+  if(!d || !(d.yedekler||[]).length){ alert("Önce yedek durumu yüklenmeli / yedek alınmalı."); return; }
+  const secilen = [], gorulen = {};
+  (d.yedekler||[]).forEach(y=>{
+    const anahtar = y.tur === "veri" ? "veri:" + (y.ad.split(" - ")[1]||"") : y.tur;
+    if(gorulen[anahtar]) return; gorulen[anahtar] = true; secilen.push(y);
+  });
+  if(!confirm(secilen.length + " dosya sırayla indirilecek (tarayıcı birden fazla indirme için izin isteyebilir). İndirilenleri flash belleğe kopyalayın.\n\n" + secilen.map(y=>"• "+y.ad).join("\n"))) return;
+  secilen.forEach((y,i)=>setTimeout(()=>{
+    const a = document.createElement("a"); a.href = y.indirUrl; a.target = "_blank"; a.rel = "noopener";
+    document.body.appendChild(a); a.click(); a.remove();
+  }, i*1500));
+}
 function hizPaneliSifirla(){
   if(!confirm("Hız ölçüm kayıtları (bu tarayıcıdaki) silinsin mi?")) return;
   _hizOzet = {}; _hizYavaslar = [];
@@ -3670,8 +3772,8 @@ function hizPaneliIndir(){
 // Veriyi DEĞİŞTİRMEYEN (ya da önbelleği ilgilendirmeyen) işlemler: bunlardan sonra önbellek temizlenmez.
 // ★ (1 Eki 2026) Okuma olsa da yavaş olduğu için "İşlem yapılıyor + geçen süre" bandı gösterilen çağrılar:
 // Bekleyen Alış Faturaları listesi (dış e-tablo + birkaç sayfa okuyor). Başka ekran eklemek için buraya ekle.
-const CARI_API_BANT_OKUMA_ = /^(getBekleyenAlisFaturalari)$/;
-const CARI_API_YAZMA_DEGIL_ = /^(get|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|edmOrtamDurumu|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
+const CARI_API_BANT_OKUMA_ = /^(getBekleyenAlisFaturalari|yedekAlSimdi|yedekTetikleyiciKurWeb)$/;
+const CARI_API_YAZMA_DEGIL_ = /^(get|yedekAlSimdi|yedekTetikleyiciKurWeb|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|edmOrtamDurumu|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
 // Yapı/tanım verisini değiştiren işlemler (banka, hesap, pos, kart, seri, tanım, marka, plasiyer, birim...).
 const CARI_API_YAPI_ISLEMI_ = /(Banka|Hesap|Pos|KrediKart|Seri|BasitTanim|Marka|Plasiyer|Birim|AciklamaSablon|SiparisDurum|SiraGuncelle)/;
 
@@ -16958,6 +17060,7 @@ let _ayarlarTaslak = null; // kaydedilmeden önceki geçici değişiklikler
 function ayarlarYukle(){
   _ayarlarTaslak = Object.assign({}, kisayollariAl());
   hizPaneliCiz();
+  yedekDurumuYukle();
   { const hc = document.getElementById("hiz-rozet-chk"); if(hc) hc.checked = hizRozetAcikMi_(); }
   ayarlarSonIslemlerYukle(true);
   ayarlarListesiCiz();
