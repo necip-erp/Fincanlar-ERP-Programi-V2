@@ -7135,6 +7135,8 @@ function tanimRenkSec(e, tip, id){
 let _hsDurum = { form:null, sekme:"hizli", ara:"", kaydirma:0, eklenenler:[] };
 let _hsMiktar = {};      // stok kartı id → yazılmış (henüz eklenmemiş) miktar
 let _hsLimit = 80;
+let _hsKolLimit = {};      // sütunlu görünümde sütun başına çizilen en çok kart (büyük gruplarda ekran geç açılıyordu); "Daha fazla göster" ile artar
+const HS_KOLON_ILK_ = 60, HS_KOLON_ADIM_ = 120;
 let _hsGorunen = [];
 let _hsSurukle = null;
 let _hsAyar = null;
@@ -7191,7 +7193,7 @@ function hizliSatisAc(){
   if(!form){ alert("Hızlı Satış, Sipariş / Fatura / Teklif ekranı açıkken kullanılır. Önce ➕ Yeni ile bir belge açın."); return; }
   if(document.getElementById("hs-overlay")) return;
   if(_hsDurum.form !== form){ _hsDurum = { form:form, sekme:"hizli", ara:"", kaydirma:0, eklenenler:[] }; _hsMiktar = {}; }
-  _hsLimit = 80;
+  _hsLimit = 80; _hsKolLimit = {};
   // Önce önbellekteki liste/gruplar ANINDA çizilir; sonra arka planda tazelenir (değiştiyse ekran güncellenir, miktar yazarken bozulmaz).
   hsStokOnbellektenYukle_();
   stokListesiIste_().then(r=>{
@@ -7492,10 +7494,15 @@ function hsKolonHtml_(k, mod, kRenk, ic){
     ${k.baslikGizli ? '' : `<div class="hs-kolon-baslik" ${k.sabit?'':`draggable="true" ondragstart="hsKolonBasSurukle(event,'${k.id}')" ondragend="hsKolonBasBitti()" title="Tutup sürükleyerek sütunun yerini değiştir (ara grup başlığına da bırakabilirsin)"`}>
       <span class="hs-bas-ad">${htmlKacis(k.ad)}</span> <span class="hs-say">${k.it.length}</span>${basIslem}
     </div>`}
-    ${(k.cells||k.it).length ? `<div class="hs-kolon-satirlar" data-n="${n}">${(k.cells||k.it).map(s=>s.bos ? hsBosHucreHtml_(s, k, mod) : hsSatirHtml_(s, k, mod, kRenk)).join("")}${hsHayaletHtml_(k, n)}</div>` : ((k.alt||[]).length ? '' : '<div class="hs-bos hs-bos-kolon">Ürünü buraya sürükle</div>')}
+    ${(k.cells||k.it).length ? `<div class="hs-kolon-satirlar" data-n="${n}">${(()=>{
+        const tum = (k.cells||k.it), lim = _hsKolLimit[k.id] || HS_KOLON_ILK_, kesik = tum.length > lim;
+        return tum.slice(0, lim).map(s=>s.bos ? hsBosHucreHtml_(s, k, mod) : hsSatirHtml_(s, k, mod, kRenk)).join("")
+          + (kesik ? `<button type="button" class="btn hs-daha" style="grid-column:1/-1" onclick="hsKolonDahaFazla('${k.id}')">▼ Daha fazla göster (${tum.length-lim} ürün daha)</button>` : hsHayaletHtml_(k, n));
+      })()}</div>` : ((k.alt||[]).length ? '' : '<div class="hs-bos hs-bos-kolon">Ürünü buraya sürükle</div>')}
     ${(k.alt||[]).map(c=>hsKolonHtml_(c, mod, kRenk, true)).join("")}
   </div>`;
 }
+function hsKolonDahaFazla(kolonId){ _hsKolLimit[kolonId] = (_hsKolLimit[kolonId] || HS_KOLON_ILK_) + HS_KOLON_ADIM_; hizliSatisCiz(); }
 // Sütun genişliği: 1, 2 ya da 3 ürün yan yana (sütun/ekran başına tarayıcıda saklanır)
 function hsKolonGen_(kolonId){ const v = hsAyar_().kolonGen[hsSiraAnahtar_(kolonId)]; return v >= 2 ? Math.min(99, v) : 1; }
 function hsKolonGenislet(kolonId, d){
@@ -7894,8 +7901,12 @@ function hsSekmeler_(){
   const stoklar = _stokTanimListe || [];
   const idler = {}; gruplar.forEach(g=>{ idler[g.id] = true; });
   const sekmeler = [{ id:"hizli", ad:"⭐ Hızlı Ürünler", n: stoklar.filter(s=>s.hizli).length }];
-  gruplar.forEach(g=>{ sekmeler.push({ id:g.id, ad:(hsAltGor_(g.id) ? "⚡ " : "") + g.ad, renk:g.renk, n: hsSekmeStoklari_(g.id).length }); });
-  const diger = stoklar.filter(s=>!s.urunGrubuId || !idler[s.urunGrubuId]).length;
+  // Sekme sayıları tek geçişte hesaplanır (eskiden her grup için tüm stok listesi ayrı ayrı taranıyordu)
+  const say = {}, uye = hsAyar_().uye || {}; let diger = 0;
+  const idMap = {}; let uyeVar = false; Object.keys(uye).forEach(g=>{ if(Object.keys(uye[g]||{}).length) uyeVar = true; });
+  stoklar.forEach(s=>{ if(s.urunGrubuId && idler[s.urunGrubuId]) say[s.urunGrubuId] = (say[s.urunGrubuId]||0) + 1; else diger++; if(uyeVar) idMap[s.id] = s; });
+  if(uyeVar) Object.keys(uye).forEach(g=>{ if(!idler[g]) return; Object.keys(uye[g]||{}).forEach(id=>{ const st = idMap[id]; if(st && uye[g][id] && uye[g][id].length && st.urunGrubuId !== g) say[g] = (say[g]||0) + 1; }); });
+  gruplar.forEach(g=>{ sekmeler.push({ id:g.id, ad:(hsAltGor_(g.id) ? "⚡ " : "") + g.ad, renk:g.renk, n: say[g.id] || 0 }); });
   if(diger) sekmeler.push({ id:"diger", ad:"Diğer", n:diger });
   const sr = hsAyar_().sekmeSira || [];       // kullanıcının sürükleyerek verdiği sıra (bu tarayıcıda)
   if(sr.length){
@@ -8023,7 +8034,7 @@ function hizliSatisCiz(){
 }
 
 function hizliSatisSekme(id){
-  _hsDurum.sekme = id; _hsLimit = 80;
+  _hsDurum.sekme = id; _hsLimit = 80; _hsKolLimit = {};
   const a = document.getElementById("hs-ara"); if(a) a.value = "";
   _hsDurum.ara = "";
   hizliSatisCiz();
