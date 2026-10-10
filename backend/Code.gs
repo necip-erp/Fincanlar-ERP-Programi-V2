@@ -129,6 +129,7 @@ const SHEETS = {
   virmanTipleri: "VirmanTipleri",
   kullanicilar: "Kullanicilar",
   oturumlar: "Oturumlar",
+  belgeMaliyetleri: "BelgeMaliyetleri",
 };
 
 // ── YARDIMCI FONKSİYONLAR ──
@@ -1152,6 +1153,9 @@ function handleRequest(e) {
       case "cariHareketSil":  result = cariHareketSil(body); break;
       case "getSatisListesi": result = getSatisListesi(); break;
       case "getSatisDetay":   result = getSatisDetay(body.satisId); break;
+      case "getBelgeKarlilik":  result = getBelgeKarlilik(body); break;
+      case "getKarlilikRaporu": result = getKarlilikRaporu(body); break;
+      case "kaydetBelgeManuelMaliyet": result = kaydetBelgeManuelMaliyet(body); break;
       case "saveSatis":       result = saveSatis(body); break;
       case "updateSatis":     result = updateSatis(body); break;
       case "silSatis":        result = silSatis(body); break;
@@ -2745,6 +2749,8 @@ function silSatis(body) {
 
   // Bu satışın otomatik yazdığı Stok Hareket Raporu satırlarını da geri al.
   stokHareketOtomatikSil(ss, id);
+  // Manuel karlılık maliyetlerini de temizle
+  try { kaydetBelgeManuelMaliyet({ satisId: id, maliyetler: [] }); } catch (e) {}
 
   // Kalemlerini sil (silmeden önce kaynak sipariş varsa geri almak için okuyoruz)
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
@@ -8579,6 +8585,221 @@ function stokTanimMaliyetGuncelle(id, alisFiyati) {
       return;
     }
   }
+}
+
+// ════════════════════════════════════════════════
+// BELGE BAZLI KARLILIK (Satış Fatura / Sipariş / Teklif) — 10 Eki 2026
+// Üç maliyet mantığı aynı anda hesaplanır, ekran istediğini gösterir:
+//  • FIFO: stok girişleri (Alış Faturası, Devir, Stok Düzeltme, maliyetli stok girişi) sıraya dizilir, çıkışlar
+//    en eski partiden tüketir. Fatura için kendi stok çıkışının tükettiği partiler; Sipariş/Teklif (stok
+//    hareketi yok) için bugünkü sıranın başındaki partiler (her belge ayrı, birikimli DEĞİL).
+//  • Son Giriş: belge tarihine kadarki (yoksa en son) alış/giriş maliyeti.
+//  • Manuel: kullanıcının o belgenin kalemi için girdiği birim maliyet (BelgeMaliyetleri sayfası).
+// Gelir = KDV hariç net satış (kalem iskontosu + dip iskonto + tutar iskontosu dağıtılmış).
+// ════════════════════════════════════════════════
+const BELGE_MALIYET_BASLIKLAR = ["ID","SATIS_ID","KALEM_ID","STOK_KODU","BIRIM_MALIYET","GUNCELLEME"];
+
+function karlilikStokVerisiOku_(ss) {
+  const tanim = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR).getDataRange().getValues();
+  const kartMaliyet = {};
+  for (let i = 1; i < tanim.length; i++) {
+    const kod = String(tanim[i][1] || "").trim();
+    if (!kod) continue;
+    const alis = parseFloat(tanim[i][6]) || 0, isk = parseFloat(tanim[i][7]) || 0;
+    kartMaliyet[kod] = alis * (1 - isk / 100);
+  }
+  const shSheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+  ensureStokHareketBelgeColonlari(shSheet);
+  const sh = shSheet.getDataRange().getValues();
+  const olaylar = {}; // stokKodu -> [{tarih, sira, tip, miktar, maliyet, belgeTipi, belgeNo}]
+  for (let i = 1; i < sh.length; i++) {
+    const kod = String(sh[i][3] || "").trim();
+    const miktar = parseFloat(sh[i][7]) || 0;
+    if (!kod || miktar <= 0) continue;
+    const tip = String(sh[i][6] || "") === "Çıkış" ? "Çıkış" : "Giriş";
+    (olaylar[kod] = olaylar[kod] || []).push({
+      tarih: hucreTarihStr(sh[i][1]).slice(0, 10), sira: i, tip: tip, miktar: miktar,
+      maliyet: parseFloat(sh[i][12]) || 0, belgeTipi: String(sh[i][10] || ""), belgeNo: String(sh[i][11] || ""),
+    });
+  }
+  Object.keys(olaylar).forEach(k => olaylar[k].sort((a, b) => a.tarih < b.tarih ? -1 : a.tarih > b.tarih ? 1 : a.sira - b.sira));
+  return { kartMaliyet: kartMaliyet, olaylar: olaylar };
+}
+
+// Bir stok kodu için: lot listesi (giriş maliyetleri), FIFO simülasyonu sonucu.
+function karlilikKodHesapla_(kod, veri) {
+  const ev = veri.olaylar[kod] || [];
+  const kart = veri.kartMaliyet[kod] || 0;
+  const lotMaliyet = (e) => e.maliyet > 0 ? e.maliyet : kart;
+  const girisler = ev.filter(e => e.tip === "Giriş" && e.belgeTipi !== "Satış İadesi");
+  let sonMaliyet = kart;
+  const kuyruk = [];
+  const belgeTuketim = {}; // belgeNo -> {miktar, tutar, yetersiz}
+  ev.forEach(e => {
+    if (e.tip === "Giriş") {
+      if (e.belgeTipi === "Satış İadesi") return;
+      const m = lotMaliyet(e);
+      if (m > 0) sonMaliyet = m;
+      kuyruk.push({ kalan: e.miktar, maliyet: m });
+      return;
+    }
+    let gerek = e.miktar, tutar = 0, yetersiz = false;
+    while (gerek > 1e-9 && kuyruk.length) {
+      const l = kuyruk[0];
+      const al = Math.min(l.kalan, gerek);
+      tutar += al * l.maliyet; l.kalan -= al; gerek -= al;
+      if (l.kalan <= 1e-9) kuyruk.shift();
+    }
+    if (gerek > 1e-9) { tutar += gerek * sonMaliyet; yetersiz = true; }
+    const b = belgeTuketim[e.belgeNo] = belgeTuketim[e.belgeNo] || { miktar: 0, tutar: 0, yetersiz: false };
+    b.miktar += e.miktar; b.tutar += tutar; b.yetersiz = b.yetersiz || yetersiz;
+  });
+  return { girisler: girisler, kuyruk: kuyruk, belgeTuketim: belgeTuketim, sonMaliyet: sonMaliyet, kart: kart, lotMaliyet: lotMaliyet };
+}
+
+// Bekleyen sıradan (kuyruktan) KOPYA üzerinden miktar kadar tüketilirse birim maliyet.
+function karlilikKuyrukBirimMaliyet_(h, miktar) {
+  let gerek = miktar, tutar = 0, yetersiz = false;
+  for (let i = 0; i < h.kuyruk.length && gerek > 1e-9; i++) {
+    const al = Math.min(h.kuyruk[i].kalan, gerek);
+    tutar += al * h.kuyruk[i].maliyet; gerek -= al;
+  }
+  if (gerek > 1e-9) { tutar += gerek * h.sonMaliyet; yetersiz = true; }
+  return { birim: miktar > 0 ? tutar / miktar : 0, yetersiz: yetersiz };
+}
+
+// belgeIdler: hesaplanacak Satislar ID'leri (Set). Dönen: { satisId: {…belge özeti, kalemler:[…]} }
+function karlilikHesapla_(ss, belgeIdler) {
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar, ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  ensureSatisBelgeTipiColonu(sSheet);
+  const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri, ["ID","SATIS_ID","URUN_ADI","MIKTAR","BIRIM","BIRIM_FIYAT","TUTAR","ISKONTO_YUZDE","KDV_ORANI","FATURALANAN_MIKTAR","STOK_KODU"]);
+  ensureSatisKalemVergiKolonlari(kSheet);
+  const sData = sSheet.getDataRange().getValues(), kData = kSheet.getDataRange().getValues();
+  const cariKodu = cariKoduHaritasiOlustur(ss);
+  const veri = karlilikStokVerisiOku_(ss);
+  const hCache = {};
+  const kodH = (kod) => hCache[kod] || (hCache[kod] = karlilikKodHesapla_(kod, veri));
+
+  const manuel = {};
+  const mData = getOrCreateSheet(ss, SHEETS.belgeMaliyetleri, BELGE_MALIYET_BASLIKLAR).getDataRange().getValues();
+  for (let i = 1; i < mData.length; i++) manuel[String(mData[i][1]) + "|" + String(mData[i][2])] = parseFloat(mData[i][4]) || 0;
+
+  const kalemMap = {};
+  for (let i = 1; i < kData.length; i++) {
+    const sid = String(kData[i][1] || "");
+    if (!belgeIdler.has(sid)) continue;
+    (kalemMap[sid] = kalemMap[sid] || []).push(kData[i]);
+  }
+
+  const sonuc = {};
+  for (let i = 1; i < sData.length; i++) {
+    const r = sData[i], id = String(r[0] || "");
+    if (!id || !belgeIdler.has(id)) continue;
+    const belgeTipi = String(r[8] || "") || "Fatura";
+    const tarih = hucreTarihStr(r[1]).slice(0, 10);
+    const dip = parseFloat(r[9]) || 0, tutarIsk = parseFloat(r[13]) || 0, kdvSonra = String(r[14]) !== "0";
+    const satirlar = kalemMap[id] || [];
+    let toplamAra = 0, toplamKdv = 0;
+    const hes = satirlar.map(k => {
+      const h = satisKalemHesapla(parseFloat(k[3]) || 0, parseFloat(k[5]) || 0, parseFloat(k[7]) || 0, parseFloat(k[8]) || 0);
+      const ara = h.araToplam * (1 - dip / 100);
+      toplamAra += ara; toplamKdv += ara * ((parseFloat(k[8]) || 0) / 100);
+      return ara;
+    });
+    let tutarIskKdvHaric = 0;
+    if (tutarIsk > 0 && toplamAra > 0) tutarIskKdvHaric = kdvSonra ? tutarIsk / (1 + toplamKdv / toplamAra) : tutarIsk;
+    const kodSayac = {};
+    const kalemler = satirlar.map((k, idx) => {
+      const miktar = parseFloat(k[3]) || 0, kod = String(k[10] || "").trim();
+      // Manuel maliyet anahtarı: kalem ID'si belge düzenlenince değişebildiği için "stokKodu#n" (belgedeki n. kalem)
+      const anaAd = kod || String(k[2] || "").trim();
+      kodSayac[anaAd] = (kodSayac[anaAd] || 0) + 1;
+      const anahtar = anaAd + "#" + kodSayac[anaAd];
+      const gelir = hes[idx] - (toplamAra > 0 ? tutarIskKdvHaric * hes[idx] / toplamAra : 0);
+      const m = { fifo: 0, sonGiris: 0, manuel: null };
+      const uyari = [];
+      if (!kod) { uyari.push("Stok kodu yok"); }
+      else {
+        const h = kodH(kod);
+        const t = h.belgeTuketim[id];
+        if (belgeTipi === "Fatura" && t && t.miktar > 0) { m.fifo = t.tutar / t.miktar; if (t.yetersiz) uyari.push("Stok yetersizdi"); }
+        else { const q = karlilikKuyrukBirimMaliyet_(h, miktar); m.fifo = q.birim; if (q.yetersiz) uyari.push("Stok yetersiz"); }
+        const uygun = h.girisler.filter(e => e.tarih <= tarih);
+        const sg = (uygun.length ? uygun : h.girisler).slice(-1)[0];
+        m.sonGiris = sg ? h.lotMaliyet(sg) : h.kart;
+        if (!(m.fifo > 0) && !(m.sonGiris > 0)) uyari.push("Maliyet bulunamadı");
+      }
+      if (Object.prototype.hasOwnProperty.call(manuel, id + "|" + anahtar)) m.manuel = manuel[id + "|" + anahtar];
+      return { kalemId: String(k[0] || ""), anahtar: anahtar, stokKodu: kod, urunAdi: String(k[2] || ""), miktar: miktar, birim: String(k[4] || ""),
+        birimFiyat: parseFloat(k[5]) || 0, gelir: gelir, birimMaliyet: m, uyari: uyari };
+    });
+    const toplam = { fifo: 0, sonGiris: 0, manuel: 0 }, manuelEksik = kalemler.filter(k => k.birimMaliyet.manuel === null).length;
+    let gelir = 0;
+    kalemler.forEach(k => {
+      gelir += k.gelir;
+      toplam.fifo += k.birimMaliyet.fifo * k.miktar; toplam.sonGiris += k.birimMaliyet.sonGiris * k.miktar;
+      toplam.manuel += (k.birimMaliyet.manuel || 0) * k.miktar;
+    });
+    const cariId = String(r[2] || "");
+    sonuc[id] = { id: id, tarih: tarih, belgeTipi: belgeTipi, cariId: cariId, cariAd: String(r[3] || ""), cariKodu: cariKodu[cariId] || "",
+      belgeNo: belgeTipi === "Fatura" ? String(r[16] || "") : String(r[15] || ""), siparisNo: String(r[15] || ""),
+      toplamTutar: parseFloat(r[4]) || 0, gelir: gelir, maliyet: toplam, manuelEksik: manuelEksik, kalemSayisi: kalemler.length, kalemler: kalemler };
+  }
+  return sonuc;
+}
+
+// Tek belgenin karlılığı (belge sayfasındaki panel).
+function getBelgeKarlilik(body) {
+  const id = String((body && body.satisId) || "");
+  if (!id) return { ok: false, hata: "satisId gerekli" };
+  const r = karlilikHesapla_(acikSS_(), new Set([id]));
+  if (!r[id]) return { ok: false, hata: "Belge bulunamadı" };
+  return { ok: true, belge: r[id] };
+}
+
+// Rapor: body {belgeTipi:"Fatura"|"Sipariş"|"Teklif", bas, bit}
+function getKarlilikRaporu(body) {
+  const tip = String((body && body.belgeTipi) || "Fatura");
+  const bas = String((body && body.bas) || ""), bit = String((body && body.bit) || "");
+  const ss = acikSS_();
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar, ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  ensureSatisBelgeTipiColonu(sSheet);
+  const sData = sSheet.getDataRange().getValues();
+  const idler = new Set();
+  for (let i = 1; i < sData.length; i++) {
+    const id = String(sData[i][0] || "");
+    if (!id || ((String(sData[i][8] || "") || "Fatura") !== tip)) continue;
+    const t = hucreTarihStr(sData[i][1]).slice(0, 10);
+    if ((bas && t < bas) || (bit && t > bit)) continue;
+    idler.add(id);
+  }
+  const r = karlilikHesapla_(ss, idler);
+  const belgeler = Object.keys(r).map(k => { const b = r[k]; delete b.kalemler; return b; });
+  belgeler.sort((a, b) => a.tarih < b.tarih ? 1 : a.tarih > b.tarih ? -1 : 0);
+  return { ok: true, belgeTipi: tip, belgeler: belgeler };
+}
+
+// body {satisId, maliyetler:[{anahtar, stokKodu, birimMaliyet}]} — boş/null birimMaliyet o kalemin manuel maliyetini siler.
+function kaydetBelgeManuelMaliyet(body) {
+  const satisId = String((body && body.satisId) || "");
+  const liste = Array.isArray(body && body.maliyetler) ? body.maliyetler : [];
+  if (!satisId) return { ok: false, hata: "satisId gerekli" };
+  const ss = acikSS_();
+  const sh = getOrCreateSheet(ss, SHEETS.belgeMaliyetleri, BELGE_MALIYET_BASLIKLAR);
+  const data = sh.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][1]) === satisId) sh.deleteRow(i + 1);
+  }
+  const zaman = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+  let kaydedilen = 0;
+  liste.forEach((m, idx) => {
+    if (m.birimMaliyet === "" || m.birimMaliyet === null || m.birimMaliyet === undefined) return;
+    const v = parseFloat(m.birimMaliyet);
+    if (isNaN(v) || v < 0) return;
+    metinliSatirEkle_(sh, ["bm_" + Date.now() + "_" + idx, satisId, String(m.anahtar || ""), String(m.stokKodu || ""), v, zaman], [2, 3, 4]);
+    kaydedilen++;
+  });
+  return { ok: true, kaydedilen: kaydedilen };
 }
 
 // ════════════════════════════════════════════════
