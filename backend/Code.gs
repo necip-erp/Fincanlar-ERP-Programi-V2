@@ -8730,20 +8730,38 @@ function karlilikHesapla_(ss, belgeIdler) {
         if (!(m.fifo > 0) && !(m.sonGiris > 0)) uyari.push("Maliyet bulunamadı");
       }
       if (Object.prototype.hasOwnProperty.call(manuel, id + "|" + anahtar)) m.manuel = manuel[id + "|" + anahtar];
+      // ★ Etkin birim maliyet: ürünle ilgili SİSTEM maliyeti (FIFO / son giriş) varsa öncelikle o; sistemde maliyet yoksa manuel girişteki değer.
+      // Manuel yöntemde kullanıcının elle yazdığı değer geçerlidir; boşsa sistem maliyeti (FIFO, yoksa son giriş) kullanılır. Hiçbiri yoksa null (= eksik, kâr hesaplanmaz).
+      const sisFifo = m.fifo > 0 ? m.fifo : null, sisSg = m.sonGiris > 0 ? m.sonGiris : null, man = (m.manuel === null || m.manuel === undefined) ? null : m.manuel;
+      const sistemIlk = sisFifo !== null ? sisFifo : sisSg;
+      const etkin = {
+        fifo: sisFifo !== null ? sisFifo : man,
+        sonGiris: sisSg !== null ? sisSg : man,
+        manuel: man !== null ? man : sistemIlk
+      };
+      const kaynak = {
+        fifo: sisFifo !== null ? "sistem" : (man !== null ? "manuel" : ""),
+        sonGiris: sisSg !== null ? "sistem" : (man !== null ? "manuel" : ""),
+        manuel: man !== null ? "manuel" : (sistemIlk !== null ? "sistem" : "")
+      };
       return { kalemId: String(k[0] || ""), anahtar: anahtar, stokKodu: kod, urunAdi: String(k[2] || ""), miktar: miktar, birim: String(k[4] || ""),
-        birimFiyat: parseFloat(k[5]) || 0, gelir: gelir, birimMaliyet: m, uyari: uyari };
+        birimFiyat: parseFloat(k[5]) || 0, gelir: gelir, birimMaliyet: m, etkin: etkin, kaynak: kaynak, uyari: uyari };
     });
-    const toplam = { fifo: 0, sonGiris: 0, manuel: 0 }, manuelEksik = kalemler.filter(k => k.birimMaliyet.manuel === null).length;
+    const toplam = { fifo: 0, sonGiris: 0, manuel: 0 };
+    const eksik = { fifo: 0, sonGiris: 0, manuel: 0 };
     let gelir = 0;
     kalemler.forEach(k => {
       gelir += k.gelir;
-      toplam.fifo += k.birimMaliyet.fifo * k.miktar; toplam.sonGiris += k.birimMaliyet.sonGiris * k.miktar;
-      toplam.manuel += (k.birimMaliyet.manuel || 0) * k.miktar;
+      ["fifo", "sonGiris", "manuel"].forEach(y => {
+        if (k.etkin[y] === null || k.etkin[y] === undefined) eksik[y]++;
+        else toplam[y] += k.etkin[y] * k.miktar;
+      });
     });
+    const manuelEksik = eksik.manuel;
     const cariId = String(r[2] || "");
     sonuc[id] = { id: id, tarih: tarih, belgeTipi: belgeTipi, cariId: cariId, cariAd: String(r[3] || ""), cariKodu: cariKodu[cariId] || "",
       belgeNo: belgeTipi === "Fatura" ? String(r[16] || "") : String(r[15] || ""), siparisNo: String(r[15] || ""),
-      toplamTutar: parseFloat(r[4]) || 0, gelir: gelir, maliyet: toplam, manuelEksik: manuelEksik, kalemSayisi: kalemler.length, kalemler: kalemler };
+      toplamTutar: parseFloat(r[4]) || 0, gelir: gelir, maliyet: toplam, manuelEksik: manuelEksik, eksik: eksik, kalemSayisi: kalemler.length, kalemler: kalemler };
   }
   return sonuc;
 }
