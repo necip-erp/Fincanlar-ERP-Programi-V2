@@ -7835,6 +7835,25 @@ function hsGrupHizliToggle(v){
   ay.hizliGrup[g] = !!v;
   hsAyarYaz_(); hizliSatisCiz();
 }
+// Açık sekmenin ara grup / alt grup / iç grup yapısını (adlar + düzen), henüz kendi yapısı olmayan diğer ürün gruplarına kopyalar.
+// Ürün atamaları kopyalanmaz (ürünler gruba özeldir); kopyalanan gruplarda ürünler "Alt grupsuz"da başlar, sonra sürüklenerek dağıtılır.
+function hsYapiKopyala(){
+  const ay = hsAyar_(), kaynak = _hsDurum.sekme;
+  const alts = ay.altGrup[kaynak] || [], aralar = ay.araGrup[kaynak] || [];
+  if(!alts.length && !aralar.length){ alert("Bu grupta kopyalanacak alt/ara grup yok."); return; }
+  const hedefler = (_tanimListeCache.urunGrubu || []).filter(g=>g.id !== kaynak && !(ay.altGrup[g.id]||[]).length && !(ay.araGrup[g.id]||[]).length);
+  if(!hedefler.length){ alert("Kopyalanacak grup yok: diğer tüm grupların zaten kendi alt/ara grup yapısı var."); return; }
+  if(!confirm("Bu grubun yapısı (" + aralar.length + " ara grup, " + alts.length + " alt grup) şu gruplara kopyalansın mı?\n\n" + hedefler.map(g=>g.ad).join(", ") + "\n\nÜrün atamaları kopyalanmaz; kendi yapısı olan gruplara dokunulmaz.")) return;
+  const yeniId = (on)=>on + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  hedefler.forEach(h=>{
+    const araHarita = {}, altHarita = {};
+    ay.araGrup[h.id] = aralar.map(r=>{ const id = yeniId("r"); araHarita[r.id] = id; return Object.assign({}, r, { id }); });
+    alts.forEach(a=>{ altHarita[a.id] = yeniId("a"); });
+    ay.altGrup[h.id] = alts.map(a=>Object.assign({}, a, { id: altHarita[a.id], ara: araHarita[a.ara] || "", ust: altHarita[a.ust] || "" }));
+  });
+  hsAyarYaz_(); hizliSatisCiz();
+  alert(hedefler.length + " gruba kopyalandı. Her grupta alt/ara grupları düzenleyip ürünleri sürükleyerek dağıtabilirsiniz.");
+}
 function hsAltGrupEkle(araId, ustId){
   const g = _hsDurum.sekme, ay = hsAyar_(); const liste = (ay.altGrup[g] = ay.altGrup[g] || []);
   let ust = ustId || "", p = null;
@@ -7991,7 +8010,7 @@ function hizliSatisCiz(){
       const acik = hsAltGor_(sekme);
       araEl.style.display = "";
       araEl.innerHTML = `<label><input type="checkbox" ${acik?'checked':''} onchange="hsGrupHizliToggle(this.checked)"> ⚡ Hızlı satış görünümü</label>` +
-        (acik ? `<button type="button" class="btn btn-primary" onclick="hsAltGrupEkle()">➕ Alt Grup</button><button type="button" class="btn btn-primary" onclick="hsAraGrupEkle()" title="Alt grupları toplayan başlık (örn. PPRC, PVC)">➕ Ara Grup</button>`
+        (acik ? `<button type="button" class="btn btn-primary" onclick="hsAltGrupEkle()">➕ Alt Grup</button><button type="button" class="btn btn-primary" onclick="hsAraGrupEkle()" title="Alt grupları toplayan başlık (örn. PPRC, PVC)">➕ Ara Grup</button>${((ay.altGrup[sekme]||[]).length||(ay.araGrup[sekme]||[]).length) ? `<button type="button" class="btn" onclick="hsYapiKopyala()" title="Bu grubun ara/alt grup yapısını (adlar ve düzen), henüz kendi yapısı olmayan diğer ürün gruplarına kopyalar">📋 Yapıyı diğer gruplara kopyala</button>` : ''}`
               : `<span class="hs-ipucu">İşaretlersen bu grup Hızlı Ürünler gibi sütunlu görünür ve kendi alt gruplarını oluşturabilirsin.</span>`);
     }
   }
