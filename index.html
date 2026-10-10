@@ -472,6 +472,10 @@ table.rehber-tbl tr:hover td,table.rehber-tbl tr.rehber-aktif td{background:var(
 .hs-alt{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
 .hs-alt #hs-ozet{flex:1;font-size:12.5px;font-weight:600;color:var(--text2)}
 
+/* Stok Tanımı formu: seçim kutusu + "➕ Tanımla" düğmesi yan yana */
+.st-tanimli-satir{display:flex;gap:4px;align-items:stretch}
+.st-tanimli-satir>select{flex:1;min-width:0}
+.st-tanimla-btn{padding:4px 8px;font-size:12px;white-space:nowrap;flex:0 0 auto}
 /* ★ (7 Eki 2026, 2) Kompakt satır, bırakma göstergesi, sarı nokta, ara grup bölümleri */
 .hs-grid.hs-kolonlu{grid-template-columns:repeat(auto-fill,minmax(calc(var(--hs-w) + 70px),calc(var(--hs-w) + 70px)));justify-content:start;gap:8px}
 .hs-kolonlu .hs-kolon,.hs-bolumlu .hs-kolon{gap:3px;padding:5px;position:relative}
@@ -19372,6 +19376,101 @@ function stokTanimModalSelectTazele_(tip){
   const cur = sel.value || (k ? k[harita[1]] : "") || "";
   sel.innerHTML = '<option value="">— Seçiniz —</option>' + liste.map(x=>`<option value="${x.id}" ${cur===x.id?'selected':''}>${x.kod?x.kod+' — ':''}${x.ad}</option>`).join("");
 }
+// ── Stok Tanımı formunda seçim kutularının yanındaki "➕ Tanımla" düğmesi ──
+// Ayarlar'a gitmeden, açık stok kartı penceresinden yeni Birim / Ambalaj / Marka / Ürün Grubu / Alt Ürün Grubu /
+// Ebat / Renk tanımlar; kayıt sonrası liste yenilenir ve yeni tanım ilgili kutuda otomatik seçilir.
+function stokTanimlaBtn_(tip){
+  return `<button type="button" class="btn st-tanimla-btn" tabindex="-1" onclick="stokHizliTanimAc('${tip}')" title="Yeni tanım ekle (Ayarlar'a gitmeden)">➕ Tanımla</button>`;
+}
+const STOK_HIZLI_TANIM_BASLIK = { birim:"Birim", ambalaj:"Ambalaj Birimi", marka:"Marka", urunGrubu:"Ürün Grubu", altUrunGrubu:"Alt Ürün Grubu", ebat:"Ebat", renk:"Renk" };
+function stokHizliTanimAc(tip){
+  if(!STOK_HIZLI_TANIM_BASLIK[tip]) return;
+  const eski = document.getElementById("st-hizli-tanim-overlay"); if(eski) eski.remove();
+  const kodVar = (tip === "marka" || tip === "urunGrubu" || tip === "altUrunGrubu");
+  let ustHtml = "";
+  if(tip === "altUrunGrubu"){
+    const sec = (document.getElementById("st-urungrubu")||{}).value || "";
+    ustHtml = `<div class="fld"><label>Üst Ürün Grubu</label><select id="sth-ust"><option value="">— Üst grup yok —</option>${(_tanimListeCache.urunGrubu||[]).map(g=>`<option value="${htmlKacis(g.id)}" ${g.id===sec?'selected':''}>${g.kod?htmlKacis(g.kod)+' — ':''}${htmlKacis(g.ad)}</option>`).join("")}</select></div>`;
+  }
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay"; ov.id = "st-hizli-tanim-overlay"; ov.style.zIndex = "10050";
+  ov.onclick = (e)=>{ if(e.target === ov) ov.remove(); };
+  ov.innerHTML = `
+    <div class="modal-box" style="max-width:420px">
+      <h3>Yeni ${STOK_HIZLI_TANIM_BASLIK[tip]} Tanımla</h3>
+      ${ustHtml}
+      ${kodVar ? `<div class="fld"><label>${tip==="marka"?"Marka Kodu":"Kod"} (2 karakter)</label><input id="sth-kod" type="text" maxlength="2" style="text-transform:uppercase" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('sth-ad').focus();}"></div>` : ""}
+      <div class="fld"><label>${STOK_HIZLI_TANIM_BASLIK[tip]} Adı</label><input id="sth-ad" type="text" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();stokHizliTanimKaydet('${tip}');}else if(event.key==='Escape'){document.getElementById('st-hizli-tanim-overlay').remove();}"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="document.getElementById('st-hizli-tanim-overlay').remove()">Vazgeç</button>
+        <button type="button" class="btn btn-primary" id="sth-kaydet" onclick="stokHizliTanimKaydet('${tip}')">Kaydet</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const f = document.getElementById(kodVar ? "sth-kod" : "sth-ad"); if(f) f.focus(); }, 50);
+}
+function stokHizliTanimKaydet(tip){
+  const adEl = document.getElementById("sth-ad"); if(!adEl) return;
+  const ad = adEl.value.trim();
+  if(!ad){ alert("Ad girin"); adEl.focus(); return; }
+  let islem, govde;
+  if(tip === "birim"){ islem = "saveBirim"; govde = { ad }; }
+  else {
+    let kod = "";
+    if(tip === "marka" || tip === "urunGrubu" || tip === "altUrunGrubu"){
+      kod = ((document.getElementById("sth-kod")||{}).value || "").trim().toUpperCase();
+      if(kod.length !== 2){ alert((tip==="marka" ? "Marka kodu" : "Kod") + " tam olarak 2 karakter olmalı."); return; }
+    }
+    if(tip === "marka"){ islem = "saveMarka"; govde = { kod, ad, renk: "" }; }
+    else {
+      islem = "saveBasitTanim"; govde = { tip, ad };
+      if(kod) govde.kod = kod;
+      if(tip === "altUrunGrubu") govde.ustId = (document.getElementById("sth-ust")||{}).value || "";
+    }
+  }
+  const btn = document.getElementById("sth-kaydet"); if(btn){ btn.disabled = true; btn.textContent = "Kaydediliyor…"; }
+  const geriAc = ()=>{ if(btn){ btn.disabled = false; btn.textContent = "Kaydet"; } };
+  cariApi(islem, govde).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); geriAc(); return; }
+    return stokHizliTanimSonrasi_(tip, res.id, ad).then(()=>{
+      const ov = document.getElementById("st-hizli-tanim-overlay"); if(ov) ov.remove();
+    });
+  }).catch(err=>{ alert("Bağlantı hatası: "+err.message); geriAc(); });
+}
+// Kayıttan sonra ilgili listeyi sunucudan tazeler, açık stok kartındaki kutuyu yeniden doldurur ve yeni tanımı seçer.
+function stokHizliTanimSonrasi_(tip, yeniId, ad){
+  const secenekler = (liste, deger)=>'<option value="">— Seçiniz —</option>' + liste.map(x=>`<option value="${htmlKacis(x.id)}" ${x.id===deger?'selected':''}>${x.kod?htmlKacis(x.kod)+' — ':''}${htmlKacis(x.ad)}</option>`).join("");
+  if(tip === "birim"){
+    return cariApi("getBirimListesi").then(r=>{
+      if(!r.ok) return;
+      _birimListe = r.birimler;
+      const sel = document.getElementById("st-birim1"); if(!sel) return;
+      sel.innerHTML = _birimListe.map(b=>`<option value="${htmlKacis(b.ad)}">${htmlKacis(b.ad)}</option>`).join("");
+      sel.value = ad;
+    });
+  }
+  if(tip === "marka"){
+    return cariApi("getMarkaListesi").then(r=>{
+      if(!r.ok) return;
+      _markaListe = r.markalar; _markaYuklendi = true;
+      const sel = document.getElementById("st-marka"); if(!sel) return;
+      sel.innerHTML = secenekler(_markaListe, yeniId);
+    });
+  }
+  return cariApi("getBasitTanimListesi", { tip }).then(r=>{
+    if(!r.ok) return;
+    _tanimListeCache[tip] = r.kalemler; _tanimListeYuklendi[tip] = true;
+    try{ tanimListesiCiz(tip); }catch(e){}
+    const kutu = { ambalaj:"st-ambalajbirimi", urunGrubu:"st-urungrubu", altUrunGrubu:"st-alturungrubu", ebat:"st-ebat", renk:"st-renk" }[tip];
+    const sel = kutu && document.getElementById(kutu); if(!sel) return;
+    if(tip === "ambalaj"){
+      sel.innerHTML = '<option value="">— Seçiniz —</option>' + r.kalemler.map(a=>`<option value="${htmlKacis(a.ad)}">${htmlKacis(a.ad)}</option>`).join("");
+      sel.value = ad;
+    } else {
+      sel.innerHTML = secenekler(r.kalemler, yeniId);
+    }
+  });
+}
 function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
   window._stokTanimKaydedildiCB = onKaydedildi || null;
   // Faturadan/tedarikçiden gelen ham ürün kodu (varsa) — "🔧 Öner" butonu, firma kodu
@@ -19415,15 +19514,19 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
       </div>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
         <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>1. Birim</label>
+          <div class="st-tanimli-satir">
           <select id="st-birim1">
             ${(()=>{ const d=k?k.birim1:'adet'; const ads=(_birimListe||[]).map(b=>b.ad); const secenekler=ads.slice(); if(d && !secenekler.includes(d)) secenekler.unshift(d); if(secenekler.length===0) secenekler.push('adet'); return secenekler.map(ad=>`<option value="${ad}" ${ad===d?'selected':''}>${ad}</option>`).join(''); })()}
-          </select>
+          </select>${stokTanimlaBtn_('birim')}
+          </div>
         </div>
         <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Ambalaj Miktarı</label><input id="st-ambalajmiktar" type="number" min="0" step="0.01" value="${k?k.ambalajMiktari:''}" title="1 ambalajın 1. Birim cinsinden karşılığı, örn. 1 kutu = 1,44"></div>
         <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Ambalaj Birimi</label>
+          <div class="st-tanimli-satir">
           <select id="st-ambalajbirimi">
             ${(()=>{ const d=k?k.ambalajBirimi:''; const ads=(_tanimListeCache.ambalaj||[]).map(a=>a.ad); const secenekler=ads.slice(); if(d && !secenekler.includes(d)) secenekler.unshift(d); return '<option value="">— Seçiniz —</option>' + secenekler.map(ad=>`<option value="${ad}" ${ad===d?'selected':''}>${ad}</option>`).join(''); })()}
-          </select>
+          </select>${stokTanimlaBtn_('ambalaj')}
+          </div>
         </div>
         <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Minimum Stok Miktarı</label><input id="st-minstok" type="number" min="0" step="1" value="${k?k.minStok||'':''}" placeholder="0 = uyarı kapalı"></div>
         <div class="fld" style="flex:1;min-width:150px;margin-bottom:0"><label>Ağırlık (kg / 1. birim)</label><input id="st-agirlik" type="number" min="0" step="0.001" value="${k?(k.agirlik||''):''}" placeholder="Örn. 18,5" title="1. birimin (m², adet vb.) kg cinsinden ağırlığı — siparişte toplam ağırlık hesabında kullanılır"></div>
@@ -19441,11 +19544,11 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
         </div>
       </div>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Marka</label><select id="st-marka">${secenekHtml(_markaListe, k?k.markaId:'')}</select></div>
-        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Ürün Grubu</label><select id="st-urungrubu">${secenekHtml(_tanimListeCache.urunGrubu, k?k.urunGrubuId:'')}</select></div>
-        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Alt Ürün Grubu</label><select id="st-alturungrubu">${secenekHtml(_tanimListeCache.altUrunGrubu, k?k.altUrunGrubuId:'')}</select></div>
-        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Ebat</label><select id="st-ebat">${secenekHtml(_tanimListeCache.ebat, k?k.ebatId:'')}</select></div>
-        <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Renk</label><select id="st-renk">${secenekHtml(_tanimListeCache.renk, k?k.renkId:'')}</select></div>
+        <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Marka</label><div class="st-tanimli-satir"><select id="st-marka">${secenekHtml(_markaListe, k?k.markaId:'')}</select>${stokTanimlaBtn_('marka')}</div></div>
+        <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Ürün Grubu</label><div class="st-tanimli-satir"><select id="st-urungrubu">${secenekHtml(_tanimListeCache.urunGrubu, k?k.urunGrubuId:'')}</select>${stokTanimlaBtn_('urunGrubu')}</div></div>
+        <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Alt Ürün Grubu</label><div class="st-tanimli-satir"><select id="st-alturungrubu">${secenekHtml(_tanimListeCache.altUrunGrubu, k?k.altUrunGrubuId:'')}</select>${stokTanimlaBtn_('altUrunGrubu')}</div></div>
+        <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Ebat</label><div class="st-tanimli-satir"><select id="st-ebat">${secenekHtml(_tanimListeCache.ebat, k?k.ebatId:'')}</select>${stokTanimlaBtn_('ebat')}</div></div>
+        <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Renk</label><div class="st-tanimli-satir"><select id="st-renk">${secenekHtml(_tanimListeCache.renk, k?k.renkId:'')}</select>${stokTanimlaBtn_('renk')}</div></div>
       </div>
       ${k ? `<div class="btnrow"><button class="btn btn-danger" onclick="stokTanimSilOnay('${k.id}')">🗑 Sil</button></div>` : ''}
       <div class="modal-actions">
