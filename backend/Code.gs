@@ -1156,6 +1156,8 @@ function handleRequest(e) {
       case "getBelgeKarlilik":  result = getBelgeKarlilik(body); break;
       case "getKarlilikRaporu": result = getKarlilikRaporu(body); break;
       case "kaydetBelgeManuelMaliyet": result = kaydetBelgeManuelMaliyet(body); break;
+      case "kaydetBelgeRaporaEkle": result = kaydetBelgeRaporaEkle(body); break;
+      case "getUrunKarlilikRaporu": result = getUrunKarlilikRaporu(body); break;
       case "saveSatis":       result = saveSatis(body); break;
       case "updateSatis":     result = updateSatis(body); break;
       case "silSatis":        result = silSatis(body); break;
@@ -2750,7 +2752,7 @@ function silSatis(body) {
   // Bu satışın otomatik yazdığı Stok Hareket Raporu satırlarını da geri al.
   stokHareketOtomatikSil(ss, id);
   // Manuel karlılık maliyetlerini de temizle
-  try { kaydetBelgeManuelMaliyet({ satisId: id, maliyetler: [] }); } catch (e) {}
+  try { kaydetBelgeManuelMaliyet({ satisId: id, maliyetler: [], sil: true }); } catch (e) {}
 
   // Kalemlerini sil (silmeden önce kaynak sipariş varsa geri almak için okuyoruz)
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
@@ -8598,6 +8600,19 @@ function stokTanimMaliyetGuncelle(id, alisFiyati) {
 // Gelir = KDV hariç net satış (kalem iskontosu + dip iskonto + tutar iskontosu dağıtılmış).
 // ════════════════════════════════════════════════
 const BELGE_MALIYET_BASLIKLAR = ["ID","SATIS_ID","KALEM_ID","STOK_KODU","BIRIM_MALIYET","GUNCELLEME"];
+// "Maliyetleri rapora ekle" tiki: belge başına tek özel satır (KALEM_ID = "__rapor__", BIRIM_MALIYET = 1). İşaretliyse Fatura/Sipariş
+// karlılık raporları ve Ürün Bazlı Karlılık raporu bu belgede (seçili yönteme bakmadan) kaydedilen MANUEL maliyetleri kullanır.
+const BELGE_RAPOR_ANAHTAR = "__rapor__";
+
+// Maliyet metnini sayıya çevirir: "2,99" / "2.99" / "1.234,56" / "1234.5" hepsi kabul edilir.
+function maliyetSayiParse_(v) {
+  if (typeof v === "number") return v;
+  let s = String(v === null || v === undefined ? "" : v).replace(/\s/g, "").replace(/[₺TLtl]/g, "");
+  if (!s) return NaN;
+  if (s.indexOf(",") > -1 && s.indexOf(".") > -1) s = s.replace(/\./g, "").replace(",", ".");
+  else if (s.indexOf(",") > -1) s = s.replace(",", ".");
+  return parseFloat(s);
+}
 
 function karlilikStokVerisiOku_(ss) {
   const tanim = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR).getDataRange().getValues();
@@ -8681,8 +8696,12 @@ function karlilikHesapla_(ss, belgeIdler) {
   const kodH = (kod) => hCache[kod] || (hCache[kod] = karlilikKodHesapla_(kod, veri));
 
   const manuel = {};
+  const raporaEkleSet = new Set();   // "Maliyetleri rapora ekle" tiki işaretli belgeler (özel satır: KALEM_ID = "__rapor__")
   const mData = getOrCreateSheet(ss, SHEETS.belgeMaliyetleri, BELGE_MALIYET_BASLIKLAR).getDataRange().getValues();
-  for (let i = 1; i < mData.length; i++) manuel[String(mData[i][1]) + "|" + String(mData[i][2])] = parseFloat(mData[i][4]) || 0;
+  for (let i = 1; i < mData.length; i++) {
+    if (String(mData[i][2]) === BELGE_RAPOR_ANAHTAR) { if (parseFloat(mData[i][4]) > 0) raporaEkleSet.add(String(mData[i][1])); continue; }
+    manuel[String(mData[i][1]) + "|" + String(mData[i][2])] = parseFloat(mData[i][4]) || 0;
+  }
 
   const kalemMap = {};
   for (let i = 1; i < kData.length; i++) {
@@ -8761,7 +8780,8 @@ function karlilikHesapla_(ss, belgeIdler) {
     const cariId = String(r[2] || "");
     sonuc[id] = { id: id, tarih: tarih, belgeTipi: belgeTipi, cariId: cariId, cariAd: String(r[3] || ""), cariKodu: cariKodu[cariId] || "",
       belgeNo: belgeTipi === "Fatura" ? String(r[16] || "") : String(r[15] || ""), siparisNo: String(r[15] || ""),
-      toplamTutar: parseFloat(r[4]) || 0, gelir: gelir, maliyet: toplam, manuelEksik: manuelEksik, eksik: eksik, kalemSayisi: kalemler.length, kalemler: kalemler };
+      toplamTutar: parseFloat(r[4]) || 0, gelir: gelir, maliyet: toplam, manuelEksik: manuelEksik, eksik: eksik, kalemSayisi: kalemler.length, kalemler: kalemler,
+      raporaEkle: raporaEkleSet.has(id), manuelSayi: kalemler.filter(k => k.birimMaliyet.manuel !== null && k.birimMaliyet.manuel !== undefined).length };
   }
   return sonuc;
 }
@@ -8792,9 +8812,82 @@ function getKarlilikRaporu(body) {
     idler.add(id);
   }
   const r = karlilikHesapla_(ss, idler);
-  const belgeler = Object.keys(r).map(k => { const b = r[k]; delete b.kalemler; return b; });
+  const belgeler = Object.keys(r).map(k => {
+    const b = r[k]; delete b.kalemler;
+    // ★ "Maliyetleri rapora ekle" işaretli belge: yöntem sekmesi ne olursa olsun kaydedilen manuel maliyet kullanılır.
+    if (b.raporaEkle) {
+      b.maliyet = { fifo: b.maliyet.manuel, sonGiris: b.maliyet.manuel, manuel: b.maliyet.manuel };
+      b.eksik = { fifo: b.eksik.manuel, sonGiris: b.eksik.manuel, manuel: b.eksik.manuel };
+    }
+    return b;
+  });
   belgeler.sort((a, b) => a.tarih < b.tarih ? 1 : a.tarih > b.tarih ? -1 : 0);
   return { ok: true, belgeTipi: tip, belgeler: belgeler };
+}
+
+// Ürün bazlı karlılık: body {belgeTipi:"Fatura"|"Sipariş", bas, bit}. Her ürün (stok kodu) için toplam miktar / net satış / maliyet (3 yöntem)
+// ve ürünün geçtiği belgelerin dökümü (cari kodlu) döner. "Maliyetleri rapora ekle" işaretli belgelerde manuel maliyet kullanılır.
+function getUrunKarlilikRaporu(body) {
+  const tip = String((body && body.belgeTipi) || "Fatura");
+  const bas = String((body && body.bas) || ""), bit = String((body && body.bit) || "");
+  const ss = acikSS_();
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar, ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  ensureSatisBelgeTipiColonu(sSheet);
+  const sData = sSheet.getDataRange().getValues();
+  const idler = new Set();
+  for (let i = 1; i < sData.length; i++) {
+    const id = String(sData[i][0] || "");
+    if (!id || ((String(sData[i][8] || "") || "Fatura") !== tip)) continue;
+    const t = hucreTarihStr(sData[i][1]).slice(0, 10);
+    if ((bas && t < bas) || (bit && t > bit)) continue;
+    idler.add(id);
+  }
+  const r = karlilikHesapla_(ss, idler);
+  const YONT = ["fifo", "sonGiris", "manuel"];
+  const urunler = {};
+  Object.keys(r).forEach(bid => {
+    const b = r[bid];
+    b.kalemler.forEach(k => {
+      const anahtar = k.stokKodu ? k.stokKodu : ("(kodsuz) " + k.urunAdi);
+      // eksik: maliyeti bilinmeyen kalem sayısı; eksikGelir: o kalemlerin net satışı (kâr yalnız maliyeti bilinen kalemlerden hesaplansın diye)
+      const u = urunler[anahtar] = urunler[anahtar] || { stokKodu: k.stokKodu, urunAdi: k.urunAdi, birim: k.birim, miktar: 0, gelir: 0,
+        maliyet: { fifo: 0, sonGiris: 0, manuel: 0 }, eksik: { fifo: 0, sonGiris: 0, manuel: 0 }, eksikGelir: { fifo: 0, sonGiris: 0, manuel: 0 }, belgeMap: {} };
+      const bl = u.belgeMap[bid] = u.belgeMap[bid] || { id: bid, tarih: b.tarih, belgeNo: b.belgeNo, siparisNo: b.siparisNo, cariId: b.cariId, cariAd: b.cariAd, cariKodu: b.cariKodu,
+        raporaEkle: b.raporaEkle, miktar: 0, gelir: 0, maliyet: { fifo: 0, sonGiris: 0, manuel: 0 }, eksik: { fifo: 0, sonGiris: 0, manuel: 0 }, eksikGelir: { fifo: 0, sonGiris: 0, manuel: 0 } };
+      u.miktar += k.miktar; u.gelir += k.gelir; bl.miktar += k.miktar; bl.gelir += k.gelir;
+      YONT.forEach(y => {
+        const v = b.raporaEkle ? k.etkin.manuel : k.etkin[y];
+        if (v === null || v === undefined) { u.eksik[y]++; bl.eksik[y]++; u.eksikGelir[y] += k.gelir; bl.eksikGelir[y] += k.gelir; }
+        else { u.maliyet[y] += v * k.miktar; bl.maliyet[y] += v * k.miktar; }
+      });
+    });
+  });
+  const liste = Object.keys(urunler).map(a => {
+    const u = urunler[a];
+    const belgeler = Object.keys(u.belgeMap).map(x => u.belgeMap[x]).sort((p, q) => p.tarih < q.tarih ? 1 : p.tarih > q.tarih ? -1 : 0);
+    delete u.belgeMap; u.belgeler = belgeler; u.belgeSayisi = belgeler.length;
+    return u;
+  });
+  liste.sort((a, b) => b.gelir - a.gelir);
+  return { ok: true, belgeTipi: tip, urunler: liste };
+}
+
+// "Maliyetleri rapora ekle" tikini tek başına kaydeder. body {satisId, deger:true|false}
+function kaydetBelgeRaporaEkle(body) {
+  const satisId = String((body && body.satisId) || "");
+  if (!satisId) return { ok: false, hata: "satisId gerekli" };
+  const ac = !!(body && (body.deger === true || body.deger === "true" || body.deger === 1 || body.deger === "1"));
+  const ss = acikSS_();
+  const sh = getOrCreateSheet(ss, SHEETS.belgeMaliyetleri, BELGE_MALIYET_BASLIKLAR);
+  const data = sh.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][1]) === satisId && String(data[i][2]) === BELGE_RAPOR_ANAHTAR) sh.deleteRow(i + 1);
+  }
+  if (ac) {
+    const zaman = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+    metinliSatirEkle_(sh, ["bm_" + Date.now() + "_r", satisId, BELGE_RAPOR_ANAHTAR, "", 1, zaman], [2, 3, 4]);
+  }
+  return { ok: true, raporaEkle: ac };
 }
 
 // body {satisId, maliyetler:[{anahtar, stokKodu, birimMaliyet}]} — boş/null birimMaliyet o kalemin manuel maliyetini siler.
@@ -8805,19 +8898,27 @@ function kaydetBelgeManuelMaliyet(body) {
   const ss = acikSS_();
   const sh = getOrCreateSheet(ss, SHEETS.belgeMaliyetleri, BELGE_MALIYET_BASLIKLAR);
   const data = sh.getDataRange().getValues();
+  // "Maliyetleri rapora ekle" tiki satırı maliyetler yeniden kaydedilirken KORUNUR (belge silinirken sil:true ile hepsi temizlenir).
+  let raporaEkle = false;
   for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][1]) === satisId) sh.deleteRow(i + 1);
+    if (String(data[i][1]) === satisId) {
+      if (String(data[i][2]) === BELGE_RAPOR_ANAHTAR && parseFloat(data[i][4]) > 0) raporaEkle = true;
+      sh.deleteRow(i + 1);
+    }
   }
+  if (body && body.sil === true) return { ok: true, kaydedilen: 0 };
+  if (body && body.raporaEkle !== undefined && body.raporaEkle !== null) raporaEkle = (body.raporaEkle === true || body.raporaEkle === "true");
   const zaman = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   let kaydedilen = 0;
   liste.forEach((m, idx) => {
     if (m.birimMaliyet === "" || m.birimMaliyet === null || m.birimMaliyet === undefined) return;
-    const v = parseFloat(m.birimMaliyet);
+    const v = maliyetSayiParse_(m.birimMaliyet);
     if (isNaN(v) || v < 0) return;
     metinliSatirEkle_(sh, ["bm_" + Date.now() + "_" + idx, satisId, String(m.anahtar || ""), String(m.stokKodu || ""), v, zaman], [2, 3, 4]);
     kaydedilen++;
   });
-  return { ok: true, kaydedilen: kaydedilen };
+  if (raporaEkle && kaydedilen > 0) metinliSatirEkle_(sh, ["bm_" + Date.now() + "_r", satisId, BELGE_RAPOR_ANAHTAR, "", 1, zaman], [2, 3, 4]);
+  return { ok: true, kaydedilen: kaydedilen, raporaEkle: raporaEkle && kaydedilen > 0 };
 }
 
 // ════════════════════════════════════════════════
