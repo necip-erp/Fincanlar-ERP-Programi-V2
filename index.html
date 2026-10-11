@@ -358,6 +358,12 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
 #mod-tahsilat>.lr-view,#mod-odeme>.lr-view,#mod-cari>.lr-view{display:none;flex:1;min-width:0;flex-direction:column;overflow:hidden}
 #mod-tahsilat.lr-liste>.lr-view,#mod-odeme.lr-liste>.lr-view,#mod-cari.lr-liste>.lr-view{display:flex}
 #mod-tahsilat.lr-liste>.cari-detail-panel,#mod-odeme.lr-liste>.cari-detail-panel,#mod-cari.lr-liste>.cari-detail-panel{display:none!important}
+.cari-modern .cm-kolonlar{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+.cari-modern .cm-sol{display:flex;flex-direction:column;gap:12px;min-width:0}
+.cari-modern .cm-sag{min-width:0}
+.cari-modern .cm-kolonlar .om-kart{margin-top:0!important}
+.cari-modern .om-aksiyon{position:sticky;bottom:-22px;background:var(--rp-alan,var(--bg2));padding:10px 0 2px;margin-top:10px;z-index:2}
+@media (max-width:900px){.cari-modern .cm-kolonlar{grid-template-columns:1fr}}
 .lr-view .sr-tbl tr.lr-daha td{text-align:center;cursor:pointer;color:var(--blue);font-weight:700}
 #satis-view .cari-list-panel{display:none}
 
@@ -2824,7 +2830,7 @@ function sekmeSeridiCiz(){
     const m = MODULLER.find(x=>x.id===id);
     if(!m) return "";
     return `<div class="sekme${id===_aktifSekme?" aktif":""}" onclick="modulAc('${id}')" onmousedown="if(event.button===1){event.preventDefault();}" onauxclick="if(event.button===1){event.preventDefault(); sekmeKapat('${id}');}">
-      <span>${m.ic} ${(id==="cari" && window._cariSekmeEtiket) ? htmlKacis(window._cariSekmeEtiket) : m.lbl}</span>
+      <span>${m.ic} ${id==="cari" ? "Cari Listesi" : m.lbl}</span>
       <span class="sekme-kapat" onclick="event.stopPropagation(); sekmeKapat('${id}')">✕</span>
     </div>`;
   }).join("");
@@ -5382,7 +5388,7 @@ function cariModalAc(editId, onKaydedildi, adIpucu){
   overlay.innerHTML = `
     <div class="modal-box modal-box-wide odeme-modal cari-modern" style="max-width:1180px;width:96vw">
       <div class="om-baslik">${duzenle?"👤 Cariyi Düzenle":"👤 Yeni Cari Ekle"}</div>
-
+      <div class="cm-kolonlar"><div class="cm-sol">
       <div class="om-kart">
         <div class="cm-bolum">Genel Bilgiler</div>
         <div class="om-grid">
@@ -5408,14 +5414,14 @@ function cariModalAc(editId, onKaydedildi, adIpucu){
         <div class="cm-bolum">İletişim ve Adres</div>
         <div class="om-grid">
           <div class="fld"><label>Telefon</label><input id="cm-telefon" type="text" value="${c?c.telefon:''}" placeholder="05xx xxx xx xx"></div>
-          <div class="fld"><label>Vergi No / TCKN</label>
+<div class="fld"><label>Vergi Dairesi</label><input id="cm-vergidairesi" type="text" value="${c?htmlKacis(c.vergiDairesi||''):''}" placeholder="Örn. Osmangazi"></div>
+          <div class="fld om-tam"><label>Vergi No / TCKN</label>
             <div style="display:flex;gap:6px">
               <input id="cm-vergino" type="text" inputmode="numeric" value="${c?c.vergiNo:''}" style="flex:1" oninput="cmKimlikIpucu()">
               <button type="button" class="btn" title="EDM üzerinden VKN/TCKN'ye göre e-Fatura/e-Arşiv durumunu sorgula" onclick="cmEdmSorgula()">🔍 Sistemden Veri Çek</button>
             </div>
             <div id="cm-kimlik-ipucu" style="font-size:11.5px;margin-top:3px;min-height:15px"></div>
           </div>
-          <div class="fld"><label>Vergi Dairesi</label><input id="cm-vergidairesi" type="text" value="${c?htmlKacis(c.vergiDairesi||''):''}" placeholder="Örn. Osmangazi"></div>
           <div class="fld om-tam"><label>Adres</label><input id="cm-adres" type="text" value="${c?c.adres:''}"></div>
           <div class="fld"><label>İl</label>
             <select id="cm-il" onchange="cariIlDegisti()">
@@ -5427,6 +5433,7 @@ function cariModalAc(editId, onKaydedildi, adIpucu){
         </div>
       </div>
 
+      </div><div class="cm-sag">
       <div class="om-kart" style="margin-top:12px">
         <div class="cm-bolum">Fatura ve Ticari Bilgiler</div>
         <div class="om-grid">
@@ -5458,6 +5465,7 @@ function cariModalAc(editId, onKaydedildi, adIpucu){
           <div class="fld om-tam"><label>Not</label><textarea id="cm-not" rows="2">${c?c.not:''}</textarea></div>
         </div>
       </div>
+      </div></div>
 
       <div class="om-aksiyon">
         <button class="btn" onclick="document.getElementById('cari-modal-overlay').remove()">İptal</button>
@@ -21918,7 +21926,7 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
       const cariAktif = _aktifSekme === "cari" || (kv && kv.modulId === "cari");
       if(cariAktif){
         const baslikEl = document.getElementById("sayfa-baslik");
-        const metin = et ? ("👥 " + et) : "👥 Cari";
+        const metin = _aktifSekme === "cari" ? "👥 Cari Listesi" : (et ? ("👥 " + et) : "👥 Cari");
         if(baslikEl) baslikEl.textContent = metin;
         document.title = metin + " · Fincanlar ERP";
       }
@@ -22481,7 +22489,7 @@ document.addEventListener("keydown", function(e){
       },
       sira:["cariKodu","cariAd","tarih","yontem","tutar","projeKodu","aciklama","kayit"],
       filtreler:[cariF,
-        {id:"yontem", etiket:"Yöntem", tip:"secim", deger:r=>r.yontem||"", esles:(r,v)=>(r.yontem||"")===v},
+        {id:"yontem", etiket:"Yöntem", tip:"secim", sabit:[["Nakit","Nakit"],["Havale/EFT","Havale/EFT"],["Kredi Kartı","Kredi Kartı"],["Çek","Çek"],["Senet","Senet"]], deger:r=>r.yontem||"", esles:(r,v)=>(r.yontem||"")===v},
         {id:"ara", etiket:"Açıklama / Proje", yer:"Açıklama veya proje kodu", esles:(r,v)=>norm(r.aciklama).includes(v)||norm(r.projeKodu).includes(v)}],
       alt:l=>{
         const y = {}; l.forEach(r=>{ y[r.yontem||"—"] = (y[r.yontem||"—"]||0) + (+r.tutar||0); });
@@ -22505,7 +22513,7 @@ document.addEventListener("keydown", function(e){
       },
       sira:["cariKodu","cariAd","tarih","yontem","hedef","tutar","seriNo","projeKodu","aciklama","kayit"],
       filtreler:[cariF,
-        {id:"yontem", etiket:"Yöntem", tip:"secim", deger:r=>r.yontem||"", esles:(r,v)=>(r.yontem||"")===v},
+        {id:"yontem", etiket:"Yöntem", tip:"secim", sabit:[["Nakit","Nakit"],["Havale/EFT","Havale/EFT"],["Kredi Kartı","Kredi Kartı"],["Çek","Çek"],["Senet","Senet"]], deger:r=>r.yontem||"", esles:(r,v)=>(r.yontem||"")===v},
         {id:"hedef", etiket:"Ödeme Hedefi", tip:"secim", deger:r=>r.hedefTipi||"Cari", esles:(r,v)=>(r.hedefTipi||"Cari")===v},
         {id:"ara", etiket:"Açıklama / Seri No", yer:"Açıklama, seri no, proje", esles:(r,v)=>norm(r.aciklama).includes(v)||norm(r.seriNo).includes(v)||norm(r.projeKodu).includes(v)}],
       alt:l=>{
@@ -22521,15 +22529,17 @@ document.addEventListener("keydown", function(e){
       sutunlar:{
         cariKodu:{baslik:"Cari Kodu", deger:c=>c.cariKodu||"", hucre:c=>htmlKacis(c.cariKodu||""), sinif:"sr-kod"},
         ad:metin("Cari Ünvanı", c=>c.ad||""), tip:metin("Tür", c=>c.tip||""), telefon:metin("Telefon", c=>c.telefon||""),
-        yer:metin("İl / İlçe", c=>[c.il,c.ilce].filter(Boolean).join(" / ")),
+        il:metin("İl", c=>c.il||""), ilce:metin("İlçe", c=>c.ilce||""),
+        borc:{baslik:"Borç", sayi:true, sag:true, deger:c=>Math.max(0,+c.bakiye||0), hucre:c=>(+c.bakiye||0)>0.005?`<b class="bakiye-pos">${paraFormat(c.bakiye)}</b>`:""},
+        alacak:{baslik:"Alacak", sayi:true, sag:true, deger:c=>Math.max(0,-(+c.bakiye||0)), hucre:c=>(+c.bakiye||0)<-0.005?`<b class="bakiye-neg">${paraFormat(Math.abs(c.bakiye))}</b>`:""},
         bakiye:{baslik:"Bakiye", sayi:true, sag:true, deger:c=>+c.bakiye||0, hucre:c=>`<b class="${bakiyeSinifi(+c.bakiye||0)}">${paraFormat(c.bakiye||0)}</b>`},
         krediLimiti:paraCol("Kredi Limiti", c=>c.krediLimiti),
         eFatura:metin("e-Fatura", c=>c.eFatura||""), eArsiv:metin("e-Arşiv", c=>c.eArsiv||""),
         sonIslem:tarihCol("Son İşlem", c=>c.sonIslemTarihi),
         durum:{baslik:"Durum", deger:c=>c.aktif===false?"Pasif":((c.krediLimiti>0&&c.bakiye>c.krediLimiti)?"Limit aşıldı":"Aktif"),
-          hucre:c=>c.aktif===false?'<span class="sr-d sr-d-diger">⏸ Pasif</span>':((c.krediLimiti>0&&c.bakiye>c.krediLimiti)?'<span class="sr-d sr-d-haber-verecek">⚠️ Limit aşıldı</span>':"")}
+          hucre:c=>c.aktif===false?'<span class="sr-d sr-d-diger">⏸ Pasif</span>':('<span class="sr-d sr-d-onaylandi">Aktif</span>'+((c.krediLimiti>0&&c.bakiye>c.krediLimiti)?' <span class="sr-d sr-d-haber-verecek">⚠️ Limit aşıldı</span>':""))}
       },
-      sira:["cariKodu","ad","tip","telefon","yer","bakiye","krediLimiti","eFatura","eArsiv","sonIslem","durum"],
+      sira:["cariKodu","ad","tip","telefon","il","ilce","borc","alacak","bakiye","krediLimiti","eFatura","eArsiv","sonIslem","durum"],
       filtreler:[
         {id:"ara", etiket:"Ara (kod, ünvan, telefon, adres)", yer:"Cari ara...", esles:(c,v)=>esnekEslesirMi(c.ad,v)||(c.telefon||"").includes(v)||norm(c.cariKodu).includes(v)||esnekEslesirMi(c.adres,v)},
         {id:"tur", etiket:"Tür", tip:"secim", tumu:"Hepsi", daima:true,
@@ -22732,10 +22742,29 @@ document.addEventListener("keydown", function(e){
       try{
         if(id === "cari"){ window._cariSekmeEtiket = ""; }
         goster(id);
-        if(id === "cari") sekmeSeridiCiz();
+        if(id === "cari"){ sekmeSeridiCiz(); window._cariListeBaslikAyarla(); }
       }catch(e){ console.error("Liste raporu açılamadı:", e); }
     }
     return r;
+  };
+  // Ctrl+Y: soldaki "+" düğmesi gizli olduğundan, bu üç modülde doğrudan "Yeni" penceresini açar
+  document.addEventListener("keydown", function(e){
+    if(e.metaKey || kisayolMetni(e) !== (kisayollariAl()._yeniKayit || "Ctrl+Y")) return;
+    if(!document.body.classList.contains("giris-yapildi")) return;
+    if(document.querySelector(".modal-overlay")) return;   // açık pencere varsa dokunma
+    const act = document.querySelector(".modview.active"); if(!act) return;
+    const m = MODLAR.find(x=>act.id === "mod-"+x); if(!m) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    TANIM[m].yeniFn();
+  }, true);
+  // Cari ana sekmesi/başlığı: "Cari Listesi" (kayıt sekmesi cari kodu + ünvanını gösterir)
+  window._cariListeBaslikAyarla = function(){
+    try{
+      if(_aktifSekme === "cari"){
+        const b = document.getElementById("sayfa-baslik"); if(b) b.textContent = "👥 Cari Listesi";
+        document.title = "👥 Cari Listesi · Fincanlar ERP";
+      }
+    }catch(e){}
   };
   // Kayıt sekmesine geçince liste değil kayıt görünsün
   const oKSG = kayitSekmesiniGoster;
