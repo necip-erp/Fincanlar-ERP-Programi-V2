@@ -1312,6 +1312,7 @@ function handleRequest(e) {
       case "getEdmOnekEslesmeListesi": result = getEdmOnekEslesmeListesi(); break;
       case "edmOnekEslesmeManuelKaydet": result = edmOnekEslesmeManuelKaydet(body); break;
       case "edmOnekEslesmeSil":    result = edmOnekEslesmeSil(body); break;
+      case "kaydetCariEdmOnekler": result = kaydetCariEdmOnekler(body); break;
       case "getTedarikciUrunKoduListesi": result = getTedarikciUrunKoduListesi(); break;
       case "tedarikciUrunKoduManuelKaydet": result = tedarikciUrunKoduManuelKaydet(body); break;
       case "tedarikciUrunKoduSil": result = tedarikciUrunKoduSil(body); break;
@@ -5561,6 +5562,32 @@ function edmOnekEslesmeManuelKaydet(body) {
   edmOnekEslesmeKaydet(ss, onek, cariId, String(body.cariAd || ""));
   cacheTemizle(["bekleyenAlisFaturalari"]);
   return { ok: true };
+}
+
+
+// Cari kartından EDM tedarikçi kodu (fatura öneki) girişi: body { cariId, cariAd, onekler:["CNY","FYT"] }.
+// Carinin önek listesi bu listeye eşitlenir (listede olmayan eski önekleri silinir, yeniler eklenir). Başka bir cariye bağlı önek reddedilir.
+function kaydetCariEdmOnekler(body) {
+  const cariId = String((body && body.cariId) || "").trim();
+  if (!cariId) return { ok: false, hata: "cariId gerekli" };
+  const ham = Array.isArray(body.onekler) ? body.onekler : String(body.onekler || "").split(/[,;\s]+/);
+  const liste = [];
+  ham.forEach(function (x) { const o = String(x || "").trim().toUpperCase(); if (o && liste.indexOf(o) < 0) liste.push(o); });
+  const ss = acikSS_();
+  const map = edmOnekEslesmeOku(ss);
+  for (let i = 0; i < liste.length; i++) {
+    const m = map[liste[i]];
+    if (m && m.cariId && m.cariId !== cariId) return { ok: false, hata: "'" + liste[i] + "' öneki zaten başka bir cariye bağlı: " + (m.cariAd || m.cariId) };
+  }
+  const sheet = getOrCreateSheet(ss, SHEETS.edmOnekEslesme, EDM_ONEK_ESLESME_BASLIKLAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    const o = String(data[i][0] || "").trim().toUpperCase();
+    if (String(data[i][1] || "") === cariId && liste.indexOf(o) < 0) sheet.deleteRow(i + 1);
+  }
+  liste.forEach(function (o) { edmOnekEslesmeKaydet(ss, o, cariId, String(body.cariAd || "")); });
+  cacheTemizle(["bekleyenAlisFaturalari"]);
+  return { ok: true, onekler: liste };
 }
 
 // body: { onek }

@@ -4972,6 +4972,7 @@ function cariDetayCiz(res){
       <div class="cari-info-item"><div class="k">İl / İlçe</div><div class="v">${[c.il,c.ilce].filter(Boolean).join(" / ")||"—"}</div></div>
       <div class="cari-info-item"><div class="k">Vergi No</div><div class="v">${c.vergiNo||"—"}</div></div>
       <div class="cari-info-item"><div class="k">Vergi Dairesi</div><div class="v">${htmlKacis(c.vergiDairesi||"")||"—"}</div></div>
+      <div class="cari-info-item"><div class="k">EDM Tedarikçi Kodu</div><div class="v" id="cari-edmonek-deger">…</div></div>
       <div class="cari-info-item"><div class="k">E-Fatura</div><div class="v" style="font-weight:800;color:${c.eFatura==='Evet'?'#15803d':'#b91c1c'}">${c.eFatura==='Evet'?'Evet (mükellef)':'Hayır'}</div></div>
       <div class="cari-info-item"><div class="k">E-Arşiv</div><div class="v" style="font-weight:800;color:${c.eArsiv==='Evet'?'#15803d':'#b91c1c'}">${c.eArsiv==='Evet'?'Evet (mükellef)':'Hayır'}</div></div>
       <div class="cari-info-item cari-limit-item"><div class="k">Kredi Limiti</div><div class="v">${c.krediLimiti>0 ? paraFormat(c.krediLimiti) + `<div class="cari-limit-kalan ${bakiye>c.krediLimiti?'hk-borc':'hk-alacak'}">${bakiye>c.krediLimiti ? 'Limit aşıldı: '+paraFormat(bakiye-c.krediLimiti) : 'Kalan: '+paraFormat(c.krediLimiti-Math.max(bakiye,0))}</div>` : "Limitsiz"}</div></div>
@@ -4999,6 +5000,8 @@ function cariDetayCiz(res){
   _hkProjeFiltre = "";
   document.getElementById("hk-proje-filtre").value = "";
   document.getElementById("hk-tablo-yeri").innerHTML = hareketTabloCiz(hareketler, c.id);
+  const edmEl = document.getElementById("cari-edmonek-deger"), edmCari = c.id;
+  cariEdmOnekleriGetir_(c.id).then(l=>{ const e = document.getElementById("cari-edmonek-deger"); if(e && _cariGuncelId===edmCari) e.textContent = l.length ? l.join(", ") : "—"; }).catch(()=>{ const e = document.getElementById("cari-edmonek-deger"); if(e) e.textContent = "—"; });
 }
 
 // Proje Kodu filtresi: girilen metni (büyük/küçük harf duyarsız, kısmi eşleşme) hareketin
@@ -5439,6 +5442,10 @@ function cariModalAc(editId, onKaydedildi, adIpucu){
           </div>
           <div class="fld"><label>Genel İskonto Oranı (%)</label><input id="cm-iskonto" type="number" min="0" max="100" step="0.01" value="${c?(c.iskontoOrani||''):''}" placeholder="0 = iskonto yok"></div>
           <div class="fld"><label>Kredi Limiti (₺)</label><input id="cm-kredilimiti" type="number" min="0" step="0.01" value="${c?(c.krediLimiti||''):''}" placeholder="0 = limitsiz"></div>
+          <div class="fld om-tam"><label>EDM Tedarikçi Kodu (Fatura Öneki)</label>
+            <input id="cm-edmonek" type="text" style="text-transform:uppercase" value="" data-yuklendi="${duzenle?'0':'1'}" data-orj="" placeholder="${duzenle?'Yükleniyor...':'Örn. CNY  (birden fazla ise virgülle: CNY, FYT)'}" ${duzenle?'disabled':''}>
+            <div class="om-not" style="margin:3px 0 0">Bu tedarikçinin e-fatura numarasının başındaki harfler (CNY2026000123 → CNY). Bekleyen Alış Faturaları bu önekle faturayı bu cariye otomatik eşler. Ayarlar > EDM Önek ile aynı kayıttır.</div>
+          </div>
           <div class="fld om-tam"><label>Not</label><textarea id="cm-not" rows="2">${c?c.not:''}</textarea></div>
         </div>
       </div>
@@ -5449,6 +5456,10 @@ function cariModalAc(editId, onKaydedildi, adIpucu){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  if(duzenle) cariEdmOnekleriGetir_(editId).then(l=>{
+    const e = document.getElementById("cm-edmonek"); if(!e) return;
+    e.value = l.join(", "); e.dataset.orj = l.join(","); e.dataset.yuklendi = "1"; e.disabled = false; e.placeholder = "Örn. CNY  (birden fazla ise virgülle: CNY, FYT)";
+  }).catch(()=>{ const e = document.getElementById("cm-edmonek"); if(e){ e.placeholder = "Yüklenemedi (kaydetmek önek alanını değiştirmez)"; } });
   try{ cmKimlikIpucu(); }catch(e){}
   setTimeout(()=>{ const e = document.getElementById("cm-ad"); if(e){ if(adIpucu && !e.value) e.value = adIpucu; e.focus(); } }, 50);
   // Yeni cari eklerken (düzenleme değil) modal açılır açılmaz, işaretli olan
@@ -5490,6 +5501,17 @@ function cariSonrakiNoKullan(tipParam){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
+// Carinin EDM tedarikçi kodları (fatura önekleri): Ayarlar > EDM Önek eşleştirmelerinden cariId'ye göre süzülür.
+function cariEdmOnekleriGetir_(cariId){
+  return cariApi("getEdmOnekEslesmeListesi").then(res=>{
+    if(!res || !res.ok) throw new Error((res&&res.hata)||"okunamadı");
+    return (res.kayitlar||[]).filter(k=>String(k.cariId)===String(cariId)).map(k=>k.onek);
+  });
+}
+function cariEdmOnekListesi_(metin){
+  const l = []; String(metin||"").split(/[,;\s]+/).forEach(x=>{ x = x.trim().toUpperCase(); if(x && !l.includes(x)) l.push(x); });
+  return l;
+}
 function cariKaydet(id){
   if(window._cariKaydediliyor) return;      // ★ işlem sürerken tekrar tıklama yok sayılır (birden fazla cari oluşmasın)
   const ad = document.getElementById("cm-ad").value.trim();
@@ -5519,8 +5541,19 @@ function cariKaydet(id){
   const serbest = ()=>{ window._cariKaydediliyor = false; if(kaydetBtn){ kaydetBtn.disabled = false; kaydetBtn.textContent = btnMetin; } };
   window._cariKaydediliyor = true;
   if(kaydetBtn){ kaydetBtn.disabled = true; kaydetBtn.textContent = "⏳ Kaydediliyor…"; }
+  const onekKutu = document.getElementById("cm-edmonek");
+  const onekYeni = onekKutu && onekKutu.dataset.yuklendi === "1" ? cariEdmOnekListesi_(onekKutu.value) : null;
+  const onekEski = onekKutu ? cariEdmOnekListesi_(onekKutu.dataset.orj) : [];
+  const onekDegisti = onekYeni !== null && onekYeni.join(",") !== onekEski.join(",");
   cariApi("saveCari", body).then(res=>{
     if(!res.ok){ serbest(); alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    if(!onekDegisti) return res;
+    return cariApi("kaydetCariEdmOnekler", {cariId: res.id || id, cariAd: body.ad, onekler: onekYeni}).then(r2=>{
+      if(!r2.ok) alert("Cari kaydedildi ama EDM tedarikçi kodu kaydedilemedi: "+(r2.hata||"bilinmiyor"));
+      return res;
+    }).catch(err=>{ alert("Cari kaydedildi ama EDM tedarikçi kodu kaydedilemedi: "+err.message); return res; });
+  }).then(res=>{
+    if(!res || !res.ok) return;
     window._cariKaydediliyor = false;
     const ov = document.getElementById("cari-modal-overlay"); if(ov) ov.remove();
     // ★ (1 Eki 2026) F1 Cari Rehberi / Bekleyen Fatura'dan açılan yeni cari: ekran değişmez, kart ilgili alana seçilir.
