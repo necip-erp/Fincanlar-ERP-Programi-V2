@@ -11351,7 +11351,7 @@ function alisBekleyenListesiYukle(){
 // (f.tedarikci) her zaman fatura sahibini yansıtmaz. Aksi halde eskisi gibi gönderen adı.
 function bfmFirmaAdi_(f){
   if(f.eslesmeKaynagi === "onek" && f.eslesenCariAd) return f.eslesenCariAd;
-  return f.tedarikci || "(Tedarikçi belirtilmemiş)";
+  return "Tanımlı olmayan cari";
 }
 function alisBekleyenFirmaFiltreDoldur(){
   const sel = document.getElementById("alis-bekleyen-firma-filtre");
@@ -11407,7 +11407,9 @@ function alisBekleyenListesiCiz(){
         <span style="font-size:14px;font-weight:700">${tarihGoster(f.tarih)}</span>
         <span style="font-size:12px;color:var(--text3)">Toplam ${f.kalemSayisi} Kalem</span>
         <span style="font-size:11.5px;font-weight:700;color:${durumRenk};background:${islendi?(f.durum==='Onaylandı'?'var(--green-l)':'#fde8e8'):'var(--bg3)'};padding:2px 9px;border-radius:20px">${islendi ? (f.durum==='Onaylandı'?'✓ İşlendi':'✖ Reddedildi') : 'Bekliyor'}</span>
+        ${!f.eslesenCariId ? `<span style="font-size:11.5px;font-weight:700;color:#b91c1c;background:#fee2e2;padding:2px 9px;border-radius:20px" title="Bu faturanın önekine bağlı bir cari tanımlı değil">Cari: Tanımlı olmayan cari${f.onek ? ` · önek ${f.onek}` : ' · önek yok'}</span>` : ``}
         ${f.eslesenCariAd ? `<span style="font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-l,#eef2ff);padding:2px 9px;border-radius:20px">Cari: ${f.eslesenCariAd}${f.eslesmeKaynagi==='onek' && f.onek ? ` · önek ${f.onek}` : ''}</span>` : ``}
+        ${(!f.eslesenCariId && f.tedarikci) ? `<span style="font-size:11px;color:var(--text3)" title="E-postadaki gönderen adı">Gönderen: ${htmlKacis(f.tedarikci)}</span>` : ``}
         ${(f.eslesmeKaynagi==='onek' && f.tedarikci && f.tedarikci.trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') !== (f.eslesenCariAd||'').trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr')) ? `<span style="font-size:11px;color:var(--text3)" title="E-postadaki gönderen adı">Gönderen: ${f.tedarikci}</span>` : ``}
       </div>
       <div style="margin-top:6px">
@@ -11770,7 +11772,7 @@ function alisBekleyenOnayModalAc(faturaNo){
       <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1.6fr;gap:10px;align-items:end">
         <div class="fld" style="position:relative;margin:0">
           <label>Bu fatura hangi cariye işlensin? *</label>
-          <input id="bfm-cari-arama" type="text" placeholder="Cari ara..." autocomplete="off" value="${htmlKacis(bfmCariEtiket_(f.eslesenCariId, f.eslesenCariAd||f.tedarikci||''))}" style="padding-right:34px"
+          <input id="bfm-cari-arama" type="text" placeholder="${f.eslesenCariId ? 'Cari ara...' : 'Tanımlı olmayan cari — cari ara/seç...'}" autocomplete="off" value="${f.eslesenCariId ? htmlKacis(bfmCariEtiket_(f.eslesenCariId, f.eslesenCariAd||'')) : ''}" style="padding-right:34px"
                  oninput="bfmCariAramaDegisti()"
                  onfocus="bfmCariOneriGoster()"
                  onblur="setTimeout(()=>bfmCariOneriKapat(),200)"
@@ -11781,6 +11783,7 @@ function alisBekleyenOnayModalAc(faturaNo){
             <span id="bfm-cari-kod-rozet" style="color:var(--text2)">${bfmCariKodRozetHTML_(f.eslesenCariId)}</span>
             <button type="button" class="btn" style="font-size:11px;padding:2px 8px;margin-left:auto" onclick="bfmCariKartiAc()" title="Cari kartı yoksa buradan aç; kaydedince bu faturaya otomatik seçilir">➕ Cari Kartı Aç</button>
           </div>
+          ${!f.eslesenCariId ? `<div style="font-size:11px;color:#b91c1c;margin-top:3px">⚠ Tanımlı olmayan cari${f.onek ? ` — önek "${f.onek}" hiçbir cariye bağlı değil` : ' — fatura numarasında önek yok'}${f.tedarikci ? ` (gönderen: ${htmlKacis(f.tedarikci)})` : ''}. Cariyi seçin ya da ➕ Cari Kartı Aç; onaylayınca önek bu cariye bağlanır.</div>` : ``}
           ${f.eslesenCariAd ? (f.eslesmeKaynagi === "onek"
             ? `<div style="font-size:11px;color:var(--green);margin-top:3px">✓ Önek "${f.onek}" → ${f.eslesenCariAd} eşleşmesine göre otomatik seçildi.${f.adEslesmesiCariAd ? ` <span style="color:var(--text3)">(Gönderen adı "${f.tedarikci}" ${f.adEslesmesiCariAd} cari'sine eşli — önek eşleşmesi önceliklidir.)</span>` : ``}</div>`
             : `<div style="font-size:11px;color:var(--green);margin-top:3px">✓ Daha önce "${f.tedarikci}" bu cariye işlenmiş, otomatik seçildi.</div>`) : ``}

@@ -5977,9 +5977,11 @@ function getBekleyenAlisFaturalariHesapla_() {
     const onekKaydi = f.onek ? onekMap[f.onek] : null;
     const onekCariGecerli = !!(onekKaydi && onekKaydi.cariId && (!cariListeSonuc.ok || cariByIdMap[onekKaydi.cariId]));
     let eslesenCariId = "", eslesmeKaynagi = "";
+    // ★ (11 Eki 2026) Gönderen adı eşleşmesi artık cari SEÇMEZ: tanımlı olmayan (hiçbir cariye bağlı olmayan) önekli/öneksiz fatura,
+    // daha önce başka bir cariye işlenmiş gönderen adı yüzünden yanlış cari adıyla görünüyordu. Önek tanımlı değilse "Tanımlı olmayan cari".
     if (onekCariGecerli) { eslesenCariId = onekKaydi.cariId; eslesmeKaynagi = "onek"; }
-    else if (adEslesenId) { eslesenCariId = adEslesenId; eslesmeKaynagi = "tedarikci"; }
     f.eslesenCariId = eslesenCariId;
+    f.tanimsizCari = !eslesenCariId;
     f.eslesmeKaynagi = eslesmeKaynagi;
     f.eslesenCariAd = eslesenCariId
       ? (cariByIdMap[eslesenCariId] ? cariByIdMap[eslesenCariId].ad : (eslesmeKaynagi === "onek" ? (onekKaydi.cariAd || "") : ""))
