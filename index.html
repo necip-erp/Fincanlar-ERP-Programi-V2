@@ -9081,6 +9081,45 @@ function karBelgeAd_(tip){ return tip === "Sipariş" ? "sipariş" : (tip === "Te
 function karBelgeAdBuyuk_(tip){ return tip === "Sipariş" ? "Sipariş" : (tip === "Teklif" ? "Teklif" : "Fatura"); }
 // Birim maliyet kutusu: Türkçe ondalık (virgül) gösterir/kabul eder; sunucu virgül ve noktayı çözümler.
 function karMaliyetYaz_(v){ return (v===null || v===undefined || v==="") ? "" : String(Math.round(v*10000)/10000).replace(".", ","); }
+// ── Belge karlılık tablosu sütunları (sürükleyerek yeri değiştirilir, sıra tarayıcıda saklanır) ──
+// Birim Satış = net satış ÷ miktar (KDV HARİÇ, iskonto sonrası) — Birim Maliyet (KDV hariç) ile doğrudan karşılaştırılır.
+const KB_SUTUNLAR = {
+  stokKodu:   { baslik:"Stok Kodu", hucre:(x)=>htmlKacis(x.k.stokKodu||'—') },
+  urun:       { baslik:"Ürün", hucre:(x)=>htmlKacis(x.k.urunAdi) },
+  miktar:     { baslik:"Miktar", sag:true, hucre:(x)=>miktarFormat(x.k.miktar) },
+  birimSatis: { baslik:"Birim Satış Fiyatı", sag:true, ipucu:"Net satış ÷ miktar: KDV HARİÇ, iskontolar düşülmüş birim satış fiyatı (Birim Maliyet ile aynı bazda)",
+    hucre:(x)=>{ if(!(x.k.miktar>0)) return '—'; const v = x.k.gelir / x.k.miktar, kdv = parseFloat(x.k.kdvOrani)||0;
+      return fiyatFormat(v) + (kdv>0 ? `<div style="font-size:10.5px;color:var(--text3);font-weight:400" title="KDV %${kdv} eklenmiş hali">KDV dahil ${fiyatFormat(v*(1+kdv/100))}</div>` : ''); } },
+  netSatis:   { baslik:"Net Satış", sag:true, hucre:(x)=>paraFormat(x.k.gelir), toplam:(o)=>paraFormat(o.b.gelir) },
+  birimMaliyet:{ baslik:"Birim Maliyet ⓘ", sag:true, ipucu:"Birim Maliyet = ürünün BİR birimi (adet, m², kutu…) için maliyet, KDV hariç. Maliyet = Birim Maliyet × Miktar. 'Sistem: …' yazan değer, stok girişlerinden (alış faturası, devir) hesaplanan FIFO/son giriş birim maliyetidir.",
+    hucre:(x,i,o)=>{
+      if(o.manuel){ const dv = (o.taslak[i]!==undefined) ? o.taslak[i] : karMaliyetYaz_(x.k.birimMaliyet.manuel);
+        return `<input type="text" inputmode="decimal" autocomplete="off" class="kar-man-input" data-i="${i}" value="${htmlKacis(dv)}" placeholder="${x.h.bm!==null ? 'Sistem: '+fiyatFormat(x.h.bm) : 'Maliyet gir'}" title="Bu ürünün BİR birimi için maliyet (KDV hariç, virgül kullanabilirsin: 2,99). Boş bırakırsan ürünün sistem maliyeti (FIFO, yoksa son giriş) kullanılır; sistemde de yoksa kâr hesaplanmaz." style="width:120px;text-align:right">`; }
+      return x.h.eksik ? '—' : fiyatFormat(x.h.bm) + (x.k.kaynak && x.k.kaynak[o.y]==="manuel" ? ' <span style="font-size:10.5px;color:var(--text3)" title="Sistemde maliyet yok; manuel girişteki değer kullanıldı">(manuel)</span>' : ''); } },
+  maliyet:    { baslik:"Maliyet", sag:true, hucre:(x)=>x.h.eksik ? '<span style="color:var(--text3)">—</span>' : paraFormat(x.h.maliyet), toplam:(o)=>paraFormat(o.toplamMaliyet) },
+  kar:        { baslik:"Kâr", sag:true, hucre:(x)=>x.h.eksik ? '<span style="color:var(--text3)">—</span>' : `<span class="${x.h.kar<0?'hk-borc':'hk-alacak'}">${paraFormat(x.h.kar)}</span>`,
+    toplam:(o)=>o.hepsiEksik ? '—' : `<span class="${o.toplamKar<0?'hk-borc':'hk-alacak'}">${paraFormat(o.toplamKar)}</span>` },
+  karYuzde:   { baslik:"Kâr %", sag:true, hucre:(x)=>x.h.eksik ? '<span style="color:var(--text3)">—</span>' : karYuzdeHtml_(x.h.marj), toplam:(o)=>o.hepsiEksik ? '—' : karYuzdeHtml_(o.toplamMarj) },
+  uyari:      { baslik:"Not", hucre:(x)=>(x.h.eksik ? '<span style="color:#b45309;font-weight:700">Maliyet girilmedi</span> ' : '') + (x.k.uyari||[]).map(htmlKacis).join(", ") }
+};
+const KB_VARSAYILAN_SIRA = ["stokKodu","urun","miktar","birimSatis","netSatis","birimMaliyet","maliyet","kar","karYuzde","uyari"];
+function karBelgeSutunSirasiAl_(){
+  let k = null; try{ k = JSON.parse(localStorage.getItem("kbSutunSirasi")||"null"); }catch(e){}
+  const sira = Array.isArray(k) ? k.filter(x=>KB_SUTUNLAR[x]) : [];
+  KB_VARSAYILAN_SIRA.forEach(x=>{ if(!sira.includes(x)) sira.splice(Math.min(KB_VARSAYILAN_SIRA.indexOf(x), sira.length), 0, x); });
+  return sira;
+}
+function karBelgeSutunSurukle_(kap, kaynak, hedef){
+  if(!kaynak || kaynak === hedef) return;
+  const sira = karBelgeSutunSirasiAl_(), k = sira.indexOf(kaynak), h = sira.indexOf(hedef);
+  if(k < 0 || h < 0) return;
+  sira.splice(h, 0, sira.splice(k,1)[0]);
+  try{ localStorage.setItem("kbSutunSirasi", JSON.stringify(sira)); }catch(e){}
+  const tas = {}; kap.querySelectorAll(".kar-man-input").forEach(inp=>{ tas[inp.dataset.i] = inp.value; });
+  kap._taslak = tas;
+  satisKarlilikCiz(kap, kap._karBelge || _karBelge);
+}
+let _kbDragKol = null;
 function satisKarlilikCiz(kap, b){
   kap = kap || document.getElementById("satis-karlilik-panel");
   b = b || _karBelge;
@@ -9095,6 +9134,8 @@ function satisKarlilikCiz(kap, b){
   const toplamKar = gelirBilinen - toplamMaliyet;
   const toplamMarj = gelirBilinen > 0 ? toplamKar / gelirBilinen * 100 : 0;
   const manuel = y === "manuel";
+  const sira = karBelgeSutunSirasiAl_();
+  const taslak = kap._taslak || {}; kap._taslak = null;   // sütun sürüklenince yazılmış ama kaydedilmemiş manuel değerler kaybolmasın
   const eksikSay = h.filter(x=>x.h.eksik).length;
   const hepsiEksik = eksikSay === h.length;
   const karKutu = (baslik, ana, alt)=>`<div class="cari-info-item"><div class="k">${baslik}</div><div class="v">${ana}${alt?`<div style="font-size:11px;color:var(--text3);font-weight:400">${alt}</div>`:''}</div></div>`;
@@ -9113,21 +9154,10 @@ function satisKarlilikCiz(kap, b){
       ${karKutu("Kâr Oranı (satışa göre)", hepsiEksik ? '<span style="color:var(--text3)">—</span>' : karYuzdeHtml_(toplamMarj), toplamMaliyet>0 && !hepsiEksik ? "Maliyete göre %"+(toplamKar/toplamMaliyet*100).toLocaleString("tr-TR",{maximumFractionDigits:1}) : "")}
     </div>
     <div style="overflow-x:auto">
-    <table class="hareket-tbl">
-      <thead><tr><th>Stok Kodu</th><th>Ürün</th><th style="text-align:right">Miktar</th><th style="text-align:right">Net Satış</th><th style="text-align:right;cursor:help" title="Birim Maliyet = ürünün BİR birimi (adet, m², kutu…) için maliyet, KDV hariç. Maliyet = Birim Maliyet × Miktar. 'Sistem: …' yazan değer, stok girişlerinden (alış faturası, devir) hesaplanan FIFO/son giriş birim maliyetidir.">Birim Maliyet ⓘ</th><th style="text-align:right">Maliyet</th><th style="text-align:right">Kâr</th><th style="text-align:right">Kâr %</th><th></th></tr></thead>
-      <tbody>${h.map((x,i)=>`<tr>
-        <td>${htmlKacis(x.k.stokKodu||'—')}</td><td>${htmlKacis(x.k.urunAdi)}</td>
-        <td style="text-align:right">${miktarFormat(x.k.miktar)}</td>
-        <td style="text-align:right">${paraFormat(x.k.gelir)}</td>
-        <td style="text-align:right">${manuel
-          ? `<input type="text" inputmode="decimal" autocomplete="off" class="kar-man-input" data-i="${i}" value="${karMaliyetYaz_(x.k.birimMaliyet.manuel)}" placeholder="${x.h.bm!==null ? 'Sistem: '+fiyatFormat(x.h.bm) : 'Maliyet gir'}" title="Bu ürünün BİR birimi için maliyet (KDV hariç, virgül kullanabilirsin: 2,99). Boş bırakırsan ürünün sistem maliyeti (FIFO, yoksa son giriş) kullanılır; sistemde de yoksa kâr hesaplanmaz." style="width:120px;text-align:right">`
-          : (x.h.eksik ? '—' : fiyatFormat(x.h.bm) + (x.k.kaynak && x.k.kaynak[y]==="manuel" ? ' <span style="font-size:10.5px;color:var(--text3)" title="Sistemde maliyet yok; manuel girişteki değer kullanıldı">(manuel)</span>' : ''))}</td>
-        <td style="text-align:right">${x.h.eksik ? '<span style="color:var(--text3)">—</span>' : paraFormat(x.h.maliyet)}</td>
-        <td style="text-align:right" class="${x.h.eksik?'':(x.h.kar<0?'hk-borc':'hk-alacak')}">${x.h.eksik ? '<span style="color:var(--text3)">—</span>' : paraFormat(x.h.kar)}</td>
-        <td style="text-align:right">${x.h.eksik ? '<span style="color:var(--text3)">—</span>' : karYuzdeHtml_(x.h.marj)}</td>
-        <td style="font-size:11px;color:var(--text3)">${x.h.eksik ? '<span style="color:#b45309;font-weight:700">Maliyet girilmedi</span> ' : ''}${(x.k.uyari||[]).map(htmlKacis).join(", ")}</td>
-      </tr>`).join("")}</tbody>
-      <tfoot><tr style="font-weight:800"><td colspan="3">Toplam</td><td style="text-align:right">${paraFormat(b.gelir)}</td><td></td><td style="text-align:right">${paraFormat(toplamMaliyet)}</td><td style="text-align:right" class="${hepsiEksik?'':(toplamKar<0?'hk-borc':'hk-alacak')}">${hepsiEksik ? '—' : paraFormat(toplamKar)}</td><td style="text-align:right">${hepsiEksik ? '—' : karYuzdeHtml_(toplamMarj)}</td><td></td></tr></tfoot>
+    <table class="hareket-tbl kar-belge-tbl">
+      <thead><tr>${sira.map(c=>`<th draggable="true" data-bkol="${c}" style="cursor:grab${KB_SUTUNLAR[c].sag?';text-align:right':''}" title="${htmlKacis(KB_SUTUNLAR[c].ipucu||'')}${KB_SUTUNLAR[c].ipucu?' · ':''}Sürükle: sütunun yerini değiştir">${KB_SUTUNLAR[c].baslik}</th>`).join("")}</tr></thead>
+      <tbody>${h.map((x,i)=>`<tr>${sira.map(c=>`<td${KB_SUTUNLAR[c].sag?' style="text-align:right"':(c==="uyari"?' style="font-size:11px;color:var(--text3)"':'')}>${KB_SUTUNLAR[c].hucre(x,i,{manuel,y,taslak})}</td>`).join("")}</tr>`).join("")}</tbody>
+      <tfoot><tr style="font-weight:800">${sira.map((c,ci)=>`<td${KB_SUTUNLAR[c].sag?' style="text-align:right"':''}>${ci===0 ? 'Toplam' : (KB_SUTUNLAR[c].toplam ? KB_SUTUNLAR[c].toplam({b,toplamMaliyet,toplamKar,toplamMarj,hepsiEksik}) : '')}</td>`).join("")}</tr></tfoot>
     </table></div>
     <div style="font-size:11.5px;color:var(--text3);margin-top:6px"><b>Birim Maliyet</b> = ürünün bir birimi (adet, m², kutu…) için maliyet, KDV hariç. <b>Maliyet</b> = Birim Maliyet × Miktar; <b>Kâr</b> = Net Satış − Maliyet. "Sistem: …" yazan değer, stok girişlerinden (alış faturası, devir) hesaplanan birim maliyettir.</div>
     ${manuel ? `<div class="btnrow" style="margin-top:8px">
@@ -9151,6 +9181,11 @@ function satisKarlilikCiz(kap, b){
           return `<tr style="cursor:pointer${m===y?';font-weight:700':''}" onclick="karYontemSec('${m}')"><td>${KAR_YONTEMLER[m]}${eks?' <span style="font-size:11px;color:#b45309">(maliyeti girilmeyen kalem var — kâr yalnız girilenlerden)</span>':''}</td><td style="text-align:right">${paraFormat(mm)}</td><td style="text-align:right" class="${kr<0?'hk-borc':'hk-alacak'}">${paraFormat(kr)}</td><td style="text-align:right">${karYuzdeHtml_(gb>0?kr/gb*100:0)}</td></tr>`;
         }).join("")}
       </tbody></table>`}`;
+  kap.querySelectorAll("th[data-bkol]").forEach(th=>{
+    th.addEventListener("dragstart", e=>{ _kbDragKol = th.dataset.bkol; try{ e.dataTransfer.setData("text/plain","kolon"); e.dataTransfer.effectAllowed="move"; }catch(x){} });
+    th.addEventListener("dragover", e=>{ if(_kbDragKol) e.preventDefault(); });
+    th.addEventListener("drop", e=>{ e.preventDefault(); const k = _kbDragKol; _kbDragKol = null; karBelgeSutunSurukle_(kap, k, th.dataset.bkol); });
+  });
 }
 function satisKarlilikManuelDoldur(kaynak){
   if(!_karBelge) return;

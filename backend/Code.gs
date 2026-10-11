@@ -8764,7 +8764,7 @@ function karlilikHesapla_(ss, belgeIdler) {
         manuel: man !== null ? "manuel" : (sistemIlk !== null ? "sistem" : "")
       };
       return { kalemId: String(k[0] || ""), anahtar: anahtar, stokKodu: kod, urunAdi: String(k[2] || ""), miktar: miktar, birim: String(k[4] || ""),
-        birimFiyat: parseFloat(k[5]) || 0, gelir: gelir, birimMaliyet: m, etkin: etkin, kaynak: kaynak, uyari: uyari };
+        birimFiyat: parseFloat(k[5]) || 0, kdvOrani: parseFloat(k[8]) || 0, gelir: gelir, birimMaliyet: m, etkin: etkin, kaynak: kaynak, uyari: uyari };
     });
     const toplam = { fifo: 0, sonGiris: 0, manuel: 0 };
     const eksik = { fifo: 0, sonGiris: 0, manuel: 0 };
