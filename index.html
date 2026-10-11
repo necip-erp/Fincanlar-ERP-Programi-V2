@@ -353,6 +353,12 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
 .sr-d-diger{background:var(--bg3);color:var(--text2)}
 .sr-alt{display:flex;gap:22px;flex-wrap:wrap;padding:9px 16px;border-top:2px solid var(--rp-th-bd,#9db8dd);background:var(--rp-foot,#e8eff9);font-size:13px;color:var(--text2)}
 .sr-alt b{color:var(--text)}
+/* ── ★ (11 Eki 2026) Tahsilat / Ödeme / Cari: soldaki menü yerine Satış'taki gibi geniş LİSTE (rapor) ── */
+#mod-tahsilat>.cari-list-panel,#mod-odeme>.cari-list-panel,#mod-cari>.cari-list-panel{display:none!important}
+#mod-tahsilat>.lr-view,#mod-odeme>.lr-view,#mod-cari>.lr-view{display:none;flex:1;min-width:0;flex-direction:column;overflow:hidden}
+#mod-tahsilat.lr-liste>.lr-view,#mod-odeme.lr-liste>.lr-view,#mod-cari.lr-liste>.lr-view{display:flex}
+#mod-tahsilat.lr-liste>.cari-detail-panel,#mod-odeme.lr-liste>.cari-detail-panel,#mod-cari.lr-liste>.cari-detail-panel{display:none!important}
+.lr-view .sr-tbl tr.lr-daha td{text-align:center;cursor:pointer;color:var(--blue);font-weight:700}
 #satis-view .cari-list-panel{display:none}
 
 /* ── SATIŞ MODÜLÜ ── */
@@ -1194,6 +1200,7 @@ setInterval(topbarSaatGuncelle, 10000);
     <div class="cari-detail-panel" id="cari-detail-panel">
       <div class="cari-detail-empty"><span class="ic">👥</span><p>Detayları görmek için soldan bir cari seçin</p></div>
     </div>
+    <div class="lr-view" id="lr-cari"></div>
   </div>
   <div class="modview" id="mod-tahsilat">
     <div class="cari-list-panel">
@@ -1207,6 +1214,7 @@ setInterval(topbarSaatGuncelle, 10000);
     <div class="cari-detail-panel" id="tahsilat-detail-panel">
       <div class="cari-detail-empty"><span class="ic">💰</span><p>Detayları görmek için soldan bir tahsilat seçin</p></div>
     </div>
+    <div class="lr-view" id="lr-tahsilat"></div>
   </div>
   <div class="modview" id="mod-odeme">
     <div class="cari-list-panel">
@@ -1220,6 +1228,7 @@ setInterval(topbarSaatGuncelle, 10000);
     <div class="cari-detail-panel" id="odeme-detail-panel">
       <div class="cari-detail-empty"><span class="ic">💳</span><p>Detayları görmek için soldan bir ödeme seçin</p></div>
     </div>
+    <div class="lr-view" id="lr-odeme"></div>
   </div>
   <div class="modview" id="mod-ceksenet">
     <div id="ceksenet-secim" class="finans-panel">
@@ -22206,7 +22215,7 @@ function akHesapla(sorgu){
     } else {
       akCariler(ad).slice(0,6).forEach(c=>{
         sonuc.push({ic:"📞", ad:c.ad + " — " + (c.telefon || "telefon kayıtlı değil"), alt:(c.cariKodu?c.cariKodu+" · ":"")+"Enter: numarayı kopyala ve cariyi aç", etiket:"Telefon", puan:300,
-          sec:()=>{ if(c.telefon){ try{ navigator.clipboard.writeText(String(c.telefon)); }catch(_){} } modulAc("cari"); setTimeout(()=>{ try{ cariAc(c.id); }catch(_){} }, 250); }});
+          sec:()=>{ if(c.telefon){ try{ navigator.clipboard.writeText(String(c.telefon)); }catch(_){} } try{ cariYeniSekmedeAc(c.id); }catch(_){} }});
       });
     }
   }
@@ -22242,7 +22251,7 @@ function akHesapla(sorgu){
   // 5) Cari adı eşleşmeleri (her zaman en altta)
   if(norm.length >= 2 && sonuc.filter(x=>x.puan>=100).length < 3){
     akCariler(q).slice(0,3).forEach(c=>{
-      sonuc.push({ic:"👥", ad:c.ad, alt:(c.cariKodu?c.cariKodu+" · ":"")+(c.telefon||""), etiket:"Cari", puan:20, sec:()=>{ modulAc("cari"); setTimeout(()=>{ try{ cariAc(c.id); }catch(_){} }, 250); }});
+      sonuc.push({ic:"👥", ad:c.ad, alt:(c.cariKodu?c.cariKodu+" · ":"")+(c.telefon||""), etiket:"Cari", puan:20, sec:()=>{ try{ cariYeniSekmedeAc(c.id); }catch(_){} }});
     });
   }
   sonuc.sort((a,b)=>b.puan-a.puan);
@@ -22439,6 +22448,303 @@ document.addEventListener("keydown", function(e){
     });
   }
   new MutationObserver(()=>{ if(!bekliyor){ bekliyor = true; setTimeout(tara, 80); } }).observe(document.body, {childList:true, subtree:true});
+})();
+</script>
+
+<script>
+// ══════════════ LİSTE RAPORU: Tahsilat / Ödeme / Cari (11-12 Eki 2026) ══════════════
+// Soldaki menü yerine Satış'taki gibi geniş liste: filtre, cari HER ZAMAN cari koduyla, başlık sürükle (yer değiştir),
+// başlığa tıkla (önce büyükten küçüğe, tekrar küçükten büyüğe), kayda tıkla → kayıt YENİ sekmede açılır, liste yerinde kalır.
+(function(){
+  const norm = t=>String(t==null?"":t).replace(/[İIıi]/g,"i").toLocaleLowerCase("tr");
+  const kisalt = (t,n)=>{ t = String(t||""); return t.length > n ? t.slice(0,n-1)+"…" : t; };
+  const kimlik = r=>String(r.id);
+  const metin = (ad, f)=>({baslik:ad, deger:f, hucre:r=>htmlKacis(f(r))});
+  const kodCol = ()=>({baslik:"Cari Kodu", deger:r=>r.cariKodu||"", hucre:r=>htmlKacis(r.cariKodu||""), sinif:"sr-kod"});
+  const paraCol = (ad,f)=>({baslik:ad, sayi:true, sag:true, deger:r=>+f(r)||0, hucre:r=>paraFormat(f(r)||0)});
+  const tarihCol = (ad,f)=>({baslik:ad, deger:r=>String(f(r)||""), hucre:r=>tarihGoster(f(r)), excel:r=>tarihGoster(f(r))});
+  const cariF = {id:"cari", etiket:"Cari (kod / ünvan)", yer:"Cari kodu veya ünvanı", esles:(r,v)=>norm(r.cariKodu).includes(v)||norm(r.cariAd).includes(v)};
+  const toplamAlt = (l, ek)=>`<span><b>${l.length}</b> kayıt</span>${ek||""}`;
+
+  const TANIM = {
+    tahsilat:{
+      ikon:"💰", baslik:"Tahsilat Raporu", yeni:"➕ Yeni Tahsilat", yeniFn:()=>tahsilatModalAc(), dosya:"Tahsilat_Raporu",
+      liste:()=>_tahsilatListe, yukle:()=>tahsilatListesiYukle(), items:"tahsilat-items",
+      tarih:r=>String(r.tarih||"").slice(0,10),
+      sutunlar:{
+        cariKodu:kodCol(), cariAd:metin("Cari Ünvanı", r=>r.cariAd||""),
+        tarih:tarihCol("Tarih", r=>r.tarih),
+        yontem:{baslik:"Yöntem", deger:r=>r.yontem||"", hucre:r=>r.yontem?`<span class="od-yontem">${htmlKacis(r.yontem)}</span>`:""},
+        tutar:paraCol("Tutar", r=>r.tutar),
+        projeKodu:metin("Proje Kodu", r=>r.projeKodu||""), aciklama:metin("Açıklama", r=>r.aciklama||""),
+        kayit:tarihCol("Kayıt Tarihi", r=>r.kayitTarihi)
+      },
+      sira:["cariKodu","cariAd","tarih","yontem","tutar","projeKodu","aciklama","kayit"],
+      filtreler:[cariF,
+        {id:"yontem", etiket:"Yöntem", tip:"secim", deger:r=>r.yontem||"", esles:(r,v)=>(r.yontem||"")===v},
+        {id:"ara", etiket:"Açıklama / Proje", yer:"Açıklama veya proje kodu", esles:(r,v)=>norm(r.aciklama).includes(v)||norm(r.projeKodu).includes(v)}],
+      alt:l=>{
+        const y = {}; l.forEach(r=>{ y[r.yontem||"—"] = (y[r.yontem||"—"]||0) + (+r.tutar||0); });
+        return toplamAlt(l, Object.keys(y).sort().map(k=>`<span>${htmlKacis(k)}: <b>${paraFormat(y[k])}</b></span>`).join("")
+          + `<span style="margin-left:auto">Toplam Tahsilat: <b>${paraFormat(l.reduce((a,r)=>a+(+r.tutar||0),0))}</b></span>`);
+      },
+      ac:r=>kayitSekmesindeAc("tahsilat","💰","Tahsilat "+kisalt(r.cariKodu||r.cariAd||"",14),"TAHSILAT:"+r.id,()=>{ if(!_tahsilatYuklendi) tahsilatListesiYukle(); tahsilatAc(r.id); })
+    },
+    odeme:{
+      ikon:"💳", baslik:"Ödeme Raporu", yeni:"➕ Yeni Ödeme", yeniFn:()=>odemeModalAc(), dosya:"Odeme_Raporu",
+      liste:()=>_odemeListe, yukle:()=>odemeListesiYukle(), items:"odeme-items",
+      tarih:r=>String(r.tarih||"").slice(0,10),
+      sutunlar:{
+        cariKodu:kodCol(), cariAd:metin("Cari / Hedef", r=>r.cariAd||""),
+        tarih:tarihCol("Tarih", r=>r.tarih),
+        yontem:{baslik:"Yöntem", deger:r=>r.yontem||"", hucre:r=>r.yontem?`<span class="od-yontem">${htmlKacis(r.yontem)}</span>`:""},
+        hedef:metin("Ödeme Hedefi", r=>r.hedefTipi||"Cari"),
+        tutar:paraCol("Tutar", r=>r.tutar),
+        seriNo:metin("Seri No", r=>r.seriNo||""), projeKodu:metin("Proje Kodu", r=>r.projeKodu||""),
+        aciklama:metin("Açıklama", r=>r.aciklama||""), kayit:tarihCol("Kayıt Tarihi", r=>r.kayitTarihi)
+      },
+      sira:["cariKodu","cariAd","tarih","yontem","hedef","tutar","seriNo","projeKodu","aciklama","kayit"],
+      filtreler:[cariF,
+        {id:"yontem", etiket:"Yöntem", tip:"secim", deger:r=>r.yontem||"", esles:(r,v)=>(r.yontem||"")===v},
+        {id:"hedef", etiket:"Ödeme Hedefi", tip:"secim", deger:r=>r.hedefTipi||"Cari", esles:(r,v)=>(r.hedefTipi||"Cari")===v},
+        {id:"ara", etiket:"Açıklama / Seri No", yer:"Açıklama, seri no, proje", esles:(r,v)=>norm(r.aciklama).includes(v)||norm(r.seriNo).includes(v)||norm(r.projeKodu).includes(v)}],
+      alt:l=>{
+        const y = {}; l.forEach(r=>{ y[r.yontem||"—"] = (y[r.yontem||"—"]||0) + (+r.tutar||0); });
+        return toplamAlt(l, Object.keys(y).sort().map(k=>`<span>${htmlKacis(k)}: <b>${paraFormat(y[k])}</b></span>`).join("")
+          + `<span style="margin-left:auto">Toplam Ödeme: <b>${paraFormat(l.reduce((a,r)=>a+(+r.tutar||0),0))}</b></span>`);
+      },
+      ac:r=>kayitSekmesindeAc("odeme","💳","Ödeme "+kisalt(r.cariKodu||r.cariAd||"",14),"ODEME:"+r.id,()=>{ if(!_odemeYuklendi) odemeListesiYukle(); odemeAc(r.id); })
+    },
+    cari:{
+      ikon:"👥", baslik:"Cari Listesi", yeni:"➕ Yeni Cari", yeniFn:()=>cariModalAc(), dosya:"Cari_Listesi",
+      liste:()=>_cariListe, yukle:()=>cariListesiYukle(), items:"cari-items", tarih:null,
+      sutunlar:{
+        cariKodu:{baslik:"Cari Kodu", deger:c=>c.cariKodu||"", hucre:c=>htmlKacis(c.cariKodu||""), sinif:"sr-kod"},
+        ad:metin("Cari Ünvanı", c=>c.ad||""), tip:metin("Tür", c=>c.tip||""), telefon:metin("Telefon", c=>c.telefon||""),
+        yer:metin("İl / İlçe", c=>[c.il,c.ilce].filter(Boolean).join(" / ")),
+        bakiye:{baslik:"Bakiye", sayi:true, sag:true, deger:c=>+c.bakiye||0, hucre:c=>`<b class="${bakiyeSinifi(+c.bakiye||0)}">${paraFormat(c.bakiye||0)}</b>`},
+        krediLimiti:paraCol("Kredi Limiti", c=>c.krediLimiti),
+        eFatura:metin("e-Fatura", c=>c.eFatura||""), eArsiv:metin("e-Arşiv", c=>c.eArsiv||""),
+        sonIslem:tarihCol("Son İşlem", c=>c.sonIslemTarihi),
+        durum:{baslik:"Durum", deger:c=>c.aktif===false?"Pasif":((c.krediLimiti>0&&c.bakiye>c.krediLimiti)?"Limit aşıldı":"Aktif"),
+          hucre:c=>c.aktif===false?'<span class="sr-d sr-d-diger">⏸ Pasif</span>':((c.krediLimiti>0&&c.bakiye>c.krediLimiti)?'<span class="sr-d sr-d-haber-verecek">⚠️ Limit aşıldı</span>':"")}
+      },
+      sira:["cariKodu","ad","tip","telefon","yer","bakiye","krediLimiti","eFatura","eArsiv","sonIslem","durum"],
+      filtreler:[
+        {id:"ara", etiket:"Ara (kod, ünvan, telefon, adres)", yer:"Cari ara...", esles:(c,v)=>esnekEslesirMi(c.ad,v)||(c.telefon||"").includes(v)||norm(c.cariKodu).includes(v)||esnekEslesirMi(c.adres,v)},
+        {id:"tur", etiket:"Tür", tip:"secim", tumu:"Hepsi", daima:true,
+          sabit:[["Müşteri","Müşteri"],["Tedarikçi","Tedarikçi"],["Personel","Personel"],["__pasif","⏸ Pasif Cariler"]],
+          esles:(c,v)=> v==="__pasif" ? c.aktif===false : (c.aktif!==false && (!v || c.tip===v))},
+        {id:"bakiye", etiket:"Bakiye", tip:"secim", sabit:[["borc","Borçlu (bakiye > 0)"],["alacak","Alacaklı (bakiye < 0)"],["sifir","Bakiyesi sıfır"]],
+          esles:(c,v)=> v==="borc" ? (c.bakiye>0.005) : v==="alacak" ? (c.bakiye<-0.005) : Math.abs(c.bakiye||0)<=0.005}],
+      alt:l=>{
+        const b = l.reduce((a,c)=>a+(+c.bakiye||0),0), borc = l.reduce((a,c)=>a+Math.max(0,+c.bakiye||0),0), alacak = l.reduce((a,c)=>a+Math.min(0,+c.bakiye||0),0);
+        return toplamAlt(l, `<span style="margin-left:auto">Toplam Borç Bakiyesi: <b class="bakiye-pos">${paraFormat(borc)}</b></span><span>Toplam Alacak Bakiyesi: <b class="bakiye-neg">${paraFormat(Math.abs(alacak))}</b></span><span>Net: <b>${paraFormat(b)}</b></span>`);
+      },
+      ac:c=>kayitSekmesindeAc("cari","👥",kisalt((c.cariKodu?c.cariKodu+" · ":"")+c.ad,34),"CARI:"+c.id,()=>{ if(!_cariYuklendi) cariListesiYukle(); if(!_plasiyerYuklendi) plasiyerListesiYukle(); cariAc(c.id); })
+    }
+  };
+  const MODLAR = Object.keys(TANIM);
+  const LS = {};
+  const st = m=>LS[m] || (LS[m] = {sirala:null, tarihTumu:false, limit:500, drag:null, kuruldu:false, geldi:false});
+  const kap = m=>document.getElementById("lr-"+m);
+  const fid = (m,x)=>"lr-"+m+"-"+x;
+  const val = id=>{ const e = document.getElementById(id); return e ? e.value : ""; };
+
+  function sutunSirasi(m){
+    const T = TANIM[m]; let k = null;
+    try{ k = JSON.parse(localStorage.getItem("lrSutunSirasi_"+m)||"null"); }catch(e){}
+    const sira = Array.isArray(k) ? k.filter(x=>T.sutunlar[x]) : [];
+    T.sira.forEach(x=>{ if(!sira.includes(x)) sira.push(x); });
+    return sira;
+  }
+  function kur(m){
+    const T = TANIM[m], s = st(m), k = kap(m);
+    if(s.kuruldu || !k) return;
+    s.kuruldu = true;
+    const filtreHtml = T.filtreler.map(f=>{
+      const id = fid(m,"f-"+f.id);
+      if(f.tip === "secim") return `<div class="fld"><label>${f.etiket}</label><select id="${id}" onchange="lrFiltre('${m}')"><option value="">${f.tumu||"Tümü"}</option>${(f.sabit||[]).map(([d,e])=>`<option value="${htmlKacis(d)}">${htmlKacis(e)}</option>`).join("")}</select></div>`;
+      return `<div class="fld"><label>${f.etiket}</label><input id="${id}" autocomplete="off" oninput="lrFiltre('${m}')" placeholder="${htmlKacis(f.yer||"")}"></div>`;
+    }).join("");
+    const tarihHtml = T.tarih ? `<div class="fld"><label>Başlangıç</label><input type="date" id="${fid(m,"bas")}" onchange="lrTarihDegisti('${m}')"></div>
+      <div class="fld"><label>Bitiş</label><input type="date" id="${fid(m,"bit")}" onchange="lrTarihDegisti('${m}')"></div>
+      <div class="sr-hizli"><button class="btn" onclick="lrTarihHizli('${m}','bugun')">Bugün</button><button class="btn" onclick="lrTarihHizli('${m}','7')">7 gün</button><button class="btn" onclick="lrTarihHizli('${m}','30')">30 gün</button><button class="btn" onclick="lrTarihHizli('${m}','yil')">Bu yıl</button><button class="btn" onclick="lrTarihHizli('${m}','tumu')">Tümü</button></div>` : "";
+    k.innerHTML = `<div class="sr-ust"><div class="sr-baslik">${T.ikon} ${T.baslik}</div>
+        <button class="btn btn-primary" style="margin-left:auto" onclick="lrYeni('${m}')">${T.yeni}</button>
+        <button class="btn" onclick="lrExcel('${m}')" title="Listeyi Excel'e aktar">📊 Excel</button>
+        <button class="btn" onclick="lrYazdir('${m}')" title="Listeyi yazdır">🖨 Yazdır</button>
+        <button class="btn" onclick="lrYenile('${m}')" title="Listeyi sunucudan yenile">↻</button>
+        <button class="btn" onclick="lrSutunSifirla('${m}')" title="Sütun sırasını sıfırla">⇄</button></div>
+      <div class="sr-filtre">${tarihHtml}${filtreHtml}<button class="btn" onclick="lrTemizle('${m}')">✕ Temizle</button></div>
+      <div class="sr-icerik" id="${fid(m,"icerik")}"><div class="cari-empty">Yükleniyor...</div></div>
+      <div class="sr-alt" id="${fid(m,"alt")}"></div>`;
+    // Veri yüklenirken hata olursa (eski gizli liste hata yazar) raporda da göster
+    const it = document.getElementById(T.items);
+    if(it) new MutationObserver(()=>{ const t = it.textContent||""; if(/^\s*(Hata|Bağlantı hatası)/.test(t)){ s.hata = t.trim(); ciz(m); } else if(s.hata){ s.hata = null; } }).observe(it, {childList:true});
+  }
+  function tarihHizli(m, tur, sessiz){
+    const b = document.getElementById(fid(m,"bas")), t = document.getElementById(fid(m,"bit")); if(!b||!t) return;
+    const s = st(m), bugun = new Date(), iso = d=>tarihIsoYaz_(d);
+    s.tarihTumu = false;
+    if(tur === "tumu"){ b.value = ""; t.value = ""; s.tarihTumu = true; }
+    else if(tur === "bugun"){ b.value = t.value = iso(bugun); }
+    else if(tur === "yil"){ b.value = bugun.getFullYear()+"-01-01"; t.value = iso(bugun); }
+    else { const g = new Date(bugun); g.setDate(g.getDate() - (parseInt(tur,10)||30)); b.value = iso(g); t.value = iso(bugun); }
+    if(!sessiz) ciz(m);
+  }
+  function suz(m){
+    const T = TANIM[m];
+    const bas = val(fid(m,"bas")), bit = val(fid(m,"bit"));
+    const vals = T.filtreler.map(f=>{ let v = val(fid(m,"f-"+f.id)); if(f.tip !== "secim") v = norm(v.trim()); return [f,v]; });
+    return (T.liste()||[]).filter(r=>{
+      if(T.tarih){ const t = T.tarih(r); if(bas && t < bas) return false; if(bit && t > bit) return false; }
+      for(const [f,v] of vals){ if(!(f.daima || v)) continue; if(!f.esles(r,v)) return false; }
+      return true;
+    });
+  }
+  function siralaListe(m, liste){
+    const s = st(m), T = TANIM[m];
+    if(!s.sirala || !T.sutunlar[s.sirala.k]) return liste;
+    const kol = T.sutunlar[s.sirala.k], c = s.sirala.yon === "azalan" ? -1 : 1;
+    return liste.slice().sort((x,y)=>{ const a = kol.deger(x), b = kol.deger(y); return c * (kol.sayi ? (a-b) : String(a).localeCompare(String(b),"tr")); });
+  }
+  function ciz(m){
+    const T = TANIM[m], s = st(m), k = kap(m);
+    if(!k || !s.kuruldu || !k.offsetParent) return;
+    // Yontem / hedef gibi seçenekleri veriden çıkar (seçili değer korunur)
+    T.filtreler.forEach(f=>{
+      if(f.tip !== "secim" || f.sabit) return;
+      const sel = document.getElementById(fid(m,"f-"+f.id)); if(!sel) return;
+      const mevcut = sel.value, uniq = Array.from(new Set((T.liste()||[]).map(f.deger).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"tr"));
+      sel.innerHTML = '<option value="">Tümü</option>' + uniq.map(d=>`<option value="${htmlKacis(d)}">${htmlKacis(d)}</option>`).join("");
+      sel.value = uniq.includes(mevcut) ? mevcut : "";
+    });
+    const tum = T.liste()||[], liste = siralaListe(m, suz(m)), sira = sutunSirasi(m);
+    const ok = x=> (s.sirala && s.sirala.k === x) ? (s.sirala.yon === "azalan" ? " ▼" : " ▲") : "";
+    const icerik = document.getElementById(fid(m,"icerik"));
+    if(s.hata && !tum.length){
+      icerik.innerHTML = '<div class="cari-empty">'+htmlKacis(s.hata)+'</div>';
+    } else if(!tum.length && !s.geldi){
+      icerik.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
+    } else if(!liste.length){
+      icerik.innerHTML = '<div class="cari-empty">Bu filtrelerle kayıt bulunamadı.'+(T.tarih?' Tarih aralığını genişletmek için "Tümü"ne basın.':'')+'</div>';
+    } else {
+      const gor = liste.slice(0, s.limit);
+      icerik.innerHTML = `<table class="sr-tbl"><thead><tr>${sira.map(x=>`<th draggable="true" data-lrkol="${x}" class="${T.sutunlar[x].sag?'sag':''}" onclick="lrSirala('${m}','${x}')" title="Tıkla: sırala (büyükten küçüğe / küçükten büyüğe) · Sürükle: sütunun yerini değiştir">${T.sutunlar[x].baslik}${ok(x)}</th>`).join("")}</tr></thead>
+        <tbody>${gor.map(r=>`<tr onclick="lrAc('${m}','${htmlKacis(kimlik(r))}')" title="Tıkla: kayıt yeni sekmede açılır (bu liste yerinde kalır)">${sira.map(x=>{ const c = T.sutunlar[x]; return `<td class="${(c.sag?'sag ':'')+(c.sinif||'')}">${c.hucre(r)}</td>`; }).join("")}</tr>`).join("")}
+        ${liste.length > gor.length ? `<tr class="lr-daha" onclick="lrDahaFazla('${m}')"><td colspan="${sira.length}">+ ${liste.length-gor.length} kayıt daha göster</td></tr>` : ""}</tbody></table>`;
+      icerik.querySelectorAll("th[data-lrkol]").forEach(th=>{
+        th.addEventListener("dragstart", e=>{ s.drag = th.dataset.lrkol; try{ e.dataTransfer.setData("text/plain","kolon"); e.dataTransfer.effectAllowed="move"; }catch(x){} });
+        th.addEventListener("dragover", e=>{ if(!s.drag) return; e.preventDefault(); th.style.outline = "2px dashed var(--blue)"; th.style.outlineOffset = "-2px"; });
+        th.addEventListener("dragleave", ()=>{ th.style.outline = ""; });
+        th.addEventListener("dragend", ()=>{ s.drag = null; icerik.querySelectorAll("th").forEach(x=>x.style.outline=""); });
+        th.addEventListener("drop", e=>{ e.preventDefault(); const a = s.drag; s.drag = null; surukle(m, a, th.dataset.lrkol); });
+      });
+    }
+    document.getElementById(fid(m,"alt")).innerHTML = T.alt(liste);
+  }
+  function surukle(m, kaynak, hedef){
+    if(!kaynak || kaynak === hedef) return;
+    const sira = sutunSirasi(m), a = sira.indexOf(kaynak), b = sira.indexOf(hedef);
+    if(a < 0 || b < 0) return;
+    sira.splice(b, 0, sira.splice(a,1)[0]);
+    try{ localStorage.setItem("lrSutunSirasi_"+m, JSON.stringify(sira)); }catch(e){}
+    ciz(m);
+  }
+  function goster(m){
+    const T = TANIM[m], mod = document.getElementById("mod-"+m);
+    if(!mod || !kap(m)) return;
+    kur(m);
+    mod.classList.add("lr-liste");
+    const s = st(m);
+    if(T.tarih){ const b = document.getElementById(fid(m,"bas")), t = document.getElementById(fid(m,"bit")); if(b && t && !b.value && !t.value && !s.tarihTumu) tarihHizli(m,"30",true); }
+    ciz(m);
+    if(window.matchMedia && window.matchMedia("(pointer: fine)").matches){
+      const e = document.getElementById(fid(m,"f-"+T.filtreler[0].id)); if(e && e.tagName === "INPUT") setTimeout(()=>e.focus(), 0);
+    }
+  }
+  function kayitAc(m, id){
+    const T = TANIM[m];
+    const r = (T.liste()||[]).find(x=>String(x.id) === String(id)) || {id:id, cariAd:"", cariKodu:"", ad:"Cari"};
+    T.ac(r);
+  }
+
+  // ── Düğmelerin çağırdığı genel fonksiyonlar ──
+  window.lrFiltre = m=>{ st(m).limit = 500; ciz(m); };
+  window.lrTarihDegisti = m=>{ const s = st(m); s.tarihTumu = !val(fid(m,"bas")) && !val(fid(m,"bit")); s.limit = 500; ciz(m); };
+  window.lrTarihHizli = (m,t)=>{ st(m).limit = 500; tarihHizli(m,t); };
+  window.lrTemizle = m=>{
+    TANIM[m].filtreler.forEach(f=>{ const e = document.getElementById(fid(m,"f-"+f.id)); if(e) e.value = ""; });
+    st(m).limit = 500;
+    if(TANIM[m].tarih) tarihHizli(m,"30",true);
+    ciz(m);
+  };
+  window.lrSirala = (m,k)=>{ const s = st(m); s.sirala = (s.sirala && s.sirala.k === k && s.sirala.yon === "azalan") ? {k, yon:"artan"} : {k, yon:"azalan"}; ciz(m); };
+  window.lrAc = (m,id)=>kayitAc(m,id);
+  window.lrYeni = m=>TANIM[m].yeniFn();
+  window.lrYenile = m=>TANIM[m].yukle();
+  window.lrDahaFazla = m=>{ st(m).limit += 500; ciz(m); };
+  window.lrSutunSifirla = m=>{ try{ localStorage.removeItem("lrSutunSirasi_"+m); }catch(e){} ciz(m); };
+  window.lrYazdir = m=>tablolariYazdir_(TANIM[m].baslik, document.getElementById(fid(m,"icerik")));
+  window.lrExcel = m=>{
+    if(typeof XLSX === "undefined"){ alert("Excel kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin."); return; }
+    const T = TANIM[m], sira = sutunSirasi(m), liste = siralaListe(m, suz(m));
+    if(!liste.length){ alert("Aktarılacak kayıt yok."); return; }
+    const aoa = [sira.map(x=>T.sutunlar[x].baslik)].concat(liste.map(r=>sira.map(x=>{ const c = T.sutunlar[x]; return c.excel ? c.excel(r) : c.deger(r); })));
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = sira.map(x=>({wch: /ad|cariAd|aciklama/.test(x) ? 34 : 14}));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, T.baslik.slice(0,28));
+    XLSX.writeFile(wb, T.dosya+".xlsx");
+  };
+
+  // ── Mevcut akışlara bağlama ──
+  MODLAR.forEach(m=>{
+    // Veri geldikçe (veya her yeniden çizimde) rapor tazelenir
+    const ad = m+"ListesiCiz", o = window[ad];
+    if(typeof o === "function") window[ad] = function(){ const r = o.apply(this, arguments); try{ st(m).geldi = true; ciz(m); }catch(e){ console.error(e); } return r; };
+    // Liste açıkken bir kayıt açılmak istenirse (kayıttan sonra vb.) kayıt yeni sekmede açılır; liste yerinde kalır
+    const acAd = m+"Ac", oAc = window[acAd];
+    if(typeof oAc === "function") window[acAd] = function(id){
+      const mod = document.getElementById("mod-"+m);
+      if(!_kayitAcCalisiyor && mod && mod.classList.contains("lr-liste") && _aktifSekme === m){
+        try{ kayitAc(m, id); return; }catch(e){ console.error(e); }
+      }
+      if(mod) mod.classList.remove("lr-liste");
+      return oAc.apply(this, arguments);
+    };
+    // "← Listeye dön" (mobil / Esc): liste görünümüne geç
+    const dAd = m+"ListeyeDon", oD = window[dAd];
+    if(typeof oD === "function") window[dAd] = function(){ const r = oD.apply(this, arguments); try{ goster(m); }catch(e){} return r; };
+  });
+  // Hızlı Erişim "Cari - Pasif / Personel" gibi çağrılar: filtre kutusunu da eşitle
+  const oTip = window.cariTipFiltreSecimden;
+  if(typeof oTip === "function") window.cariTipFiltreSecimden = function(d){
+    const r = oTip.apply(this, arguments);
+    try{ kur("cari"); const e = document.getElementById(fid("cari","f-tur")); if(e) e.value = d || ""; ciz("cari"); }catch(x){}
+    return r;
+  };
+  // Ana modül sekmesi: liste göster (kayıt sekmesi açıkken ana sekmeye dönünce kayıt panelinin içeriği korunur)
+  const oModulAc = modulAc;
+  modulAc = function(id){
+    const r = oModulAc.apply(this, arguments);
+    if(TANIM[id]){
+      try{
+        if(id === "cari"){ window._cariSekmeEtiket = ""; }
+        goster(id);
+        if(id === "cari") sekmeSeridiCiz();
+      }catch(e){ console.error("Liste raporu açılamadı:", e); }
+    }
+    return r;
+  };
+  // Kayıt sekmesine geçince liste değil kayıt görünsün
+  const oKSG = kayitSekmesiniGoster;
+  kayitSekmesiniGoster = function(sekmeId){
+    const r = oKSG.apply(this, arguments);
+    const kv = _kayitSekmeVeri[sekmeId];
+    if(kv && TANIM[kv.modulId]){ const mod = document.getElementById("mod-"+kv.modulId); if(mod) mod.classList.remove("lr-liste"); }
+    return r;
+  };
 })();
 </script>
 </body>
