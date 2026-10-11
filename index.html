@@ -3957,7 +3957,7 @@ function yedekAlSimdiIste(){
     yedekDurumuCiz_(res);
     const o = res.yeniTur || {};
     const hata = [].concat(o.veri||[], [o.ayar, o.kod, o.rehber]).filter(x=>x && /HATA/.test(String(x)));
-    toastGoster(hata.length ? "Yedek alındı ama uyarı var: " + hata[0] : "Yedek alındı ✔ (veri + program kodu + ayarlar)");
+    toastGoster((hata.length ? "Yedek alındı ama uyarı var: " + hata[0] : "Yedek alındı ✔ (veri + program kodu + ayarlar)") + (o.temizlik && /silindi|silinebilecek/.test(o.temizlik) ? " · " + o.temizlik : ""));
   }).catch(err=>{ if(b){ b.disabled = false; b.textContent = "💾 Şimdi Yedek Al"; } alert("Bağlantı hatası: " + err.message); });
 }
 function yedekTetikleyiciKurIste(){

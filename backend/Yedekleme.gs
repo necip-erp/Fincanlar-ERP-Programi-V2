@@ -34,6 +34,8 @@ function yedekCalistir_(kodZorla) {
   var klasor = yedekKlasoruGetirVeyaOlustur_();
   var damga = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd_HH-mm");
   var ozet = { damga: damga, veri: [], kod: null, ayar: null, rehber: null };
+  var temizlikOnce = "";
+  try { temizlikOnce = yedekAlanTemizle_(klasor); } catch (e) { temizlikOnce = "HATA: " + e.message; }   // yer açmadan yeni kopya alınamayabilir
   var kayit = yilKayitlari_();
   Object.keys(kayit).sort().forEach(function (yil) {
     try {
@@ -44,9 +46,69 @@ function yedekCalistir_(kodZorla) {
   try { ozet.ayar = yedekAyarDosyasiYaz_(klasor, damga); } catch (e) { ozet.ayar = "HATA: " + e.message; }
   try { ozet.kod = yedekKodZipiAl_(klasor, damga, !!kodZorla); } catch (e) { ozet.kod = "HATA: " + e.message; }
   try { yedekRehberiYaz_(klasor); ozet.rehber = "tamam"; } catch (e) { ozet.rehber = "HATA: " + e.message; }
+  var temizlikSonra = "";
+  try { temizlikSonra = yedekAlanTemizle_(klasor); } catch (e) { temizlikSonra = "HATA: " + e.message; }
+  ozet.temizlik = [temizlikOnce, temizlikSonra].filter(function (x) { return x; }).join(" | ");
   try { ozet.eposta = yedekEpostaGonder_(klasor, damga, !!kodZorla); } catch (e) { ozet.eposta = "HATA: " + e.message; }
   try { PropertiesService.getScriptProperties().setProperty("SON_YEDEK_OZET", JSON.stringify({ z: Date.now(), o: ozet })); } catch (e) {}
   return ozet;
+}
+
+// ── Drive doluluk koruması (12 Eki 2026) ──
+// Drive %80 dolduğunda en ESKİ yedek dosyaları silinir. Her türün (veri için her yılın) en yeni birkaç kopyası ASLA silinmez;
+// rehber silinmez. Silme KALICIDIR (çöp kutusu yer açmaz); Drive REST API ile yapılır, olmazsa çöpe atılır.
+var YEDEK_DOLULUK_ESIGI_ = 0.80;
+var YEDEK_TUR_MIN_ = { veri: 3, kod: 2, ayar: 3 };   // korunan en yeni kopya sayısı
+var YEDEK_TEMIZLIK_TUR_LIMIT_ = 6;                    // tek turda en çok bu kadar dosya silinir
+
+function driveDolulukOrani_() {
+  try {
+    var lim = DriveApp.getStorageLimit();
+    if (!(lim > 0)) return null;   // sınırsız / okunamadı
+    return DriveApp.getStorageUsed() / lim;
+  } catch (e) { return null; }
+}
+
+function yedekKaliciSil_(dosya) {
+  try {
+    var r = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + dosya.getId() + "?supportsAllDrives=true",
+      { method: "delete", headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+    var k = r.getResponseCode();
+    if (k === 204 || k === 200) return true;
+  } catch (e) {}
+  dosya.setTrashed(true);
+  return false;
+}
+
+function yedekAlanTemizle_(klasor) {
+  var oran = driveDolulukOrani_();
+  if (oran === null) return "Drive kotası okunamadı";
+  var yuzde = Math.round(oran * 100);
+  if (oran < YEDEK_DOLULUK_ESIGI_) return "Drive %" + yuzde + " dolu (temizlik gerekmedi)";
+  var gruplar = {}, it = klasor.getFiles();
+  while (it.hasNext()) {
+    var f = it.next(), ad = f.getName(), tur = yedekTurunuBul_(ad);
+    if (!tur || tur === "rehber") continue;
+    var anahtar = tur === "veri" ? "veri:" + (ad.split(" - ")[1] || "") : tur;
+    (gruplar[anahtar] = gruplar[anahtar] || []).push({ f: f, tur: tur, t: f.getDateCreated().getTime(), ad: ad });
+  }
+  var adaylar = [];
+  Object.keys(gruplar).forEach(function (k) {
+    var g = gruplar[k].sort(function (a, b) { return b.t - a.t; });
+    g.slice(YEDEK_TUR_MIN_[g[0].tur] || 3).forEach(function (x) { adaylar.push(x); });   // en yeniler korunur
+  });
+  adaylar.sort(function (a, b) { return a.t - b.t; });   // en eskiden başla
+  var silinen = [];
+  while (adaylar.length && silinen.length < YEDEK_TEMIZLIK_TUR_LIMIT_) {
+    var x = adaylar.shift();
+    try { yedekKaliciSil_(x.f); silinen.push(x.ad); } catch (e) { break; }
+    var yeni = driveDolulukOrani_();
+    if (yeni !== null && yeni < YEDEK_DOLULUK_ESIGI_) { oran = yeni; break; }
+  }
+  var son = driveDolulukOrani_();
+  var sonYuzde = son === null ? yuzde : Math.round(son * 100);
+  if (!silinen.length) return "Drive %" + yuzde + " dolu — silinebilecek eski yedek yok (her türün en yeni kopyaları korunur); Drive alanını elle boşaltın";
+  return "Drive %" + yuzde + " doluydu: " + silinen.length + " eski yedek silindi (şimdi ≈%" + sonYuzde + ")" + (sonYuzde >= 80 ? " — hâlâ %80 üstü, Drive'da başka büyük dosyalar var" : "");
 }
 
 // Apps Script özellikleri → JSON. EDM şifresi KASITLI olarak yazılmaz (Drive'da düz metin durmasın).
@@ -147,6 +209,7 @@ function getYedekDurumu() {
     eposta: yedekEpostaDurumu_(),
     yedekler: [], adet: { veri: 0, kod: 0, ayar: 0 }, sonVeriZamani: null, sonVeriDakika: null,
     sonKodZamani: null, tetikleyici: yedekTetikleyiciDurumu_(), sonTur: null,
+    driveDolulukYuzde: (function () { var o = driveDolulukOrani_(); return o === null ? null : Math.round(o * 100); })(),
   };
   try {
     var p = PropertiesService.getScriptProperties().getProperty("SON_YEDEK_OZET");
