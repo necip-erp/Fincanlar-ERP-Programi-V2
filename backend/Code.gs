@@ -2968,6 +2968,7 @@ function getAlisListesi() {
   const ss = acikSS_();
   const aSheet = getOrCreateSheet(ss, SHEETS.alislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+  ensureAlisFaturaNumarasiColonu(aSheet);
   const data = aSheet.getDataRange().getValues();
 
   // ★ EKLENDİ: soldaki listede fatura no + cari kodu belirgin gösterilsin diye
@@ -3016,7 +3017,8 @@ function getAlisListesi() {
       cariKodu: cariKoduMap[cariId] || "",
       toplamTutar: parseFloat(row[4]) || 0, odemeTipi: String(row[5] || ""),
       aciklama: String(row[6] || ""), kayitTarihi: hucreTarihStr(row[7]),
-      faturaNo: faturaNo,
+      faturaNo: (metinOku_(row[11]) || faturaNo),
+      portalFaturaNo: faturaNo,
       kdvToplam: (function () {
         const kdv = kdvHaritasi[id] || 0, kg = kalemGenelHaritasi[id] || 0, tt = parseFloat(row[4]) || 0;
         const oran = kg > 0 ? Math.min(1, tt / kg) : 1;
@@ -3043,6 +3045,7 @@ function getAlisDetay(alisId) {
   ensureAlisTutarIskontosuColonu(aSheet);
   ensureAlisProjeKoduColonu(aSheet);
   ensureAlisFaturaTipiColonu(aSheet);
+  ensureAlisFaturaNumarasiColonu(aSheet);
 
   const data = aSheet.getDataRange().getValues();
   let alis = null;
@@ -3054,6 +3057,7 @@ function getAlisDetay(alisId) {
         odemeTipi: String(data[i][5] || ""), aciklama: String(data[i][6] || ""), kayitTarihi: hucreTarihStr(data[i][7]),
         tutarIskontosu: parseFloat(data[i][8]) || 0, projeKodu: metinOku_(data[i][9]),
         faturaTipi: metinOku_(data[i][10]),
+        faturaNumarasi: metinOku_(data[i][11]),
       };
       break;
     }
@@ -3071,7 +3075,9 @@ function getAlisDetay(alisId) {
     const m = String(alis.aciklama || "").match(/Fatura No:\s*(\S+)/i);
     if (m) faturaNo = m[1];
   }
-  alis.faturaNo = faturaNo;
+  alis.faturaNo = faturaNo;   // portal fatura no ("Faturayı Gör" bununla açılır)
+  alis.faturaNumarasi = alis.faturaNumarasi || faturaNo;   // ekranda görünen / kaydedilen Fatura Numarası
+  try { alis.cariKodu = alis.cariId ? (cariKoduHaritasiOlustur(ss)[alis.cariId] || "") : ""; } catch (e) { alis.cariKodu = ""; }
 
 
   const kData = kSheet.getDataRange().getValues();
@@ -3143,6 +3149,16 @@ function ensureAlisFaturaTipiColonu_orj_(sheet) {
   metinKolonuGarantiEt_(sheet, 11);
 }
 
+// ★ (12 Eki 2026) Alış faturasının "Fatura Numarası" alanı (kullanıcı elle yazar; Alislar 12. kolon).
+// Portaldan onaylanan faturalarda numara AlisFaturaDurum'dan gelmeye devam eder; boşsa bu kolon kullanılır.
+function ensureAlisFaturaNumarasiColonu_orj_(sheet) {
+  const h12 = sheet.getRange(1, 12).getValue();
+  if (String(h12 || "") !== "FATURA_NUMARASI") {
+    sheet.getRange(1, 12).setValue("FATURA_NUMARASI").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  metinKolonuGarantiEt_(sheet, 12);
+}
+
 function saveAlis(body) {
   const kalemler = Array.isArray(body.kalemler) ? body.kalemler : [];
   if (kalemler.length === 0) return { ok: false, hata: "En az bir ürün kalemi eklemelisiniz" };
@@ -3164,6 +3180,7 @@ function saveAlis(body) {
   ensureAlisTutarIskontosuColonu(aSheet);
   ensureAlisProjeKoduColonu(aSheet);
   ensureAlisFaturaTipiColonu(aSheet);
+  ensureAlisFaturaNumarasiColonu(aSheet);
 
   // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
   // otomatik, minimal bir stok kartı oluşturulur (stok kodu + ürün adı ile).
@@ -3211,7 +3228,7 @@ function saveAlis(body) {
   const id = "al_" + Date.now();
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
-  metinliSatirEkle_(aSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim()], [10, 11]);
+  metinliSatirEkle_(aSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim(), String(body.faturaNumarasi || "").trim()], [10, 11, 12]);
   const _cariAdHrt = kalemler.some(k => String(k.satilanCariId || "").trim()) ? cariAdHaritasiOlustur_(ss) : {};
   const _kSatirlar = [];
   kalemler.forEach((k, idx) => {
@@ -3405,6 +3422,7 @@ function updateAlis(body) {
   ensureAlisTutarIskontosuColonu(aSheet);
   ensureAlisProjeKoduColonu(aSheet);
   ensureAlisFaturaTipiColonu(aSheet);
+  ensureAlisFaturaNumarasiColonu(aSheet);
   const kData = kSheet.getDataRange().getValues();
   for (let i = kData.length - 1; i >= 1; i--) {
     if (String(kData[i][1]) === id) kSheet.deleteRow(i + 1);
@@ -3460,7 +3478,7 @@ function updateAlis(body) {
 
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = String(data[satirIdx - 1][7] || "");
-  metinliSatirYaz_(aSheet, satirIdx, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim()], [10, 11]);
+  metinliSatirYaz_(aSheet, satirIdx, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, tutarIskontosu, String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim(), String(body.faturaNumarasi || "").trim()], [10, 11, 12]);
   const _cariAdHrt = kalemler.some(k => String(k.satilanCariId || "").trim()) ? cariAdHaritasiOlustur_(ss) : {};
   const _kSatirlar = [];
   kalemler.forEach((k, idx) => {
@@ -6025,6 +6043,7 @@ function onaylaAlisFaturasi(body) {
     aciklama: (String(body.aciklama || "").trim() || ("Fatura No: " + faturaNo)),
     tutarIskontosu: body.tutarIskontosu,
     projeKodu: body.projeKodu,
+    faturaNumarasi: faturaNo,
     kalemler: body.kalemler,
   });
   if (!alisSonuc.ok) return alisSonuc;
@@ -11222,7 +11241,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20261009a";
+const ENSURE_SURUM_ = "20261012a";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}
@@ -11256,6 +11275,7 @@ function ensureCariVirmanVirmanTipiColonu(sheet) { const k = ensureAnahtar_("ens
 function ensureSatisBelgeTipiColonu(sheet) { const k = ensureAnahtar_("ensureSatisBelgeTipiColonu", sheet); if (ensureYapildiMi_(k)) return; ensureSatisBelgeTipiColonu_orj_(sheet); ensureIsaretle_(k); }
 function ensureSatisKalemVergiKolonlari(sheet) { const k = ensureAnahtar_("ensureSatisKalemVergiKolonlari", sheet); if (ensureYapildiMi_(k)) return; ensureSatisKalemVergiKolonlari_orj_(sheet); ensureIsaretle_(k); }
 function ensureAlisProjeKoduColonu(sheet) { const k = ensureAnahtar_("ensureAlisProjeKoduColonu", sheet); if (ensureYapildiMi_(k)) return; ensureAlisProjeKoduColonu_orj_(sheet); ensureIsaretle_(k); }
+function ensureAlisFaturaNumarasiColonu(sheet) { const k = ensureAnahtar_("ensureAlisFaturaNumarasiColonu", sheet); if (ensureYapildiMi_(k)) return; ensureAlisFaturaNumarasiColonu_orj_(sheet); ensureIsaretle_(k); }
 function ensureAlisFaturaTipiColonu(sheet) { const k = ensureAnahtar_("ensureAlisFaturaTipiColonu", sheet); if (ensureYapildiMi_(k)) return; ensureAlisFaturaTipiColonu_orj_(sheet); ensureIsaretle_(k); }
 function ensureTahsilatPosColonu(sheet) { const k = ensureAnahtar_("ensureTahsilatPosColonu", sheet); if (ensureYapildiMi_(k)) return; ensureTahsilatPosColonu_orj_(sheet); ensureIsaretle_(k); }
 function ensureOdemePosBankaColonlari(sheet) { const k = ensureAnahtar_("ensureOdemePosBankaColonlari", sheet); if (ensureYapildiMi_(k)) return; ensureOdemePosBankaColonlari_orj_(sheet); ensureIsaretle_(k); }

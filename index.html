@@ -365,7 +365,7 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
 .cari-modern .om-aksiyon{position:sticky;bottom:-22px;background:var(--rp-alan,var(--bg2));padding:10px 0 2px;margin-top:10px;z-index:2}
 @media (max-width:900px){.cari-modern .cm-kolonlar{grid-template-columns:1fr}}
 .lr-view .sr-tbl tr.lr-daha td{text-align:center;cursor:pointer;color:var(--blue);font-weight:700}
-#satis-view .cari-list-panel{display:none}
+#satis-view .cari-list-panel,#alis-giris-view .cari-list-panel{display:none}
 
 /* ── SATIŞ MODÜLÜ ── */
 #mod-satis{flex-direction:row}
@@ -1385,7 +1385,7 @@ setInterval(topbarSaatGuncelle, 10000);
     <div id="alis-bekleyen-view" style="display:none;height:100%;flex-direction:column;overflow:auto">
       <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0;flex-shrink:0" onclick="alisAnaSecimeDon()">← Alış seçimine dön</button>
       <div style="padding:14px">
-        <div class="rapor-baslik" style="margin-top:0">📨 Onay Bekleyen Faturalar</div>
+        <div class="rapor-baslik" style="margin-top:0">📨 Portaldan Gelen Faturalar</div>
         <p style="font-size:12.5px;color:var(--text3);margin:4px 0 14px">
           fincanlaryapi@gmail.com hesabına gelen e-Faturalardan otomatik çekilen fiyat/tedarikçi bilgileri — miktarları girip
           onayladığında gerçek bir Alış kaydı oluşur ve tedarikçi cari hesabına borç işlenir.
@@ -2007,7 +2007,7 @@ setInterval(topbarSaatGuncelle, 10000);
       <p style="color:var(--text3);font-size:13px;margin:0 0 14px">
         Bazı EDM e-Fatura numaraları gönderen bilgisini net vermez, sadece bir önek taşır
         (örn. fatura no "CNY2026000123" → önek "CNY" → gerçek tedarikçi "CANYAP"). Burada
-        tanımlanan eşleştirmeler, Alış &gt; Bekleyen Alış Faturaları ekranında bir ÖNERİ olarak
+        tanımlanan eşleştirmeler, Alış &gt; Portaldan Gelen Faturalar ekranında bir ÖNERİ olarak
         gösterilir — otomatik uygulanmaz, siz onaylayınca kullanılır. Bir faturayı bir cariye
         onayladığınızda, o faturanın öneki de buraya otomatik eklenir/güncellenir.
       </p>
@@ -2265,7 +2265,7 @@ const ALT_MODUL_TANIM = {
   alis: [
     {alt:"giris",    ic:"📥", lbl:"Alış Girişi",      desc:"Tedarikçiden mal/hizmet alışı"},
     {alt:"iade",     ic:"↩️", lbl:"İade",             desc:"Tedarikçiye yapılan iade kayıtları"},
-    {alt:"bekleyen", ic:"📨", lbl:"Bekleyen Faturalar", desc:"Gelen e-Fatura'lardan onay bekleyenler"},
+    {alt:"bekleyen", ic:"📨", lbl:"Portaldan Gelen Faturalar", desc:"Gelen e-Fatura'lardan onay bekleyenler"},
   ],
   ceksenet: [
     {alt:"tahsilat", ic:"📥", lbl:"Tahsilat",         desc:"Yeni müşteri çeki girişi"},
@@ -2386,7 +2386,7 @@ function hizliErisimKatalogUret(){
   ekle("satis-iade","Satış","↩️","Satış - İade",()=>{modulAc("satis"); satisAltModulAc("Iade");});
   ekle("alis-giris","Alış","📥","Alış - Giriş",()=>{modulAc("alis"); alisAltModulAc("giris");});
   ekle("alis-iade","Alış","↩️","Alış - İade",()=>{modulAc("alis"); alisAltModulAc("iade");});
-  ekle("alis-bekleyen","Alış","📨","Alış - Bekleyen Faturalar",()=>{modulAc("alis"); alisAltModulAc("bekleyen");});
+  ekle("alis-bekleyen","Alış","📨","Alış - Portaldan Gelen Faturalar",()=>{modulAc("alis"); alisAltModulAc("bekleyen");});
   // Stok: panel, işlemler, tanımlar, raporlar
   ekle("stok-panel","Stok","📦","Stok - Stok Paneli",()=>{modulAc("stok"); stokAltModulAc("panel");});
   ekle("stok-islemler","Stok","🔄","Stok - İşlemler (seçim)",()=>{modulAc("stok"); stokAltModulAc("islemler");});
@@ -3999,7 +3999,7 @@ function hizPaneliIndir(){
 }
 // Veriyi DEĞİŞTİRMEYEN (ya da önbelleği ilgilendirmeyen) işlemler: bunlardan sonra önbellek temizlenmez.
 // ★ (1 Eki 2026) Okuma olsa da yavaş olduğu için "İşlem yapılıyor + geçen süre" bandı gösterilen çağrılar:
-// Bekleyen Alış Faturaları listesi (dış e-tablo + birkaç sayfa okuyor). Başka ekran eklemek için buraya ekle.
+// Portaldan Gelen Faturalar listesi (dış e-tablo + birkaç sayfa okuyor). Başka ekran eklemek için buraya ekle.
 const CARI_API_BANT_OKUMA_ = /^(getBekleyenAlisFaturalari|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi)$/;
 const CARI_API_YAZMA_DEGIL_ = /^(get|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|edmOrtamDurumu|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
 // Yapı/tanım verisini değiştiren işlemler (banka, hesap, pos, kart, seri, tanım, marka, plasiyer, birim...).
@@ -5460,7 +5460,7 @@ function cariModalAc(editId, onKaydedildi, adIpucu){
           <div class="fld"><label>Kredi Limiti (₺)</label><input id="cm-kredilimiti" type="number" min="0" step="0.01" value="${c?(c.krediLimiti||''):''}" placeholder="0 = limitsiz"></div>
           <div class="fld om-tam"><label>EDM Tedarikçi Kodu (Fatura Öneki)</label>
             <input id="cm-edmonek" type="text" style="text-transform:uppercase" value="" data-yuklendi="${duzenle?'0':'1'}" data-orj="" placeholder="${duzenle?'Yükleniyor...':'Örn. CNY  (birden fazla ise virgülle: CNY, FYT)'}" ${duzenle?'disabled':''}>
-            <div class="om-not" style="margin:3px 0 0">Bu tedarikçinin e-fatura numarasının başındaki harfler (CNY2026000123 → CNY). Bekleyen Alış Faturaları bu önekle faturayı bu cariye otomatik eşler. Ayarlar > EDM Önek ile aynı kayıttır.</div>
+            <div class="om-not" style="margin:3px 0 0">Bu tedarikçinin e-fatura numarasının başındaki harfler (CNY2026000123 → CNY). Portaldan Gelen Faturalar bu önekle faturayı bu cariye otomatik eşler. Ayarlar > EDM Önek ile aynı kayıttır.</div>
           </div>
           <div class="fld om-tam"><label>Not</label><textarea id="cm-not" rows="2">${c?c.not:''}</textarea></div>
         </div>
@@ -10264,7 +10264,7 @@ function alisAc(id){
 }
 
 // ★ EKLENDİ: Kullanıcının "mükerrer stok" sorunu nedeniyle istediği, TÜM Alış Faturalarını
-// (bağlı Stok Hareketi + Cari Hareketi ile birlikte) silip Bekleyen Alış Faturaları'ndan
+// (bağlı Stok Hareketi + Cari Hareketi ile birlikte) silip Portaldan Gelen Faturalar'ndan
 // yeniden işlemeye başlama işlemi. GERİ ALINAMAZ bir işlem olduğu için 2 adımlı onay ister;
 // backend ayrıca silmeden önce ilgili sayfaların bir "_YEDEK_<tarih>" kopyasını alır.
 function alisTumunuSilOnaySureci(){
@@ -10273,14 +10273,14 @@ function alisTumunuSilOnaySureci(){
     if(res.silinecekSayi === 0){ alert("Silinecek Alış Faturası yok."); return; }
     const yazilan = prompt(
       `Bu işlem sistemdeki TÜM ${res.silinecekSayi} Alış Faturasını, bunlara bağlı Stok Hareketi ve Cari Hareketi (borç/alacak) kayıtlarıyla BİRLİKTE silecek.\n\n`+
-      `Faturaların kendisi Bekleyen Alış Faturaları listesinde "Bekliyor" durumuna dönecek, oradan tek tek yeniden onaylayabilirsin.\n\n`+
+      `Faturaların kendisi Portaldan Gelen Faturalar listesinde "Bekliyor" durumuna dönecek, oradan tek tek yeniden onaylayabilirsin.\n\n`+
       `Silme öncesi otomatik bir yedek sayfası alınacak ama işlem GERİ ALINAMAZ.\n\n`+
       `Devam etmek için kutuya tam olarak SİL yaz:`
     );
     if(yazilan !== "SİL"){ if(yazilan!==null) alert("Onay metni eşleşmedi, işlem iptal edildi."); return; }
     cariApi("tumAlislariSilVeSifirla", {onay:true}).then(res2=>{
       if(!res2.ok){ alert("Hata: " + (res2.hata||"bilinmiyor")); return; }
-      alert(`${res2.silinen}/${res2.toplam} Alış Faturası silindi. Yedek sayfaları: "_YEDEK_${res2.yedekEki}" ekiyle Sheets'te duruyor. Şimdi Bekleyen Alış Faturaları'ndan yeniden işleyebilirsin.`);
+      alert(`${res2.silinen}/${res2.toplam} Alış Faturası silindi. Yedek sayfaları: "_YEDEK_${res2.yedekEki}" ekiyle Sheets'te duruyor. Şimdi Portaldan Gelen Faturalar'ndan yeniden işleyebilirsin.`);
       alisListesiYukle();
     }).catch(err=>alert("Bağlantı hatası: "+err.message));
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
@@ -10330,6 +10330,8 @@ function alisDetayCiz(res){
       <div>
         <h2>${a.cariAd} ${a.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${a.cariId}')" title="Cari Hareket ekranını sekme olarak aç">🔗 Cariyi Aç</button>` : ''}</h2>
         <span class="tip-badge"><b class="tarih-vurgu">${tarihGoster(a.tarih)}</b> · ${a.odemeTipi}</span>
+        ${a.cariKodu ? `<span class="tip-badge" title="Cari Kodu">Cari Kodu: <b>${htmlKacis(a.cariKodu)}</b></span>` : ''}
+        ${a.faturaNumarasi ? `<span class="tip-badge" title="Fatura Numarası">Fatura No: <b>${htmlKacis(a.faturaNumarasi)}</b></span>` : ''}
       </div>
       <div class="cari-bakiye-box">
         <div class="num">${paraFormat(a.toplamTutar)}</div>
@@ -10419,7 +10421,7 @@ function alisModalAc(duzenle){
       <div class="fm-kart">
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
         <div class="fld" style="flex:2;min-width:220px;margin-bottom:0;position:relative">
-          <label>Tedarikçi (Cari)</label>
+          <label>Tedarikçi (Cari) <span id="am-cari-kodu" style="font-weight:700;color:var(--blue);margin-left:6px">${a && a.cariKodu ? 'Kod: '+htmlKacis(a.cariKodu) : ''}</span></label>
           <input id="am-cari-arama" type="text" placeholder="Cari ara (boş bırakılırsa peşin/serbest tedarikçi)..." autocomplete="off" style="padding-right:34px" value="${htmlKacis(a && a.cariId ? a.cariAd : '')}"
                  oninput="amCariAramaDegisti(this.value)"
                  onfocus="amCariOneriGoster()"
@@ -10430,6 +10432,7 @@ function alisModalAc(duzenle){
           <div id="am-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
         </div>
         <div class="fld" id="am-serbest-ad-fld" style="flex:2;min-width:220px;margin-bottom:0;display:${a && a.cariId ? 'none' : 'flex'}"><label>Tedarikçi Adı (cari seçilmediyse)</label><input id="am-serbest-ad" type="text" placeholder="Peşin Tedarikçi" value="${htmlKacis(a && !a.cariId ? a.cariAd : '')}"></div>
+        <div class="fld" style="flex:1;min-width:150px;margin-bottom:0"><label>Fatura Numarası</label><input id="am-fatura-no" type="text" placeholder="Örn: CNY2026000123" value="${htmlKacis(a ? (a.faturaNumarasi||'') : '')}"></div>
         <div class="fld" style="flex:1;min-width:140px;margin-bottom:0"><label>Tarih</label><input id="am-tarih" type="datetime-local" value="${bugun}"></div>
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap">
@@ -10500,7 +10503,14 @@ function alisDuzenleAc(id){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
+function amCariKoduGuncelle_(){
+  const el = document.getElementById("am-cari-kodu"); if(!el) return;
+  const id = document.getElementById("am-cari").value;
+  const c = id ? (typeof _cariListe!=="undefined" ? (_cariListe||[]).find(x=>String(x.id)===String(id)) : null) : null;
+  el.textContent = c && c.cariKodu ? "Kod: "+c.cariKodu : (id ? el.textContent : "");
+}
 function alisCariSecimiDegisti(){
+  amCariKoduGuncelle_();
   const cariSecili = !!document.getElementById("am-cari").value;
   document.getElementById("am-serbest-ad-fld").style.display = cariSecili ? "none" : "flex";
 }
@@ -10752,6 +10762,7 @@ function alisKaydet(){
     aciklama: document.getElementById("am-aciklama").value,
     projeKodu: document.getElementById("am-proje-kodu").value,
     faturaTipi: document.getElementById("am-fatura-tipi").value,
+    faturaNumarasi: (document.getElementById("am-fatura-no")||{}).value || "",
     tutarIskontosu: tutarIskontosuEl ? (parseFloat(tutarIskontosuEl.value)||0) : 0,
     kalemler,
   };
@@ -11091,7 +11102,7 @@ function alisIadeKaydet(){
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
-// ── Bekleyen Alış Faturaları (e-Fatura otomasyonundan gelen, onay bekleyen) ──
+// ── Portaldan Gelen Faturalar (e-Fatura otomasyonundan gelen, onay bekleyen) ──
 let _alisBekleyenListe = [];
 
 // ★ EKLENDİ: "Fatura görselini yanda aç" tercihi — kullanıcı isteğiyle localStorage'a
@@ -12361,7 +12372,7 @@ function bfmStokKartiAc(i){
 // sabit kalır — fatura-okuma-otomasyonu tarafında palet/nakliye bedelinin m²'ye bölünmüş
 // hâlidir, elle düzeltilebilir alanların hiçbiri onu etkilemez.
 // ★ DÜZELTME: bu hesaplama önceden nakliyePayi'yi tamamen atlıyordu — bu yüzden bu modalda
-// görünen Fatura Tutarı, "Bekleyen Alış Faturaları" liste ekranındaki toplamla (backend'de
+// görünen Fatura Tutarı, "Portaldan Gelen Faturalar" liste ekranındaki toplamla (backend'de
 // nakliyePayi dahil hesaplanıyor) tutarsızdı; nakliyeli faturalarda modal daha düşük bir
 // tutar gösteriyordu.
 // Bir ürünün stok kodu + adına göre m² birimiyle mi tanımlanması gerektiğini belirler.
@@ -20181,7 +20192,7 @@ function stokTanimKaydet(id){
     // Kayıt başarıyla tamamlandı — bir sonraki "Yeni Stok Tanımı" açılışında eski
     // yapıştırılan kod/ad önerilmesin diye önbellek temizlenir.
     if(!id){ _stokTanimSonKod = ""; _stokTanimSonAd = ""; }
-    // Bu modal başka bir ekrandan (örn. Bekleyen Alış Faturaları gruplama) "yeni stok aç"
+    // Bu modal başka bir ekrandan (örn. Portaldan Gelen Faturalar gruplama) "yeni stok aç"
     // tetikleyicisiyle açıldıysa, oluşan stoğun kodu/adı çağıran ekrana geri bildirilir.
     if(window._stokTanimKaydedildiCB){
       window._stokTanimKaydedildiCB({id: res.id, stokKodu: body.stokKodu, stokAdi: body.stokAdi});
@@ -22774,6 +22785,47 @@ document.addEventListener("keydown", function(e){
     if(kv && TANIM[kv.modulId]){ const mod = document.getElementById("mod-"+kv.modulId); if(mod) mod.classList.remove("lr-liste"); }
     return r;
   };
+})();
+</script>
+
+<script>
+/* ★ (12 Eki 2026) Büyüteç: her modül sayfasında içerik boyutunu büyüt/küçült (modül başına hatırlanır) */
+(function(){
+  const ANAHTAR="fincanlarSayfaZoom", ADIMLAR=[0.7,0.8,0.9,1,1.1,1.25,1.5,1.75,2];
+  let harita={}; try{ harita=JSON.parse(localStorage.getItem(ANAHTAR)||"{}")||{}; }catch(e){}
+  function kaydet(){ try{ localStorage.setItem(ANAHTAR, JSON.stringify(harita)); }catch(e){} }
+  const kutu=document.createElement("div");
+  kutu.id="zoom-kutu";
+  kutu.style.cssText="position:fixed;right:14px;bottom:12px;z-index:900;display:none;align-items:center;gap:2px;background:var(--bg2,#fff);border:1px solid var(--border,#ccc);border-radius:20px;padding:3px 6px;box-shadow:0 2px 8px rgba(0,0,0,.18);font-size:12px;opacity:.85";
+  kutu.innerHTML='<span title="Sayfa yakınlaştırma" style="padding:0 4px">🔍</span>'+
+    '<button type="button" data-z="-1" title="Küçült" style="border:0;background:none;cursor:pointer;font-size:15px;font-weight:700;padding:0 6px">−</button>'+
+    '<button type="button" data-z="0" id="zoom-yuzde" title="Sıfırla (%100)" style="border:0;background:none;cursor:pointer;font-size:12px;font-weight:700;min-width:42px">100%</button>'+
+    '<button type="button" data-z="1" title="Büyüt" style="border:0;background:none;cursor:pointer;font-size:15px;font-weight:700;padding:0 6px">+</button>';
+  document.body.appendChild(kutu);
+  function aktif(){ return document.querySelector(".modview.active"); }
+  function uygula(el,z){
+    if(!el) return;
+    if(z===1){ el.style.zoom=""; el.style.width=""; el.style.height=""; el.style.right=""; el.style.bottom=""; return; }
+    el.style.zoom=z; el.style.width=(100/z)+"%"; el.style.height=(100/z)+"%"; el.style.right="auto"; el.style.bottom="auto";
+  }
+  function zoomOku(el){ return (el && harita[el.id]) || 1; }
+  function guncelle(){
+    const el=aktif(), vis=document.getElementById("home") && document.getElementById("home").style.display==="none" && el;
+    kutu.style.display = vis ? "flex" : "none";
+    if(!vis) return;
+    const z=zoomOku(el);
+    if(String(el.style.zoom||"")!==(z===1?"":String(z))) uygula(el,z);
+    document.getElementById("zoom-yuzde").textContent=Math.round(z*100)+"%";
+  }
+  kutu.addEventListener("click",function(e){
+    const b=e.target.closest("button"); if(!b) return;
+    const el=aktif(); if(!el) return;
+    let z=zoomOku(el), i=ADIMLAR.findIndex(x=>Math.abs(x-z)<0.001); if(i<0) i=3;
+    const d=+b.dataset.z; i = d===0 ? 3 : Math.max(0,Math.min(ADIMLAR.length-1,i+d));
+    z=ADIMLAR[i]; if(z===1) delete harita[el.id]; else harita[el.id]=z;
+    kaydet(); uygula(el,z); guncelle();
+  });
+  setInterval(guncelle,400);
 })();
 </script>
 </body>
