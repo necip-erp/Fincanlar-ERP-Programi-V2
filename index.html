@@ -4790,7 +4790,19 @@ function onbellekOku(anahtar, maxYasMs){
   }catch(e){ return null; }
 }
 function onbellekYaz(anahtar, veri){
-  try{ localStorage.setItem("fincanlar_onbellek_" + anahtar, JSON.stringify({t: Date.now(), veri: veri})); }catch(e){}
+  const k = "fincanlar_onbellek_" + anahtar;
+  let metin; try{ metin = JSON.stringify({t: Date.now(), veri: veri}); }catch(e){ return; }
+  try{ localStorage.setItem(k, metin); return; }catch(e){}
+  // ★ (12 Eki 2026) Kota doldu (tarayıcı ~5MB): en eski önbellek kayıtlarını sil, yeniden dene (sessizce kaybolmasın).
+  try{
+    const adaylar = Object.keys(localStorage).filter(x=>x.indexOf("fincanlar_onbellek_")===0 && x!==k).map(x=>{
+      let t=0; try{ t=JSON.parse(localStorage.getItem(x)).t||0; }catch(_){} return {x,t};
+    }).sort((a,b)=>a.t-b.t);
+    for(const a of adaylar){
+      localStorage.removeItem(a.x);
+      try{ localStorage.setItem(k, metin); return; }catch(_){}
+    }
+  }catch(e){}
 }
 // ★ ÖNBELLEK GÜNCELLEMESİ (19 Eyl 2026): Liste önbelleği artık 60 sn yerine saatlerce geçerli —
 // "önce eski veriyi ANINDA göster, arkada tazele" yaklaşımında yaşın önemi yok, çünkü her açılışta
