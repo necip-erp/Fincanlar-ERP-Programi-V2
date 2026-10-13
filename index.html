@@ -4244,7 +4244,7 @@ function rehberSiralaSecimden(idxStr){
 }
 
 function rehberAc(tip, callback){
-  _rehberState = { tip, satirlar:[], filtreli:[], siraAlan:null, siraYon:1, aktifIdx:-1, callback, cariTipiFiltre:'hepsi' };
+  _rehberState = { tip, satirlar:[], filtreli:[], siraAlan:null, siraYon:1, aktifIdx:-1, callback, cariTipiFiltre:'hepsi', pasifDahil:false };
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "rehber-modal-overlay";
@@ -4263,12 +4263,15 @@ function rehberAc(tip, callback){
           <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="personel" onchange="rehberCariTipiDegisti(this.value)"> Personel</label>
           <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="radio" name="rehber-cari-tip" value="hepsi" checked onchange="rehberCariTipiDegisti(this.value)"> Hepsi</label>
         </span>` : '';
+  const pasifAraHTML = `
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;flex-shrink:0;font-size:12.5px;color:var(--text2);white-space:nowrap" title="İşaretlenirse pasife alınmış ${tip==='cari'?'cariler':'stok kartları'} da aranır ve listelenir"><input type="checkbox" id="rehber-pasif-ara" onchange="rehberPasifDegisti(this.checked)"> ⏸ Pasifte de ara</label>`;
   overlay.innerHTML = `
     <div class="rehber-box" ${tip==='stok' ? 'style="max-width:1100px"' : 'style="max-width:900px"'} onclick="event.stopPropagation()">
       <div class="rehber-head">
         <h3>${baslik}</h3>
         <input id="rehber-ara" type="text" placeholder="Ara..." autocomplete="off" oninput="rehberFiltrele(this.value)" onkeydown="rehberKlavye(event)">
         ${cariTipiFiltreHTML}
+        ${pasifAraHTML}
         ${ciftTikHTML}
         <select id="rehber-sirala-select" title="Sıralama kriteri" onchange="rehberSiralaSecimden(this.value)">
           <option value="" selected disabled>Sırala...</option>
@@ -4325,7 +4328,8 @@ function rehberAc(tip, callback){
 function rehberVeriGuncelle_(durum, satirlar){
   if(!durum || _rehberState !== durum || !document.getElementById("rehber-modal-overlay")) return;
   if(durum.tip === "stok"){
-    satirlar = (satirlar||[]).filter(x=>!x.pasif);
+    durum.tumHam = satirlar || [];
+    satirlar = durum.tumHam.filter(x=>durum.pasifDahil || !x.pasif);
     durum.hamSatirlar = satirlar;
     satirlar = rehberStokZenginlestir_(satirlar);
   }
@@ -4386,11 +4390,24 @@ function rehberStokZenginlestir_(liste){
 function _rehberCariTipiUygula(satirlar){
   if(_rehberState.tip !== 'cari') return satirlar;
   const f = _rehberState.cariTipiFiltre || 'hepsi';
-  satirlar = satirlar.filter(c=>c.aktif !== false); // pasif cariler F1 Rehberi'nde çıkmaz (Cari modülünde "Pasif Cariler" filtresinden çağrılır)
+  if(!_rehberState.pasifDahil) satirlar = satirlar.filter(c=>c.aktif !== false); // pasif cariler F1 Rehberi'nde çıkmaz ('Pasifte de ara' işaretliyse çıkar) (Cari modülünde "Pasif Cariler" filtresinden çağrılır)
   if(f === 'hepsi') return satirlar;
   if(f === 'satici') return satirlar.filter(c=>c.tip==='Tedarikçi');
   if(f === 'personel') return satirlar.filter(c=>c.tip==='Personel');
   return satirlar.filter(c=>c.tip!=='Tedarikçi' && c.tip!=='Personel');
+}
+// ★ (13 Eki 2026) F1/F2 Rehberi "⏸ Pasifte de ara" kutucuğu: işaretliyse pasife alınmış cari/stok kartları da aranır ve listelenir.
+function rehberPasifDegisti(isaretli){
+  const d = _rehberState;
+  d.pasifDahil = !!isaretli;
+  const araEl = document.getElementById("rehber-ara");
+  if(d.tip === "stok" && d.tumHam){
+    const ham = d.tumHam.filter(x=>d.pasifDahil || !x.pasif);
+    d.hamSatirlar = ham;
+    d.satirlar = rehberStokZenginlestir_(ham);
+  }
+  rehberFiltrele(araEl ? araEl.value : "");
+  if(araEl) araEl.focus();
 }
 function rehberCariTipiDegisti(deger){
   _rehberState.cariTipiFiltre = deger;
@@ -4399,7 +4416,8 @@ function rehberCariTipiDegisti(deger){
 }
 function rehberVeriGeldi(satirlar){
   if(_rehberState.tip === "stok"){
-    satirlar = (satirlar||[]).filter(x=>!x.pasif);
+    _rehberState.tumHam = satirlar || [];
+    satirlar = _rehberState.tumHam.filter(x=>_rehberState.pasifDahil || !x.pasif);
     _rehberState.hamSatirlar = satirlar;
     satirlar = rehberStokZenginlestir_(satirlar);
   }
@@ -4417,7 +4435,7 @@ function rehberPanelStokYukle_(durum){
     if(!res || !res.ok) return;
     _stokPanelSnap = { tarih: res.tarih || "", kodlar: res.kodlar || {} };
     onbellekYaz("stokPanelSnapshot", _stokPanelSnap);
-    if(durum && durum.hamSatirlar) rehberVeriGuncelle_(durum, durum.hamSatirlar);
+    if(durum && durum.hamSatirlar) rehberVeriGuncelle_(durum, durum.tumHam || durum.hamSatirlar);
   }).catch(()=>{});
 }
 
@@ -4580,7 +4598,7 @@ function rehberTabloCiz(){
         <tbody>
           ${liste.length===0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
           liste.map((c,i)=>`<tr class="${i===_rehberState.aktifIdx?'rehber-aktif':''}" onclick="rehberSecReal(${i})" ondblclick="rehberSecReal(${i})">
-            <td>${c.cariKodu||'—'}</td><td>${c.ad}</td><td>${c.telefon||'—'}</td><td>${c.tip}</td><td class="${bakiyeSinifi(c.bakiye)}">${paraFormat(c.bakiye)}</td><td>${c.sonIslemTarihi?tarihGoster(c.sonIslemTarihi):'—'}</td>
+            <td>${c.cariKodu||'—'}</td><td>${c.ad}${c.aktif===false?' <span class="tip-badge" style="background:var(--red-l);color:var(--red)">⏸ PASİF</span>':''}</td><td>${c.telefon||'—'}</td><td>${c.tip}</td><td class="${bakiyeSinifi(c.bakiye)}">${paraFormat(c.bakiye)}</td><td>${c.sonIslemTarihi?tarihGoster(c.sonIslemTarihi):'—'}</td>
           </tr>`).join("")}
         </tbody>
       </table>`;
@@ -4602,7 +4620,7 @@ function rehberTabloCiz(){
         <tbody>
           ${liste.length===0 ? '<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
           liste.map((s,i)=>`<tr class="${i===_rehberState.aktifIdx?'rehber-aktif':''}" onclick="rehberSecReal(${i})" ondblclick="rehberSecReal(${i})">
-            <td>${s.markaKodu?`<span class="tip-badge">${s.markaKodu}</span>`:'—'}</td><td>${s.stokKodu||'—'}</td><td>${olcuBasaAlGoster(s.stokAdi, s.markaKodu)}</td><td>${s.birim1||'—'}</td>
+            <td>${s.markaKodu?`<span class="tip-badge">${s.markaKodu}</span>`:'—'}</td><td>${s.stokKodu||'—'}</td><td>${olcuBasaAlGoster(s.stokAdi, s.markaKodu)}${s.pasif?' <span class="tip-badge" style="background:var(--red-l);color:var(--red)">⏸ PASİF</span>':''}</td><td>${s.birim1||'—'}</td>
             <td>${s.minStok>0 && s.guncelStok<=s.minStok?`<span class="hk-borc">${miktarFormat(s.guncelStok)}</span>`:miktarFormat(s.guncelStok||0)}</td>
             <td>${s.panelStok===null||s.panelStok===undefined?'—':miktarFormat(s.panelStok)}</td>
             <td>${s.panelAyrilmis===null||s.panelAyrilmis===undefined?'—':miktarFormat(s.panelAyrilmis)}</td>
