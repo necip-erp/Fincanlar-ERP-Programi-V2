@@ -5872,6 +5872,16 @@ function satisRaporFiltreTemizle(){
 function satisRaporYeni(){
   satisModalAc();
 }
+// ★ (14 Eki 2026) Ctrl+Y: Satış'ta Fatura/Teklif/Sipariş listesi veya belge ekranı açıkken yeni kayıt penceresini açar (sol "+" düğmesi gizli olduğu için).
+function satisYeniKayitKisayolu_(){
+  const m = document.getElementById("mod-satis");
+  if(!m || !m.classList.contains("active")) return false;
+  const secim = document.getElementById("satis-secim");
+  if(secim && secim.style.display !== "none") return false;   // belge türü henüz seçilmemiş (Fatura/Teklif/Sipariş kartları)
+  if(document.getElementById("satis-modal-overlay")) return false;
+  satisModalAc();
+  return true;
+}
 function satisRaporYazdir(){
   tablolariYazdir_("Satış Raporu — " + _satisAktifBelgeTipi, document.getElementById("sr-icerik"));
 }
@@ -6827,23 +6837,21 @@ function edmGorselHamXmlGoster(id){
 // miktar+birim, örn. m²'den kutu/koli adedine), ve sağ altta toplamlar.
 function belgeFormuYazdir(res){
   const s = res.satis, kalemler = res.kalemler, t = s.toplamlar || {};
-  const cariP = cariApi("getCariDetay", {cariId: s.cariId}).catch(()=>({ok:false}));
-  // ★ DÜZELTME (kullanıcı bildirimi: "sipariş yazıldıktan sonra stoğun paket verisi
-  // girişi olunca da siparişi o veriye göre güncelle"): önceden burada _stokTanimListe
-  // önbellekte VARSA hiç yeniden çekilmiyordu — bir stoğun Ambalaj Miktarı/Birimi
-  // sonradan girilse veya değiştirilse bile, bu sekmede daha önce yüklenmiş eski liste
-  // kullanıldığı için yazdırılan Sipariş Formu'ndaki Miktar 2/paket sayısı güncel
-  // ambalaj bilgisini yansıtmıyordu. Artık yazdırmadan hemen önce HER ZAMAN backend'den
-  // taze stok tanım listesi çekiliyor ki paket hesabı o anki en güncel veriyle yapılsın.
-  const stokP = cariApi("getStokTanimListesi").catch(()=>({ok:false, kalemler:_stokTanimListe}));
-  Promise.all([cariP, stokP]).then(([cres, sres])=>{
-    const c = cres.ok ? cres.cari : {};
-    if(sres.ok) _stokTanimListe = sres.kalemler;
-    belgeFormuCiz(s, kalemler, t, c);
+  // ★ (14 Eki 2026) Eskiden yazdırmadan önce HER SEFERİNDE iki ağır istek gidiyordu: getCariDetay (carinin tüm hareket geçmişi) ve
+  // getStokTanimListesi (2000'lik tam liste). Şimdi tek HAFİF istek: yalnız bu belgenin stok kodlarının GÜNCEL ambalaj bilgisi
+  // (ambalaj sonradan değişse de çıktı güncel kalır); cari bilgisi bellekteki cari listesinden okunur.
+  const cariListeden = (_cariListe||[]).find(x=>x.id === s.cariId) || null;
+  const kodlar = Array.from(new Set((kalemler||[]).map(k=>k.stokKodu).filter(Boolean)));
+  cariApi("getSatisYazdirVerisi", {cariId: cariListeden ? "" : s.cariId, kodlar}).catch(()=>({ok:false})).then(r=>{
+    const c = cariListeden || (r && r.ok && r.cari) || {};
+    window._yazdirAmbalajHaritasi = (r && r.ok) ? r.ambalaj : null;
+    try{ belgeFormuCiz(s, kalemler, t, c); }
+    finally{ window._yazdirAmbalajHaritasi = null; }
   });
 }
 function belgeFormuMiktar2(k){
-  const stok = (_stokTanimListe||[]).find(x=>x.stokKodu===k.stokKodu);
+  const harita = window._yazdirAmbalajHaritasi;
+  const stok = (harita && harita[k.stokKodu]) || (_stokTanimListe||[]).find(x=>x.stokKodu===k.stokKodu);
   if(!stok || !(stok.ambalajMiktari>0)) return { miktar: k.miktar, birim: k.birim };
   return { miktar: Math.ceil((parseFloat(k.miktar)||0) / stok.ambalajMiktari), birim: stok.ambalajBirimi || k.birim };
 }
@@ -6972,7 +6980,9 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       <h3 class="fm-baslik" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <span>${duzenle ? "✏️ "+belgeTipiBaslangic+"'i Düzenle" : "🧾 Yeni "+belgeTipiBaslangic}</span>
         <span id="sm-efatura-rozet" title="Seçili carinin E-Fatura mükellefiyeti" style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;padding:4px 14px;border-radius:20px;white-space:nowrap;background:var(--bg3);color:var(--text3)">E-Fatura: —</span>
+        <button type="button" id="sm-efatura-kapat" class="btn" style="display:none;padding:2px 9px;font-size:11px" title="Carinin E-Fatura durumunu kapatır (cari kartına da yansır). Tekrar açmak yalnız Cari kartından yapılır." onclick="smCariEfaturaKapat('eFatura')">✕ Kapat</button>
         <span id="sm-earsiv-rozet" title="Seçili carinin E-Arşiv mükellefiyeti" style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;padding:4px 14px;border-radius:20px;white-space:nowrap;background:var(--bg3);color:var(--text3)">E-Arşiv: —</span>
+        <button type="button" id="sm-earsiv-kapat" class="btn" style="display:none;padding:2px 9px;font-size:11px" title="Carinin E-Arşiv durumunu kapatır (cari kartına da yansır). Tekrar açmak yalnız Cari kartından yapılır." onclick="smCariEfaturaKapat('eArsiv')">✕ Kapat</button>
         <span id="sm-siparis-no-badge" style="display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">
           # <span id="sm-siparis-no-metin">${s && s.siparisNo ? s.siparisNo : '—'}</span>
         </span>
@@ -7152,6 +7162,9 @@ function smKdvSonraKisitiUygula(){
     else if(eArsivMi){ earsivRozet.textContent = "E-Arşiv: Evet"; earsivRozet.style.background = "#dcf5e4"; earsivRozet.style.color = "#15803d"; }
     else { earsivRozet.textContent = "E-Arşiv: Hayır"; earsivRozet.style.background = "#fde2e2"; earsivRozet.style.color = "#b91c1c"; }
   }
+  const fKapat = document.getElementById("sm-efatura-kapat"), aKapat = document.getElementById("sm-earsiv-kapat");
+  if(fKapat) fKapat.style.display = eFaturaMi ? "inline-flex" : "none";   // yalnız "Evet" iken kapatılabilir; açmak Cari kartından
+  if(aKapat) aKapat.style.display = eArsivMi ? "inline-flex" : "none";
   const dip = document.getElementById("sm-dip-iskonto"), tutarIsk = document.getElementById("sm-tutar-iskontosu");
   [dip, tutarIsk].forEach(inp=>{
     if(!inp) return;
@@ -7160,6 +7173,26 @@ function smKdvSonraKisitiUygula(){
   const dipNot = document.getElementById("sm-efatura-dip-not");
   if(dipNot) dipNot.style.display = eFaturaMi ? "block" : "none";
   satisToplamGuncelle();
+}
+
+// ★ (14 Eki 2026) Sipariş/Teklif/Fatura formunda carinin E-Fatura / E-Arşiv durumunu KAPATIR (cari kartına da yazılır); açmak yalnız Cari kartından.
+function smCariEfaturaKapat(alan){
+  const cariId = (document.getElementById("sm-cari")||{}).value;
+  const c = (_cariListe||[]).find(x=>x.id===cariId);
+  if(!c || c[alan] !== "Evet") return;
+  const ad = alan === "eFatura" ? "E-Fatura" : "E-Arşiv";
+  if(!confirm((c.cariKodu ? c.cariKodu + " — " : "") + c.ad + " carisinin " + ad + " durumu KAPATILSIN mı?\n\nBu değişiklik cari kartına da yansır. Tekrar AÇMAK için Cari kartından düzenleme yapmanız gerekir.")) return;
+  const eski = c[alan];
+  c[alan] = "Hayır";
+  smKdvSonraKisitiUygula();
+  try{ onbellekYaz("cariListesi", _cariListe); }catch(e){}
+  const govde = {id: c.id}; govde[alan] = "Hayır";
+  cariApi("setCariEfaturaKapat", govde).then(res=>{
+    if(!res || !res.ok) throw new Error((res && res.hata) || "bilinmiyor");
+  }).catch(err=>{
+    c[alan] = eski; smKdvSonraKisitiUygula();
+    alert(ad + " durumu kapatılamadı, eski durum geri alındı: " + err.message);
+  });
 }
 
 // Satış/Sipariş/Teklif detayındaki "✏️ Düzenle" butonu (SADECE Sipariş/Teklif'te
@@ -21548,7 +21581,7 @@ if("serviceWorker" in navigator){
     if(e.metaKey || kisayolMetni(e) !== (kisayollariAl()._yeniKayit || "Ctrl+Y")) return; // Ayarlar > Kısayol Tuşları'ndan değiştirilebilir
     if(!girisYapildi() || pencereOnde()) return; // pencere açıkken Ctrl+Y normal "yinele" olarak kalır
     const btn = yeniKayitDugmeleri().find(b=> b.offsetParent !== null && !b.disabled);
-    if(!btn) return;
+    if(!btn){ if(satisYeniKayitKisayolu_()) e.preventDefault(); return; }
     e.preventDefault();
     btn.click();
   });

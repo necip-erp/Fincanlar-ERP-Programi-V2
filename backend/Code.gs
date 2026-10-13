@@ -1149,6 +1149,8 @@ function handleRequest(e) {
       case "saveCari":       result = saveCari(body); break;
       case "silCari":        result = silCari(body); break;
       case "setCariAktif":   result = setCariAktif(body); break;
+      case "setCariEfaturaKapat": result = setCariEfaturaKapat(body); break;
+      case "getSatisYazdirVerisi": result = getSatisYazdirVerisi(body); break;
       case "setStokPasif":   result = setStokPasif(body); break;
       case "cariHareketEkle": result = cariHareketEkle(body); break;
       case "cariHareketSil":  result = cariHareketSil(body); break;
@@ -1579,6 +1581,53 @@ function cariKullanildiMi_(ss, cariId) {
     if (sayfadaDegerVarMi_(ss, kontroller[i][0], kontroller[i][1], cariId)) return true;
   }
   return false;
+}
+
+// ★ (14 Eki 2026) Sipariş/Fatura formundan: carinin E-Fatura ve/veya E-Arşiv durumunu YALNIZ KAPATIR ("Hayır"). Açmak (Evet) bu işlemle
+// yapılamaz — bu, Cari kartından yapılır. body: { id, eFatura?: "Hayır", eArsiv?: "Hayır" }
+function setCariEfaturaKapat(body) {
+  const id = String(body.id || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const kapatFatura = String(body.eFatura || "") === "Hayır";
+  const kapatArsiv = String(body.eArsiv || "") === "Hayır";
+  if (!kapatFatura && !kapatArsiv) return { ok: false, hata: "Bu işlem yalnızca kapatma içindir (açmak için Cari kartını kullanın)" };
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
+  ensureCariEkKolonlariHepsi(sheet);
+  const ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+  for (let i = 1; i < ids.length; i++) {
+    if (String(ids[i][0]) === id) {
+      if (kapatFatura) sheet.getRange(i + 1, 12).setValue("Hayır");
+      if (kapatArsiv) sheet.getRange(i + 1, 13).setValue("Hayır");
+      cacheTemizle(["cariListesi_v4"]);
+      return { ok: true };
+    }
+  }
+  return { ok: false, hata: "Cari bulunamadı" };
+}
+
+// ★ (14 Eki 2026) Sipariş/Teklif/Fatura yazdırma için HAFİF veri: cari bilgisi (önbellekli cari listesinden, hareket geçmişi taranmaz) +
+// istenen stok kodlarının güncel ambalaj bilgisi (önbellekli stok listesinden; istemciye 2000'lik liste yerine yalnız gereken kodlar döner).
+// body: { cariId, kodlar: [stokKodu] }
+function getSatisYazdirVerisi(body) {
+  const cariId = String(body.cariId || "");
+  const kodlar = Array.isArray(body.kodlar) ? body.kodlar.map(k => String(k || "").trim()).filter(Boolean) : [];
+  let cari = null;
+  if (cariId) {
+    const cl = getCariListesi();
+    if (cl && cl.ok) cari = (cl.cariler || []).find(x => x.id === cariId) || null;
+  }
+  const ambalaj = {};
+  if (kodlar.length) {
+    const sl = getStokTanimListesi();
+    if (sl && sl.ok) {
+      const set = {}; kodlar.forEach(k => { set[k] = true; });
+      (sl.kalemler || []).forEach(s => {
+        if (set[s.stokKodu]) ambalaj[s.stokKodu] = { ambalajMiktari: s.ambalajMiktari || 0, ambalajBirimi: s.ambalajBirimi || "" };
+      });
+    }
+  }
+  return { ok: true, cari: cari, ambalaj: ambalaj };
 }
 
 // body: { id, aktif: true|false } — cariyi pasife alır / tekrar aktif eder (kayıt silinmez, hareketleri durur).
@@ -2212,11 +2261,14 @@ function getSatisDetay(satisId) {
   // EDM'e gönderilmiş bir faturaysa, içerik ekranında "E-FATURA" mı "E-ARŞİV" mi olduğunu
   // belirgin gösterebilmek için carinin e-Fatura/e-Arşiv mükellefiyet bilgisini de ekliyoruz
   // (edmBaglantisiVarMi_ ile aynı mantık: e-Fatura'ya kayıtlı DEĞİLSE e-Arşiv varsayılır).
+  // ★ (14 Eki 2026) Eskiden burada getCariDetay (carinin TÜM hareket geçmişini tarar) çağrılıyordu; yalnız iki bayrak gerektiği için
+  // önbellekli cari listesinden okunur.
   if (satis.efaturaNo && satis.cariId) {
-    const cariRes = getCariDetay(satis.cariId);
-    if (cariRes.ok) {
-      satis.cariEFatura = cariRes.cari.eFatura;
-      satis.cariEArsiv = cariRes.cari.eArsiv;
+    const cl = getCariListesi();
+    const c = cl && cl.ok ? (cl.cariler || []).find(x => x.id === String(satis.cariId)) : null;
+    if (c) {
+      satis.cariEFatura = c.eFatura;
+      satis.cariEArsiv = c.eArsiv;
     }
   }
 
