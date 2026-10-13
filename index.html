@@ -6124,13 +6124,39 @@ function siparisDurumSinifi(durum){
   return "hk-borc"; // Beklemede, Haber Verecek
 }
 
+// ★ (13 Eki 2026) Sipariş durumu değişince ekran HEMEN güncellenir (bellekteki liste + açık detay rozeti + rapor); kayıt arka planda gönderilir.
+// Eskiden her değişiklikte önce kayıt beklenip sonra liste ve sipariş sunucudan baştan yükleniyordu (8 sn + yükleme).
+// Kayıt başarısız olursa eski durum geri konur ve uyarı verilir.
 function siparisDurumKaydet(id){
-  const durum = document.getElementById("sd-siparis-durumu").value;
+  const sel = document.getElementById("sd-siparis-durumu");
+  if(!sel) return;
+  const durum = sel.value;
+  const kayit = (_satisListe||[]).find(x=>String(x.id) === String(id));
+  const eski = kayit ? (kayit.siparisManuelDurum || kayit.siparisDurumu || "") : "";
+  const rozetYaz = d=>{
+    const r = document.getElementById("sd-durum-rozet");
+    if(r){ r.textContent = d; r.className = siparisDurumSinifi(d); }
+  };
+  const listeYenile = ()=>{
+    if(kayit) onbellekYaz("satisListesi", _satisListe);
+    try{ satisListesiCiz(satisAramaliListe()); }catch(e){}
+    try{ satisRaporCiz_(); }catch(e){}
+  };
+  if(kayit){ kayit.siparisManuelDurum = durum; kayit.siparisDurumu = durum; }
+  rozetYaz(durum);
+  listeYenile();
   cariApi("siparisDurumGuncelle", {id, durum}).then(res=>{
-    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
-    satisListesiYukle();
-    satisAc(id);
-  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+    if(res && res.ok) return;
+    throw new Error((res && res.hata) || "bilinmiyor");
+  }).catch(err=>{
+    // Bu arada başka bir değişiklik yapılmadıysa eski duruma dön
+    if(kayit && kayit.siparisManuelDurum === durum){ kayit.siparisManuelDurum = eski; kayit.siparisDurumu = eski; }
+    const sel2 = document.getElementById("sd-siparis-durumu");
+    if(sel2 && sel2.value === durum && eski) sel2.value = eski;
+    if(eski) rozetYaz(eski);
+    listeYenile();
+    alert("Sipariş durumu kaydedilemedi, eski durum geri alındı: "+err.message);
+  });
 }
 
 function satisBelgeTipiDegistir(tip){
@@ -6327,7 +6353,7 @@ function satisDetayCiz(res){
       <div>
         <h2>${s.cariAd} ${s.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${s.cariId}')" title="Cari Hareket ekranını sekme olarak aç">🔗 Cariyi Aç</button>` : ''}</h2>
         <span class="tip-badge">${s.belgeTipi||'Fatura'} · <b class="tarih-vurgu">${tarihGoster(s.tarih)}</b> · ${s.odemeTipi}</span>
-        ${siparis ? ` <span class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}
+        ${siparis ? ` <span id="sd-durum-rozet" class="${siparisDurumSinifi(s.siparisDurumu)}">${s.siparisDurumu}</span>` : ''}
       </div>
       <div class="cari-bakiye-box">
         <div class="num">${paraFormat(s.toplamTutar)}</div>
