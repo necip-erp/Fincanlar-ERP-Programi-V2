@@ -1149,6 +1149,7 @@ function handleRequest(e) {
       case "saveCari":       result = saveCari(body); break;
       case "silCari":        result = silCari(body); break;
       case "setCariAktif":   result = setCariAktif(body); break;
+      case "setStokPasif":   result = setStokPasif(body); break;
       case "cariHareketEkle": result = cariHareketEkle(body); break;
       case "cariHareketSil":  result = cariHareketSil(body); break;
       case "getSatisListesi": result = getSatisListesi(); break;
@@ -7424,7 +7425,7 @@ function ensureStokTanimEkColonlari_orj_(sheet) {
   // AGIRLIK (4 Eki 2026): 1. birim başına ağırlık (kg) — siparişte toplam ağırlık için. STOK_TANIM_BASLIKLAR'a EKLENMEZ
   // (toplu yazan fonksiyonlar 20 sütunluk satır yazıyor); sütun yalnızca bu göç adımıyla eklenir.
   // GORSEL_URL (6 Eki 2026): Hızlı Satış ekranındaki ürün görseli (Drive linki, 22. sütun) — aynı şekilde yalnızca göç adımıyla eklenir.
-  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK","GORSEL_URL","HIZLI_URUN","HIZLI_RENK","KISA_AD"];
+  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK","GORSEL_URL","HIZLI_URUN","HIZLI_RENK","KISA_AD","PASIF"];
   eklenecek.forEach((baslik, idx) => {
     const kolonNo = 12 + idx;
     const mevcut = sheet.getRange(1, kolonNo).getValue();
@@ -7464,6 +7465,7 @@ function stokTanimSatiriNesneYap(row) {
     hizli: String(row[22] || "") === "1", // Hızlı Satış > "Hızlı Ürünler" sekmesinde de görünsün
     hizliRenk: renkTemizle_(row[23]),     // Hızlı Satış'ta ürüne özel renk (#rrggbb ya da "")
     kisaAd: String(row[24] || ""),        // Hızlı Satış'ta tam ad yerine gösterilen kısa ad (KISA_AD, 25. sütun)
+    pasif: String(row[25] || "") === "1", // ★ (13 Eki 2026) Pasif stok kartı: aramalarda/rehberde/Hızlı Satış'ta çıkmaz (PASIF, 26. sütun)
   };
 }
 
@@ -7632,6 +7634,25 @@ function getStokPanelSnapshot() {
     }
     return { ok: true, tarih: sonTarih, kodlar: kodlar };
   });
+}
+
+// ★ (13 Eki 2026) Stok kartını pasife alır / tekrar aktif eder (silinmez, hareketleri korunur). body: { id, pasif }
+function setStokPasif(body) {
+  const id = String((body && body.id) || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  ensureStokTanimEkColonlari(sheet);
+  const pasif = body.pasif === true || body.pasif === "true" || body.pasif === 1 || body.pasif === "1";
+  const ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+  for (let i = 1; i < ids.length; i++) {
+    if (String(ids[i][0]) === id) {
+      sheet.getRange(i + 1, 26).setValue(pasif ? "1" : "");
+      cacheTemizle(["stokTanimListesi"]);
+      return { ok: true, pasif: pasif };
+    }
+  }
+  return { ok: false, hata: "Stok kartı bulunamadı" };
 }
 
 function getStokTanimListesi() {
@@ -11241,7 +11262,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20261012a";
+const ENSURE_SURUM_ = "20261013a";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}

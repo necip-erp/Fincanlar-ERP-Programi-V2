@@ -1011,6 +1011,7 @@ setInterval(topbarSaatGuncelle, 10000);
         <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="stokAltModulAc('tanimlar')">← Geri</button>
         <div class="cari-list-head">
           <input id="stoktanim-ara" placeholder="Ürün ara..." oninput="stokTanimAramaFiltrele(this.value)">
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap" title="Pasif stok kartlarını listele"><input type="checkbox" id="stoktanim-pasif-goster" onchange="stokTanimAramaFiltrele(document.getElementById('stoktanim-ara').value)"> ⏸ Pasifler</label>
           <button class="cari-add-btn" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);width:auto;padding:0 10px;font-size:12px;font-weight:700" onclick="stokTanimIceAktarModalAc()" title="Excel'den içe aktar">📥 İçe Aktar</button>
           <button class="cari-add-btn" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);width:auto;padding:0 10px;font-size:12px;font-weight:700" onclick="stokTanimMarkaKoduIsleUygula()" title="Marka alanı boş olan stok kartlarında, stok kodunun ilk 2 hanesini Marka Tanımlama'daki kodlarla eşleştirip otomatik doldurur">🏷️ Marka Kodlarını İşle</button>
           <button class="cari-add-btn" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border);width:auto;padding:0 10px;font-size:12px;font-weight:700" onclick="stokTanimOlcuBirimIsleUygula()" title="Adında 60X120, 45X45, 42,5X42,5, 20X90 veya 20X120 geçen tüm stok kartlarının birimini m² yapar">📐 m² Ölçülerini İşle</button>
@@ -4324,6 +4325,7 @@ function rehberAc(tip, callback){
 function rehberVeriGuncelle_(durum, satirlar){
   if(!durum || _rehberState !== durum || !document.getElementById("rehber-modal-overlay")) return;
   if(durum.tip === "stok"){
+    satirlar = (satirlar||[]).filter(x=>!x.pasif);
     durum.hamSatirlar = satirlar;
     satirlar = rehberStokZenginlestir_(satirlar);
   }
@@ -4397,6 +4399,7 @@ function rehberCariTipiDegisti(deger){
 }
 function rehberVeriGeldi(satirlar){
   if(_rehberState.tip === "stok"){
+    satirlar = (satirlar||[]).filter(x=>!x.pasif);
     _rehberState.hamSatirlar = satirlar;
     satirlar = rehberStokZenginlestir_(satirlar);
   }
@@ -4789,7 +4792,13 @@ function onbellekOku(anahtar, maxYasMs){
     return kayit.veri;
   }catch(e){ return null; }
 }
+// ★ (13 Eki 2026) Pasif stok/cari kartları tarayıcı önbelleğine girmez (sessiz beklerler; tam liste sunucudan gelir).
+function stokAktifler(){ return (_stokTanimListe||[]).filter(s=>!s.pasif); }
 function onbellekYaz(anahtar, veri){
+  try{
+    if(anahtar==="stokTanimListesi" && Array.isArray(veri)) veri = veri.filter(s=>!s.pasif);
+    else if(anahtar==="cariListesi" && Array.isArray(veri)) veri = veri.filter(c=>c.aktif!==false);
+  }catch(e){}
   const k = "fincanlar_onbellek_" + anahtar;
   let metin; try{ metin = JSON.stringify({t: Date.now(), veri: veri}); }catch(e){ return; }
   try{ localStorage.setItem(k, metin); return; }catch(e){}
@@ -8086,7 +8095,7 @@ function hizliSatisAdetSayi_(v){
 
 function hsSekmeler_(){
   const gruplar = _tanimListeCache.urunGrubu || [];
-  const stoklar = _stokTanimListe || [];
+  const stoklar = stokAktifler();
   const idler = {}; gruplar.forEach(g=>{ idler[g.id] = true; });
   const sekmeler = [{ id:"hizli", ad:"⭐ Hızlı Ürünler", n: stoklar.filter(s=>s.hizli).length }];
   // Sekme sayıları tek geçişte hesaplanır (eskiden her grup için tüm stok listesi ayrı ayrı taranıyordu)
@@ -8118,7 +8127,7 @@ function hsSekmeBirak(e, hedefId){
 }
 
 function hsSekmeStoklari_(sekme){
-  const stoklar = _stokTanimListe || [];
+  const stoklar = stokAktifler();
   if(sekme === "hizli") return stoklar.filter(s=>s.hizli);
   if(sekme === "diger"){ const idler = {}; (_tanimListeCache.urunGrubu||[]).forEach(g=>{ idler[g.id] = true; }); return stoklar.filter(s=>!s.urunGrubuId || !idler[s.urunGrubuId]); }
   const uy = hsAyar_().uye[sekme] || {};
@@ -8179,7 +8188,7 @@ function hizliSatisCiz(){
               : `<span class="hs-ipucu">İşaretlersen bu grup Hızlı Ürünler gibi sütunlu görünür ve kendi alt gruplarını oluşturabilirsin.</span>`);
     }
   }
-  const kaynak = q ? (_stokTanimListe||[]).filter(s=>stokEslesirMi(s, q)) : hsSekmeStoklari_(sekme);
+  const kaynak = q ? stokAktifler().filter(s=>stokEslesirMi(s, q)) : hsSekmeStoklari_(sekme);
   const liste = q ? hsSirala_(kaynak, "arama", "ad") : hsSirala_(kaynak, sekme, mod);
   _hsGorunen = liste;
   grid.style.setProperty("--hs-w", hsW_(sekme) + "px");
@@ -8408,7 +8417,7 @@ function hizliSatisUrunEkleCiz(){
   const q = ((document.getElementById("hs-sec-ara")||{}).value || "").trim();
   const zaten = {}; hsSekmeStoklari_(sekme).forEach(s=>{ zaten[s.id] = true; });
   const gAd = id => { const g = (_tanimListeCache.urunGrubu||[]).find(x=>x.id === id); return g ? g.ad : ""; };
-  const liste = (_stokTanimListe||[]).filter(s=>!zaten[s.id] && (!q || stokEslesirMi(s, q))).slice(0, 60);
+  const liste = stokAktifler().filter(s=>!zaten[s.id] && (!q || stokEslesirMi(s, q))).slice(0, 60);
   el.innerHTML = liste.length ? liste.map(s=>`<div class="hs-sec-satir">
       <div style="flex:1;min-width:0"><div class="hs-sec-ad">${htmlKacis(s.stokAdi)}</div><div class="hs-kod">${htmlKacis(s.stokKodu||"")} · ${gAd(s.urunGrubuId) ? "Grubu: "+htmlKacis(gAd(s.urunGrubuId)) : "Grubu yok"}</div></div>
       ${(sekme !== "hizli" && s.urunGrubuId !== sekme) ? `<button class="btn" title="Ürün kendi grubunda kalır; bu sekmede de (seçili alt grupta) görünür" onclick="hizliSatisUrunKisayol('${s.id}')">🔗 Kısayol</button>` : ""}
@@ -8793,7 +8802,7 @@ function urunOneriGoster(idx){
   if(!kutu) return;
   if(q.length < 1){ kutu.style.display="none"; return; }
   _urunOneriTimer = setTimeout(()=>{
-    const eslesenler = (_stokTanimListe||[]).filter(s=>
+    const eslesenler = stokAktifler().filter(s=>
       stokEslesirMi(s, q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
@@ -9974,7 +9983,7 @@ function satisIadeUrunOneriGoster(idx){
   if(!kutu) return;
   if(q.length<1){ kutu.style.display="none"; return; }
   _stimOneriTimer = setTimeout(()=>{
-    const eslesenler = (_stokTanimListe||[]).filter(s=>
+    const eslesenler = stokAktifler().filter(s=>
       stokEslesirMi(s, q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
@@ -10683,7 +10692,7 @@ function alisUrunOneriGoster(idx){
   if(!kutu) return;
   if(q.length < 1){ kutu.style.display="none"; return; }
   _alisUrunOneriTimer = setTimeout(()=>{
-    const eslesenler = (_stokTanimListe||[]).filter(s=>
+    const eslesenler = stokAktifler().filter(s=>
       stokEslesirMi(s, q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
@@ -11058,7 +11067,7 @@ function alisIadeUrunOneriGoster(idx){
   if(!kutu) return;
   if(q.length<1){ kutu.style.display="none"; return; }
   _aimOneriTimer = setTimeout(()=>{
-    const eslesenler = (_stokTanimListe||[]).filter(s=>
+    const eslesenler = stokAktifler().filter(s=>
       stokEslesirMi(s, q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
@@ -12249,7 +12258,7 @@ function bfmStokOneriGoster(i){
   if(!kutu) return;
   const q = (document.getElementById(`bfm-stokara-${i}`).value || "").trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   if(q.length < 1){ kutu.style.display = "none"; return; }
-  const eslesenler = (_stokTanimListe || []).filter(s =>
+  const eslesenler = stokAktifler().filter(s =>
     stokEslesirMi(s, q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
@@ -16176,7 +16185,7 @@ function mrStokOneriGoster(){
   if(!_stokTanimListe || _stokTanimListe.length===0){ if(!_stokTanimYuklendi) stokTanimListesiYukle(); }
   const q = (document.getElementById("mr-stokkodu").value || "").trim();
   if(q.length < 1){ kutu.style.display = "none"; return; }
-  const eslesenler = (_stokTanimListe || []).filter(s =>
+  const eslesenler = stokAktifler().filter(s =>
     esnekEslesirMi(s.stokAdi||"", q) || esnekEslesirMi(s.stokKodu||"", q)
   ).slice(0, 8);
   if(eslesenler.length === 0){ kutu.style.display = "none"; return; }
@@ -17666,7 +17675,7 @@ function shpAraDegisti(){
     const q = esnekNormalize_(inp.value);
     if(!q){ kutu.style.display = "none"; return; }
     if(!_stokTanimYuklendi) stokTanimListesiYukle();
-    const eslesen = (_stokTanimListe||[]).filter(s=>stokEslesirMi(s, q)).slice(0,8);
+    const eslesen = stokAktifler().filter(s=>stokEslesirMi(s, q)).slice(0,8);
     if(!eslesen.length){ kutu.style.display = "none"; return; }
     kutu.innerHTML = eslesen.map((s,i)=>`<div class="fiyat-gecmis-satir" data-oneri-idx="${i}" onclick="shpStokSec(${i})"><span>${htmlKacis(s.stokKodu?s.stokKodu+' · ':'')}${htmlKacis(s.stokAdi||'')}</span><b>${htmlKacis(s.birim1||'adet')}</b></div>`).join("");
     kutu.dataset.eslesenler = JSON.stringify(eslesen);
@@ -19800,8 +19809,7 @@ let _stokTanimListe = [];
 // o terimi kaybetmeden filtreli halini gösteriyoruz.
 function _stokTanimGuncelAramaTerimiIleCiz(){
   const arama = (document.getElementById("stoktanim-ara")||{}).value || "";
-  if(arama.trim()) stokTanimAramaFiltrele(arama);
-  else stokTanimListesiCiz(_stokTanimListe);
+  stokTanimAramaFiltrele(arama);   // pasif filtresi de burada uygulanır
 }
 function stokTanimListesiYukle(){
   try{ const b=document.getElementById("stoktanim-eski-aktar-btn"); if(b) b.style.display = modulGorunurMu_({admin:true}) ? "" : "none"; }catch(e){}
@@ -19875,7 +19883,9 @@ function stokTanimDahaFazlaGoster(){
 function stokTanimAramaFiltrele(deger){
   _stokTanimRenderLimit = 80;
   const d = deger.trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
-  const filtreli = !d ? _stokTanimListe : _stokTanimListe.filter(k =>
+  const pg = !!(document.getElementById("stoktanim-pasif-goster")||{}).checked;
+  const taban = _stokTanimListe.filter(k=> pg ? !!k.pasif : !k.pasif);   // ★ pasifler yalnız "Pasifleri göster" ile listelenir
+  const filtreli = !d ? taban : taban.filter(k =>
     stokEslesirMi(k, d));
   stokTanimListesiCiz(filtreli);
 }
@@ -20080,7 +20090,8 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
         <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Ebat</label><div class="st-tanimli-satir"><select id="st-ebat">${secenekHtml(_tanimListeCache.ebat, k?k.ebatId:'')}</select>${stokTanimlaBtn_('ebat')}</div></div>
         <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Renk</label><div class="st-tanimli-satir"><select id="st-renk">${secenekHtml(_tanimListeCache.renk, k?k.renkId:'')}</select>${stokTanimlaBtn_('renk')}</div></div>
       </div>
-      ${k ? `<div class="btnrow"><button class="btn btn-danger" onclick="stokTanimSilOnay('${k.id}')">🗑 Sil</button></div>` : ''}
+      ${k ? `<div class="btnrow"><button class="btn btn-danger" onclick="stokTanimSilOnay('${k.id}')">🗑 Sil</button>
+        <button class="btn" onclick="stokPasifDegistir('${k.id}', ${k.pasif?'false':'true'})" title="${k.pasif?'Stok kartını tekrar aktif eder':'Silmeden pasife alır; aramalarda, F2 rehberinde ve Hızlı Satış\'ta çıkmaz, hareketleri korunur'}">${k.pasif?'▶ Aktif Et':'⏸ Pasife Al'}</button>${k.pasif?' <span class="tip-badge">PASİF</span>':''}</div>` : ''}
       <div class="modal-actions">
         <button class="btn" onclick="document.getElementById('stoktanim-modal-overlay').remove()">İptal</button>
         <button class="btn btn-primary" onclick="stokTanimKaydet(${k?`'${k.id}'`:'null'})">Kaydet</button>
@@ -20141,6 +20152,18 @@ function stokKoduOnerUygula(){
     if(!res.ok){ alert("Kod önerilemedi: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("st-stokkodu").value = res.stokKodu;
     _stokTanimSonKod = res.stokKodu;
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+
+function stokPasifDegistir(id, pasifYap){
+  const k = (_stokTanimListe||[]).find(x=>x.id===id) || {};
+  if(pasifYap && !confirm((k.stokAdi||"Bu stok")+" pasife alınsın mı?\n\nAramalarda, F2 Stok Rehberi'nde ve Hızlı Satış'ta çıkmaz; hareketleri korunur, istediğiniz zaman tekrar aktif edebilirsiniz.")) return;
+  cariApi("setStokPasif", {id, pasif: !!pasifYap}).then(res=>{
+    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+    k.pasif = !!pasifYap;
+    try{ onbellekYaz("stokTanimListesi", _stokTanimListe); }catch(_){}
+    const ov = document.getElementById("stoktanim-modal-overlay"); if(ov) ov.remove();
+    stokTanimAramaFiltrele((document.getElementById("stoktanim-ara")||{value:""}).value);
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
@@ -20509,7 +20532,7 @@ function stokHareketUrunOneriGoster(mod, idx){
   if(!kutu) return;
   if(q.length < 1){ kutu.style.display="none"; return; }
   _shOneriTimer = setTimeout(()=>{
-    const eslesenler = (_stokTanimListe||[]).filter(s=>
+    const eslesenler = stokAktifler().filter(s=>
       stokEslesirMi(s, q)
     ).slice(0,8);
     if(eslesenler.length===0){ kutu.style.display="none"; return; }
@@ -20632,7 +20655,7 @@ function shrUrunOneriGoster(){
   const q = (document.getElementById("shr-urun-ara").value || "").trim();
   if(q.length < 1){ kutu.style.display = "none"; return; }
   const ql = q.replace(/[İIıi]/g,"i").toLocaleLowerCase("tr");
-  const eslesenler = (_stokTanimListe || []).filter(s => esnekEslesirMi(s.stokKodu||"", q) || esnekEslesirMi(s.stokAdi||"", q))
+  const eslesenler = stokAktifler().filter(s => esnekEslesirMi(s.stokKodu||"", q) || esnekEslesirMi(s.stokAdi||"", q))
     .sort((a,b)=>{ // stok kodu q ile BAŞLAYANLAR öne
       const ak = (a.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase("tr").startsWith(ql) ? 0 : 1, bk = (b.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase("tr").startsWith(ql) ? 0 : 1;
       return ak - bk;
