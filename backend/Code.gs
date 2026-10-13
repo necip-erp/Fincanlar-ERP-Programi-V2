@@ -1159,8 +1159,9 @@ function handleRequest(e) {
       case "kaydetBelgeManuelMaliyet": result = kaydetBelgeManuelMaliyet(body); break;
       case "kaydetBelgeRaporaEkle": result = kaydetBelgeRaporaEkle(body); break;
       case "getUrunKarlilikRaporu": result = getUrunKarlilikRaporu(body); break;
-      case "saveSatis":       result = saveSatis(body); break;
-      case "updateSatis":     result = updateSatis(body); break;
+      // ★ (14 Eki 2026) Kayıt yanıtına belge detayı eklenir: istemci ekranı ikinci bir getSatisDetay isteği beklemeden açar.
+      case "saveSatis":       result = saveSatis(body); if (result && result.ok) { try { result.detay = getSatisDetay(result.id); } catch (_e) {} } break;
+      case "updateSatis":     result = updateSatis(body); if (result && result.ok) { try { result.detay = getSatisDetay(result.id); } catch (_e) {} } break;
       case "silSatis":        result = silSatis(body); break;
       case "getAlisListesi":  result = getAlisListesi(); break;
       case "getAlisDetay":    result = getAlisDetay(body.alisId); break;

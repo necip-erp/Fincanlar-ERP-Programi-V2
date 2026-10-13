@@ -6232,7 +6232,7 @@ function satisBelgeGorunumuAc_(id){
   document.getElementById("satis-view").style.display = "flex";
   document.getElementById("mod-satis").classList.add("detay-acik");
 }
-function satisAc(id){
+function satisAc(id, hazirDetay){
   if(!_siparisDurumlari.length) siparisDurumlariYukle();
   // ★ (10 Eki 2026) Sekme şeridinden bu belgenin sekmesine geri dönülünce (rapor/başka sayfa arada gezildiyse) panel hâlâ aynı belgeyi
   // gösteriyorsa sunucudan yeniden yüklenmez; yalnız görünüm geri açılır (yazılmış ama kaydedilmemiş değişiklikler de korunur).
@@ -6268,7 +6268,10 @@ function satisAc(id){
   document.getElementById("mod-satis").classList.add("detay-acik");
   const panel = document.getElementById("satis-detail-panel");
   panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⏳</span><p>Yükleniyor...</p></div>';
-  cariApi("getSatisDetay", {satisId:id}).then(res=>{
+  // ★ (14 Eki 2026) Kayıttan hemen sonra açılışta detay, kayıt yanıtıyla birlikte geldiyse (hazirDetay) ikinci sunucu isteği yapılmaz;
+  // EDM ortamı sorgusu da detayı beklemeden paralel başlar.
+  const edmHazir = edmOrtamYukle_();
+  (hazirDetay && hazirDetay.ok ? Promise.resolve(hazirDetay) : cariApi("getSatisDetay", {satisId:id})).then(res=>{
     if(!res.ok){ panel.innerHTML = '<div class="cari-detail-empty"><span class="ic">⚠️</span><p>'+(res.hata||"Hata")+'</p></div>'; return; }
     // Bu kayıt hangi belge tipindeyse (Fatura/Teklif/Sipariş), sol taraftaki alt sekmeyi
     // de ona göre senkronize et — aksi halde ör. son görülen sekme "Sipariş" iken bir
@@ -6280,7 +6283,7 @@ function satisAc(id){
       _satisAktifBelgeTipi = belgeTipi;
       document.querySelectorAll(".belge-tab").forEach(b=>b.classList.toggle("active", b.dataset.tip===belgeTipi));
     }
-    edmOrtamYukle_().then(()=>{
+    edmHazir.then(()=>{
       satisDetayCiz(res);
       satisListesiCiz(_satisListe);
       edmOtomatikDurum_(res);
@@ -8555,14 +8558,32 @@ function hsNokta_(id){
   if(!n) return "";
   return `<span class="hs-nokta ${_hsYeni.indexOf(id)>=0?'hs-nokta-yeni':''}" title="Forma eklendi${n>1?' ('+n+' kez)':''}"></span>`;
 }
+// ★ (14 Eki 2026) Hızlı Satış: ambalaj (Birim2/kutu) tanımlı üründe yazılan miktar kutunun tam katı değilse miktar bir sonraki
+// tam kutuya YUKARI yuvarlanır (müşteriye eksik gitmesin) ve sipariş formuna düzeltilmiş haliyle aktarılır; ekranda uyarı verilir.
+function hsKutuDuzelt_(s, m){
+  const amb = parseFloat(s && s.ambalajMiktari) || 0;
+  if(!(amb > 0) || !(m > 0)) return { miktar:m, duzeltildi:false };
+  const kat = m / amb;
+  if(Math.abs(kat - Math.round(kat)) <= 1e-6) return { miktar:m, duzeltildi:false };
+  const ust = Math.ceil(kat);
+  const yeni = Math.round(ust * amb * 10000) / 10000;
+  const ambAd = s.ambalajBirimi || "kutu", birim = s.birim1 || s.birim || "";
+  return { miktar:yeni, duzeltildi:true,
+    metin: (s.stokAdi ? s.stokAdi + ": " : "") + miktarFormat(m) + " → " + miktarFormat(yeni) + " " + birim + " (" + ust + " " + ambAd + ")",
+    kutuBilgi: "1 " + ambAd + " = " + miktarFormat(amb) + " " + birim };
+}
 function hizliSatisEkle(id){
   const s = (_stokTanimListe||[]).find(x=>x.id === id);
   if(!s) return;
   const inp = document.getElementById("hs-q-"+id);
-  const m = hizliSatisAdetSayi_(inp ? inp.value : _hsMiktar[id]);
+  let m = hizliSatisAdetSayi_(inp ? inp.value : _hsMiktar[id]);
   if(!m){ if(inp) inp.focus(); return; }
+  const d = hsKutuDuzelt_(s, m);
+  if(d.duzeltildi){
+    m = d.miktar;
+    kutuUyariGoster_("⚠️ KUTUYA UYMAYAN MİKTAR DÜZELTİLDİ", d.metin + " — " + d.kutuBilgi + ". Düzeltilmiş miktar forma eklendi.");
+  }
   hizliSatisFormaEkle_([hsKalem_(s, m)]);
-  kutuMiktarUyumKontrol(s.stokKodu, m);
   _hsDurum.eklenenler.push({ id, ad: s.stokAdi, miktar: m, birim: s.birim1 || "adet" });
   delete _hsMiktar[id];
   _hsYeni = [id];
@@ -8572,17 +8593,21 @@ function hizliSatisEkle(id){
 }
 // Toplu Ekle: miktar yazılmış TÜM ürünleri (hangi sekmede olursa olsun) tek seferde forma ekler.
 function hizliSatisTopluEkle(){
-  const kalemler = [], ekle = [];
+  const kalemler = [], ekle = [], duzeltilen = [];
   Object.keys(_hsMiktar).forEach(id=>{
-    const m = hizliSatisAdetSayi_(_hsMiktar[id]);
+    let m = hizliSatisAdetSayi_(_hsMiktar[id]);
     const s = (_stokTanimListe||[]).find(x=>x.id === id);
     if(!m || !s) return;
+    const d = hsKutuDuzelt_(s, m);
+    if(d.duzeltildi){ duzeltilen.push(d.metin); m = d.miktar; }
     kalemler.push(hsKalem_(s, m)); ekle.push({ id, ad: s.stokAdi, miktar: m, birim: s.birim1 || "adet" });
   });
   if(!kalemler.length){ alert("Önce en az bir ürüne miktar yazın."); return; }
   hizliSatisFormaEkle_(kalemler);
-  let _kutuIlk = false;
-  kalemler.forEach(k=>{ if(!_kutuIlk && kutuMiktarUyumKontrol(k.stokKodu, k.miktar)) _kutuIlk = true; });   // birden fazlaysa ilk uyumsuzu gösterir
+  if(duzeltilen.length){
+    kutuUyariGoster_("⚠️ " + duzeltilen.length + " ÜRÜNDE KUTUYA UYMAYAN MİKTAR DÜZELTİLDİ",
+      duzeltilen.slice(0,3).join(" · ") + (duzeltilen.length > 3 ? " · … (+" + (duzeltilen.length-3) + ")" : "") + ". Düzeltilmiş miktarlar forma eklendi.");
+  }
   ekle.forEach(x=>{ _hsDurum.eklenenler.push(x); delete _hsMiktar[x.id]; });
   _hsYeni = ekle.map(x=>x.id);
   hizliSatisCiz();
@@ -9177,12 +9202,14 @@ function satisKaydet(){
     _satisDuzenleId = null;
     if(_satisTaslakId){ satisTaslakSil_(_satisTaslakId); _satisTaslakId = null; } // kayıt tamamlandı → yarım kalan taslak silinir
     satisBelgeTipiDegistir(body.belgeTipi);
-    satisListesiYukle();
-    if(cariId) cariListesiYukle(); // cari bakiyesi güncellenmiş olabilir
     // Kaydedilen belge listeyi bozmadan YENİ sekmede açılır (liste/rapor yerinde kalır)
     const kayitId = duzenleId || res.id;
     const kayitOzet = (_satisListe||[]).find(x=>x.id===kayitId) || {belgeTipi:body.belgeTipi, siparisNo:body.siparisNo, id:kayitId};
-    kayitSekmesindeAc('satis','📤',satisSekmeEtiketi_(kayitOzet),'SATIS:'+kayitId,()=>satisAc(kayitId));
+    // ★ (14 Eki 2026) Belge detayı kayıt yanıtıyla geldi (res.detay): açılışta ikinci sunucu isteği yok (yalnız ilk açılışta kullanılır, sonraki
+    // sekme dönüşlerinde güncel veri yüklenir). Liste ve cari yenilemesi belge ekranı çizildikten SONRA başlar; eskiden aynı anda 3 istek yarışıyordu.
+    let ilkDetay = res.detay || null;
+    kayitSekmesindeAc('satis','📤',satisSekmeEtiketi_(kayitOzet),'SATIS:'+kayitId,()=>{ const d = ilkDetay; ilkDetay = null; satisAc(kayitId, d); });
+    setTimeout(()=>{ satisListesiYukle(); if(cariId) cariListesiYukle(); }, 400);   // cari bakiyesi güncellenmiş olabilir
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
