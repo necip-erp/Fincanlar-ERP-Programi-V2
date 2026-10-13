@@ -7383,12 +7383,17 @@ function hsAyarYaz_(){ try{ localStorage.setItem("hs_ayar", JSON.stringify(hsAya
 // ANINDA çizer, taze liste gelince (değiştiyse) sessizce günceller. Önbellek giriş/çıkışta temizlenir (yapı önbelleği).
 const HS_STOK_ANAHTAR_ = "fincanlar_yapi_hsStokListesi";
 let _stokIstek_ = null;
+// ★ (14 Eki 2026) Hızlı Satış ara belleği: stok + ürün grubu listesi her F12'de sunucudan çekilip ekran baştan düzenlenmesin diye
+// bellekteki liste en çok 15 dk'da bir tazelenir (açıkken arka planda, sessizce). Anında tazelemek için 🔄 Yenile / F9.
+const HS_YENILE_MS_ = 15 * 60 * 1000;
+let _hsStokSon = 0, _hsGrupSon = 0, _hsYenileniyor = false;
 function stokListesiIste_(){
   if(_stokIstek_) return _stokIstek_;
   _stokIstek_ = cariApi("getStokTanimListesi").then(r=>{
     if(r && r.ok){
       r.degisti = JSON.stringify(_stokTanimListe) !== JSON.stringify(r.kalemler);
       _stokTanimListe = r.kalemler;
+      _hsStokSon = Date.now();
       onbellekYaz("stokTanimListesi", r.kalemler);
       try{ localStorage.setItem(HS_STOK_ANAHTAR_, JSON.stringify({t:Date.now(), veri:r.kalemler})); }catch(e){}
     }
@@ -7405,6 +7410,47 @@ function hsStokOnbellektenYukle_(){
   if(l && l.length) _stokTanimListe = l;
 }
 
+// Stok + ürün grubu listesini tazeler. zorla=false: ara bellek 15 dk'dan tazeyse hiçbir şey yapmaz. Ekran, liste değiştiyse
+// ve kullanıcı miktar yazmıyorsa yeniden çizilir. Döner: Promise (bitince).
+function hsVeriYenile_(zorla){
+  const stokBos = !(_stokTanimListe && _stokTanimListe.length);
+  const grupBos = !(_tanimListeCache.urunGrubu && _tanimListeCache.urunGrubu.length);
+  const simdi = Date.now();
+  const stokEski = zorla || stokBos || (simdi - _hsStokSon > HS_YENILE_MS_);
+  const grupEski = zorla || grupBos || (simdi - _hsGrupSon > HS_YENILE_MS_);
+  if(!stokEski && !grupEski) return Promise.resolve();
+  if(_hsYenileniyor && !zorla) return Promise.resolve();
+  _hsYenileniyor = true;
+  const yaziyor = ()=>document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("hs-adet");
+  const isler = [];
+  if(stokEski) isler.push(stokListesiIste_().then(r=>{
+    if(r && r.ok && r.degisti && document.getElementById("hs-grid") && !yaziyor()) hizliSatisCiz();
+  }).catch(()=>{}));
+  if(grupEski){
+    const grupOnceki = JSON.stringify(_tanimListeCache.urunGrubu || []);
+    isler.push(cariApiYapi("getBasitTanimListesi", {tip:"urunGrubu"}).then(r=>{
+      if(r && r.ok){
+        _hsGrupSon = Date.now();
+        _tanimListeCache.urunGrubu = r.kalemler; _tanimListeYuklendi.urunGrubu = true;
+        if(JSON.stringify(r.kalemler) !== grupOnceki && document.getElementById("hs-grid") && !yaziyor()) hizliSatisCiz();
+      }
+    }).catch(()=>{}));
+  }
+  return Promise.all(isler).finally(()=>{ _hsYenileniyor = false; });
+}
+// 🔄 Yenile / F9: ara belleği beklemeden sunucudan tazeler.
+function hizliSatisYenile(){
+  const b = document.getElementById("hs-yenile-btn");
+  if(b){ b.disabled = true; b.textContent = "⏳ Yenileniyor…"; }
+  hsVeriYenile_(true).finally(()=>{
+    const b2 = document.getElementById("hs-yenile-btn");
+    if(b2){ b2.disabled = false; b2.textContent = "🔄 Yenile (F9)"; }
+    if(document.getElementById("hs-grid")) hizliSatisCiz();
+  });
+}
+// Hızlı Satış açıkken ara belleğin yaşı dakikada bir kontrol edilir; 15 dk'yı geçtiyse sessizce tazelenir.
+setInterval(function(){ if(document.getElementById("hs-overlay")) hsVeriYenile_(false); }, 60 * 1000);
+
 function hizliSatisToggle(){
   if(document.getElementById("hs-overlay")){ hizliSatisKapat(); return; }
   hizliSatisAc();
@@ -7416,18 +7462,10 @@ function hizliSatisAc(){
   if(document.getElementById("hs-overlay")) return;
   if(_hsDurum.form !== form){ _hsDurum = { form:form, sekme:"hizli", ara:"", kaydirma:0, eklenenler:[] }; _hsMiktar = {}; }
   _hsLimit = 80; _hsKolLimit = {};
-  // Önce önbellekteki liste/gruplar ANINDA çizilir; sonra arka planda tazelenir (değiştiyse ekran güncellenir, miktar yazarken bozulmaz).
+  // Önce ara bellekteki liste/gruplar ANINDA çizilir. Ara bellek 15 dk'dan eskiyse (veya boşsa) arka planda tazelenir;
+  // tazeyse sunucuya hiç gidilmez ve ekran yeniden düzenlenmez.
   hsStokOnbellektenYukle_();
-  stokListesiIste_().then(r=>{
-    if(r && r.ok && r.degisti && document.getElementById("hs-grid") && !(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("hs-adet"))) hizliSatisCiz();
-  }).catch(()=>{});
-  const grupOnceki = JSON.stringify(_tanimListeCache.urunGrubu || []);
-  cariApiYapi("getBasitTanimListesi", {tip:"urunGrubu"}).then(r=>{
-    if(r && r.ok){
-      _tanimListeCache.urunGrubu = r.kalemler; _tanimListeYuklendi.urunGrubu = true;
-      if(JSON.stringify(r.kalemler) !== grupOnceki && document.getElementById("hs-grid")) hizliSatisCiz();
-    }
-  }).catch(()=>{});
+  hsVeriYenile_(false);
   const ay = hsAyar_();
   const ov = document.createElement("div");
   ov.className = "modal-overlay";
@@ -7449,6 +7487,7 @@ function hizliSatisAc(){
         <label class="hs-boy" title="Miktar kutularının çerçeve rengi">Miktar rengi <input type="color" id="hs-mr" value="${ay.miktarRenk||'#2563eb'}" oninput="hizliSatisMiktarRenk(this.value)"></label>
         <button class="btn btn-primary" onclick="hizliSatisUrunEkleAc()" title="Seçili sekmeye ürün ekle (stok kartından seç)">➕ Ürün Ekle</button>
         <button class="btn" onclick="hizliSatisDuzenSifirla()" title="Bu sekmenin elle sıralamasını ve ürün boyutlarını sıfırla">Düzeni Sıfırla</button>
+        <button class="btn" id="hs-yenile-btn" onclick="hizliSatisYenile()" title="Stok ve ürün gruplarını sunucudan hemen tazele (liste normalde 15 dakikada bir kendiliğinden tazelenir) — F9">🔄 Yenile (F9)</button>
         <button class="btn" onclick="hizliSatisKapat()" title="Kapat — forma dön (F12 / Esc)">✕ Kapat (F12)</button>
       </div>
       <div class="hs-sekmeler" id="hs-sekmeler"></div>
@@ -8606,6 +8645,14 @@ function hizliSatisFormaEkle_(kalemler){
   satisKalemlerCiz();
   satisSonSatiraKaydir_(true);
 }
+
+// F9 (yalnız Hızlı Satış açıkken): listeyi ara bellek süresini beklemeden sunucudan tazeler.
+document.addEventListener("keydown", function(e){
+  if(e.key === "F9" && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && document.getElementById("hs-overlay")){
+    e.preventDefault(); e.stopPropagation();
+    hizliSatisYenile();
+  }
+}, true);
 
 // F12: Sipariş / Fatura / Teklif formu açıkken Hızlı Satış'ı açar-kapatır (form yokken tarayıcının kendi F12'si çalışır).
 document.addEventListener("keydown", function(e){
