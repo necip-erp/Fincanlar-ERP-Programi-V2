@@ -26,8 +26,18 @@ function yilKayitlari_() {
   return kayit;
 }
 function yilListesi_() { return Object.keys(yilKayitlari_()).sort(); }
+// Şirket (çalışma yılı) görünen adları: iç anahtar (ör. "2026", "2026-2", "2026-3") DEĞİŞMEZ, ekranda etiket görünür
+// (ör. "2026" → "ESKİ 2026"). Script Properties "YIL_ETIKETLERI" (JSON). Etiketi olmayan yılda anahtar görünür.
+function yilEtiketleri_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty("YIL_ETIKETLERI") || "{}") || {}; } catch (e) { return {}; }
+}
+// Açılışta (giriş ekranında) seçili gelecek şirket: Script Properties "VARSAYILAN_YIL"; yoksa eski davranış (takvim yılı).
 function varsayilanYil_() {
   const kayit = yilKayitlari_();
+  try {
+    const secili = PropertiesService.getScriptProperties().getProperty("VARSAYILAN_YIL");
+    if (secili && kayit[secili]) return secili;
+  } catch (e) {}
   const takvim = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy");
   if (kayit[takvim]) return takvim;
   const liste = yilListesi_();
@@ -1087,7 +1097,7 @@ const YAZMA_DEGIL_ = /^(get|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostal
 const OTURUMSUZ_ACTIONLAR = { girisYap: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
-  eskiPanelStokKartlariniAktar: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
+  eskiPanelStokKartlariniAktar: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, sirketDuzeniKur: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
   getYedekDurumu: true, yedekAlSimdi: true, yedekTetikleyiciKurWeb: true, saveYedekEpostalari: true, yedekEpostaGonderSimdi: true, // Yedekleme: sadece Admin
   getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, kayitDefteriHatalariTemizle: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
@@ -1103,7 +1113,8 @@ function handleRequest(e) {
     let oturum = null;
     // Giriş ekranı yıl listesini oturum açmadan ister.
     if (action === "calismaYillariGetir") {
-      return jsonResponse({ ok: true, yillar: yilListesi_(), varsayilan: varsayilanYil_() });
+      return jsonResponse({ ok: true, yillar: yilListesi_(), varsayilan: varsayilanYil_(), etiketler: yilEtiketleri_(),
+        sirketDuzeniKuruldu: !!PropertiesService.getScriptProperties().getProperty("SIRKET_DUZENI_KURULDU") });
     }
     // Çalışma yılı: istekle gelen yıl kayıtlıysa o yılın e-tablosu kullanılır (yoksa takvim yılı).
     const istenenYil = String(body.yil || "").trim() || varsayilanYil_();
@@ -1137,6 +1148,7 @@ function handleRequest(e) {
       case "girisYap":        result = girisYap(body); break;
       case "cikisYap":        result = cikisYap(body); break;
       case "yeniCalismaYiliOlustur": result = yeniCalismaYiliOlustur(body); break;
+      case "sirketDuzeniKur": result = sirketDuzeniKur(body); break;
       case "parolaDegistir":  result = parolaDegistir(body, oturum); break;
       case "kullaniciListesiGetir": result = kullaniciListesiGetir(); break;
       case "kullaniciEkle":         result = kullaniciEkle(body); break;

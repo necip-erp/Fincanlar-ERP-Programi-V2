@@ -1931,7 +1931,7 @@ setInterval(topbarSaatGuncelle, 10000);
         <div style="flex:1"><label>Telefon (opsiyonel)</label><input id="plasiyer-yeni-tel" type="text" placeholder="05XX XXX XX XX"></div>
         <button class="btn btn-primary" onclick="plasiyerEkleUI()">+ Ekle</button>
       </div>
-      <div style="margin-top:10px"><button id="plasiyer-eski-aktar-btn" class="btn" style="display:none" onclick="eskiYildanPlasiyerAktar()" title="Temel yıl (2026) e-tablosundaki plasiyer tanımlarını bu çalışma yılına devreder. Sadece Admin.">📥 2026 Şirketinden Devral (Plasiyerler)</button></div>
+      <div style="margin-top:10px"><button id="plasiyer-eski-aktar-btn" class="btn" style="display:none" onclick="eskiYildanPlasiyerAktar()" title="Temel yıl (2026) e-tablosundaki plasiyer tanımlarını bu çalışma yılına devreder. Sadece Admin.">📥 ESKİ 2026 Şirketinden Devral (Plasiyerler)</button></div>
       <div id="plasiyer-liste" style="margin-top:12px"></div>
     </div>
     <div class="finans-panel">
@@ -2104,6 +2104,7 @@ setInterval(topbarSaatGuncelle, 10000);
       <div class="rapor-baslik" style="margin-top:0">Çalışma Yılları</div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Her yıl ayrı bir e-tabloda tutulur; giriş ekranında yıl seçilir. Yeni yıl, mevcut yılın kopyasından üretilir: tüm ayarlar, tanımlar, kullanıcılar ve kurallar aynen gelir; cariler, stok kartları, stok ve tüm hareketler sıfırdan başlar.</p>
       <div id="calisma-yili-liste" style="margin-bottom:12px;font-size:13px"></div>
+      <div style="margin-bottom:14px"><button class="btn btn-primary" id="sirket-duzeni-btn" style="display:none" onclick="sirketDuzeniKurGonder()" title="Mevcut şirketlerin başına ESKİ yazar, boş yeni 2026 şirketini oluşturur ve açılışta onu getirir. Tek seferlik, sadece Admin.">🏢 Şirket Düzenini Kur (ESKİ 2026 / ESKİ 2026-2 + boş yeni 2026)</button></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
         <div class="fld" style="width:170px;margin-bottom:0"><label>Yeni Çalışma Yılı</label><input id="yeni-yil-deger" type="text" maxlength="7" placeholder="2027 veya 2026-2"></div>
         <button class="btn btn-primary" id="yeni-yil-btn" onclick="yeniCalismaYiliGonder()">+ Yeni Çalışma Yılı Oluştur</button>
@@ -2968,7 +2969,7 @@ function uygulamaKullanicisiUyGoster_(){
     const el = document.getElementById("kullanici-menu-ad");
     if(el){
       const y = localStorage.getItem("fincanlar_calisma_yili");
-      el.textContent = k ? k.ad + (k.rol==="Admin" ? " (Admin)" : "") + (y ? " · " + y : "") : "";
+      el.textContent = k ? k.ad + (k.rol==="Admin" ? " (Admin)" : "") + (y ? " · " + (typeof yilEtiketi_==="function" ? yilEtiketi_(y) : y) : "") : "";
     }
   }catch(e){}
 }
@@ -19230,9 +19231,26 @@ function calismaYiliListeCiz_(){
   const el = document.getElementById("calisma-yili-liste"); if(!el) return;
   cariApi("calismaYillariGetir", {}).then(res=>{
     if(!res || !res.ok) return;
+    yilEtiketleriKaydet_(res.etiketler);
     const aktif = localStorage.getItem("fincanlar_calisma_yili");
-    el.innerHTML = "Mevcut yıllar: " + res.yillar.map(y=>`<b>${y}</b>${y===aktif?" (açık)":""}`).join(", ");
+    el.innerHTML = "Mevcut şirketler / yıllar: " + res.yillar.map(y=>`<b>${yilEtiketi_(y)}</b>${y===aktif?" (açık)":""}${y===res.varsayilan?" (açılışta gelen)":""}`).join(", ");
+    const db = document.getElementById("sirket-duzeni-btn");
+    if(db) db.style.display = res.sirketDuzeniKuruldu ? "none" : "";
+    uygulamaKullanicisiUyGoster_();
   });
+}
+// ★ 14 Eki 2026: tek seferlik — mevcut şirketlerin başına "ESKİ" yazılır, boş yeni "2026" şirketi oluşturulur ve açılışta o gelir.
+function sirketDuzeniKurGonder(){
+  if(!confirm("Şirket düzeni kurulsun mu?\n\n• Mevcut şirketler (2026 ve 2026-2) AYNEN kalır; adlarının başına ESKİ yazılır (veriler değişmez).\n• Yeni, BOŞ bir \"2026\" şirketi oluşturulur (ayarlar, tanımlar ve kullanıcılar kopyalanır; cari, stok ve tüm hareketler sıfır).\n• Giriş ekranında açılışta yeni 2026 şirketi gelir; eskilere listeden seçip girilir.\n\nBu işlem birkaç dakika sürebilir ve tek seferliktir.")) return;
+  const btn = document.getElementById("sirket-duzeni-btn");
+  btn.disabled = true; const eski = btn.textContent; btn.textContent = "Kuruluyor...";
+  cariApi("sirketDuzeniKur", {}).then(res=>{
+    btn.disabled = false; btn.textContent = eski;
+    if(!res || !res.ok){ alert((res&&res.hata)||"Kurulamadı"); return; }
+    yilEtiketleriKaydet_(res.etiketler);
+    toastGoster("Şirket düzeni kuruldu — çıkış yapıp girişte yeni 2026 şirketi açılır");
+    calismaYiliListeCiz_();
+  }).catch(()=>{ btn.disabled = false; btn.textContent = eski; alert("Sunucuya ulaşılamadı"); });
 }
 function yeniCalismaYiliGonder(){
   const el = document.getElementById("yeni-yil-deger");
@@ -21162,13 +21180,19 @@ window.addEventListener("beforeunload", function(e){
      Token yoksa uygulamaAcilisRutini() HİÇ ÇAĞRILMAZ — sadece login formu görünür,
      başarılı girişten sonra bir kez çağrılır. -->
 <script>
+// Şirket (çalışma yılı) görünen adı: iç anahtar değişmez, etiket sunucudan gelir (ör. "2026" → "ESKİ 2026").
+function yilEtiketleriKaydet_(et){ try{ localStorage.setItem("fincanlar_yil_etiketleri", JSON.stringify(et||{})); }catch(e){} }
+function yilEtiketi_(y){
+  try{ const et = JSON.parse(localStorage.getItem("fincanlar_yil_etiketleri")||"{}")||{}; return et[y] || y; }catch(e){ return y; }
+}
 function girisYilListesiYukle_(){
   const sel = document.getElementById("login-yil"); if(!sel) return;
   cariApi("calismaYillariGetir", {yil: "-"}).then(res=>{ // yıl istekte kullanılmaz, sadece listeyi alır
     if(!res || !res.ok || !res.yillar || !res.yillar.length) return;
-    const kayitli = localStorage.getItem("fincanlar_calisma_yili");
-    const secili = (kayitli && res.yillar.indexOf(kayitli) >= 0) ? kayitli : res.varsayilan;
-    sel.innerHTML = res.yillar.map(y=>`<option value="${y}" ${y===secili?"selected":""}>${y}</option>`).join("");
+    yilEtiketleriKaydet_(res.etiketler);
+    // Açılışta HER ZAMAN sunucunun belirlediği güncel şirket seçili gelir (eskilere girmek için listeden seçilir).
+    const secili = (res.yillar.indexOf(res.varsayilan) >= 0) ? res.varsayilan : res.yillar[res.yillar.length-1];
+    sel.innerHTML = res.yillar.map(y=>`<option value="${y}" ${y===secili?"selected":""}>${yilEtiketi_(y)}</option>`).join("");
   }).catch(()=>{});
 }
 function girisEkraniGoster_(hataMesaji){

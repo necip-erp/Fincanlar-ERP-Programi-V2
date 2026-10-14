@@ -75,6 +75,43 @@ function yeniCalismaYiliOlustur(body) {
   }
 }
 
+// ★ 14 Eki 2026 — ŞİRKET DÜZENİ (tek seferlik, sadece Admin):
+//   • Mevcut tüm şirketler (2026, 2026-2) AYNEN kalır, yalnızca görünen adlarının başına "ESKİ " eklenir
+//     (iç anahtarlar ve veriler değişmez).
+//   • Yeni, BOŞ bir şirket oluşturulur ve adı "2026" görünür (iç anahtar 2026-3; ayarlar/tanımlar/kullanıcılar
+//     kaynak şirketten aynen gelir, cari/stok/hareket sıfırdır) ve giriş ekranında AÇILIŞTA bu şirket seçili gelir.
+//   • Bundan sonraki tüm kayıtlar yeni şirkette tutulur; eski şirketlere giriş ekranından yıl seçilerek girilir.
+// body: { kaynakYil?: "2026-2" } — kaynak verilmezse 2026-2 (yoksa temel yıl) kullanılır.
+function sirketDuzeniKur(body) {
+  const props = PropertiesService.getScriptProperties();
+  const onceki = props.getProperty("SIRKET_DUZENI_KURULDU");
+  if (onceki) return { ok: false, hata: "Şirket düzeni zaten kurulmuş (yeni şirket iç adı: " + onceki + ")" };
+
+  const kayit = yilKayitlari_();
+  const eskiler = Object.keys(kayit).sort();
+  let n = 3, yeniAnahtar = "2026-" + n;
+  while (kayit[yeniAnahtar]) { n++; yeniAnahtar = "2026-" + n; }
+
+  let kaynak = String((body && body.kaynakYil) || "");
+  if (!kaynak || !kayit[kaynak]) kaynak = kayit["2026-2"] ? "2026-2" : TEMEL_YIL_;
+
+  const r = yeniCalismaYiliOlustur({ yeniYil: yeniAnahtar, kaynakYil: kaynak });
+  if (!r || !r.ok) return r || { ok: false, hata: "Yeni şirket oluşturulamadı" };
+
+  const etiket = yilEtiketleri_();
+  eskiler.forEach(function (y) {
+    const mevcut = String(etiket[y] || y);
+    etiket[y] = mevcut.indexOf("ESKİ") === 0 ? mevcut : "ESKİ " + mevcut;
+  });
+  etiket[yeniAnahtar] = "2026";
+  props.setProperty("YIL_ETIKETLERI", JSON.stringify(etiket));
+  props.setProperty("VARSAYILAN_YIL", yeniAnahtar);
+  props.setProperty("SIRKET_DUZENI_KURULDU", yeniAnahtar);
+  _YIL_KAYIT_ = null;
+
+  return { ok: true, yeniAnahtar: yeniAnahtar, kaynakYil: kaynak, etiketler: etiket, sheetId: r.sheetId, url: r.url };
+}
+
 // FATURAFIYAT (dış e-fatura tablosu) tüm yılların faturalarını tutar. BFM "bekleyen alış faturaları"
 // listesi çalışma yılına göre süzülür: temel yıl (2026) eski davranışı korur (2026 ve öncesi görünür);
 // sonraki yıllar yalnız kendi yılının faturalarını görür. Tarihten yıl okunamıyorsa fatura gösterilir.
