@@ -820,6 +820,7 @@ body.giris-yapildi #login-ekran{display:none}
     <input id="global-ara" placeholder="Ürün ara (kod, isim, ebat)..." oninput="globalAraDegisti(this.value)">
   </div>
   <button class="homebtn" id="ak-btn" onclick="akAc()" title="Akıllı Arama: ne yapmak istediğini yaz, doğrudan işleme geç (Ctrl+K)">⚡ Ne yapmak istiyorsun? <span class="kisayol-ipucu" id="ak-btn-kisayol">Ctrl+K</span></button>
+  <button class="homebtn" id="baglanti-rozet" style="display:inline-block;margin-left:8px;font-weight:800" onclick="baglantiGecisSor()" title="">…</button>
   <button class="homebtn" id="yedek-rozet" style="display:none" onclick="modulAc('yedekleme')" title="Yedekleme durumu — tıklayınca Yedekleme modülü açılır">💾 …</button>
   <button class="homebtn" id="home-btn" onclick="gitAnaSayfa()" title="Ana Sayfa (Ctrl + sayı satırında 1'in solundaki tuş)">← Ana Sayfa <span class="kisayol-ipucu">Ctrl+"</span></button>
   <button class="homebtn" id="veri-yenile-btn" style="display:inline-block;margin-left:8px" onclick="verileriYenile()" title="Sayfayı yenile: sayfa yeniden yüklenmez, açık sekmeler ve pencereler kapanmaz (verileri sunucudan tazeler)">↻ Sayfayı Yenile <span class="kisayol-ipucu" id="veri-yenile-ipucu">Alt+V</span></button>
@@ -3888,6 +3889,36 @@ function yedekRozetYenile_(zorla){
 }
 setTimeout(yedekRozetYenile_, 6000);
 setInterval(()=>yedekRozetYenile_(false), 5*60*1000);
+
+// ── ★ 15 Eki 2026: Bağlantı rozeti (Bulut / Yerel Sunucu) + geçiş ──
+const BAGLANTI_BULUT_URL = "https://necip-erp.github.io/Fincanlar-ERP-Programi-V2/";
+const BAGLANTI_YEREL_URL = "http://192.168.1.103:3000/";
+function baglantiBulutMu_(){ return /(^|\.)github\.io$/i.test(location.hostname); }
+function baglantiRozetCiz_(){
+  const r = document.getElementById("baglanti-rozet"); if(!r) return;
+  const bulut = baglantiBulutMu_();
+  if(bulut){
+    r.textContent = "☁ BULUT";
+    r.style.background = "#dbeafe"; r.style.color = "#1d4ed8"; r.style.borderColor = "#3b82f6";
+    r.title = "Şu an BULUT (Google E-Tablo) sürümündesiniz — yavaş olabilir. Tıklayınca yerel sunucuya geçiş sorulur.";
+  } else {
+    r.textContent = "🟢 YEREL SUNUCU";
+    r.style.background = "#dcfce7"; r.style.color = "#166534"; r.style.borderColor = "#22c55e";
+    r.title = "Şu an dükkândaki YEREL SUNUCUdasınız (hızlı sürüm), adres: " + location.host + ". Tıklayınca buluta geçiş sorulur.";
+  }
+}
+function baglantiGecisSor(){
+  const bulut = baglantiBulutMu_();
+  const hedefAd = bulut ? "YEREL SUNUCU (dükkân ağı)" : "BULUT";
+  const hedefUrl = bulut ? BAGLANTI_YEREL_URL : BAGLANTI_BULUT_URL;
+  const uyari = bulut
+    ? "Yerel sunucuya yalnızca dükkân ağındayken ulaşılır.\nBulutta girdiğiniz kayıtlar yerel sunucuda görünmeyebilir."
+    : "Yerel sunucuda girdiğiniz kayıtlar buluta birkaç dakika içinde yedekle gider; bulutta girilen kayıtlar yerele geri aktarılmaz.";
+  if(!confirm("Şu an: " + (bulut ? "BULUT" : "YEREL SUNUCU") + "\n\n" + hedefAd + " sürümüne geçilsin mi?\n\n" + uyari + "\n\nİki yerde birden kayıt girmeyin, veriler ayrışır. Geçiş yeni pencerede açılır.")) return;
+  window.open(hedefUrl, "_blank", "noopener");
+}
+document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
+baglantiRozetCiz_();
 
 // ── ★ 15 Eki 2026: Yerel sunucu yedekleri (bulut 5 dk + flash saatleri + Şimdi yedekle) ──
 let _yySaatler = [], _yyForm = false, _yyZaman = null;
