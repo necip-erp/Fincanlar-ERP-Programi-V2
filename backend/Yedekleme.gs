@@ -527,7 +527,7 @@ function yerelYedekSimdi(body) {
 // ════════════════════════════════════════════════════════════════════════════
 function yerelGuncelleDurum() {
   if (typeof YerelGuncelle === "undefined" || !YerelGuncelle) return { ok: true, yerel: false };
-  return Object.assign({ ok: true, yerel: true }, JSON.parse(JSON.stringify(YerelGuncelle.durum())));
+  return Object.assign({ ok: true }, JSON.parse(JSON.stringify(YerelGuncelle.durum())), { yerelSunucu: true }); // "yerel" alanı kurulu sürüm bilgisidir (null olabilir), bayrak ayrı
 }
 function yerelGuncelleKontrol() {
   if (typeof YerelGuncelle === "undefined" || !YerelGuncelle) return { ok: false, hata: "Bu işlem yalnızca yerel sunucuda çalışır" };

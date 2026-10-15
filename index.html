@@ -4013,7 +4013,8 @@ function yerelGuncelleSurumMetni_(v){ if(!v) return null; const t = v.tarih ? ne
 function yerelGuncellePanelYukle_(){
   const p = document.getElementById("yerel-guncelle-panel"); if(!p) return;
   cariApi("yerelGuncelleDurum").then(res=>{
-    if(!res || !res.ok || !res.yerel){ p.style.display = "none"; return; }
+    // Not: "yerel" alanı aynı zamanda kurulu sürüm bilgisidir (ilk kurulumda null); yerel sunucu olduğunu yerelSunucu / uzak alanlarından anla.
+    if(!res || !res.ok || !(res.yerelSunucu || res.yerel || ("uzak" in res))){ p.style.display = "none"; return; }
     p.style.display = "";
     yerelGuncelleCiz_(res);
     clearTimeout(_ygZaman);
