@@ -1093,11 +1093,11 @@ function doPost(e) {
 // Bu action'lar oturum/token gerektirmeden çalışır (login ekranı henüz token
 // almadan bunlara ihtiyaç duyar).
 // Veriyi değiştirmeyen işlemler kilit beklemez (istemcideki CARI_API_YAZMA_DEGIL_ ile aynı mantık).
-const YAZMA_DEGIL_ = /^(get|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|cekSeriNoUret|nakliyeSorunluFaturalar$)/; // giriş/çıkış/parola oturum satırı yazar → kilitli (satır kayması olmasın)
-const OTURUMSUZ_ACTIONLAR = { girisYap: true };
+const YAZMA_DEGIL_ = /^(get|yerelYedek|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|cekSeriNoUret|nakliyeSorunluFaturalar$)/; // giriş/çıkış/parola oturum satırı yazar → kilitli (satır kayması olmasın)
+const OTURUMSUZ_ACTIONLAR = { girisYap: true, yerelYedekYukle: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
-  eskiPanelStokKartlariniAktar: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, sirketDuzeniKur: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
+  eskiPanelStokKartlariniAktar: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, sirketDuzeniKur: true, yerelYedekDurum: true, yerelYedekAyarKaydet: true, yerelYedekSimdi: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
   getYedekDurumu: true, yedekAlSimdi: true, yedekTetikleyiciKurWeb: true, saveYedekEpostalari: true, yedekEpostaGonderSimdi: true, // Yedekleme: sadece Admin
   getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, kayitDefteriHatalariTemizle: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
@@ -1254,6 +1254,10 @@ function handleRequest(e) {
       case "getZRaporu": result = zRaporuGetir(body); break;
       case "getYedekDurumu": result = getYedekDurumu(); break;
       case "yedekAlSimdi": result = yedekAlSimdi(); break;
+      case "yerelYedekYukle": result = yerelYedekYukle(body); break;
+      case "yerelYedekDurum": result = yerelYedekDurum(); break;
+      case "yerelYedekAyarKaydet": result = yerelYedekAyarKaydet(body); break;
+      case "yerelYedekSimdi": result = yerelYedekSimdi(body); break;
       case "yedekTetikleyiciKurWeb": result = yedekTetikleyiciKurWeb(); break;
       case "saveYedekEpostalari": result = saveYedekEpostalari(body); break;
       case "yedekEpostaGonderSimdi": result = yedekEpostaGonderSimdi(); break;

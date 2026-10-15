@@ -1790,6 +1790,42 @@ setInterval(topbarSaatGuncelle, 10000);
     </div>
   </div>
   <div class="modview" id="mod-yedekleme">
+    <div class="finans-panel" id="yerel-yedek-bolum" style="display:none">
+      <div class="rapor-baslik" style="margin-top:0">🖥️ Yerel Sunucu Yedekleri</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Bu bilgisayardaki (yerel sunucu) veri <b>değiştiyse her birkaç dakikada buluta</b> (Drive) gönderilir; ayarladığınız saatlerde <b>flash belleğe</b> (veri + program kodu) kopyalanır. Flash o saatte takılı değilse takıldığında kaçan saat için bir kez yedek alınır.</p>
+      <div id="yerel-yedek-durum"><div class="cari-empty">Yükleniyor...</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+        <button class="btn btn-primary" onclick="yerelYedekSimdi('ikisi')">💾 Şimdi Yedek Al (bulut + flash)</button>
+        <button class="btn" onclick="yerelYedekSimdi('bulut')">☁ Yalnız buluta</button>
+        <button class="btn" onclick="yerelYedekSimdi('flash')">🔌 Yalnız flash'a</button>
+        <button class="btn" onclick="yerelYedekPanelYukle_(true)">↻ Yenile</button>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:6px">
+        <div style="font-weight:700;margin-bottom:6px">⚙ Yedek ayarları</div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+          <div style="min-width:240px">
+            <label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="yy-bulut-acik" style="width:auto"> <b>☁ Buluta otomatik yedek</b></label>
+            <div style="margin:6px 0 0 22px;font-size:13px">Her <input type="number" id="yy-bulut-dk" min="1" max="60" style="width:64px"> dakikada bir <span style="color:var(--text3)">(yalnız veri değiştiyse)</span></div>
+          </div>
+          <div style="min-width:300px">
+            <label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="yy-flash-acik" style="width:auto"> <b>🔌 Flash'a otomatik yedek</b></label>
+            <div style="margin:6px 0 0 22px;font-size:13px">
+              <div style="margin-bottom:6px">Hazır düzen:
+                <button class="btn" onclick="yerelYedekSaatHazir(['18:00'])">Günde 1 (18:00)</button>
+                <button class="btn" onclick="yerelYedekSaatHazir(['13:00','19:00'])">Günde 2 (13:00, 19:00)</button>
+                <button class="btn" onclick="yerelYedekSaatHazir(['10:00','14:00','19:00'])">Günde 3</button>
+              </div>
+              <div id="yy-saatler" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
+              <div style="margin-top:6px"><button class="btn" onclick="yerelYedekSaatEkle()">+ Saat ekle</button></div>
+              <div style="margin-top:8px">Flash'ta saklanacak yedek sayısı: <input type="number" id="yy-flash-sakla" min="1" max="100" style="width:64px"></div>
+              <label style="display:flex;gap:6px;align-items:center;margin-top:6px;cursor:pointer"><input type="checkbox" id="yy-flash-kod" style="width:auto"> Program kodunu da flash'a kopyala (KOD klasörü)</label>
+              <div style="margin-top:6px">Ek sürücü harfi <span style="color:var(--text3)">(boşsa takılı flash kendiliğinden bulunur; harici disk için örn. F:)</span>: <input type="text" id="yy-flash-harf" maxlength="14" style="width:96px" placeholder="F:" autocomplete="off"></div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:12px"><button class="btn btn-primary" onclick="yerelYedekAyarKaydet_()">Ayarları Kaydet</button> <span id="yy-kayit-durum" style="font-size:12.5px;color:var(--text3);margin-left:8px"></span></div>
+      </div>
+    </div>
     <div class="finans-panel" id="yedek-bolum">
       <div class="rapor-baslik" style="margin-top:0">💾 Yedekleme</div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Otomatik yedek her 6 saatte bir Drive'daki "Fincanlar ERP - Otomatik Yedekler" klasörüne alınır. Her turda <b>veri</b> (her yılın e-tablosu), <b>program kodu</b> (ZIP), <b>ayarlar</b> (EDM şifresi hariç) ve <b>geri yükleme rehberi</b> kaydedilir. Flash belleğe kaydetmek için aşağıdan indirin.</p>
@@ -3842,9 +3878,105 @@ function yedekRozetYenile_(zorla){
 }
 setTimeout(yedekRozetYenile_, 6000);
 setInterval(()=>yedekRozetYenile_(false), 5*60*1000);
+
+// ── ★ 15 Eki 2026: Yerel sunucu yedekleri (bulut 5 dk + flash saatleri + Şimdi yedekle) ──
+let _yySaatler = [], _yyForm = false, _yyZaman = null;
+function yerelYedekZamanMetni_(t){ if(!t) return "hiç"; const sn = Math.round((Date.now()-t)/1000); const m = new Date(t).toLocaleString("tr-TR"); const g = sn<60 ? "az önce" : sn<3600 ? Math.round(sn/60)+" dk önce" : sn<86400 ? Math.round(sn/3600)+" saat önce" : Math.round(sn/86400)+" gün önce"; return m + " (" + g + ")"; }
+function yerelYedekPanelYukle_(zorla){
+  const bolum = document.getElementById("yerel-yedek-bolum"); if(!bolum) return;
+  if(typeof yedekAdminMi_ === "function" && !yedekAdminMi_()){ bolum.style.display = "none"; return; }
+  cariApi("yerelYedekDurum").then(res=>{
+    if(!res || !res.ok || !res.yerel){ window._yerelSunucu = false; bolum.style.display = "none"; return; }
+    window._yerelSunucu = true;
+    bolum.style.display = "";
+    const eski = document.getElementById("yedek-bolum"); if(eski) eski.style.display = "none"; // bulut e-tablo yedekleme ekranı yerelde çalışmaz
+    yerelYedekDurumCiz_(res);
+    if(!_yyForm || zorla){ yerelYedekFormDoldur_(res.ayar); _yyForm = true; }
+    const calisiyor = res.simdi && res.simdi.islem && (res.simdi.islem.bulut || res.simdi.islem.flash);
+    clearTimeout(_yyZaman);
+    if(bolum.offsetParent !== null) _yyZaman = setTimeout(()=>yerelYedekPanelYukle_(false), calisiyor ? 1500 : 10000);
+  }).catch(()=>{});
+}
+function yerelYedekDurumCiz_(r){
+  const kap = document.getElementById("yerel-yedek-durum"); if(!kap) return;
+  const b = r.durum.bulut, f = r.durum.flash, ay = r.ayar, sm = r.simdi || {}, isl = sm.islem || {};
+  const bd = b.sonBasari ? (Date.now()-b.sonBasari)/60000 : null;
+  let brenk = "#1a8f3c", bikon = "✅";
+  if(!r.bulutAdres){ brenk = "#c62828"; bikon = "❌"; }
+  else if(bd === null || b.sonHata){ brenk = "#c62828"; bikon = b.sonBasari ? "⚠️" : "❌"; }
+  else if(bd > Math.max(15, ay.bulut.dakika*3)){ brenk = "#b07a00"; bikon = "🟡"; }
+  const bmetin = isl.bulut ? "⏳ Buluta gönderiliyor..." : (!r.bulutAdres ? "Bulut adresi bulunamadı" : (b.sonBasari ? "Son bulut yedeği: " + yerelYedekZamanMetni_(b.sonBasari) + (b.sonBoyutKB ? " · " + b.sonBoyutKB + " KB" : "") : "Henüz buluta yedek gönderilmedi"));
+  const bek = (!isl.bulut && ay.bulut.acik && sm.bulutKalanSn !== null) ? ' · sonraki ≈ ' + (sm.bulutKalanSn > 90 ? Math.round(sm.bulutKalanSn/60)+" dk" : sm.bulutKalanSn+" sn") + " sonra (veri değiştiyse)" : (ay.bulut.acik ? "" : " · otomatik KAPALI");
+  const takili = (r.flash.takili||[]).map(x=>x.yol.replace(/\\$/,"")+(x.ad?" ("+x.ad+")":"")).join(", ");
+  let frenk = "#1a8f3c", fikon = "✅";
+  if(isl.flash) { frenk = "#b07a00"; fikon = "⏳"; }
+  else if(f.sonHata && f.sonHata !== "Flash takılı değil"){ frenk = "#c62828"; fikon = "⚠️"; }
+  else if(!f.sonBasari){ frenk = "#b07a00"; fikon = "🟡"; }
+  if(r.flash.bekleyenSlot && !takili && !isl.flash){ frenk = "#b07a00"; fikon = "⚠️"; }
+  const fmetin = isl.flash ? "⏳ Flash'a kopyalanıyor..." : (f.sonBasari ? "Son flash yedeği: " + yerelYedekZamanMetni_(f.sonBasari) + (f.sonSurucu ? " · " + htmlKacis(f.sonSurucu.replace(/\\$/,"")) : "") : "Henüz flash'a yedek alınmadı");
+  const fek = takili ? '<span style="color:#1a8f3c">Flash takılı: ' + htmlKacis(takili) + '</span>' : '<span style="color:var(--text3)">Flash takılı değil</span>';
+  const fsaat = ay.flash.acik ? "Saatler: " + (ay.flash.saatler.length ? ay.flash.saatler.join(", ") : "—") : "otomatik KAPALI";
+  const uyari = (r.flash.bekleyenSlot && !takili) ? '<div style="font-size:12.5px;color:#b07a00;margin-top:4px">⚠ ' + htmlKacis(r.flash.bekleyenSlot) + ' yedeği bekliyor — flash\'ı takın, otomatik alınır.</div>' : "";
+  kap.innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:280px;border:1px solid ${brenk};border-left-width:6px;border-radius:8px;padding:10px 12px;background:var(--bg3)">
+        <div style="font-weight:700;color:${brenk}">${bikon} ☁ Bulut yedeği</div>
+        <div style="font-size:13px;margin-top:3px">${htmlKacis(bmetin)}${htmlKacis(bek)}</div>
+        ${b.sonHata ? '<div style="font-size:12.5px;color:#c62828;margin-top:3px">Son hata: ' + htmlKacis(b.sonHata) + '</div>' : ""}
+        ${b.sonDriveYuzde !== null && b.sonDriveYuzde !== undefined ? '<div style="font-size:12px;color:var(--text3);margin-top:3px">Drive doluluğu: %' + b.sonDriveYuzde + (b.sonDriveYuzde >= 80 ? ' — yer azalıyor, eski yedekler silinecek' : '') + '</div>' : ""}
+      </div>
+      <div style="flex:1;min-width:280px;border:1px solid ${frenk};border-left-width:6px;border-radius:8px;padding:10px 12px;background:var(--bg3)">
+        <div style="font-weight:700;color:${frenk}">${fikon} 🔌 Flash yedeği</div>
+        <div style="font-size:13px;margin-top:3px">${fmetin}</div>
+        <div style="font-size:12.5px;margin-top:3px">${fek} · ${htmlKacis(fsaat)}</div>
+        ${f.sonHata && f.sonHata !== "Flash takılı değil" ? '<div style="font-size:12.5px;color:#c62828;margin-top:3px">Son hata: ' + htmlKacis(f.sonHata) + '</div>' : ""}
+        ${uyari}
+      </div>
+    </div>`;
+}
+function yerelYedekFormDoldur_(ay){
+  document.getElementById("yy-bulut-acik").checked = !!ay.bulut.acik;
+  document.getElementById("yy-bulut-dk").value = ay.bulut.dakika;
+  document.getElementById("yy-flash-acik").checked = !!ay.flash.acik;
+  document.getElementById("yy-flash-sakla").value = ay.flash.sakla;
+  document.getElementById("yy-flash-kod").checked = !!ay.flash.kodDa;
+  document.getElementById("yy-flash-harf").value = (ay.flash.harfler||[]).join(", ");
+  _yySaatler = (ay.flash.saatler||[]).slice();
+  yerelYedekSaatCiz_();
+}
+function yerelYedekSaatCiz_(){
+  const kap = document.getElementById("yy-saatler"); if(!kap) return;
+  kap.innerHTML = _yySaatler.length ? _yySaatler.map((s,i)=>`<span style="display:inline-flex;gap:3px;align-items:center;border:1px solid var(--border);border-radius:8px;padding:2px 4px;background:var(--bg3)"><input type="time" value="${s}" onchange="_yySaatler[${i}]=this.value" style="width:100px"><button class="btn" style="padding:0 6px" title="Bu saati sil" onclick="_yySaatler.splice(${i},1);yerelYedekSaatCiz_()">✕</button></span>`).join("") : '<span style="color:var(--text3)">Saat yok — otomatik flash yedeği alınmaz</span>';
+}
+function yerelYedekSaatEkle(){ if(_yySaatler.length >= 8){ alert("En fazla 8 saat eklenebilir"); return; } _yySaatler.push("12:00"); yerelYedekSaatCiz_(); }
+function yerelYedekSaatHazir(l){ _yySaatler = l.slice(); yerelYedekSaatCiz_(); }
+function yerelYedekAyarKaydet_(){
+  const saatler = _yySaatler.filter(s=>/^([01]\d|2[0-3]):[0-5]\d$/.test(s));
+  if(saatler.length !== _yySaatler.length){ alert("Boş ya da geçersiz bir saat var; düzeltin ya da ✕ ile silin."); return; }
+  const dk = parseInt(document.getElementById("yy-bulut-dk").value,10);
+  if(!(dk>=1 && dk<=60)){ alert("Bulut yedek aralığı 1-60 dakika olmalı"); return; }
+  const harfler = document.getElementById("yy-flash-harf").value.split(/[,;\s]+/).filter(Boolean);
+  const ayar = { bulut:{ acik:document.getElementById("yy-bulut-acik").checked, dakika:dk },
+    flash:{ acik:document.getElementById("yy-flash-acik").checked, saatler, sakla:parseInt(document.getElementById("yy-flash-sakla").value,10)||10, kodDa:document.getElementById("yy-flash-kod").checked, harfler } };
+  const d = document.getElementById("yy-kayit-durum"); d.textContent = "Kaydediliyor...";
+  cariApi("yerelYedekAyarKaydet", {ayar}).then(res=>{
+    if(!res || !res.ok){ d.textContent = ""; alert((res&&res.hata)||"Kaydedilemedi"); return; }
+    d.textContent = "✔ Kaydedildi"; setTimeout(()=>{ d.textContent = ""; }, 3000);
+    yerelYedekPanelYukle_(true);
+  }).catch(()=>{ d.textContent = ""; alert("Sunucuya ulaşılamadı"); });
+}
+function yerelYedekSimdi(hedef){
+  cariApi("yerelYedekSimdi", {hedef}).then(res=>{
+    if(!res || !res.ok){ alert((res&&res.hata)||"Başlatılamadı"); return; }
+    toastGoster(hedef==="flash" ? "Flash yedeği başlatıldı" : hedef==="bulut" ? "Bulut yedeği başlatıldı" : "Yedek başlatıldı (bulut + flash)");
+    setTimeout(()=>yerelYedekPanelYukle_(false), 800);
+  }).catch(()=>alert("Sunucuya ulaşılamadı"));
+}
 function yedekDurumuYukle(){
   const bolum = document.getElementById("yedek-bolum");
   if(!bolum) return;
+  yerelYedekPanelYukle_(false);
+  if(window._yerelSunucu === true){ bolum.style.display = "none"; return; }
   if(!yedekAdminMi_()){ bolum.style.display = "none"; return; }
   bolum.style.display = "";
   const kap = document.getElementById("yedek-durum");
@@ -4002,8 +4134,8 @@ function hizPaneliIndir(){
 // Veriyi DEĞİŞTİRMEYEN (ya da önbelleği ilgilendirmeyen) işlemler: bunlardan sonra önbellek temizlenmez.
 // ★ (1 Eki 2026) Okuma olsa da yavaş olduğu için "İşlem yapılıyor + geçen süre" bandı gösterilen çağrılar:
 // Portaldan Gelen Faturalar listesi (dış e-tablo + birkaç sayfa okuyor). Başka ekran eklemek için buraya ekle.
-const CARI_API_BANT_OKUMA_ = /^(getBekleyenAlisFaturalari|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi)$/;
-const CARI_API_YAZMA_DEGIL_ = /^(get|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|edmOrtamDurumu|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
+const CARI_API_BANT_OKUMA_ = /^(yerelYedekDurum|getBekleyenAlisFaturalari|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi)$/;
+const CARI_API_YAZMA_DEGIL_ = /^(get|yerelYedek|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|edmOrtamDurumu|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
 // Yapı/tanım verisini değiştiren işlemler (banka, hesap, pos, kart, seri, tanım, marka, plasiyer, birim...).
 const CARI_API_YAPI_ISLEMI_ = /(Banka|Hesap|Pos|KrediKart|Seri|BasitTanim|Marka|Plasiyer|Birim|AciklamaSablon|SiparisDurum|SiraGuncelle)/;
 

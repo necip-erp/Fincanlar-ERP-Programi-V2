@@ -416,3 +416,107 @@ function yedekEpostaGonderSimdi() {
   d.epostaSonuc = sonuc;
   return d;
 }
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// YEREL SUNUCU YEDEĞİ (15 Eki 2026)
+// Dükkândaki yerel sunucu (localhost:3000) verisini her 5 dakikada (değiştiyse) buraya gönderir:
+//   Drive > "Fincanlar ERP - Otomatik Yedekler" > "Yerel Sunucu" > yerel-veri-<yıl-ay-gün_saat-dk-sn>.json.gz
+// Güvenlik: yükleme anahtarı yerel sunucuda üretilir; bulutta yalnızca SHA-256 özeti tutulur (ilk yüklemede kaydolur).
+//   Anahtarı sıfırlamak için Script Özelliği YEREL_YEDEK_ANAHTAR_OZET silinir.
+// Budama: son 3 saat hepsi, 48 saate kadar saatte 1, 30 güne kadar günde 1, daha eskisi silinir; en yeni 3 hiç silinmez.
+// Büyük veri 24 MB'lık gzip PARÇALARINA bölünür (.001, .002 ...); birleştirme: copy /b a.gz.001+a.gz.002 a.json.gz
+// ════════════════════════════════════════════════════════════════════════════
+var YEREL_YEDEK_ALT_KLASOR_ = "Yerel Sunucu";
+
+function yerelYedekKlasoru_() {
+  var ana = yedekKlasoruGetirVeyaOlustur_();
+  var it = ana.getFoldersByName(YEREL_YEDEK_ALT_KLASOR_);
+  if (it.hasNext()) return it.next();
+  var k = ana.createFolder(YEREL_YEDEK_ALT_KLASOR_);
+  k.createFile("OKU-BENI.txt", [
+    "YEREL SUNUCU YEDEKLERI",
+    "yerel-veri-<tarih_saat>.json.gz  : yerel sunucunun veri.json dosyasinin sikistirilmis kopyasi.",
+    "Geri yuklemek icin: dosyayi acin (7-Zip / gunzip) -> veri.json elde edilir -> C:\\YerelSunucu\\FincanlarERP\\veri\\ icine koyun (sunucu kapaliyken).",
+    "Buyuk veri .001 .002 parcalara bolunur: copy /b yerel-veri-X.json.gz.001+yerel-veri-X.json.gz.002 birlesik.json.gz",
+    "Yedekler budanir: son 3 saat hepsi, 48 saate kadar saatte 1, 30 gune kadar gunde 1."
+  ].join("\r\n"), MimeType.PLAIN_TEXT);
+  return k;
+}
+
+function yerelYedekAnahtarKontrol_(anahtar) {
+  anahtar = String(anahtar || "");
+  if (anahtar.length < 20) return "Anahtar geçersiz";
+  var ozet = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, anahtar));
+  var props = PropertiesService.getScriptProperties();
+  var kayitli = props.getProperty("YEREL_YEDEK_ANAHTAR_OZET");
+  if (!kayitli) { props.setProperty("YEREL_YEDEK_ANAHTAR_OZET", ozet); return ""; }
+  return kayitli === ozet ? "" : "Anahtar uyuşmuyor";
+}
+
+// body: { anahtar, damga: "2026-10-15_03-55-10", parca: 1, toplam: 1, veri: <base64 gzip> } — oturumsuz, anahtarla korunur.
+function yerelYedekYukle(body) {
+  body = body || {};
+  var hata = yerelYedekAnahtarKontrol_(body.anahtar);
+  if (hata) return { ok: false, hata: hata };
+  var damga = String(body.damga || "");
+  if (!/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/.test(damga)) return { ok: false, hata: "Damga geçersiz" };
+  var parca = parseInt(body.parca, 10) || 1, toplam = parseInt(body.toplam, 10) || 1;
+  if (parca < 1 || toplam < 1 || parca > toplam || toplam > 99) return { ok: false, hata: "Parça bilgisi geçersiz" };
+  var bytes = Utilities.base64Decode(String(body.veri || ""));
+  if (!bytes || bytes.length < 20) return { ok: false, hata: "Veri boş" };
+  var ad = "yerel-veri-" + damga + ".json.gz" + (toplam > 1 ? "." + ("00" + parca).slice(-3) : "");
+  var klasor = yerelYedekKlasoru_();
+  if (klasor.getFilesByName(ad).hasNext()) return { ok: true, ad: ad, zatenVar: true };   // aynı parça tekrar gelirse çoğaltma
+  klasor.createFile(Utilities.newBlob(bytes, "application/gzip", ad));
+  var silinen = 0;
+  if (parca === toplam) { try { silinen = yerelYedekBuda_(klasor); } catch (e) {} }
+  var oran = driveDolulukOrani_();
+  return { ok: true, ad: ad, boyut: bytes.length, silinen: silinen, driveYuzde: oran === null ? null : Math.round(oran * 100) };
+}
+
+function yerelYedekBuda_(klasor) {
+  var gruplar = {}, it = klasor.getFiles();
+  while (it.hasNext()) {
+    var f = it.next();
+    var m = /^yerel-veri-(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})\.json\.gz/.exec(f.getName());
+    if (!m) continue;
+    var anahtar = m.slice(1, 7).join("");
+    var g = gruplar[anahtar] || (gruplar[anahtar] = { t: Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]), dosyalar: [] });
+    g.dosyalar.push(f);
+  }
+  var s = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd-HH-mm-ss").split("-");
+  var simdi = Date.UTC(+s[0], +s[1] - 1, +s[2], +s[3], +s[4], +s[5]);
+  var liste = Object.keys(gruplar).map(function (k) { return gruplar[k]; }).sort(function (a, b) { return a.t - b.t; });   // eskiden yeniye
+  var korunanSon = liste.length - 3;   // en yeni 3 grup ASLA silinmez
+  var goruldu = {}, sil = [];
+  liste.forEach(function (g, i) {
+    if (i >= korunanSon) return;
+    var yasSaat = (simdi - g.t) / 3600000;
+    if (yasSaat <= 3) return;
+    var kova = yasSaat <= 48 ? "s" + Math.floor(g.t / 3600000) : (yasSaat <= 720 ? "g" + Math.floor(g.t / 86400000) : "x");
+    if (kova !== "x" && !goruldu[kova]) { goruldu[kova] = true; return; }   // kovanın ilk (en eski) yedeği kalır
+    sil.push(g);
+  });
+  var adet = 0;
+  for (var i = 0; i < sil.length && adet < 40; i++) {
+    sil[i].dosyalar.forEach(function (f) { try { yedekKaliciSil_(f); } catch (e) {} });
+    adet++;
+  }
+  return adet;
+}
+
+// ── Yerel sunucuda çalışırken Yedekleme ekranının kullandığı işlemler (yerel sunucu src/yedek.js ile konuşur) ──
+function yerelYedekDurum() {
+  if (typeof YerelYedek === "undefined" || !YerelYedek) return { ok: true, yerel: false };
+  var d = YerelYedek.durum();
+  return JSON.parse(JSON.stringify({ ok: true, yerel: true, ayar: d.ayar, durum: d.durum, flash: d.flash, bulutAdres: d.bulutAdres, simdi: d.simdi }));
+}
+function yerelYedekAyarKaydet(body) {
+  if (typeof YerelYedek === "undefined" || !YerelYedek) return { ok: false, hata: "Bu işlem yalnızca yerel sunucuda çalışır" };
+  return JSON.parse(JSON.stringify(YerelYedek.ayarKaydet((body && body.ayar) || {})));
+}
+function yerelYedekSimdi(body) {
+  if (typeof YerelYedek === "undefined" || !YerelYedek) return { ok: false, hata: "Bu işlem yalnızca yerel sunucuda çalışır" };
+  return JSON.parse(JSON.stringify(YerelYedek.simdi(String((body && body.hedef) || "ikisi"))));
+}
