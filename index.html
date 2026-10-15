@@ -2161,6 +2161,15 @@ setInterval(topbarSaatGuncelle, 10000);
       <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Veri tek yerde (yerel sunucu) yazılsın diye bulut varsayılan olarak SALT OKUNURDUR. Yerel sunucu bozulduysa ya da dışarıdan acil çalışmanız gerekiyorsa yazmayı geçici olarak açabilirsiniz; açıkken girilen kayıtlar yerel sunucuya geri aktarılmaz. İşiniz bitince kilitleyin.</p>
       <div id="bulut-kilit-durum" style="margin-bottom:10px;font-weight:700"></div>
       <button class="btn btn-primary" id="bulut-kilit-btn" onclick="bulutKilitDegistir()">…</button>
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border,#e2e8f0)">
+        <div style="font-weight:700;margin-bottom:4px">🔄 Yerel sunucu aynası</div>
+        <p style="color:var(--text3);font-size:13px;margin:0 0 8px">Bulut, yerel sunucunun 5 dakikada bir gönderdiği yedeğe bakarak yerelin AYNISI olur (aynı şirketler, kullanıcılar, cariler, stoklar, hareketler). Bulutun eski e-tablolarına dokunulmaz; yerel için yeni "Yerel Ayna" e-tabloları açılır. Yalnızca yerel → bulut yönünde işler.</p>
+        <div id="bulut-ayna-durum" style="margin-bottom:8px;font-size:13px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" id="bulut-ayna-simdi" onclick="bulutAynaSimdiGonder()">🔄 Şimdi eşitle</button>
+          <button class="btn" id="bulut-ayna-kur" onclick="bulutAynaKurGonder()">⏱ Otomatik eşitlemeyi kur (5 dk, bir kez)</button>
+        </div>
+      </div>
     </div>
     <div class="finans-panel" id="yerel-guncelle-panel" style="display:none">
       <div class="rapor-baslik" style="margin-top:0">🔄 Program Güncelleme (GitHub)</div>
@@ -3937,7 +3946,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261016a";
+const FRONT_SURUM = "20261016b";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -3967,7 +3976,7 @@ function bulutDurumCiz_(){
   const b = bulutBantGetir_();
   if(d.bulutKilitli){
     b.style.display = ""; b.style.background = "#fee2e2"; b.style.color = "#991b1b"; b.style.border = "1px solid #ef4444";
-    b.textContent = "🔒 BULUT — SALT OKUNUR · kayıt için YEREL SUNUCUyu kullanın";
+    b.textContent = "🔒 BULUT — yerelin salt okunur AYNASI" + (d.aynaSon ? " · son eşitleme " + d.aynaSon.slice(-5) : "") + " · kayıt için YEREL SUNUCU";
     b.title = "Bulutta kayıt/ayar yazılamaz (veri iki yerde ayrışmasın). Acil durumda Admin: Ayarlar > Bulut Yazma Kilidi.";
   } else if(d.bulutYazmaAcik){
     b.style.display = ""; b.style.background = "#ffedd5"; b.style.color = "#9a3412"; b.style.border = "1px solid #f97316";
@@ -3982,6 +3991,13 @@ function bulutDurumCiz_(){
     if(dd) dd.textContent = d.bulutYazmaAcik ? "Durum: ⚠ YAZMAYA AÇIK" + (d.acan ? " — açan: " + d.acan + (d.acilis ? " (" + d.acilis + ")" : "") : "") : "Durum: 🔒 KİLİTLİ (salt okunur)";
     if(bt) bt.textContent = d.bulutYazmaAcik ? "🔒 Kilitle (salt okunur yap)" : "⚠ Acil durum: yazmayı aç";
   }
+  const ad = document.getElementById("bulut-ayna-durum");
+  if(ad && !d.yerel){
+    ad.innerHTML = (d.aynaAktif ? "✅ Ayna aktif" : "⚪ Ayna henüz çalışmadı (ilk eşitleme bekleniyor)") +
+      (d.aynaSon ? " · son eşitleme: <b>" + d.aynaSon + "</b>" : "") +
+      " · otomatik: " + (d.aynaTetikleyici ? "<b>açık</b> (5 dk)" : "<b style='color:#b91c1c'>kurulu değil</b>") +
+      (d.aynaHata ? "<br><span style='color:#b91c1c'>Son hata: " + String(d.aynaHata).replace(/</g,"&lt;") + "</span>" : "");
+  }
   // Şirket düzeni / yeni yıl işlemleri bulutta yapılmaz: düğmeleri gizle, yerelde yalnız aktarım bloğu görünür.
   const sd = document.getElementById("sirket-duzeni-btn"); if(sd && !d.yerel) sd.style.display = "none";
   const yy = document.getElementById("yeni-yil-btn"); if(yy && !d.yerel){ yy.disabled = true; yy.title = "Yeni çalışma yılı yalnızca yerel sunucuda oluşturulur"; }
@@ -3995,6 +4011,21 @@ function bulutKilitDegistir(){
     if(!res || !res.ok){ alert((res && res.hata) || "Ayarlanamadı"); return; }
     _bulutDurum = res; bulutDurumCiz_();
     toastGoster(ac ? "Bulut yazmaya AÇILDI (acil durum)" : "Bulut kilitlendi (salt okunur)");
+  }).catch(()=>alert("Sunucuya ulaşılamadı"));
+}
+function bulutAynaSimdiGonder(){
+  const b = document.getElementById("bulut-ayna-simdi"); b.disabled = true; const e0 = b.textContent; b.textContent = "Eşitleniyor...";
+  cariApi("bulutAynaSimdi").then(res=>{
+    b.disabled = false; b.textContent = e0;
+    if(!res || !res.ok){ alert((res && res.hata) || "Eşitlenemedi"); bulutDurumYukle_(); return; }
+    toastGoster("Bulut yerelle eşitlendi (" + (res.yazilanSatir||0) + " satır, " + (res.sureSn||0) + " sn). Giriş ekranında yıl listesi yenilenir; çıkış yapıp tekrar girin.");
+    bulutDurumYukle_();
+  }).catch(()=>{ b.disabled = false; b.textContent = e0; alert("Sunucuya ulaşılamadı (işlem sürüyor olabilir, 1 dk sonra durumu kontrol edin)"); });
+}
+function bulutAynaKurGonder(){
+  cariApi("bulutAynaKur").then(res=>{
+    if(!res || !res.ok){ alert((res && res.hata) || "Kurulamadı"); return; }
+    toastGoster("Otomatik eşitleme kuruldu (5 dakikada bir)"); bulutDurumYukle_();
   }).catch(()=>alert("Sunucuya ulaşılamadı"));
 }
 function stokKartiAktarKaynakDoldur_(){

@@ -22,6 +22,13 @@ function yilKayitlari_() {
   let kayit = {};
   try { kayit = JSON.parse(PropertiesService.getScriptProperties().getProperty("YIL_SHEETLERI") || "{}") || {}; } catch (e) { kayit = {}; }
   kayit[TEMEL_YIL_] = SHEET_ID_TEMEL_; // temel yıl her zaman koddan gelir, özellik bozulsa da kaybolmaz
+  // ★ 16 Eki 2026: bulut yerelin AYNASI ise şirket listesi/e-tabloları yerelden eşitlenen ayna kayıtlarıdır (eski bulut şirketleri listeden çıkar).
+  if (!yerelMi_()) {
+    try {
+      const ayna = JSON.parse(PropertiesService.getScriptProperties().getProperty("AYNA_YIL_SHEETLERI") || "null");
+      if (ayna && Object.keys(ayna).length) { kayit = ayna; if (!kayit[TEMEL_YIL_]) kayit[TEMEL_YIL_] = SHEET_ID_TEMEL_; }
+    } catch (e) {}
+  }
   _YIL_KAYIT_ = kayit;
   return kayit;
 }
@@ -1097,13 +1104,13 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261016a";
+const PROGRAM_SURUM_ = "20261016b";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 function bulutYazmaAcikMi_() {
   try { return PropertiesService.getScriptProperties().getProperty("BULUT_YAZMA_ACIK") === "1"; } catch (e) { return false; }
 }
 // Bulutta kilitli olsa bile çalışacak (veri kaydı yapmayan / yedek alan / oturum) işlemler:
-const BULUT_KILIT_SERBEST_ = /^(girisYap|cikisYap|parolaDegistir|yerelYedekYukle|bulutYazmaAyarla|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|edmOrtamDurumu)$/;
+const BULUT_KILIT_SERBEST_ = /^(girisYap|cikisYap|parolaDegistir|yerelYedekYukle|bulutYazmaAyarla|bulutAynaSimdi|bulutAynaKur|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|edmOrtamDurumu)$/;
 // Bulutta, kilit açık olsa bile ÇALIŞMAYAN işlemler (veri iki yerde ayrışmasın): şirket düzeni / yeni yıl / şirketler arası stok aktarımı.
 const YALNIZ_YEREL_ACTIONLAR_ = { sirketDuzeniKur: true, yeniCalismaYiliOlustur: true, yilStokKartlariAktar: true };
 function bulutKilitKontrol_(action) {
@@ -1120,7 +1127,9 @@ function getBulutDurum() {
   const p = PropertiesService.getScriptProperties();
   let acan = "", acilis = "";
   try { acan = p.getProperty("BULUT_YAZMA_ACAN") || ""; acilis = p.getProperty("BULUT_YAZMA_ACILIS") || ""; } catch (e) {}
-  return { ok: true, yerel: yerel, bulutKilitli: !yerel && !bulutYazmaAcikMi_(), bulutYazmaAcik: !yerel && bulutYazmaAcikMi_(), surum: PROGRAM_SURUM_, acan: acan, acilis: acilis };
+  const sonuc = { ok: true, yerel: yerel, bulutKilitli: !yerel && !bulutYazmaAcikMi_(), bulutYazmaAcik: !yerel && bulutYazmaAcikMi_(), surum: PROGRAM_SURUM_, acan: acan, acilis: acilis };
+  if (!yerel) { try { Object.assign(sonuc, bulutAynaDurum_()); } catch (e) {} }
+  return sonuc;
 }
 // body: { ac: true|false } — yalnız Admin; yalnız bulutta anlamlı.
 function bulutYazmaAyarla(body, oturum) {
@@ -1140,7 +1149,7 @@ const YAZMA_DEGIL_ = /^(get|yerelYedek|yerelGuncelle|yedekAlSimdi|yedekTetikleyi
 const OTURUMSUZ_ACTIONLAR = { girisYap: true, yerelYedekYukle: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
-  eskiPanelStokKartlariniAktar: true, yilStokKartlariAktar: true, bulutYazmaAyarla: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, sirketDuzeniKur: true, yerelYedekDurum: true, yerelYedekAyarKaydet: true, yerelYedekSimdi: true, yerelGuncelleDurum: true, yerelGuncelleKontrol: true, yerelGuncelleUygula: true, yerelGuncelleGeriAl: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
+  eskiPanelStokKartlariniAktar: true, yilStokKartlariAktar: true, bulutYazmaAyarla: true, bulutAynaSimdi: true, bulutAynaKur: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, sirketDuzeniKur: true, yerelYedekDurum: true, yerelYedekAyarKaydet: true, yerelYedekSimdi: true, yerelGuncelleDurum: true, yerelGuncelleKontrol: true, yerelGuncelleUygula: true, yerelGuncelleGeriAl: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
   getYedekDurumu: true, yedekAlSimdi: true, yedekTetikleyiciKurWeb: true, saveYedekEpostalari: true, yedekEpostaGonderSimdi: true, // Yedekleme: sadece Admin
   getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, kayitDefteriHatalariTemizle: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
@@ -1196,6 +1205,8 @@ function handleRequest(e) {
       case "yilStokKartlariAktar": result = yilStokKartlariAktar(body); break;
       case "getBulutDurum": result = getBulutDurum(); break;
       case "bulutYazmaAyarla": result = bulutYazmaAyarla(body, oturum); break;
+      case "bulutAynaSimdi": result = bulutAynaSimdi(); break;
+      case "bulutAynaKur": result = bulutAynaKur(); break;
       case "parolaDegistir":  result = parolaDegistir(body, oturum); break;
       case "kullaniciListesiGetir": result = kullaniciListesiGetir(); break;
       case "kullaniciEkle":         result = kullaniciEkle(body); break;

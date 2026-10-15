@@ -541,3 +541,151 @@ function yerelGuncelleGeriAl(body) {
   if (typeof YerelGuncelle === "undefined" || !YerelGuncelle) return { ok: false, hata: "Bu işlem yalnızca yerel sunucuda çalışır" };
   return JSON.parse(JSON.stringify(YerelGuncelle.geriAl(String((body && body.ad) || ""))));
 }
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// ★ 16 Eki 2026 — BULUT = YEREL AYNASI (tek yönlü: yerel → bulut)
+// Yerel sunucu her 5 dk'da (veri değiştiyse) veri.json'ı yukarıdaki "Yerel Sunucu" Drive klasörüne gönderir. Bu bölüm o yedeğin
+// EN YENİ tamamlanmış kopyasını okur ve bulutun e-tablolarını yerelle AYNI hale getirir: aynı şirketler/yıllar (ESKİ 2026, 2026...),
+// aynı kullanıcılar, cariler, stoklar, hareketler. Bulut zaten salt okunur olduğundan ayna yönü tek taraflıdır (çakışma yok).
+//   • Bulutun ESKİ e-tablolarına DOKUNULMAZ: yerelin her şirketi için yeni bir "Fincanlar ERP - Yerel Ayna - <ad>" e-tablosu açılır
+//     (AYNA_HARITA: yerel kitap kimliği → bulut e-tablo kimliği). Bulut şirket listesi AYNA_YIL_SHEETLERI ile bunlara yönlenir.
+//   • "Oturumlar" sayfası aynalanmaz (bulut girişleri düşmesin). Şirket etiketleri / açılış şirketi yerelden alınır.
+//   • Bulut acil durumda yazmaya AÇIKSA ayna çalışmaz (acil kayıtlar ezilmesin).
+//   • Tetikleyici: Ayarlar > Bulut Yazma Kilidi > "Otomatik eşitlemeyi kur" (bir kez, 5 dk'da bir). "Şimdi eşitle" ile elle de çalışır.
+// ════════════════════════════════════════════════════════════════════════════
+function aynaVeriOku_() {
+  var klasor = yerelYedekKlasoru_();
+  var gruplar = {}, it = klasor.getFiles();
+  while (it.hasNext()) {
+    var f = it.next();
+    var m = /^yerel-veri-(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})\.json\.gz(?:\.(\d{3}))?$/.exec(f.getName());
+    if (!m) continue;
+    var g = gruplar[m[1]] || (gruplar[m[1]] = { damga: m[1], parcalar: [] });
+    g.parcalar.push({ no: m[2] ? parseInt(m[2], 10) : 1, tek: !m[2], dosya: f });
+  }
+  var liste = Object.keys(gruplar).sort().reverse();   // yeniden eskiye
+  var simdi = Date.now();
+  for (var i = 0; i < liste.length; i++) {
+    var g2 = gruplar[liste[i]];
+    g2.parcalar.sort(function (a, b) { return a.no - b.no; });
+    var tamam = g2.parcalar.every(function (p, ix) { return p.no === ix + 1; });
+    var yeniMi = g2.parcalar.some(function (p) { return simdi - p.dosya.getLastUpdated().getTime() < 90000; });   // yükleme sürüyor olabilir
+    if (!tamam || yeniMi) continue;
+    var baytlar = [];
+    g2.parcalar.forEach(function (p) {
+      var ham = Utilities.ungzip(Utilities.newBlob(p.dosya.getBlob().getBytes(), "application/x-gzip", "p.gz")).getBytes();
+      baytlar = baytlar.concat(ham);
+    });
+    var metin = Utilities.newBlob(baytlar).getDataAsString("UTF-8");
+    var veri = JSON.parse(metin, function (k, v) { return v && typeof v === "object" && v.$d !== undefined && Object.keys(v).length === 1 ? new Date(v.$d) : v; });
+    return { damga: g2.damga, veri: veri };
+  }
+  return null;
+}
+
+// Çekirdek: ayrıştırılmış yerel veriyi (veri.json) bulut e-tablolarına yazar. Test edilebilsin diye Drive'dan ayrı.
+function aynaUygula_(veri, baslangic) {
+  var props = PropertiesService.getScriptProperties();
+  var harita = {};
+  try { harita = JSON.parse(props.getProperty("AYNA_HARITA") || "{}") || {}; } catch (e) { harita = {}; }
+  var t0 = baslangic || Date.now();
+  var yazilan = 0, sayfaSayisi = 0, yeniDosya = 0;
+  var atla = {}; atla[SHEETS.oturumlar] = true;
+  (veri.kitaplar || []).forEach(function (k) {
+    var ss = null;
+    if (harita[k.id]) { try { ss = SpreadsheetApp.openById(harita[k.id]); } catch (e) { ss = null; } }
+    if (!ss) { ss = SpreadsheetApp.create("Fincanlar ERP - Yerel Ayna - " + (k.ad || k.id)); harita[k.id] = ss.getId(); yeniDosya++; props.setProperty("AYNA_HARITA", JSON.stringify(harita)); }
+    var yerelAdlar = {};
+    (k.sayfalar || []).forEach(function (sy) {
+      if (!sy || !sy.ad || atla[sy.ad] || sy.ad.indexOf("_YEDEK_") >= 0) return;
+      yerelAdlar[sy.ad] = true;
+      var sh = ss.getSheetByName(sy.ad) || ss.insertSheet(sy.ad);
+      var satirlar = sy.satirlar || [];
+      var nr = satirlar.length, nc = 1;
+      satirlar.forEach(function (r) { if (r && r.length > nc) nc = r.length; });
+      var eskiSon = sh.getLastRow(), eskiKol = sh.getLastColumn();
+      if (nr === 0) { if (eskiSon > 0) sh.clearContents(); sayfaSayisi++; return; }
+      if (sh.getMaxRows() < nr) sh.insertRowsAfter(sh.getMaxRows(), nr - sh.getMaxRows());
+      if (sh.getMaxColumns() < nc) sh.insertColumnsAfter(sh.getMaxColumns(), nc - sh.getMaxColumns());
+      (sy.metinKol || []).forEach(function (c) { if (c >= 1 && c <= nc) sh.getRange(1, c, nr, 1).setNumberFormat("@"); });
+      var m = satirlar.map(function (r) {
+        var o = new Array(nc);
+        for (var j = 0; j < nc; j++) { var v = r && r[j]; o[j] = (v === undefined || v === null) ? "" : v; }
+        return o;
+      });
+      sh.getRange(1, 1, nr, nc).setValues(m);
+      if (eskiSon > nr) sh.getRange(nr + 1, 1, eskiSon - nr, Math.max(eskiKol, nc)).clearContent();
+      if (eskiKol > nc) sh.getRange(1, nc + 1, Math.max(nr, eskiSon), eskiKol - nc).clearContent();
+      yazilan += nr; sayfaSayisi++;
+    });
+    // yerelde olmayan (silinmiş / varsayılan boş) sayfaları kaldır; en az bir sayfa kalır, Oturumlar'a dokunulmaz
+    ss.getSheets().forEach(function (sh) {
+      var ad = sh.getName();
+      if (yerelAdlar[ad] || atla[ad] || ss.getSheets().length <= 1) return;
+      try { ss.deleteSheet(sh); } catch (e) {}
+    });
+  });
+  SpreadsheetApp.flush();
+  props.setProperty("AYNA_HARITA", JSON.stringify(harita));
+
+  // Şirket (çalışma yılı) listesi yerelle birebir: anahtar → ayna e-tablosu. Temel yıl "2026" yerelde de örtük (varsayılan kitaba düşer).
+  var oz = veri.ozellikler || {};
+  var yerelYil = {};
+  try { yerelYil = JSON.parse(oz.YIL_SHEETLERI || "{}") || {}; } catch (e) { yerelYil = {}; }
+  yerelYil[TEMEL_YIL_] = SHEET_ID_TEMEL_;
+  var kitapIds = {}; (veri.kitaplar || []).forEach(function (k) { kitapIds[k.id] = true; });
+  var yilHarita = {};
+  Object.keys(yerelYil).forEach(function (y) {
+    var kid = kitapIds[yerelYil[y]] ? yerelYil[y] : veri.varsayilanId;   // yerel sunucudaki çözümleme ile aynı
+    if (harita[kid]) yilHarita[y] = harita[kid];
+  });
+  props.setProperty("AYNA_YIL_SHEETLERI", JSON.stringify(yilHarita));
+  ["YIL_ETIKETLERI", "VARSAYILAN_YIL", "SIRKET_DUZENI_KURULDU"].forEach(function (a) {
+    if (oz[a]) props.setProperty(a, String(oz[a])); else props.deleteProperty(a);
+  });
+  _YIL_KAYIT_ = null;
+  Object.keys(yilHarita).forEach(function (y) { aktifYilAyarla_(y); veriSurumuArtir_(); });
+  _AKTIF_YIL_ = null;
+  return { yazilanSatir: yazilan, sayfa: sayfaSayisi, yeniDosya: yeniDosya, yil: Object.keys(yilHarita).sort(), sureSn: Math.round((Date.now() - t0) / 1000) };
+}
+
+function bulutAynaEsitle(zorla) {
+  if (yerelMi_()) return { ok: false, hata: "Ayna yalnızca bulutta çalışır" };
+  var props = PropertiesService.getScriptProperties();
+  if (bulutYazmaAcikMi_()) return { ok: false, hata: "Bulut acil durum için yazmaya AÇIK; ayna durduruldu (acil kayıtlar ezilmesin). Önce kilitleyin." };
+  try { kilitGetir_().waitLock(20000); } catch (e) { return { ok: false, hata: "Sistem meşgul, ayna sonra denenecek" }; }
+  try {
+    var t0 = Date.now();
+    var okunan = aynaVeriOku_();
+    if (!okunan) { props.setProperty("AYNA_HATA", "Tamamlanmış yerel yedek bulunamadı"); return { ok: false, hata: "Tamamlanmış yerel yedek bulunamadı (yerel sunucu henüz bulut yedeği göndermemiş olabilir)" }; }
+    if (!zorla && props.getProperty("AYNA_SON_DAMGA") === okunan.damga) return { ok: true, degismedi: true, damga: okunan.damga };
+    var r = aynaUygula_(okunan.veri, t0);
+    props.setProperty("AYNA_SON_DAMGA", okunan.damga);
+    props.setProperty("AYNA_SON_ZAMAN", Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"));
+    props.setProperty("AYNA_HATA", "");
+    r.ok = true; r.damga = okunan.damga;
+    return r;
+  } catch (e) {
+    try { props.setProperty("AYNA_HATA", String(e && e.message || e).slice(0, 300)); } catch (x) {}
+    return { ok: false, hata: "Ayna eşitleme hatası: " + (e && e.message || e) };
+  } finally {
+    try { kilitGetir_().releaseLock(); } catch (e2) {}
+  }
+}
+function bulutAynaEsitleTetikleyici() { bulutAynaEsitle(false); }
+function bulutAynaSimdi() { return bulutAynaEsitle(true); }
+function bulutAynaKur() {
+  if (yerelMi_()) return { ok: false, hata: "Yalnızca bulutta kurulur" };
+  try {
+    ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "bulutAynaEsitleTetikleyici") ScriptApp.deleteTrigger(t); });
+    ScriptApp.newTrigger("bulutAynaEsitleTetikleyici").timeBased().everyMinutes(5).create();
+    return { ok: true };
+  } catch (e) { return { ok: false, hata: "Tetikleyici kurulamadı: " + (e && e.message || e) }; }
+}
+function bulutAynaDurum_() {
+  var p = PropertiesService.getScriptProperties();
+  var kurulu = false;
+  try { kurulu = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === "bulutAynaEsitleTetikleyici"; }); } catch (e) {}
+  return { aynaAktif: !!p.getProperty("AYNA_YIL_SHEETLERI"), aynaSon: p.getProperty("AYNA_SON_ZAMAN") || "", aynaYedekDamga: p.getProperty("AYNA_SON_DAMGA") || "", aynaHata: p.getProperty("AYNA_HATA") || "", aynaTetikleyici: kurulu };
+}
