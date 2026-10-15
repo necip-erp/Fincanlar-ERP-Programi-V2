@@ -821,6 +821,7 @@ body.giris-yapildi #login-ekran{display:none}
   </div>
   <button class="homebtn" id="ak-btn" onclick="akAc()" title="Akıllı Arama: ne yapmak istediğini yaz, doğrudan işleme geç (Ctrl+K)">⚡ Ne yapmak istiyorsun? <span class="kisayol-ipucu" id="ak-btn-kisayol">Ctrl+K</span></button>
   <button class="homebtn" id="baglanti-rozet" style="display:inline-block;margin-left:8px;font-weight:800" onclick="baglantiGecisSor()" title="">…</button>
+  <span id="surum-rozet" style="display:inline-block;margin-left:6px;font-size:11px;font-weight:700;color:#64748b;white-space:nowrap" title="Program sürümü">v…</span>
   <button class="homebtn" id="yedek-rozet" style="display:none" onclick="modulAc('yedekleme')" title="Yedekleme durumu — tıklayınca Yedekleme modülü açılır">💾 …</button>
   <button class="homebtn" id="home-btn" onclick="gitAnaSayfa()" title="Ana Sayfa (Ctrl + sayı satırında 1'in solundaki tuş)">← Ana Sayfa <span class="kisayol-ipucu">Ctrl+"</span></button>
   <button class="homebtn" id="veri-yenile-btn" style="display:inline-block;margin-left:8px" onclick="verileriYenile()" title="Sayfayı yenile: sayfa yeniden yüklenmez, açık sekmeler ve pencereler kapanmaz (verileri sunucudan tazeler)">↻ Sayfayı Yenile <span class="kisayol-ipucu" id="veri-yenile-ipucu">Alt+V</span></button>
@@ -2141,11 +2142,25 @@ setInterval(topbarSaatGuncelle, 10000);
       <div class="rapor-baslik" style="margin-top:0">Çalışma Yılları</div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Her yıl ayrı bir e-tabloda tutulur; giriş ekranında yıl seçilir. Yeni yıl, mevcut yılın kopyasından üretilir: tüm ayarlar, tanımlar, kullanıcılar ve kurallar aynen gelir; cariler, stok kartları, stok ve tüm hareketler sıfırdan başlar.</p>
       <div id="calisma-yili-liste" style="margin-bottom:12px;font-size:13px"></div>
+      <div id="stok-aktar-blok" style="display:none;margin-bottom:14px;padding:12px;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:#f8fafc">
+        <div style="font-weight:700;margin-bottom:4px">📦 Eski şirketten stok kartlarını aktar</div>
+        <div style="color:var(--text3);font-size:13px;margin-bottom:8px">Şu an açık olan şirkete, seçtiğiniz eski şirketteki stok kartları kopyalanır (miktar ve hareket aktarılmaz). Aynı stok kodlu kart varsa atlanır; tekrar çalıştırmak güvenlidir. Önce YENİ şirkete giriş yapın.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <div class="fld" style="width:220px;margin-bottom:0"><label>Kaynak (eski) şirket</label><select id="stok-aktar-kaynak"></select></div>
+          <button class="btn btn-primary" id="stok-aktar-btn" onclick="stokKartiAktarGonder()">Önizle ve Aktar</button>
+        </div>
+      </div>
       <div style="margin-bottom:14px"><button class="btn btn-primary" id="sirket-duzeni-btn" style="display:none" onclick="sirketDuzeniKurGonder()" title="Mevcut şirketlerin başına ESKİ yazar, boş yeni 2026 şirketini oluşturur ve açılışta onu getirir. Tek seferlik, sadece Admin.">🏢 Şirket Düzenini Kur (ESKİ 2026 / ESKİ 2026-2 + boş yeni 2026)</button></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
         <div class="fld" style="width:170px;margin-bottom:0"><label>Yeni Çalışma Yılı</label><input id="yeni-yil-deger" type="text" maxlength="7" placeholder="2027 veya 2026-2"></div>
         <button class="btn btn-primary" id="yeni-yil-btn" onclick="yeniCalismaYiliGonder()">+ Yeni Çalışma Yılı Oluştur</button>
       </div>
+    </div>
+    <div class="finans-panel" id="bulut-kilit-panel" style="display:none">
+      <div class="rapor-baslik" style="margin-top:0">☁ Bulut Yazma Kilidi</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Veri tek yerde (yerel sunucu) yazılsın diye bulut varsayılan olarak SALT OKUNURDUR. Yerel sunucu bozulduysa ya da dışarıdan acil çalışmanız gerekiyorsa yazmayı geçici olarak açabilirsiniz; açıkken girilen kayıtlar yerel sunucuya geri aktarılmaz. İşiniz bitince kilitleyin.</p>
+      <div id="bulut-kilit-durum" style="margin-bottom:10px;font-weight:700"></div>
+      <button class="btn btn-primary" id="bulut-kilit-btn" onclick="bulutKilitDegistir()">…</button>
     </div>
     <div class="finans-panel" id="yerel-guncelle-panel" style="display:none">
       <div class="rapor-baslik" style="margin-top:0">🔄 Program Güncelleme (GitHub)</div>
@@ -3697,6 +3712,7 @@ function cariApi(action, params, _tokenYenidenDenendi){
     if(res && res.error && res.ok===undefined){
       return { ok:false, hata: res.error };
     }
+    if(res && res.bulutKilitli){ try{ bulutDurumYukle_(); }catch(_){} } // bulut salt okunur: bandı/durumu tazele (hata metnini çağıran gösterir)
     if(res && res.oturumGecersiz){
       // BAYAT YANIT KORUMASI: eski (süresi dolmuş) token ile yola çıkmış bir istek, kullanıcı
       // yeniden giriş yaptıktan SONRA "geçersiz" cevabıyla dönebilir; bu YENİ oturumu düşürüp
@@ -3919,6 +3935,97 @@ function baglantiGecisSor(){
 }
 document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
+
+// ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
+const FRONT_SURUM = "20261016a";
+let _bulutDurum = null;
+function bulutDurumYukle_(){
+  try{
+    if(!localStorage.getItem("fincanlar_oturum_token")) return;
+    cariApi("getBulutDurum").then(res=>{ if(res && res.ok){ _bulutDurum = res; bulutDurumCiz_(); } }).catch(()=>{});
+  }catch(_){}
+}
+function bulutBantGetir_(){
+  let b = document.getElementById("bulut-kilit-bandi");
+  if(!b){
+    b = document.createElement("div"); b.id = "bulut-kilit-bandi";
+    b.style.cssText = "position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:99998;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:800;box-shadow:0 2px 10px rgba(0,0,0,.25);display:none;cursor:pointer;max-width:92vw;text-align:center";
+    b.onclick = ()=>{ if(typeof modulAc === "function") { try{ modulAc("ayarlar"); }catch(_){} } };
+    document.body.appendChild(b);
+  }
+  return b;
+}
+function bulutDurumCiz_(){
+  const d = _bulutDurum; if(!d) return;
+  const r = document.getElementById("surum-rozet");
+  if(r){
+    const uyumlu = !d.surum || d.surum === FRONT_SURUM;
+    r.textContent = uyumlu ? "v" + FRONT_SURUM : "⚠ v" + FRONT_SURUM + " ≠ sunucu v" + d.surum;
+    r.style.color = uyumlu ? "#64748b" : "#b91c1c";
+    r.title = uyumlu ? "Ekran ve sunucu programı aynı sürümde" : "Ekran (index.html) ile sunucu programı farklı sürümde! Yerel sunucuda Ayarlar > Program Güncelleme (GitHub) ile güncelleyin; sayfayı Ctrl+F5 ile yenileyin.";
+  }
+  const b = bulutBantGetir_();
+  if(d.bulutKilitli){
+    b.style.display = ""; b.style.background = "#fee2e2"; b.style.color = "#991b1b"; b.style.border = "1px solid #ef4444";
+    b.textContent = "🔒 BULUT — SALT OKUNUR · kayıt için YEREL SUNUCUyu kullanın";
+    b.title = "Bulutta kayıt/ayar yazılamaz (veri iki yerde ayrışmasın). Acil durumda Admin: Ayarlar > Bulut Yazma Kilidi.";
+  } else if(d.bulutYazmaAcik){
+    b.style.display = ""; b.style.background = "#ffedd5"; b.style.color = "#9a3412"; b.style.border = "1px solid #f97316";
+    b.textContent = "⚠ BULUT YAZMAYA AÇIK" + (d.acan ? " (" + d.acan + (d.acilis ? ", " + d.acilis : "") + ")" : "") + " — girilen kayıtlar yerel sunucudan AYRIŞIR";
+    b.title = "Acil durum modu. İşiniz bitince Ayarlar > Bulut Yazma Kilidi'nden kilitleyin.";
+  } else { b.style.display = "none"; }
+  const p = document.getElementById("bulut-kilit-panel");
+  if(p){
+    const admin = typeof yedekAdminMi_ === "function" && yedekAdminMi_();
+    p.style.display = (!d.yerel && admin) ? "" : "none";
+    const dd = document.getElementById("bulut-kilit-durum"), bt = document.getElementById("bulut-kilit-btn");
+    if(dd) dd.textContent = d.bulutYazmaAcik ? "Durum: ⚠ YAZMAYA AÇIK" + (d.acan ? " — açan: " + d.acan + (d.acilis ? " (" + d.acilis + ")" : "") : "") : "Durum: 🔒 KİLİTLİ (salt okunur)";
+    if(bt) bt.textContent = d.bulutYazmaAcik ? "🔒 Kilitle (salt okunur yap)" : "⚠ Acil durum: yazmayı aç";
+  }
+  // Şirket düzeni / yeni yıl işlemleri bulutta yapılmaz: düğmeleri gizle, yerelde yalnız aktarım bloğu görünür.
+  const sd = document.getElementById("sirket-duzeni-btn"); if(sd && !d.yerel) sd.style.display = "none";
+  const yy = document.getElementById("yeni-yil-btn"); if(yy && !d.yerel){ yy.disabled = true; yy.title = "Yeni çalışma yılı yalnızca yerel sunucuda oluşturulur"; }
+  const sa = document.getElementById("stok-aktar-blok"); if(sa) sa.style.display = d.yerel && typeof yedekAdminMi_ === "function" && yedekAdminMi_() ? "" : "none";
+}
+function bulutKilitDegistir(){
+  const d = _bulutDurum || {};
+  const ac = !d.bulutYazmaAcik;
+  if(ac && !confirm("BULUT yazmaya açılsın mı?\n\nAçıkken girilen kayıtlar yerel sunucuda GÖRÜNMEZ ve veriler ayrışır. Yalnızca yerel sunucu çalışmıyorken / dışarıdan acil işlem için açın, işiniz bitince tekrar kilitleyin.")) return;
+  cariApi("bulutYazmaAyarla", {ac: ac}).then(res=>{
+    if(!res || !res.ok){ alert((res && res.hata) || "Ayarlanamadı"); return; }
+    _bulutDurum = res; bulutDurumCiz_();
+    toastGoster(ac ? "Bulut yazmaya AÇILDI (acil durum)" : "Bulut kilitlendi (salt okunur)");
+  }).catch(()=>alert("Sunucuya ulaşılamadı"));
+}
+function stokKartiAktarKaynakDoldur_(){
+  const sel = document.getElementById("stok-aktar-kaynak"); if(!sel) return;
+  cariApi("calismaYillariGetir", {yil: "-"}).then(res=>{
+    if(!res || !res.ok) return;
+    yilEtiketleriKaydet_(res.etiketler);
+    const aktif = localStorage.getItem("fincanlar_calisma_yili");
+    const digerleri = res.yillar.filter(y=>y !== aktif);
+    sel.innerHTML = digerleri.map(y=>`<option value="${y}">${yilEtiketi_(y)} (${y})</option>`).join("");
+    const eski = digerleri.find(y=>/^ESKİ/.test(yilEtiketi_(y))); if(eski) sel.value = eski;
+  }).catch(()=>{});
+}
+function stokKartiAktarGonder(){
+  const kaynak = (document.getElementById("stok-aktar-kaynak")||{}).value;
+  if(!kaynak){ alert("Kaynak şirket seçin"); return; }
+  const btn = document.getElementById("stok-aktar-btn"); btn.disabled = true;
+  cariApi("yilStokKartlariAktar", {kaynakYil: kaynak, onizleme: true}).then(on=>{
+    if(!on || !on.ok){ btn.disabled = false; alert((on && on.hata) || "Önizleme alınamadı"); return; }
+    if(!on.eklenecek){ btn.disabled = false; alert("Aktarılacak yeni stok kartı yok.\n\nKaynakta " + on.kaynakAdet + " kart var, " + on.zatenVar + " tanesi bu şirkette zaten mevcut."); return; }
+    if(!confirm(yilEtiketi_(on.kaynakYil) + " şirketinden " + on.eklenecek + " stok kartı " + yilEtiketi_(on.hedefYil) + " şirketine aktarılsın mı?\n\n(Kaynakta toplam " + on.kaynakAdet + " kart, " + on.zatenVar + " tanesi zaten var. Miktar/hareket aktarılmaz.)")){ btn.disabled = false; return; }
+    btn.textContent = "Aktarılıyor...";
+    cariApi("yilStokKartlariAktar", {kaynakYil: kaynak}).then(res=>{
+      btn.disabled = false; btn.textContent = "Önizle ve Aktar";
+      if(!res || !res.ok){ alert((res && res.hata) || "Aktarılamadı"); return; }
+      toastGoster(res.eklenen + " stok kartı aktarıldı");
+      alert(res.eklenen + " stok kartı aktarıldı (" + res.zatenVar + " tanesi zaten vardı).\n\nStok listesini görmek için Alt+V ile verileri yenileyin.");
+    }).catch(()=>{ btn.disabled = false; btn.textContent = "Önizle ve Aktar"; alert("Sunucuya ulaşılamadı"); });
+  }).catch(()=>{ btn.disabled = false; alert("Sunucuya ulaşılamadı"); });
+}
+setTimeout(bulutDurumYukle_, 2500);
 
 // ── ★ 15 Eki 2026: Yerel sunucu yedekleri (bulut 5 dk + flash saatleri + Şimdi yedekle) ──
 let _yySaatler = [], _yyForm = false, _yyZaman = null;
@@ -19464,6 +19571,7 @@ function kullaniciYonetimiKontrolEtVeYukle(){
   kullaniciYonetimiCiz();
   const yp = document.getElementById("calisma-yili-panel"); if(yp){ yp.style.display = ""; calismaYiliListeCiz_(); }
   yerelGuncellePanelYukle_();
+  bulutDurumYukle_(); stokKartiAktarKaynakDoldur_();
 }
 function calismaYiliListeCiz_(){
   const el = document.getElementById("calisma-yili-liste"); if(!el) return;
@@ -19473,7 +19581,7 @@ function calismaYiliListeCiz_(){
     const aktif = localStorage.getItem("fincanlar_calisma_yili");
     el.innerHTML = "Mevcut şirketler / yıllar: " + res.yillar.map(y=>`<b>${yilEtiketi_(y)}</b>${y===aktif?" (açık)":""}${y===res.varsayilan?" (açılışta gelen)":""}`).join(", ");
     const db = document.getElementById("sirket-duzeni-btn");
-    if(db) db.style.display = res.sirketDuzeniKuruldu ? "none" : "";
+    if(db) db.style.display = (res.sirketDuzeniKuruldu || (_bulutDurum && !_bulutDurum.yerel)) ? "none" : "";
     uygulamaKullanicisiUyGoster_();
   });
 }
@@ -21462,6 +21570,7 @@ function girisDene(){
     if(!res || !res.ok){ hataEl.textContent = (res && res.hata) || "Giriş başarısız"; return; }
     onbellekTemizleHepsi_(); yapiOnbellekTemizle_(); // yeni oturum: önceki kullanıcının önbelleği kalmasın
     localStorage.setItem("fincanlar_oturum_token", res.token);
+    setTimeout(bulutDurumYukle_, 1200);
     localStorage.setItem("fincanlar_calisma_yili", String(res.yil || yil));
     localStorage.setItem("fincanlar_oturum_kullanici", JSON.stringify({ad: res.kullaniciAdi, rol: res.rol}));
     document.getElementById("login-parola").value = "";

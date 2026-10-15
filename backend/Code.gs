@@ -1090,6 +1090,49 @@ function doPost(e) {
   return handleRequest(e);
 }
 
+// ════════════════════════════════════════════════
+// ★ 16 Eki 2026 — TEK YAZMA YERİ: yerel sunucu. BULUT (Google Apps Script) varsayılan olarak SALT OKUNURDUR.
+// Neden: yerel sunucu ile bulut ayrı veri tutar; ikisine de kayıt girilirse (ör. şirket düzeni yalnız bir tarafta kurulursa)
+// veriler ayrışır. Bulutta yazma işlemleri kilitlenir; yalnızca Admin, acil durumda (yerel sunucu bozuk / dışarıdan çalışma)
+// "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
+// Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
+// ════════════════════════════════════════════════
+const PROGRAM_SURUM_ = "20261016a";
+function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
+function bulutYazmaAcikMi_() {
+  try { return PropertiesService.getScriptProperties().getProperty("BULUT_YAZMA_ACIK") === "1"; } catch (e) { return false; }
+}
+// Bulutta kilitli olsa bile çalışacak (veri kaydı yapmayan / yedek alan / oturum) işlemler:
+const BULUT_KILIT_SERBEST_ = /^(girisYap|cikisYap|parolaDegistir|yerelYedekYukle|bulutYazmaAyarla|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|edmOrtamDurumu)$/;
+// Bulutta, kilit açık olsa bile ÇALIŞMAYAN işlemler (veri iki yerde ayrışmasın): şirket düzeni / yeni yıl / şirketler arası stok aktarımı.
+const YALNIZ_YEREL_ACTIONLAR_ = { sirketDuzeniKur: true, yeniCalismaYiliOlustur: true, yilStokKartlariAktar: true };
+function bulutKilitKontrol_(action) {
+  if (yerelMi_()) return null;
+  if (YALNIZ_YEREL_ACTIONLAR_[action]) {
+    return { ok: false, bulutKilitli: true, hata: "Bu işlem yalnızca YEREL SUNUCUDA yapılır (şirket düzeni, yeni yıl ve stok kartı aktarımı). Bulutta yapılırsa iki taraf farklı veri görür." };
+  }
+  if (YAZMA_DEGIL_.test(action) || BULUT_KILIT_SERBEST_.test(action)) return null;
+  if (bulutYazmaAcikMi_()) return null;
+  return { ok: false, bulutKilitli: true, hata: "🔒 BULUT salt okunurdur: kayıt/ayar yazılamaz. İşlem için YEREL SUNUCUyu kullanın (acil durumda Admin: Ayarlar > Bulut Yazma Kilidi'nden yazmayı bilinçli olarak açabilir)." };
+}
+function getBulutDurum() {
+  const yerel = yerelMi_();
+  const p = PropertiesService.getScriptProperties();
+  let acan = "", acilis = "";
+  try { acan = p.getProperty("BULUT_YAZMA_ACAN") || ""; acilis = p.getProperty("BULUT_YAZMA_ACILIS") || ""; } catch (e) {}
+  return { ok: true, yerel: yerel, bulutKilitli: !yerel && !bulutYazmaAcikMi_(), bulutYazmaAcik: !yerel && bulutYazmaAcikMi_(), surum: PROGRAM_SURUM_, acan: acan, acilis: acilis };
+}
+// body: { ac: true|false } — yalnız Admin; yalnız bulutta anlamlı.
+function bulutYazmaAyarla(body, oturum) {
+  if (yerelMi_()) return { ok: false, hata: "Yerel sunucuda kilit yoktur; bu ayar yalnızca bulut içindir." };
+  const p = PropertiesService.getScriptProperties();
+  const ac = !!(body && body.ac);
+  p.setProperty("BULUT_YAZMA_ACIK", ac ? "1" : "");
+  p.setProperty("BULUT_YAZMA_ACAN", ac ? String((oturum && oturum.kullaniciAdi) || "Admin") : "");
+  p.setProperty("BULUT_YAZMA_ACILIS", ac ? Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm") : "");
+  return getBulutDurum();
+}
+
 // Bu action'lar oturum/token gerektirmeden çalışır (login ekranı henüz token
 // almadan bunlara ihtiyaç duyar).
 // Veriyi değiştirmeyen işlemler kilit beklemez (istemcideki CARI_API_YAZMA_DEGIL_ ile aynı mantık).
@@ -1097,7 +1140,7 @@ const YAZMA_DEGIL_ = /^(get|yerelYedek|yerelGuncelle|yedekAlSimdi|yedekTetikleyi
 const OTURUMSUZ_ACTIONLAR = { girisYap: true, yerelYedekYukle: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
-  eskiPanelStokKartlariniAktar: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, sirketDuzeniKur: true, yerelYedekDurum: true, yerelYedekAyarKaydet: true, yerelYedekSimdi: true, yerelGuncelleDurum: true, yerelGuncelleKontrol: true, yerelGuncelleUygula: true, yerelGuncelleGeriAl: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
+  eskiPanelStokKartlariniAktar: true, yilStokKartlariAktar: true, bulutYazmaAyarla: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, sirketDuzeniKur: true, yerelYedekDurum: true, yerelYedekAyarKaydet: true, yerelYedekSimdi: true, yerelGuncelleDurum: true, yerelGuncelleKontrol: true, yerelGuncelleUygula: true, yerelGuncelleGeriAl: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
   getYedekDurumu: true, yedekAlSimdi: true, yedekTetikleyiciKurWeb: true, saveYedekEpostalari: true, yedekEpostaGonderSimdi: true, // Yedekleme: sadece Admin
   getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, kayitDefteriHatalariTemizle: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
@@ -1131,6 +1174,7 @@ function handleRequest(e) {
         return jsonResponse({ ok: false, hata: "Bu işlem sadece Admin yetkisiyle yapılabilir." });
       }
     }
+    { const _kilitSonuc = bulutKilitKontrol_(action); if (_kilitSonuc) return jsonResponse(_kilitSonuc); }
     _tOturum = Date.now();
     // ★ EŞZAMANLI KULLANIM: veriyi DEĞİŞTİREN her işlem (kaydet/sil/güncelle...) tek tek sıraya girer.
     // İki kullanıcı aynı anda yazarsa ikincisi birincinin bitmesini bekler; böylece "satır kayması"
@@ -1149,6 +1193,9 @@ function handleRequest(e) {
       case "cikisYap":        result = cikisYap(body); break;
       case "yeniCalismaYiliOlustur": result = yeniCalismaYiliOlustur(body); break;
       case "sirketDuzeniKur": result = sirketDuzeniKur(body); break;
+      case "yilStokKartlariAktar": result = yilStokKartlariAktar(body); break;
+      case "getBulutDurum": result = getBulutDurum(); break;
+      case "bulutYazmaAyarla": result = bulutYazmaAyarla(body, oturum); break;
       case "parolaDegistir":  result = parolaDegistir(body, oturum); break;
       case "kullaniciListesiGetir": result = kullaniciListesiGetir(); break;
       case "kullaniciEkle":         result = kullaniciEkle(body); break;
