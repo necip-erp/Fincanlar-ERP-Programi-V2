@@ -2146,6 +2146,16 @@ setInterval(topbarSaatGuncelle, 10000);
         <button class="btn btn-primary" id="yeni-yil-btn" onclick="yeniCalismaYiliGonder()">+ Yeni Çalışma Yılı Oluştur</button>
       </div>
     </div>
+    <div class="finans-panel" id="yerel-guncelle-panel" style="display:none">
+      <div class="rapor-baslik" style="margin-top:0">🔄 Program Güncelleme (GitHub)</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Yerel sunucudaki program (ekranlar + arka plan kodu + sunucu dosyaları), GitHub'daki güncel sürümle karşılaştırılır. <b>Güncelle</b> yalnızca değişen dosyaları indirir, eski sürümü yedekler, sunucuyu yeniden başlatır. Veri etkilenmez; sorun olursa <b>önceki sürüme dönülebilir</b>.</p>
+      <div id="yerel-guncelle-durum"><div class="cari-empty">Yükleniyor...</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;align-items:center">
+        <button class="btn" id="yg-kontrol-btn" onclick="yerelGuncelleKontrol_()">↻ GitHub'ı kontrol et</button>
+        <button class="btn btn-primary" id="yg-uygula-btn" onclick="yerelGuncelleUygula_()">⬇ Güncelle</button>
+        <span id="yg-geri-alan" style="display:none"><select id="yg-geri-sec" style="max-width:210px"></select> <button class="btn" onclick="yerelGuncelleGeriAl_()">↩ Önceki sürüme dön</button></span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -3965,6 +3975,69 @@ function yerelYedekAyarKaydet_(){
     yerelYedekPanelYukle_(true);
   }).catch(()=>{ d.textContent = ""; alert("Sunucuya ulaşılamadı"); });
 }
+
+// ── ★ 15 Eki 2026: Yerel sunucuda GitHub'dan program güncelleme ──
+let _ygZaman = null, _ygKontrolEdildi = false, _ygBekliyor = false;
+function yerelGuncelleSurumMetni_(v){ if(!v) return null; const t = v.tarih ? new Date(v.tarih).toLocaleString("tr-TR") : ""; return (v.sha||"").slice(0,7) + (t ? " · " + t : "") + (v.mesaj ? " · " + v.mesaj : ""); }
+function yerelGuncellePanelYukle_(){
+  const p = document.getElementById("yerel-guncelle-panel"); if(!p) return;
+  cariApi("yerelGuncelleDurum").then(res=>{
+    if(!res || !res.ok || !res.yerel){ p.style.display = "none"; return; }
+    p.style.display = "";
+    yerelGuncelleCiz_(res);
+    clearTimeout(_ygZaman);
+    if(res.islem) _ygZaman = setTimeout(yerelGuncellePanelYukle_, 900);
+    else if(res.bitti && res.yeniden) yerelGuncelleYenidenBekle_();
+    else if(!_ygKontrolEdildi && (!res.sonKontrol || Date.now()-res.sonKontrol > 10*60*1000)){ _ygKontrolEdildi = true; cariApi("yerelGuncelleKontrol").then(()=>setTimeout(yerelGuncellePanelYukle_, 900)).catch(()=>{}); }
+  }).catch(()=>{ if(_ygBekliyor) return; });
+}
+function yerelGuncelleCiz_(r){
+  const kap = document.getElementById("yerel-guncelle-durum"); if(!kap) return;
+  const yerel = yerelGuncelleSurumMetni_(r.yerel), uzak = yerelGuncelleSurumMetni_(r.uzak);
+  const n = (r.degisen||[]).length;
+  const guncel = r.uzak && r.yerel && r.yerel.sha === r.uzak.sha && !n;
+  let renk = "#1a8f3c", baslik;
+  if(r.islem){ renk = "#b07a00"; baslik = "⏳ " + (r.asama || "Çalışıyor...") + (r.toplam ? " (" + r.ilerleme + "/" + r.toplam + ")" : ""); }
+  else if(r.hata){ renk = "#c62828"; baslik = "⚠️ " + r.hata; }
+  else if(r.bitti && r.mesaj){ baslik = "✅ " + r.mesaj; }
+  else if(!r.sonKontrol){ renk = "#b07a00"; baslik = "GitHub henüz kontrol edilmedi"; }
+  else if(n){ renk = "#b07a00"; baslik = "🆕 Güncelleme var — " + n + " dosya değişmiş"; }
+  else baslik = "✅ " + (r.mesaj || "Program güncel");
+  const dosyalar = n ? '<div style="font-size:12px;color:var(--text3);margin-top:5px;max-height:90px;overflow:auto">' + r.degisen.map(d=>htmlKacis(d.yol)+(d.yeni?" (yeni)":"")).join("<br>") + '</div>' : "";
+  kap.innerHTML = `<div style="border:1px solid ${renk};border-left-width:6px;border-radius:8px;padding:10px 12px;background:var(--bg3)">
+    <div style="font-weight:700;color:${renk}">${htmlKacis(baslik)}</div>
+    <div style="font-size:12.5px;margin-top:5px"><b>Bu bilgisayardaki sürüm:</b> ${yerel ? htmlKacis(yerel) : '<span style="color:var(--text3)">bilinmiyor (ilk güncellemeden sonra yazılır)</span>'}</div>
+    <div style="font-size:12.5px;margin-top:2px"><b>GitHub'daki sürüm:</b> ${uzak ? htmlKacis(uzak) : "—"}${r.sonKontrol ? ' <span style="color:var(--text3)">(kontrol: ' + new Date(r.sonKontrol).toLocaleTimeString("tr-TR") + ')</span>' : ""}</div>
+    ${dosyalar}</div>`;
+  const ub = document.getElementById("yg-uygula-btn"), kb = document.getElementById("yg-kontrol-btn");
+  if(ub){ ub.disabled = !!r.islem; ub.textContent = n ? "⬇ Güncelle (" + n + " dosya)" : "⬇ Güncelle"; }
+  if(kb) kb.disabled = !!r.islem;
+  const ga = document.getElementById("yg-geri-alan"), sec = document.getElementById("yg-geri-sec");
+  if(ga && sec){ const y = r.yedekler||[]; ga.style.display = y.length ? "" : "none"; const eski = sec.value; sec.innerHTML = y.map((a,i)=>`<option value="${htmlKacis(a)}">${i===0?"Son yedek: ":""}${htmlKacis(a.replace("_"," ").replace(/-(\d\d)-(\d\d)$/,":$1:$2"))}</option>`).join(""); if(eski) sec.value = eski; }
+}
+function yerelGuncelleKontrol_(){ cariApi("yerelGuncelleKontrol").then(()=>setTimeout(yerelGuncellePanelYukle_, 500)); }
+function yerelGuncelleUygula_(){
+  if(!confirm("Program GitHub'daki güncel sürüme getirilsin mi?\n\n• Yalnızca değişen dosyalar indirilir, eski sürüm yedeklenir.\n• Sunucu birkaç saniye kapanıp yeniden açılır; bağlı TÜM bilgisayarlardaki ekranlar kısa süre kesilir.\n• Veriniz etkilenmez.\n\nDiğer bilgisayardaki kullanıcıya haber verdiniz mi?")) return;
+  cariApi("yerelGuncelleUygula").then(res=>{ if(res && res.ok === false) alert(res.hata || "Başlatılamadı"); setTimeout(yerelGuncellePanelYukle_, 500); }).catch(()=>alert("Sunucuya ulaşılamadı"));
+}
+function yerelGuncelleGeriAl_(){
+  const ad = (document.getElementById("yg-geri-sec")||{}).value; if(!ad) return;
+  if(!confirm("Program, güncellemeden ÖNCEKİ sürüme döndürülsün mü?\n(" + ad + " yedeği)\n\nSunucu yeniden başlar; veriniz etkilenmez.")) return;
+  cariApi("yerelGuncelleGeriAl", {ad}).then(res=>{ if(!res || !res.ok){ alert((res&&res.hata)||"Geri alınamadı"); return; } setTimeout(yerelGuncellePanelYukle_, 400); }).catch(()=>alert("Sunucuya ulaşılamadı"));
+}
+// Sunucu kapanıp açılana kadar bekler, sonra sayfayı yeniler (yeni ekran dosyaları yüklensin).
+function yerelGuncelleYenidenBekle_(){
+  if(_ygBekliyor) return; _ygBekliyor = true;
+  const kap = document.getElementById("yerel-guncelle-durum");
+  if(kap) kap.insertAdjacentHTML("beforeend", '<div style="margin-top:8px;font-weight:700;color:#b07a00">⏳ Sunucu yeniden başlıyor... sayfa kendiliğinden yenilenecek.</div>');
+  let kapandi = false, deneme = 0;
+  const dene = ()=>{
+    deneme++;
+    fetch("/durum", {cache:"no-store"}).then(r=>{ if(!r.ok) throw 0; if(kapandi || deneme > 12) location.reload(); else setTimeout(dene, 1200); })
+      .catch(()=>{ kapandi = true; if(deneme > 50){ if(kap) kap.insertAdjacentHTML("beforeend", '<div style="margin-top:6px;color:#c62828">Sunucu kendiliğinden açılmadı — SATIS bilgisayarında sunucuyu elle başlatın, sonra Ctrl+F5 yapın.</div>'); return; } setTimeout(dene, 1500); });
+  };
+  setTimeout(dene, 2500);
+}
 function yerelYedekSimdi(hedef){
   cariApi("yerelYedekSimdi", {hedef}).then(res=>{
     if(!res || !res.ok){ alert((res&&res.hata)||"Başlatılamadı"); return; }
@@ -4134,8 +4207,8 @@ function hizPaneliIndir(){
 // Veriyi DEĞİŞTİRMEYEN (ya da önbelleği ilgilendirmeyen) işlemler: bunlardan sonra önbellek temizlenmez.
 // ★ (1 Eki 2026) Okuma olsa da yavaş olduğu için "İşlem yapılıyor + geçen süre" bandı gösterilen çağrılar:
 // Portaldan Gelen Faturalar listesi (dış e-tablo + birkaç sayfa okuyor). Başka ekran eklemek için buraya ekle.
-const CARI_API_BANT_OKUMA_ = /^(yerelYedekDurum|getBekleyenAlisFaturalari|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi)$/;
-const CARI_API_YAZMA_DEGIL_ = /^(get|yerelYedek|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|edmOrtamDurumu|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
+const CARI_API_BANT_OKUMA_ = /^(yerelYedekDurum|yerelGuncelleDurum|yerelGuncelleKontrol|getBekleyenAlisFaturalari|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi)$/;
+const CARI_API_YAZMA_DEGIL_ = /^(get|yerelYedek|yerelGuncelle|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|edmOrtamDurumu|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
 // Yapı/tanım verisini değiştiren işlemler (banka, hesap, pos, kart, seri, tanım, marka, plasiyer, birim...).
 const CARI_API_YAPI_ISLEMI_ = /(Banka|Hesap|Pos|KrediKart|Seri|BasitTanim|Marka|Plasiyer|Birim|AciklamaSablon|SiparisDurum|SiraGuncelle)/;
 
@@ -19358,6 +19431,7 @@ function kullaniciYonetimiKontrolEtVeYukle(){
   panel.style.display = "";
   kullaniciYonetimiCiz();
   const yp = document.getElementById("calisma-yili-panel"); if(yp){ yp.style.display = ""; calismaYiliListeCiz_(); }
+  yerelGuncellePanelYukle_();
 }
 function calismaYiliListeCiz_(){
   const el = document.getElementById("calisma-yili-liste"); if(!el) return;

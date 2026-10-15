@@ -520,3 +520,24 @@ function yerelYedekSimdi(body) {
   if (typeof YerelYedek === "undefined" || !YerelYedek) return { ok: false, hata: "Bu işlem yalnızca yerel sunucuda çalışır" };
   return JSON.parse(JSON.stringify(YerelYedek.simdi(String((body && body.hedef) || "ikisi"))));
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// YEREL SUNUCU PROGRAM GÜNCELLEME (15 Eki 2026) — Ayarlar > "Program Güncelleme (GitHub)"
+// Yerel sunucu src/guncelle.js ile konuşur; bulutta (Apps Script) bu işlemler "yerel değil" döner.
+// ════════════════════════════════════════════════════════════════════════════
+function yerelGuncelleDurum() {
+  if (typeof YerelGuncelle === "undefined" || !YerelGuncelle) return { ok: true, yerel: false };
+  return Object.assign({ ok: true, yerel: true }, JSON.parse(JSON.stringify(YerelGuncelle.durum())));
+}
+function yerelGuncelleKontrol() {
+  if (typeof YerelGuncelle === "undefined" || !YerelGuncelle) return { ok: false, hata: "Bu işlem yalnızca yerel sunucuda çalışır" };
+  return JSON.parse(JSON.stringify(YerelGuncelle.kontrol()));
+}
+function yerelGuncelleUygula() {
+  if (typeof YerelGuncelle === "undefined" || !YerelGuncelle) return { ok: false, hata: "Bu işlem yalnızca yerel sunucuda çalışır" };
+  return JSON.parse(JSON.stringify(YerelGuncelle.uygula()));
+}
+function yerelGuncelleGeriAl(body) {
+  if (typeof YerelGuncelle === "undefined" || !YerelGuncelle) return { ok: false, hata: "Bu işlem yalnızca yerel sunucuda çalışır" };
+  return JSON.parse(JSON.stringify(YerelGuncelle.geriAl(String((body && body.ad) || ""))));
+}
