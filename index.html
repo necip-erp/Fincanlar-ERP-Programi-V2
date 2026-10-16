@@ -3974,7 +3974,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261016e";
+const FRONT_SURUM = "20261017a";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -4803,7 +4803,7 @@ function tarihGoster(deger){
 // (alert() gibi kullanıcının tıklamasını beklemez). Örn. kutu miktarına uymayan
 // girişlerde "1 kerelik" uyarı göstermek için kullanılır.
 let _toastTimer = null;
-function toastGoster(mesaj){
+function toastGoster(mesaj, sureMs){
   let el = document.getElementById("toast-kutu");
   if(!el){
     el = document.createElement("div");
@@ -4814,7 +4814,7 @@ function toastGoster(mesaj){
   el.textContent = mesaj;
   clearTimeout(_toastTimer);
   requestAnimationFrame(()=>el.classList.add("gorunur"));
-  _toastTimer = setTimeout(()=>el.classList.remove("gorunur"), 2600);
+  _toastTimer = setTimeout(()=>el.classList.remove("gorunur"), sureMs||2600);
 }
 
 function simdiTarihSaat(){
@@ -7073,7 +7073,7 @@ function satisDetayCiz(res){
       ${(s.belgeTipi==='Sipariş'||s.belgeTipi==='Teklif') ? `<button class="btn btn-primary" onclick="satisDuzenleAc('${s.id}')">✏️ Düzenle</button>` : ''}
       <button class="btn btn-primary" onclick="satisFisYazdir('${s.id}')">🖨 Yazdır</button>
       ${s.belgeTipi==='Fatura' && !(_edmOrtam.canli && s.efaturaUuid) ? (_edmOrtam.canli
-          ? `<button class="btn btn-primary" title="Faturayı EDM üzerinden GERÇEK alıcıya (GİB) e-Fatura olarak gönderir" onclick="satisEdmTestGonder('${s.id}')">📤 e-Fatura Gönder</button>`
+          ? `<button class="btn btn-primary" title="Faturayı EDM üzerinden GERÇEK alıcıya (GİB) e-Fatura olarak gönderir" onclick="satisEdmTestGonder('${s.id}')">📤 e-Fatura / e-Arşiv Gönder</button>`
           : `<button class="btn" title="EDM test ortamına DENEME e-Fatura gönderimi (test alıcısına)" onclick="satisEdmTestGonder('${s.id}')">🧪 EDM'e Test Gönder</button>`) : ''}
       ${s.belgeTipi==='Fatura' && s.efaturaUuid ? `<button class="btn" title="EDM/GİB portalındaki güncel durumu sorgula" onclick="satisEdmDurumSorgula('${s.id}')">🔄 Durumu Sorgula</button>` : ''}
       ${s.belgeTipi==='Fatura' && s.efaturaUuid ? `<button class="btn" title="EDM'e gönderilen faturanın resmi görünümünü göster" onclick="satisEfaturaGorselGoster('${s.id}')">🖼️ Resmi Görüntüle</button>` : ''}
@@ -7357,9 +7357,17 @@ function satisEdmTestGonder(id){
     if(!detay.ok){ alert("Fatura bilgisi alınamadı: "+(detay.hata||"bilinmiyor")); return; }
     const s = detay.satis, kalemler = detay.kalemler || [];
     const t = s.toplamlar || {};
-    cariApi("getCariDetay", {cariId: s.cariId}).catch(()=>({ok:false})).then(cres=>{
+    Promise.all([
+      cariApi("getCariDetay", {cariId: s.cariId}).catch(()=>({ok:false})),
+      cariApi("getEdmFaturaOnKontrol", {satisId:id}).catch(()=>({ok:false}))
+    ]).then(([cres, onk])=>{
       const c = cres.ok ? cres.cari : {};
-      edmOnayEkraniGoster(s, kalemler, t, c, id);
+      // ★ 17 Eki 2026: gönderim öncesi kontrol — hata varsa onay ekranı hiç açılmaz
+      if(onk && onk.ok && (onk.hatalar||[]).length){
+        alert("⛔ Gönderim öncesi kontrol — düzeltilmesi gerekenler:\n\n- "+onk.hatalar.join("\n- ")+((onk.uyarilar||[]).length?"\n\nUyarılar:\n- "+onk.uyarilar.join("\n- "):""));
+        return;
+      }
+      edmOnayEkraniGoster(s, kalemler, t, c, id, (onk && onk.ok) ? onk : null);
     });
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
@@ -7371,7 +7379,7 @@ function edmOnayEkraniKapat(){
 // EDM'e göndermeden önceki son onay ekranı — faturayı gerçek fatura formunda
 // (belgeFormuHTMLOlustur ile aynı fonksiyon) gösterir, "Onayla ve Gönder"/"İptal"
 // düğmeleri ile karar verilir.
-function edmOnayEkraniGoster(s, kalemler, t, c, satisId){
+function edmOnayEkraniGoster(s, kalemler, t, c, satisId, onk){
   edmOnayEkraniKapat();
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -7384,10 +7392,18 @@ function edmOnayEkraniGoster(s, kalemler, t, c, satisId){
           ? 'Bu fatura GERÇEK olarak '+(c.ad||s.cariAd||'cari')+' adına GİB\'e gönderilecek ve geri alınamaz (hata varsa iptal/iade faturası gerekir). KDV oranlarını, tutarları ve cari bilgilerini son kez kontrol edin.'
           : 'Aşağıdaki fatura EDM TEST ortamına DENEME olarak gönderilecek (alıcı her zaman EDM\'in kendi test mükellefidir, gerçek cariniz DEĞİLDİR). Göndermeden önce rakamları son kez kontrol edin.'}
       </p>
+      ${onk && (onk.uyarilar||[]).length ? `<div style="flex-shrink:0;margin:0 0 10px;padding:8px 12px;border-radius:8px;background:#fff7e0;border:1px solid #f0d78a;font-size:12.5px;color:#7a5a00"><b>⚠ Kontrol uyarıları</b><br>${onk.uyarilar.map(u=>'• '+String(u).replace(/</g,'&lt;')).join('<br>')}</div>` : ''}
       <div style="flex:1;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:20px;background:#fff">
         ${belgeFormuHTMLOlustur(s, kalemler, t, c)}
       </div>
-      <div class="modal-actions" style="flex-shrink:0;margin-top:16px">
+      <div class="modal-actions" style="flex-shrink:0;margin-top:16px;align-items:center">
+        <label style="margin-right:auto;font-size:13px">Gönderim türü:
+          <select id="edm-tur" style="margin-left:6px">
+            <option value="EFATURA"${onk && onk.onerilenTur!=='EARSIV' ? ' selected' : ''}>e-Fatura</option>
+            <option value="EARSIV"${onk && onk.onerilenTur==='EARSIV' ? ' selected' : ''}>e-Arşiv</option>
+          </select>
+          ${onk && onk.onerilenTur ? `<span style="color:var(--text3);font-size:12px"> (GİB sorgusu: ${onk.onerilenTur==='EARSIV'?'e-Fatura mükellefi değil → e-Arşiv':'e-Fatura mükellefi'})</span>` : ''}
+        </label>
         <button class="btn" onclick="edmOnayEkraniKapat()">İptal</button>
         <button class="btn btn-primary" onclick="edmOnayEkraniOnayla('${satisId}')">✅ Onayla ve Gönder</button>
       </div>
@@ -7395,10 +7411,13 @@ function edmOnayEkraniGoster(s, kalemler, t, c, satisId){
   document.body.appendChild(overlay);
 }
 function edmOnayEkraniOnayla(satisId){
+  const turEl = document.getElementById("edm-tur");
+  const tur = turEl ? turEl.value : "EFATURA";
   edmOnayEkraniKapat();
-  cariApi("edmFaturaGonder", {satisId, canliOnay: _edmOrtam.canli === true}).then(res=>{
+  cariApi("edmFaturaGonder", {satisId, tur, canliOnay: _edmOrtam.canli === true}).then(res=>{
     if(!res.ok){ alert("EDM gönderim hatası:\n\n"+(res.hata||"bilinmiyor")); return; }
-    let mesaj = (res.canli ? "✅ e-Fatura GİB'e gönderildi." : "✅ EDM'e deneme gönderimi başarılı.")+"\n\nAlıcı: "+(res.aliciUnvan||"—")+"\nE-Fatura No: "+(res.efaturaNo||"—")+"\nDurum: "+(res.durum||"—");
+    const turAd = res.tur==="EARSIV" ? "e-Arşiv" : "e-Fatura";
+    let mesaj = (res.canli ? "✅ "+turAd+" GİB'e gönderildi." : "✅ EDM'e deneme gönderimi ("+turAd+") başarılı.")+"\n\nAlıcı: "+(res.aliciUnvan||"—")+"\nE-Fatura No: "+(res.efaturaNo||"—")+"\nDurum: "+(res.durum||"—");
     const od = res.otomatikDurumSorgusu;
     if(od){
       mesaj += od.ok ? ("\n\nPortal durumu: "+(od.ozet||"—")) : ("\n\n(Otomatik portal durum sorgusu henüz sonuç vermedi: "+(od.hata||"")+")");
@@ -9920,6 +9939,17 @@ function satisKaydet(){
     let ilkDetay = res.detay || null;
     kayitSekmesindeAc('satis','📤',satisSekmeEtiketi_(kayitOzet),'SATIS:'+kayitId,()=>{ const d = ilkDetay; ilkDetay = null; satisAc(kayitId, d); });
     setTimeout(()=>{ satisListesiYukle(); if(cariId) cariListesiYukle(); }, 400);   // cari bakiyesi güncellenmiş olabilir
+    // ★ 17 Eki 2026: e-Fatura/e-Arşiv carisine kesilen faturada, kayıttan hemen sonra eksikleri (VKN/il/ilçe/satır/KDV vb.) hafifçe bildir.
+    if(body.belgeTipi==='Fatura'){
+      setTimeout(()=>{
+        cariApi("getEdmFaturaOnKontrol",{satisId:kayitId, hafif:true}).then(k=>{
+          if(!k || !k.ok || k.gerekmez) return;
+          const h = k.hatalar||[], u = k.uyarilar||[];
+          if(!h.length && !u.length) return;
+          toastGoster("⚠ e-Fatura/e-Arşiv kontrolü: "+(h.length?h.length+" hata — ":"")+(h[0]||u[0])+((h.length+u.length)>1?" (+"+(h.length+u.length-1)+" madde daha, 'e-Fatura Gönder'de görünür)":""), 9000);
+        }).catch(()=>{});
+      }, 900);
+    }
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
 }
 
@@ -10641,12 +10671,16 @@ function satisIadeEdmGonder(id){
   edmOrtamYukle_().then(()=>{
     if(_edmOrtam.canli && !_edmOrtam.canliAcik){ alert("Canlı e-Fatura gönderimi henüz açılmadı (EDM_CANLI_GONDERIM = EVET gerekli)."); return; }
     const m = _edmOrtam.canli ? "Bu iade GERÇEK olarak GİB'e IADE tipli e-Fatura gönderilecek ve geri alınamaz. Devam edilsin mi?" : "Bu iade EDM TEST ortamına DENEME olarak gönderilecek. Devam edilsin mi?";
-    if(!confirm(m)) return;
+    cariApi("getEdmFaturaOnKontrol",{iadeId:id}).catch(()=>({ok:false})).then(onk=>{
+    if(onk && onk.ok && (onk.hatalar||[]).length){ alert("⛔ Gönderim öncesi kontrol — düzeltilmesi gerekenler:\n\n- "+onk.hatalar.join("\n- ")); return; }
+    const uy = (onk && onk.ok && (onk.uyarilar||[]).length) ? "\n\n⚠ Uyarılar:\n- "+onk.uyarilar.join("\n- ") : "";
+    if(!confirm(m+uy)) return;
     cariApi("edmFaturaGonder",{iadeId:id, canliOnay:_edmOrtam.canli===true}).then(res=>{
       if(!res.ok){ alert("EDM gönderim hatası:\n\n"+(res.hata||"bilinmiyor")); return; }
       alert((res.canli?"✅ İade e-Faturası gönderildi.":"✅ Deneme gönderimi başarılı.")+"\n\nE-Fatura No: "+(res.efaturaNo||"—")+"\nDurum: "+(res.durum||"—"));
       satisIadeAc(id);
     }).catch(err=>alert("Bağlantı hatası: "+err.message));
+    });
   });
 }
 function satisIadeEdmDurum(id){

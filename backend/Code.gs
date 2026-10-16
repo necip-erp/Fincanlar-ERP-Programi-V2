@@ -1104,7 +1104,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261016e";
+const PROGRAM_SURUM_ = "20261017a";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -1124,11 +1124,13 @@ function bulutYazmaAcikMi_() {
 // Bulutta kilitli olsa bile çalışacak (veri kaydı yapmayan / yedek alan / oturum) işlemler:
 const BULUT_KILIT_SERBEST_ = /^(girisYap|cikisYap|parolaDegistir|yerelYedekYukle|yerelNabiz|bulutYazmaAyarla|bulutAynaSimdi|bulutAynaKur|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|edmOrtamDurumu)$/;
 // Bulutta, kilit açık olsa bile ÇALIŞMAYAN işlemler (veri iki yerde ayrışmasın): şirket düzeni / yeni yıl / şirketler arası stok aktarımı.
-const YALNIZ_YEREL_ACTIONLAR_ = { sirketDuzeniKur: true, yeniCalismaYiliOlustur: true, yilStokKartlariAktar: true };
+// ★ 17 Eki 2026: edmFaturaGonder de burada — e-Fatura/e-Arşiv GİB'e yalnız yerel sunucudan gider (fatura numara sayacı EDM_FATURA_SAYAC_<yıl> ve
+// "gönderildi" kaydı iki tarafta ayrı tutulduğundan, bulut yazma kilidi açık olsa bile ikinci yerden gönderim aynı faturayı/numarayı çiftleyebilirdi).
+const YALNIZ_YEREL_ACTIONLAR_ = { sirketDuzeniKur: true, yeniCalismaYiliOlustur: true, yilStokKartlariAktar: true, edmFaturaGonder: true };
 function bulutKilitKontrol_(action) {
   if (yerelMi_()) return null;
   if (YALNIZ_YEREL_ACTIONLAR_[action]) {
-    return { ok: false, bulutKilitli: true, hata: "Bu işlem yalnızca YEREL SUNUCUDA yapılır (şirket düzeni, yeni yıl ve stok kartı aktarımı). Bulutta yapılırsa iki taraf farklı veri görür." };
+    return { ok: false, bulutKilitli: true, hata: "Bu işlem yalnızca YEREL SUNUCUDA yapılır (şirket düzeni, yeni yıl, stok kartı aktarımı ve e-Fatura/e-Arşiv gönderimi). Bulutta yapılırsa iki taraf farklı veri/fatura numarası görür." };
   }
   if (YAZMA_DEGIL_.test(action) || BULUT_KILIT_SERBEST_.test(action)) return null;
   if (bulutYazmaAcikMi_()) return null;
@@ -1363,6 +1365,7 @@ function handleRequest(e) {
       case "edmCariSorgula":  result = edmCariSorgula(body); break;
       case "edmFaturaGonderTest": result = edmFaturaGonderTest(body); break;
       case "edmFaturaGonder": result = edmFaturaGonder(body); break;
+      case "getEdmFaturaOnKontrol": result = getEdmFaturaOnKontrol(body); break;
       case "edmOrtamDurumu": result = edmOrtamDurumu(); break;
       case "getSatisEfaturaGorsel": result = satisEfaturaGorselAl(body); break;
       case "getAlisFaturaGorselHtml": result = alisFaturaGorselHtmlAl(body); break;
@@ -10726,7 +10729,7 @@ function edmFaturaXmlOlustur_(p) {
   return '<Invoice xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:xades="http://uri.etsi.org/01903/v1.3.2#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xsi:schemaLocation="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2 UBL-Invoice-2.1.xsd" xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2">\n' +
     '\t<cbc:UBLVersionID>2.1</cbc:UBLVersionID>\n' +
     '\t<cbc:CustomizationID>TR1.2</cbc:CustomizationID>\n' +
-    '\t<cbc:ProfileID>TEMELFATURA</cbc:ProfileID>\n' +
+    '\t<cbc:ProfileID>' + (p.earsiv ? 'EARSIVFATURA' : 'TEMELFATURA') + '</cbc:ProfileID>\n' +
     '\t<cbc:ID>' + p.faturaNo + '</cbc:ID>\n' +
     '\t<cbc:CopyIndicator>false</cbc:CopyIndicator>\n' +
     '\t<cbc:UUID>' + p.uuid + '</cbc:UUID>\n' +
@@ -10737,6 +10740,7 @@ function edmFaturaXmlOlustur_(p) {
     '\t<cbc:DocumentCurrencyCode>TRY</cbc:DocumentCurrencyCode>\n' +
     '\t<cbc:LineCountNumeric>' + h.kalemler.length + '</cbc:LineCountNumeric>\n' +
     iadeRefXml +
+    (p.earsiv ? '\t<cac:AdditionalDocumentReference>\n\t\t<cbc:ID>ELEKTRONIK</cbc:ID>\n\t\t<cbc:IssueDate>' + p.tarih + '</cbc:IssueDate>\n\t\t<cbc:DocumentTypeCode>SendingType</cbc:DocumentTypeCode>\n\t</cac:AdditionalDocumentReference>\n' : '') +
     '\t<cac:AccountingSupplierParty>\n' +
     '\t\t<cac:Party>\n' +
     '\t\t\t<cac:PartyIdentification><cbc:ID schemeID="VKN">' + saticiVkn + '</cbc:ID></cac:PartyIdentification>\n' +
@@ -10766,6 +10770,161 @@ function edmFaturaXmlOlustur_(p) {
     '</Invoice>';
 }
 
+// ════════════════════════════════════════════════
+// ★ (17 Eki 2026) e-Fatura / e-Arşiv GÖNDERİM ÖN KONTROLLERİ
+// Hem edmFaturaGonder (engelleyici) hem de ekran (getEdmFaturaOnKontrol) bu tek fonksiyonu kullanır.
+// hatalar = gönderimi DURDURUR; uyarilar = bilgi (kullanıcı görür, gönderim engellenmez).
+// Test ortamında (EDM_URL "test") alıcı her zaman EDM test mükellefi olduğundan cari kaynaklı sorunlar hata değil uyarı sayılır.
+// ════════════════════════════════════════════════
+function edmVknGecerliMi_(s) {
+  s = String(s || "");
+  if (!/^\d{10}$/.test(s)) return false;
+  const d = s.split("").map(Number);
+  let toplam = 0;
+  for (let i = 0; i < 9; i++) {
+    const t = (d[i] + (9 - i)) % 10;
+    let v = (t * Math.pow(2, 9 - i)) % 9;
+    if (t !== 0 && v === 0) v = 9;
+    toplam += v;
+  }
+  return ((10 - (toplam % 10)) % 10) === d[9];
+}
+function edmTcknGecerliMi_(s) {
+  s = String(s || "");
+  if (!/^[1-9]\d{10}$/.test(s)) return false;
+  const d = s.split("").map(Number);
+  const tekler = d[0] + d[2] + d[4] + d[6] + d[8], ciftler = d[1] + d[3] + d[5] + d[7];
+  const d10 = (((tekler * 7) - ciftler) % 10 + 10) % 10;
+  if (d10 !== d[9]) return false;
+  let ilk10 = 0;
+  for (let i = 0; i < 10; i++) ilk10 += d[i];
+  return (ilk10 % 10) === d[10];
+}
+// "yyyy-MM-dd[ HH:mm]" veya "dd/MM/yyyy[...]" → "yyyy-MM-dd" ("" = çözülemedi)
+function edmTarihIso_(t) {
+  const m = String(t || "").trim();
+  let r = m.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (r) return r[1] + "-" + r[2] + "-" + r[3];
+  r = m.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})/);
+  if (r) return r[3] + "-" + ("0" + r[2]).slice(-2) + "-" + ("0" + r[1]).slice(-2);
+  return "";
+}
+const EDM_GECERLI_KDV_ = [0, 1, 10, 20];
+// satis: getSatisDetay().satis (veya iade); kalemler: kalem listesi; cari: {ad,vergiNo,il,ilce,adres,eFatura,eArsiv} veya null
+// o: { testMi, iadeMi, earsiv }
+function edmOnKontrolHesapla_(satis, kalemler, cari, o) {
+  o = o || {};
+  const hatalar = [], uyarilar = [];
+  const cariHata = o.testMi ? uyarilar : hatalar;
+  const ek = o.testMi ? " (test ortamında engel değil)" : "";
+  if (!satis) { hatalar.push("Belge bulunamadı."); return { hatalar: hatalar, uyarilar: uyarilar }; }
+  if (satis.belgeTipi !== "Fatura") hatalar.push("Sadece Fatura belgesi e-Fatura/e-Arşiv olarak gönderilebilir.");
+  if (!kalemler || kalemler.length === 0) {
+    hatalar.push("Faturada hiç kalem yok.");
+  } else {
+    kalemler.forEach(function (k, i) {
+      const n = "Satır " + (i + 1) + (k.urunAdi ? " (" + String(k.urunAdi).substring(0, 30) + ")" : "") + ": ";
+      const miktar = Number(k.miktar), fiyat = Number(k.birimFiyat) || 0, isk = Number(k.iskontoYuzde) || 0;
+      const kdv = (k.kdvOrani === undefined || k.kdvOrani === null || k.kdvOrani === "") ? 20 : Number(k.kdvOrani);
+      if (!String(k.urunAdi || "").trim()) hatalar.push("Satır " + (i + 1) + ": ürün adı boş.");
+      if (!(miktar > 0)) hatalar.push(n + "miktar 0 veya negatif.");
+      if (fiyat < 0) hatalar.push(n + "birim fiyat negatif.");
+      else if (fiyat === 0) uyarilar.push(n + "birim fiyat 0 (bedelsiz satır).");
+      if (isk < 0 || isk > 100) hatalar.push(n + "iskonto % 0-100 arasında olmalı (şu an " + isk + ").");
+      if (isNaN(kdv) || EDM_GECERLI_KDV_.indexOf(kdv) < 0) hatalar.push(n + "tanımsız KDV oranı (%" + k.kdvOrani + "). Geçerli oranlar: %" + EDM_GECERLI_KDV_.join(", %") + ".");
+    });
+    if (satis.toplamlar && satis.toplamlar.genelToplam !== undefined) {
+      const h = edmFaturaHesapla_(kalemler.map(function (k) {
+        return { urunAdi: k.urunAdi, stokKodu: k.stokKodu, miktar: k.miktar, birim: k.birim, birimFiyat: k.birimFiyat, iskontoYuzde: k.iskontoYuzde, kdvOrani: k.kdvOrani };
+      }));
+      const fark = Math.abs(h.genelToplam - (satis.toplamlar.genelToplam || 0));
+      if (fark > 0.10) hatalar.push("Kalemlerden hesaplanan toplam (" + h.genelToplam.toFixed(2) + ") ERP genel toplamından (" + (satis.toplamlar.genelToplam || 0).toFixed(2) + ") farklı.");
+    }
+  }
+  if ((satis.dipIskontoYuzde || 0) > 0 || (satis.tutarIskontosu || 0) > 0) {
+    hatalar.push("Dip iskonto / tutar iskontosu var: e-Fatura/e-Arşiv'de yalnızca kalem iskontosu kullanılabilir (iskontoyu satır İsk.% alanına taşıyın).");
+  }
+  if (o.iadeMi && !String(satis.iadeFaturaNo || "").trim()) hatalar.push("İade için 'iade edilen fatura no' boş.");
+  const bugun = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd");
+  const faturaTarih = edmTarihIso_(satis.tarih);
+  if (faturaTarih && faturaTarih !== bugun) {
+    uyarilar.push("Fatura tarihi " + faturaTarih + " ama e-Fatura/e-Arşiv GİB'e gönderim günü (" + bugun + ") tarihiyle düzenlenir. ERP'deki tarih ile resmi fatura tarihi farklı olacak.");
+  }
+  if (satis.efaturaUuid) {
+    (o.testMi ? uyarilar : hatalar).push("Bu belge zaten gönderilmiş (" + (satis.efaturaNo || satis.efaturaUuid) + "). Aynı belge ikinci kez gönderilemez; hata varsa iptal/iade faturası gerekir." + ek);
+  }
+  if (o.cariKontrol !== false) {
+    if (!cari) {
+      cariHata.push("Fatura carisi bulunamadı veya seçilmemiş." + ek);
+    } else {
+      const kimlik = String(cari.vergiNo || "").replace(/[^0-9]/g, "");
+      if (kimlik.length !== 10 && kimlik.length !== 11) {
+        cariHata.push("Cari Vergi No / TCKN 10 (VKN) veya 11 (TCKN) haneli olmalı (şu an: \"" + (cari.vergiNo || "boş") + "\")." + ek);
+      } else if (kimlik.length === 10 && !edmVknGecerliMi_(kimlik)) {
+        cariHata.push("Cari VKN (" + kimlik + ") sağlama (kontrol hanesi) kontrolünden geçmedi — yazım hatası olabilir." + ek);
+      } else if (kimlik.length === 11 && !edmTcknGecerliMi_(kimlik)) {
+        cariHata.push("Cari TCKN (" + kimlik + ") sağlama kontrolünden geçmedi — yazım hatası olabilir." + ek);
+      } else if (kimlik.length === 11 && String(cari.ad || "").trim().split(/\s+/).length < 2) {
+        uyarilar.push("TCKN'li (şahıs) alıcıda Ad ve Soyad ayrı yazılmalı; cari adı tek kelime: \"" + (cari.ad || "") + "\".");
+      }
+      if (!String(cari.il || "").trim() || !String(cari.ilce || "").trim()) cariHata.push("Cari İl ve İlçe bilgisi dolu olmalı." + ek);
+      if (!String(cari.adres || "").trim()) uyarilar.push("Cari adres alanı boş (fatura adres satırı boş çıkar).");
+      if (String(cari.eFatura || "") !== "Evet" && String(cari.eArsiv || "") !== "Evet") {
+        uyarilar.push("Cari kartında e-Fatura/e-Arşiv işaretli değil. Mükellefiyeti sorgulayıp kartı güncelleyin (Cari > E-Fatura/E-Arşiv).");
+      }
+    }
+  }
+  return { hatalar: hatalar, uyarilar: uyarilar };
+}
+
+// Ekran için: body { satisId | iadeId, hafif?: true }.
+// hafif=true → ağ çağrısı yok (kayıt sonrası hızlı uyarı; carisi e-Fatura/e-Arşiv değilse hiç uyarı üretmez).
+// hafif değilse EDM/GİB'den alıcının mükellefiyeti de sorgulanır → onerilenTur: "EFATURA" | "EARSIV".
+function getEdmFaturaOnKontrol(body) {
+  try {
+    const iadeMi = !!body.iadeId;
+    const id = iadeMi ? body.iadeId : body.satisId;
+    if (!id) return { ok: false, hata: "satisId gerekli" };
+    let satis, kalemler;
+    if (iadeMi) {
+      const idt = getSatisIadeDetay(id);
+      if (!idt.ok) return { ok: false, hata: "İade bulunamadı: " + (idt.hata || "") };
+      satis = idt.iade; satis.belgeTipi = "Fatura"; satis.toplamlar = { genelToplam: idt.iade.toplamTutar };
+      kalemler = idt.kalemler;
+    } else {
+      const d = getSatisDetay(id);
+      if (!d.ok) return { ok: false, hata: "Satış bulunamadı: " + (d.hata || "") };
+      satis = d.satis; kalemler = d.kalemler;
+    }
+    const ayar = edmAyarlariniAl_();
+    const testMi = !ayar.url || ayar.url.indexOf("test") > -1;
+    const cl = getCariListesi();
+    const cari = cl && cl.ok ? (cl.cariler || []).find(function (x) { return x.id === String(satis.cariId); }) || null : null;
+    if (body.hafif === true && satis.belgeTipi === "Fatura" && cari && String(cari.eFatura) !== "Evet" && String(cari.eArsiv) !== "Evet") {
+      return { ok: true, hatalar: [], uyarilar: [], gerekmez: true, testMi: testMi };
+    }
+    const sonuc = edmOnKontrolHesapla_(satis, kalemler, cari, { testMi: testMi, iadeMi: iadeMi });
+    let onerilenTur = "";
+    if (body.hafif !== true && cari && ayar.url && ayar.user && ayar.password) {
+      try {
+        const kimlik = String(cari.vergiNo || "").replace(/[^0-9]/g, "");
+        if (kimlik.length === 10 || kimlik.length === 11) {
+          const sessionId = edmLogin_(ayar);
+          const gib = edmVknBilgiAl_(ayar, sessionId, kimlik);
+          onerilenTur = gib ? "EFATURA" : "EARSIV";
+          if (gib && String(cari.eFatura) !== "Evet") sonuc.uyarilar.push("GİB'de e-Fatura mükellefi görünüyor ama cari kartında e-Fatura işaretli değil — kartı güncelleyin.");
+          if (!gib && String(cari.eFatura) === "Evet") sonuc.uyarilar.push("Cari kartında e-Fatura işaretli ama GİB'de e-Fatura mükellefi görünmüyor — bu alıcıya e-Arşiv kesilmeli, kartı güncelleyin.");
+        }
+      } catch (e) {
+        sonuc.uyarilar.push("GİB mükellefiyet sorgusu yapılamadı: " + e.message);
+      }
+    }
+    return { ok: true, hatalar: sonuc.hatalar, uyarilar: sonuc.uyarilar, onerilenTur: onerilenTur, testMi: testMi };
+  } catch (err) {
+    return { ok: false, hata: "Ön kontrol hatası: " + err.message };
+  }
+}
+
 // ★ (5 Eki 2026) e-Fatura gönderimi (SendInvoice) — TEST ve CANLI.
 //  • EDM_URL "test" içeriyorsa: eskisi gibi DENEME — alıcı her zaman EDM'in test mükellefi (gerçek cariye gitmez).
 //  • Canlı adreste: gerçek cariye gider. Güvenlik kapıları: (1) Script Özelliği EDM_CANLI_GONDERIM = EVET olmalı,
@@ -10781,6 +10940,7 @@ function edmFaturaGonder(body) {
   }
   const testMi = ayar.url.indexOf("test") > -1;
   const iadeMi = !!body.iadeId;
+  const earsiv = String(body.tur || "") === "EARSIV"; // ★ 17 Eki 2026: e-Arşiv gönderimi (canlıda ayrıca EDM_EARSIV_GONDERIM = EVET gerekir)
   const satisId = iadeMi ? body.iadeId : body.satisId;
   if (!satisId) return { ok: false, hata: "satisId gerekli" };
   let satis, detay;
@@ -10808,6 +10968,9 @@ function edmFaturaGonder(body) {
       return { ok: false, hata: "Canlı e-Fatura gönderimi kapalı. Açmak için Apps Script > Proje Ayarları > Script Özellikleri'ne EDM_CANLI_GONDERIM = EVET ekleyin." };
     }
     if (body.canliOnay !== true) return { ok: false, hata: "Canlı gönderim için açık onay gerekli." };
+    if (earsiv && PropertiesService.getScriptProperties().getProperty("EDM_EARSIV_GONDERIM") !== "EVET") {
+      return { ok: false, hata: "Canlı e-Arşiv gönderimi kapalı. e-Arşiv biçimi EDM test ortamında doğrulandıktan sonra Script Özellikleri'ne EDM_EARSIV_GONDERIM = EVET ekleyin." };
+    }
     if (satis.efaturaUuid) return { ok: false, hata: "Bu belge zaten EDM'e gönderilmiş (" + (satis.efaturaNo || satis.efaturaUuid) + "). Aynı belge ikinci kez gönderilemez." };
   }
 
@@ -10818,6 +10981,10 @@ function edmFaturaGonder(body) {
     cari = cr.cari;
   }
   const kimlikHam = cari ? String(cari.vergiNo || "").replace(/[^0-9]/g, "") : "";
+  {
+    const onk = edmOnKontrolHesapla_(satis, detay.kalemler, cari, { testMi: testMi, iadeMi: iadeMi, cariKontrol: !testMi });
+    if (onk.hatalar.length) return { ok: false, hata: "Gönderim öncesi kontrol — düzeltilmesi gerekenler:\n- " + onk.hatalar.join("\n- ") };
+  }
   if (!testMi) {
     if (kimlikHam.length !== 10 && kimlikHam.length !== 11) return { ok: false, hata: "Carinin Vergi No / TCKN alanı 10 (VKN) veya 11 (TCKN) haneli olmalı (şu an: \"" + (cari.vergiNo || "boş") + "\")." };
     if (!String(cari.il || "").trim() || !String(cari.ilce || "").trim()) return { ok: false, hata: "Carinin İl ve İlçe bilgisi dolu olmalı (e-Fatura alıcı adresi için zorunlu)." };
@@ -10840,13 +11007,16 @@ function edmFaturaGonder(body) {
     }
     const aliciKimlik = testMi ? EDM_TEST_ALICI_VKN : kimlikHam;
     const aliciEdm = edmVknBilgiAl_(ayar, sessionId, aliciKimlik);
-    if (!aliciEdm) {
-      return { ok: false, hata: testMi ? ("EDM test alıcısı (" + EDM_TEST_ALICI_VKN + ") bulunamadı.") : ("Bu cari (" + aliciKimlik + ") GİB'de e-Fatura mükellefi görünmüyor. e-Arşiv faturası gerekir — e-Arşiv gönderimi henüz açık değil.") };
+    if (earsiv && !testMi && aliciEdm) {
+      return { ok: false, hata: "Bu cari (" + aliciKimlik + ") GİB'de e-Fatura mükellefi. e-Fatura mükellefine e-Arşiv değil e-Fatura kesilmelidir.", onerilenTur: "EFATURA" };
+    }
+    if (!aliciEdm && !earsiv) {
+      return { ok: false, onerilenTur: testMi ? "" : "EARSIV", hata: testMi ? ("EDM test alıcısı (" + EDM_TEST_ALICI_VKN + ") bulunamadı.") : ("Bu cari (" + aliciKimlik + ") GİB'de e-Fatura mükellefi görünmüyor. e-Arşiv faturası gerekir — e-Arşiv olarak gönderin.") };
     }
     const alici = {
       kimlik: aliciKimlik,
       kimlikTuru: aliciKimlik.length === 11 ? "TCKN" : "VKN",
-      unvan: testMi ? (aliciEdm.title || "EDM Test Mükellefi") : (aliciEdm.title || cari.ad),
+      unvan: testMi ? ((aliciEdm && aliciEdm.title) || "EDM Test Mükellefi") : ((aliciEdm && aliciEdm.title) || cari.ad),
       adres: cari ? String(cari.adres || "").trim() : "",
       il: cari ? cari.il : "", ilce: cari ? cari.ilce : "",
     };
@@ -10861,6 +11031,7 @@ function edmFaturaGonder(body) {
       alici: alici,
       hesap: hesap,
       tip: iadeMi ? "IADE" : "SATIS",
+      earsiv: earsiv,
       iadeRef: iadeMi ? { faturaNo: satis.iadeFaturaNo, tarih: satis.iadeFaturaTarihi || satis.tarih } : null,
       not: testMi ? "Fincanlar ERP - DENEME gönderimi" : String(satis.aciklama || "").trim(),
     };
@@ -10870,15 +11041,15 @@ function edmFaturaGonder(body) {
     const kanal = testMi ? "TEST" : "PROD";
     const soapBody = '<SendInvoiceRequest xmlns="http://tempuri.org/">' +
       edmRequestHeaderBlock_(sessionId, kanal) +
-      '<RECEIVER xmlns="" vkn="' + aliciKimlik + '" alias="' + edmXmlEscape_(aliciEdm.alias) + '"/>' +
+      (earsiv ? '<RECEIVER xmlns="" vkn="' + aliciKimlik + '"/>' : '<RECEIVER xmlns="" vkn="' + aliciKimlik + '" alias="' + edmXmlEscape_(aliciEdm.alias) + '"/>') +
       '<INVOICE xmlns="" TRXID="0">' +
       '<HEADER>' +
       '<SENDER>' + kendi.identifier + '</SENDER>' +
       '<RECEIVER>' + aliciKimlik + '</RECEIVER>' +
       '<FROM>' + edmXmlEscape_(kendi.alias) + '</FROM>' +
-      '<TO>' + edmXmlEscape_(aliciEdm.alias) + '</TO>' +
+      (earsiv ? '' : '<TO>' + edmXmlEscape_(aliciEdm.alias) + '</TO>') +
       '<INTERNETSALES>false</INTERNETSALES>' +
-      '<EARCHIVE>false</EARCHIVE>' +
+      '<EARCHIVE>' + (earsiv ? 'true' : 'false') + '</EARCHIVE>' +
       '</HEADER>' +
       '<CONTENT>' + contentB64 + '</CONTENT>' +
       '</INVOICE>' +
@@ -10911,12 +11082,20 @@ function edmFaturaGonder(body) {
     else satisEfaturaNoKaydet_(satisId, gercekFaturaNo, gercekUuid, invoiceXml, JSON.stringify(gorselVeri));
 
     let otomatikDurum = null;
+    if (earsiv) {
+      try {
+        const kyt = iadeMi ? iadeEfaturaBilgisiAl_(satisId) : satisEfaturaBilgisiAl_(satisId);
+        if (kyt) { if (iadeMi) iadeEfaturaDurumKaydet_(kyt.rowIndex, "e-Arşiv gönderildi"); else satisEfaturaDurumKaydet_(kyt.rowIndex, "e-Arşiv gönderildi"); }
+      } catch (e2) { /* durum metni yazılamazsa gönderim yine başarılı */ }
+      otomatikDurum = { ok: true, ozet: "e-Arşiv gönderildi (portal durumunu EDM e-Arşiv ekranından izleyin)" };
+    } else {
     try {
       otomatikDurum = edmFaturaDurumSorgula(iadeMi ? { iadeId: satisId } : { satisId: satisId });
     } catch (durumErr) {
       otomatikDurum = { ok: false, hata: "Otomatik durum sorgusu başarısız: " + durumErr.message };
     }
-    return { ok: true, canli: !testMi, durum: edmDurumTurkce_(status) || "Gönderildi", aliciUnvan: alici.unvan, efaturaNo: gercekFaturaNo, uuid: gercekUuid, ozetXml: xml.substring(0, 800), otomatikDurumSorgusu: otomatikDurum };
+    }
+    return { ok: true, canli: !testMi, tur: earsiv ? "EARSIV" : "EFATURA", durum: edmDurumTurkce_(status) || "Gönderildi", aliciUnvan: alici.unvan, efaturaNo: gercekFaturaNo, uuid: gercekUuid, ozetXml: xml.substring(0, 800), otomatikDurumSorgusu: otomatikDurum };
   } catch (err) {
     return { ok: false, hata: "EDM gönderim hatası: " + err.message };
   }
