@@ -516,6 +516,15 @@ function yerelYedekAyarKaydet(body) {
   if (typeof YerelYedek === "undefined" || !YerelYedek) return { ok: false, hata: "Bu işlem yalnızca yerel sunucuda çalışır" };
   return JSON.parse(JSON.stringify(YerelYedek.ayarKaydet((body && body.ayar) || {})));
 }
+// ★ 16 Eki 2026 — İşlem günlüğü (Yedekleme modülü günlük raporu + sağ üst bildirim zili). body: { tarih: "YYYY-MM-DD", filtre: "tum|kritik|silme|bekleyen" }
+function yerelYedekAktivite(body) {
+  if (typeof YerelYedek === "undefined" || !YerelYedek) return { ok: false, hata: "Bu işlem yalnızca yerel sunucuda çalışır" };
+  return JSON.parse(JSON.stringify(YerelYedek.aktiviteListe({ tarih: String((body && body.tarih) || ""), filtre: String((body && body.filtre) || "tum") })));
+}
+function yerelYedekAktiviteOzet() {
+  if (typeof YerelYedek === "undefined" || !YerelYedek) return { ok: true, yerel: false };
+  return JSON.parse(JSON.stringify(Object.assign({ yerel: true }, YerelYedek.aktiviteOzet())));
+}
 function yerelYedekSimdi(body) {
   if (typeof YerelYedek === "undefined" || !YerelYedek) return { ok: false, hata: "Bu işlem yalnızca yerel sunucuda çalışır" };
   return JSON.parse(JSON.stringify(YerelYedek.simdi(String((body && body.hedef) || "ikisi"))));
@@ -660,7 +669,17 @@ function bulutAynaEsitle(zorla) {
     var okunan = aynaVeriOku_();
     if (!okunan) { props.setProperty("AYNA_HATA", "Tamamlanmış yerel yedek bulunamadı"); return { ok: false, hata: "Tamamlanmış yerel yedek bulunamadı (yerel sunucu henüz bulut yedeği göndermemiş olabilir)" }; }
     if (!zorla && props.getProperty("AYNA_SON_DAMGA") === okunan.damga) return { ok: true, degismedi: true, damga: okunan.damga };
+    // ★ BOŞ/EKSİK YEDEK KORUMASI: yerelin gönderdiği kopya boş ya da bir öncekinin yarısından küçükse bulut e-tabloları o kopyayla EZİLMEZ.
+    var kitapSay = (okunan.veri.kitaplar || []).length, satirSay = 0;
+    (okunan.veri.kitaplar || []).forEach(function (k) { (k.sayfalar || []).forEach(function (sy) { satirSay += (sy.satirlar || []).length; }); });
+    var oncekiSatir = parseInt(props.getProperty("AYNA_SON_SATIR") || "0", 10) || 0;
+    if (kitapSay === 0 || satirSay === 0 || (oncekiSatir >= 200 && satirSay < oncekiSatir * 0.5)) {
+      var neden = "Yerel yedek boş/eksik görünüyor (" + oncekiSatir + " → " + satirSay + " satır); ayna uygulanmadı, bulut verisi korundu";
+      props.setProperty("AYNA_HATA", neden);
+      return { ok: false, hata: neden };
+    }
     var r = aynaUygula_(okunan.veri, t0);
+    props.setProperty("AYNA_SON_SATIR", String(satirSay));
     props.setProperty("AYNA_SON_DAMGA", okunan.damga);
     props.setProperty("AYNA_SON_ZAMAN", Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"));
     props.setProperty("AYNA_HATA", "");

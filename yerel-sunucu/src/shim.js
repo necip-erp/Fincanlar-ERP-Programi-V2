@@ -28,6 +28,8 @@ class Depo {
   }
   kirlet(sayfa, islem, ayrinti) {
     this.kirli = true; this.surum++;
+    // İşlem günlüğü dinleyicisi (yedek.js > islemBasla/islemBitir): bu istekte hangi sayfalarda ne değiştiği toplanır. Hata verirse veri yazımı etkilenmez.
+    if (this.dinleyici) { try { this.dinleyici({ s: sayfa, i: islem, a: ayrinti }); } catch (e) { /* günlük asıl işlemi bozmaz */ } }
     if (this.gunlukDosya) {
       const kayit = { t: Date.now(), s: sayfa, i: islem, a: ayrinti };
       try { fs.appendFileSync(this.gunlukDosya, JSON.stringify(kayit, tarihJson) + '\n'); } catch (e) {}
@@ -139,8 +141,10 @@ class Sayfa {
   }
   deleteRow(n) { return this.deleteRows(n, 1); }
   deleteRows(n, adet) {
-    if (n <= this.satirlar.length) this.satirlar.splice(n - 1, adet);
-    this.kitap.depo.kirlet(this.ad, 'satirSil', { satir: n, adet: adet });
+    let silinen = [];
+    if (n <= this.satirlar.length) silinen = this.satirlar.splice(n - 1, adet);
+    // silinen satırların kendisi de günlüğe girer (neyin silindiği sonradan görülebilsin); dinleyici yoksa ek maliyet yok
+    this.kitap.depo.kirlet(this.ad, 'satirSil', { satir: n, adet: adet, silinen: this.kitap.depo.dinleyici ? silinen : undefined });
     return this;
   }
   insertRowsAfter(n, adet) { this.satirSayisi = Math.max(this.satirSayisi, this.satirlar.length) + adet; return this; }

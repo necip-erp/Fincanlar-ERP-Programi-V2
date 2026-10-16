@@ -5,6 +5,10 @@
 //  2) FLASH: ayarlı saatlerde, takılı çıkarılabilir sürücüye (flash) veri + program kodu kopyalanır.
 //     Saat geldiğinde flash takılı değilse, takılınca o günün kaçan saati için bir kez yedek alınır.
 //  3) "Şimdi yedekle": Ayarlar > Yedekleme ekranından anında.
+//  4) KORUMA (16 Eki 2026): veri boş/eksik görünüyorsa (kayıt sayısı veya dosya boyutu yarıdan fazla düştüyse) bulut ve flash yedeği DURDURULUR,
+//     sağlam kopyaların üzerine yazılmaz; ekranda kırmızı uyarı çıkar. Kullanıcı "Yine de gönder" derse (simdi 'bulut-onay') geçer.
+//  5) İŞLEM GÜNLÜĞÜ: her veri değiştiren işlem veri\aktivite\ günlüğüne yazılır; "yedeğe gitti / bekliyor" durumu son bulut yedeğinin
+//     zamanından hesaplanır. Sağ üst bildirim zili ve Yedekleme modülündeki günlük rapor bunu gösterir (aktiviteOzet / aktiviteListe).
 // Ayar dosyası: veri\yedek-ayar.json   Durum dosyası: veri\yedek-durum.json
 const fs = require('fs');
 const path = require('path');
@@ -74,7 +78,10 @@ function baslat(o) {
   try { const j = JSON.parse(fs.readFileSync(AYAR, 'utf8')); ayar = birlestir(j); } catch (e) { /* ilk çalıştırma */ }
   if (!ayar.anahtar) { ayar.anahtar = crypto.randomBytes(24).toString('hex'); ayarYaz(); }
 
-  let durum = { bulut: { sonBasari: 0, sonDeneme: 0, sonHata: '', sonAd: '', sonBoyutKB: 0, sonDriveYuzde: null }, flash: { sonBasari: 0, sonSlot: '', sonHata: '', sonYol: '', sonSurucu: '' } };
+  // sonSatir/sonHamBayt: son BAŞARILI bulut yedeğindeki kayıt satırı sayısı ve dosya boyutu (boş/eksik veri koruması bunlarla kıyaslar)
+  // sonSnapshotT: son başarılı bulut yedeğinin veriyi okuduğu an; bundan önceki işlemler "yedeğe gitti" sayılır
+  // durduruldu: koruma yedeği durdurduysa nedeni (ekranda kırmızı uyarı olarak görünür)
+  let durum = { bulut: { sonBasari: 0, sonDeneme: 0, sonHata: '', sonAd: '', sonBoyutKB: 0, sonDriveYuzde: null, sonSatir: 0, sonHamBayt: 0, sonSnapshotT: 0, durduruldu: '' }, flash: { sonBasari: 0, sonSlot: '', sonHata: '', sonYol: '', sonSurucu: '' } };
   try { const j = JSON.parse(fs.readFileSync(DURUM, 'utf8')); durum.bulut = Object.assign(durum.bulut, j.bulut); durum.flash = Object.assign(durum.flash, j.flash); } catch (e) {}
   const islem = { bulut: false, flash: false };
   let sonSurum = -1;               // bellekte: başlangıçta ilk turda mutlaka gönderilir
@@ -108,16 +115,28 @@ function baslat(o) {
   }
 
   // ───── BULUT ─────
-  async function bulutYukle(zorla) {
+  // onay=true: boş/eksik veri koruması atlanır (yalnızca kullanıcı ekrandan "Yine de gönder" derse)
+  async function bulutYukle(zorla, onay) {
     if (islem.bulut) return { ok: false, hata: 'Bulut yedeği zaten sürüyor' };
     const adres = bulutAdresi();
     if (!adres) { durum.bulut.sonHata = 'Bulut adresi bulunamadı (onyuz\\index.html)'; durumYaz(); return { ok: false, hata: durum.bulut.sonHata }; }
     if (!zorla && depo.surum === sonSurum) return { ok: true, degismedi: true };
     islem.bulut = true; durum.bulut.sonDeneme = Date.now();
     try {
+      const snapT = Date.now();              // bu andan önceki tüm işlemler gönderilecek dosyada olur
+      // Veri dosyası diskten silinmişse bellek (gerçek kaynak) yeniden yazılır; böylece boş/eksik dosya buluta gitmez.
+      if (!fs.existsSync(VERI)) { depo.kirli = true; log('veri dosyası diskte yoktu, bellekten yeniden yazılıyor'); aktiviteUyari('Veri dosyası diskte yoktu; bellekteki veriden yeniden yazıldı'); }
       depo.diskeYaz();                       // bellekteki son hal diske (eşzamanlı, atomik)
       const surum = depo.surum;
       const ham = fs.readFileSync(VERI);
+      const ozet = veriOzeti();
+      const neden = onay ? '' : guvenlikKontrol(ozet, ham);
+      if (neden) {                           // BOŞ/EKSİK VERİ KORUMASI: buluta (ve aynaya) gönderilmez, ekranda kırmızı uyarı çıkar
+        durum.bulut.durduruldu = neden; durum.bulut.sonHata = 'Yedek DURDURULDU (veri boş/eksik görünüyor): ' + neden;
+        durumYaz(); log('bulut yedeği durduruldu:', neden);
+        aktiviteUyari('Buluta yedek DURDURULDU: ' + neden);
+        return { ok: false, hata: durum.bulut.sonHata, durduruldu: true };
+      }
       const n = Math.max(1, Math.ceil(ham.length / PARCA_BOYUT));
       const damga = istanbul(new Date()).damga;
       let son = null;
@@ -130,6 +149,7 @@ function baslat(o) {
       }
       sonSurum = surum;
       durum.bulut.sonBasari = Date.now(); durum.bulut.sonHata = ''; durum.bulut.sonAd = son.ad || ''; if (son.driveYuzde !== undefined) durum.bulut.sonDriveYuzde = son.driveYuzde;
+      durum.bulut.sonSatir = ozet.satir; durum.bulut.sonHamBayt = ham.length; durum.bulut.sonSnapshotT = snapT; durum.bulut.durduruldu = '';
       durumYaz();
       return { ok: true };
     } catch (e) {
@@ -175,8 +195,16 @@ function baslat(o) {
     try {
       const surucular = await flashTara();
       if (!surucular.length) { durum.flash.sonHata = 'Flash takılı değil'; durumYaz(); return { ok: false, hata: durum.flash.sonHata }; }
+      if (!fs.existsSync(VERI)) depo.kirli = true;   // dosya silinmişse bellekten yeniden yazılsın
       depo.diskeYaz();
       const ham = fs.readFileSync(VERI); const ozet = sha(ham);
+      // Boş/eksik veri flash'taki sağlam kopyaların yerine geçmesin (sakla sayısı dolunca en eskiler silinir)
+      const neden = guvenlikKontrol(veriOzeti(), ham);
+      if (neden) {
+        durum.flash.sonHata = 'Flash yedeği DURDURULDU (veri boş/eksik görünüyor): ' + neden; durumYaz();
+        aktiviteUyari('Flash yedeği DURDURULDU: ' + neden);
+        return { ok: false, hata: durum.flash.sonHata, durduruldu: true };
+      }
       const z = istanbul(new Date());
       let yapilan = 0, hata = '';
       for (const s of surucular) {
@@ -224,6 +252,224 @@ function baslat(o) {
   const zaman = setInterval(tik, 30000); if (zaman.unref) zaman.unref();
   const ilk = setTimeout(() => { bulutSon = Date.now(); bulutYukle(false); }, 20000); if (ilk.unref) ilk.unref();
 
+  // ───── BOŞ / EKSİK VERİ KORUMASI ─────
+  // Bellekteki veri (gerçek kaynak) ve disk dosyası, son BAŞARILI bulut yedeğiyle kıyaslanır; veri boşsa ya da yarıdan fazla
+  // küçülmüşse yedek (bulut ve flash) DURDURULUR — sağlam kopyaların üzerine boş veri gitmesin diye. Ekranda kırmızı uyarı çıkar.
+  function veriOzeti() {
+    let kitap = 0, satir = 0;
+    for (const k of depo.kitaplar.values()) { kitap++; for (const s of k.sayfalar) satir += s.satirlar.length; }
+    return { kitap, satir };
+  }
+  function guvenlikKontrol(ozet, ham) {
+    const son = durum.bulut;
+    if (ozet.kitap === 0) return 'Bellekte hiç şirket (e-tablo) yok';
+    if (ozet.satir === 0) return 'Veride hiç kayıt satırı yok';
+    if (son.sonSatir >= 200 && ozet.satir < son.sonSatir * 0.5) return 'Kayıt satırı sayısı yarıdan fazla azaldı (' + son.sonSatir + ' → ' + ozet.satir + ')';
+    if (ham) {
+      if (ham.length < 2000) return 'Veri dosyası çok küçük (' + ham.length + ' bayt)';
+      if (son.sonHamBayt >= 200000 && ham.length < son.sonHamBayt * 0.5) return 'Veri dosyası yarıdan fazla küçüldü (' + Math.round(son.sonHamBayt / 1024) + ' KB → ' + Math.round(ham.length / 1024) + ' KB)';
+    }
+    return '';
+  }
+
+  // ───── İŞLEM GÜNLÜĞÜ: hangi işlem ne zaman yapıldı, buluta yedeklendi mi ─────
+  // Her veri değiştiren istek (Code.gs handleRequest) tek satır olarak veri\aktivite\aktivite-<gün>.jsonl dosyasına yazılır (90 gün saklanır).
+  // "Yedeğe gitti" bilgisi ayrıca tutulmaz: işlemin saati ≤ son başarılı bulut yedeğinin veriyi okuduğu an (durum.bulut.sonSnapshotT) ise gitmiştir.
+  const AKT_KL = path.join(VERIKL, 'aktivite');
+  try { fs.mkdirSync(AKT_KL, { recursive: true }); } catch (e) { /* günlük açılamazsa yedek yine çalışır */ }
+  const aktDosya = (tarih) => path.join(AKT_KL, 'aktivite-' + tarih + '.jsonl');
+  const esTarih = (v) => Object.prototype.toString.call(v) === '[object Date]';
+  const GURULTU = /^(Oturumlar|KayitDefteriV2|__ozellik)$/;   // oturum/ayar/defter yazımları işlem sayılmaz
+  const ISIM = { Tahsilat: 'Tahsilat', Odeme: 'Ödeme', Satis: 'Satış', Alis: 'Alış', AlisIade: 'Alış iadesi', SatisIade: 'Satış iadesi', CekSenet: 'Çek/Senet',
+    Cari: 'Cari', CariVirman: 'Cari virman', StokTanim: 'Stok kartı', StokHareket: 'Stok hareketi', Banka: 'Banka', BankaHesap: 'Banka hesabı', Pos: 'POS',
+    KrediKarti: 'Kredi kartı', Birim: 'Birim', Marka: 'Marka', Plasiyer: 'Plasiyer', SeriTanim: 'Seri tanımı', BasitTanim: 'Tanım', PosBankaAktarim: 'POS-banka aktarımı',
+    BankaTransfer: 'Banka transferi', CekYaprak: 'Çek yaprağı', CekSenetGorseli: 'Çek/senet görseli', Siparis: 'Sipariş' };
+  const ANA_SAYFA = { Tahsilat: 'Tahsilatlar', Odeme: 'Odemeler', Satis: 'Satislar', Alis: 'Alislar', AlisIade: 'AlisIadeler', SatisIade: 'SatisIadeler', CekSenet: 'CekSenetler', CariVirman: 'CariVirmanlar' };
+  const aktSon = [];          // bellekte son kayıtlar (bildirim zili için)
+  let aktTampon = null;       // devam eden isteğin sayfa olayları
+  let uyariSon = { m: '', t: 0 };
+  let cariOn = { t: 0, idx: null, ad: null };
+
+  function etiket(a) {
+    a = String(a || ''); let m;
+    if (a === 'silinenGeriAl') return 'Silinen kayıt geri alındı';
+    if (a === 'islemHatasi') return 'İşlem yarıda hata verdi (kısmen kaydedilmiş olabilir)';
+    if (a === 'siparisDurumGuncelle') return 'Sipariş durumu değişti';
+    if (a === 'siparistenFaturaOlustur') return 'Siparişten fatura oluşturuldu';
+    if ((m = /^sil(.+)$/.exec(a)) || (m = /^(.+?)Sil$/.exec(a))) return (ISIM[m[1]] || m[1]) + ' silindi';
+    if ((m = /^update(.+)$/.exec(a))) return (ISIM[m[1]] || m[1]) + ' düzeltildi';
+    if ((m = /^save(.+)$/.exec(a))) return (ISIM[m[1]] || m[1]) + ' kaydedildi';
+    if ((m = /^iptal(.+)$/.exec(a))) return (ISIM[m[1]] || m[1]) + ' iptal edildi';
+    return a.replace(/([a-zçğıöşü])([A-Z])/g, '$1 $2');
+  }
+  function konuAl(a) { const m = /^(?:sil|save|update|iptal)([A-Z].*)$/.exec(a) || /^(.+?)Sil$/.exec(a); return m ? m[1] : ''; }
+  function gunStr(v) {
+    if (v === undefined || v === null || v === '') return '';
+    if (esTarih(v)) return isNaN(v.getTime()) ? '' : istanbul(v).tarih;
+    if (typeof v === 'object' && v.$d) return istanbul(new Date(v.$d)).tarih;
+    const s = String(v).trim(); let m;
+    if ((m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s))) return m[1] + '-' + m[2] + '-' + m[3];
+    if ((m = /^(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})/.exec(s))) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    return '';
+  }
+  function hucreMetin(v) { if (esTarih(v)) return gunStr(v); if (v === undefined || v === null) return ''; return String(v).slice(0, 60); }
+
+  function cariIndeks() {
+    if (cariOn.idx && Date.now() - cariOn.t < 20000) return cariOn;
+    const idx = new Map(), ad = new Map();
+    for (const k of depo.kitaplar.values()) {
+      const s = k.sayfalar.find((x) => x.ad === 'CariHesaplar'); if (!s) continue;
+      for (let i = 1; i < s.satirlar.length; i++) {
+        const r = s.satirlar[i]; if (!r || !r[0]) continue;
+        const c = { ad: String(r[2] || ''), kod: String(r[8] || '') };
+        idx.set(String(r[0]), c);
+        const an = c.ad.toLowerCase(); if (an) { const l = ad.get(an) || []; l.push(c); ad.set(an, l); }
+      }
+    }
+    cariOn = { t: Date.now(), idx, ad };
+    return cariOn;
+  }
+
+  function aktOku(tarih) {
+    try {
+      return fs.readFileSync(aktDosya(tarih), 'utf8').split('\n').filter(Boolean).map((s) => { try { return JSON.parse(s); } catch (e) { return null; } }).filter(Boolean);
+    } catch (e) { return []; }
+  }
+  function aktTemizle() {
+    try {
+      const sinir = Date.now() - 90 * 86400000;
+      for (const f of fs.readdirSync(AKT_KL)) { const m = /^aktivite-(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(f); if (m && Date.parse(m[1]) < sinir) fs.unlinkSync(path.join(AKT_KL, f)); }
+    } catch (e) { /* temizlik hatası önemsiz */ }
+  }
+  aktTemizle();
+  { // açılışta son günlerin kayıtlarını belleğe al
+    const bu = istanbul(new Date()).tarih, dun = istanbul(new Date(Date.now() - 86400000)).tarih;
+    for (const e of aktOku(dun).concat(aktOku(bu))) aktSon.push(e);
+    while (aktSon.length > 300) aktSon.shift();
+  }
+  const aktZaman = setInterval(aktTemizle, 6 * 3600 * 1000); if (aktZaman.unref) aktZaman.unref();
+
+  function aktiviteEkle(kayit) {
+    aktSon.push(kayit); while (aktSon.length > 300) aktSon.shift();
+    try { fs.appendFileSync(aktDosya(istanbul(new Date(kayit.t)).tarih), JSON.stringify(kayit) + '\n'); } catch (e) { log('işlem günlüğü yazılamadı:', e.message); }
+  }
+  // Sistem uyarısı (ör. yedek durduruldu): aynı uyarı 30 dakikada bir kez günlüğe girer, zilde kırmızı görünür
+  function aktiviteUyari(metin) {
+    if (uyariSon.m === metin && Date.now() - uyariSon.t < 30 * 60000) return;
+    uyariSon = { m: metin, t: Date.now() };
+    aktiviteEkle({ id: 'u' + Date.now().toString(36), t: Date.now(), k: 'Sistem', a: '__uyari', e: metin, kr: true, gd: false, u: true, ok: false });
+  }
+
+  // Veri değiştiren istek başlarken çağrılır: bu istekte hangi sayfalarda ne değiştiğini toplamaya başlar.
+  function islemBasla() {
+    aktTampon = [];
+    depo.dinleyici = (e) => { if (aktTampon) aktTampon.push(e); };
+  }
+  // İstek bitince çağrılır; bilgiJson: { action, kullanici, govde:{...}, sonuc:{...} } (Code.gs seçili alanları JSON olarak verir)
+  function islemBitir(bilgiJson) {
+    const olaylar = aktTampon || []; aktTampon = null; depo.dinleyici = null;
+    try {
+      let bilgi = {}; try { bilgi = typeof bilgiJson === 'string' ? JSON.parse(bilgiJson) : (bilgiJson || {}); } catch (e) { bilgi = {}; }
+      const gercek = olaylar.filter((o) => !GURULTU.test(String(o.s)));
+      if (!gercek.length) return { ok: true, kayit: false };
+      const g = bilgi.govde || {}, sn = bilgi.sonuc || {}, action = String(bilgi.action || '');
+      const konu = konuAl(action), anaSayfa = ANA_SAYFA[konu] || '';
+      const bugun = istanbul(new Date()).tarih;
+
+      // silinen satırlar (neyin silindiği sonradan görülebilsin) + ana belge satırı (tutar/tarih için)
+      const silinenler = []; let anaHam = null;
+      for (const o of gercek) {
+        const a = o.a || {};
+        if (o.i !== 'satirSil' || !Array.isArray(a.silinen) || !a.silinen.length) continue;
+        silinenler.push({ s: o.s, n: a.silinen.length, r: a.silinen.slice(0, 5).map((r) => (Array.isArray(r) ? r : []).slice(0, 14).map(hucreMetin)) });
+        if (!anaHam && o.s === anaSayfa && Array.isArray(a.silinen[0])) anaHam = a.silinen[0];
+      }
+
+      // CARİ: önce istekteki cari kimliği, sonra olaylardaki satırlarda cari kimliği, en son cari adı. Cari her zaman KODUYLA birlikte gösterilir.
+      const ci = cariIndeks(), bulunan = [];
+      const ekle = (id) => { const c = id ? ci.idx.get(String(id)) : null; if (c && !bulunan.some((x) => x.kod === c.kod && x.ad === c.ad)) bulunan.push(c); };
+      ['cariId', 'kaynakCariId', 'hedefCariId'].forEach((a) => ekle(g[a]));
+      if (!bulunan.length) {
+        const satirlar = [];
+        for (const o of gercek) {
+          const a = o.a || {};
+          if (o.i === 'ekle' && Array.isArray(a.deger)) satirlar.push(a.deger);
+          else if (o.i === 'yaz' && Array.isArray(a.deger)) a.deger.slice(0, 40).forEach((r) => { if (Array.isArray(r)) satirlar.push(r); });
+          else if (o.i === 'satirSil' && Array.isArray(a.silinen)) a.silinen.slice(0, 40).forEach((r) => { if (Array.isArray(r)) satirlar.push(r); });
+          if (satirlar.length > 120) break;
+        }
+        for (const r of satirlar) {
+          for (let j = 0; j < Math.min(r.length, 8); j++) if (typeof r[j] === 'string' && r[j].length > 3) ekle(r[j]);
+          if (bulunan.length >= 2) break;
+        }
+      }
+      if (!bulunan.length && g.cariAd) { const l = ci.ad.get(String(g.cariAd).toLowerCase()); bulunan.push(l && l.length === 1 ? l[0] : { ad: String(g.cariAd), kod: '' }); }
+      if (!bulunan.length && anaHam && typeof anaHam[3] === 'string' && anaHam[3]) { const l = ci.ad.get(anaHam[3].toLowerCase()); bulunan.push(l && l.length === 1 ? l[0] : { ad: anaHam[3], kod: '' }); }
+
+      const sayi = (v) => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+      let tutar = null;
+      for (const a of ['tutar', 'toplam', 'genelToplam', 'netTutar']) if (tutar === null) tutar = sayi(g[a]);
+      if (tutar === null && anaHam) tutar = sayi(anaHam[4]);
+
+      let belgeTarih = '';
+      for (const a of ['tarih', 'belgeTarihi', 'islemTarihi', 'siparisTarihi', 'faturaTarihi']) if (!belgeTarih) belgeTarih = gunStr(g[a]);
+      if (!belgeTarih && anaHam) for (let j = 0; j < Math.min(anaHam.length, 8) && !belgeTarih; j++) if (esTarih(anaHam[j]) || (typeof anaHam[j] === 'string' && /^\d{4}-\d{2}-\d{2}/.test(anaHam[j]))) belgeTarih = gunStr(anaHam[j]);
+
+      const silme = /^sil|Sil$|^iptal|GeriAl$/.test(action) || silinenler.length > 0;
+      const duzeltme = /^update/.test(action);
+      const gd = !!belgeTarih && belgeTarih < bugun && (silme || duzeltme || /^save/.test(action));   // belge tarihi bugünden eski: geriye dönük işlem
+      const kr = silme || (duzeltme && gd) || action === 'islemHatasi';
+      let ad = etiket(action);
+      if (g.belgeTipi && /^(save|update)(Satis|Alis)$/.test(action)) ad = String(g.belgeTipi) + (duzeltme ? ' düzeltildi' : ' kaydedildi');
+      const belge = String(g.belgeNo || g.faturaNo || g.siparisNo || sn.belgeNo || sn.faturaNo || sn.siparisNo || g.id || sn.id || '').slice(0, 40);
+      const sayfalar = [...new Set(gercek.map((o) => String(o.s)))].filter((x) => x !== 'SilinenIslemler').slice(0, 4);
+      const ok = !(sn.ok === false || sn.error || sn.hata);
+      const kayit = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), t: Date.now(), k: String(bilgi.kullanici || ''), a: action, e: ad, kr, gd, bt: belgeTarih,
+        c: bulunan.slice(0, 2), b: belge, tt: tutar, sy: sayfalar, sil: silinenler.slice(0, 6), n: gercek.length, ok };
+      aktiviteEkle(kayit);
+      return { ok: true, kayit: true };
+    } catch (e) { log('işlem günlüğü hatası:', e.message); return { ok: false }; }
+  }
+
+  const yedekDurumu = (e) => (e.u ? 'uyari' : (e.t <= (durum.bulut.sonSnapshotT || 0) ? 'gitti' : 'bekliyor'));
+  const zengin = (e) => Object.assign({}, e, { yedek: yedekDurumu(e) });
+
+  // Günlük rapor: tarih = 'YYYY-MM-DD'; filtre = tum | kritik | silme | bekleyen
+  function aktiviteListe(o) {
+    o = o || {};
+    const tarih = /^\d{4}-\d{2}-\d{2}$/.test(String(o.tarih || '')) ? String(o.tarih) : istanbul(new Date()).tarih;
+    const hepsi = aktOku(tarih).map(zengin);
+    const ozet = { toplam: 0, kritik: 0, silme: 0, geriye: 0, bekleyen: 0, hata: 0, uyari: 0, kullanicilar: {}, islemler: {} };
+    for (const e of hepsi) {
+      if (e.u) { ozet.uyari++; continue; }
+      ozet.toplam++; if (e.kr) ozet.kritik++; if (e.gd) ozet.geriye++; if (e.yedek === 'bekliyor') ozet.bekleyen++; if (e.ok === false) ozet.hata++;
+      if (/^sil|Sil$|^iptal|GeriAl$/.test(e.a) || (e.sil && e.sil.length)) ozet.silme++;
+      ozet.kullanicilar[e.k || '—'] = (ozet.kullanicilar[e.k || '—'] || 0) + 1;
+      ozet.islemler[e.e] = (ozet.islemler[e.e] || 0) + 1;
+    }
+    const f = String(o.filtre || 'tum');
+    let liste = hepsi;
+    if (f === 'kritik') liste = hepsi.filter((e) => e.kr || e.gd || e.u);
+    else if (f === 'silme') liste = hepsi.filter((e) => /^sil|Sil$|^iptal|GeriAl$/.test(e.a) || (e.sil && e.sil.length));
+    else if (f === 'bekleyen') liste = hepsi.filter((e) => e.yedek === 'bekliyor');
+    return { ok: true, tarih, filtre: f, liste: liste.slice(-3000).reverse(), ozet,
+      yedek: { sonBasari: durum.bulut.sonBasari, sonSnapshotT: durum.bulut.sonSnapshotT, durduruldu: durum.bulut.durduruldu, sonHata: durum.bulut.sonHata }, sunucuSaati: Date.now() };
+  }
+
+  // Sağ üstteki bildirim zili: yeşil = hepsi yedekte, sarı = bekleyen işlem var, kırmızı = yedek durdu/hatalı
+  function aktiviteOzet() {
+    const sn = durum.bulut.sonSnapshotT || 0;
+    const bekleyen = aktSon.filter((e) => !e.u && e.t > sn);
+    let renk = 'yesil', mesaj = 'Tüm işlemler buluta yedeklendi';
+    if (!bulutAdresi()) { renk = 'kirmizi'; mesaj = 'Bulut adresi bulunamadı'; }
+    else if (durum.bulut.durduruldu) { renk = 'kirmizi'; mesaj = 'Yedek DURDURULDU: ' + durum.bulut.durduruldu; }
+    else if (durum.bulut.sonHata) { renk = 'kirmizi'; mesaj = 'Bulut yedeği hatası: ' + durum.bulut.sonHata; }
+    else if (!ayar.bulut.acik && bekleyen.length) { renk = 'sari'; mesaj = 'Otomatik bulut yedeği KAPALI — ' + bekleyen.length + ' işlem yedeğe gitmedi'; }
+    else if (bekleyen.length) { renk = 'sari'; mesaj = bekleyen.length + ' işlem buluta gitmeyi bekliyor (en geç ' + ayar.bulut.dakika + ' dk içinde)'; }
+    return { ok: true, renk, mesaj, bekleyen: bekleyen.length, kritikBekleyen: bekleyen.filter((e) => e.kr).length, sonBasari: durum.bulut.sonBasari,
+      islemde: !!islem.bulut, son: aktSon.slice(-30).reverse().map(zengin), sunucuSaati: Date.now() };
+  }
+
   // ───── Ekranın (Admin) kullandığı arayüz ─────
   function ayarKaydet(yeni) {
     const a = birlestir(Object.assign({}, yeni, { anahtar: ayar.anahtar }));
@@ -233,6 +479,8 @@ function baslat(o) {
   }
   function simdi(hedef) {
     if (hedef === 'bulut' || hedef === 'ikisi') { bulutSon = Date.now(); bulutYukle(true); }
+    // "Yine de gönder": boş/eksik veri koruması durdurduysa ve kullanıcı verinin doğru olduğunu onayladıysa
+    if (hedef === 'bulut-onay') { bulutSon = Date.now(); bulutYukle(true, true); }
     if (hedef === 'flash' || hedef === 'ikisi') flashYedekle('elle', '');
     return { ok: true, baslatildi: hedef };
   }
@@ -248,7 +496,7 @@ function baslat(o) {
       simdi: { islem: JSON.parse(JSON.stringify(islem)), bulutKalanSn, sunucuSaati: Date.now() },
     };
   }
-  return { durum: durumVer, ayarKaydet, simdi, bulutYukle, flashYedekle, flashTara, _ayar: () => ayar };
+  return { durum: durumVer, ayarKaydet, simdi, bulutYukle, flashYedekle, flashTara, islemBasla, islemBitir, aktiviteListe, aktiviteOzet, _ayar: () => ayar };
 }
 
 module.exports = { baslat };

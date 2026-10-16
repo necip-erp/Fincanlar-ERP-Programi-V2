@@ -1104,8 +1104,20 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261016c";
+const PROGRAM_SURUM_ = "20261016d";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
+// ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
+// Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
+// Günlük asıl işlemi ASLA engellemez.
+function yerelIslemGunlugu_(action, body, result, oturum) {
+  try {
+    var g = {}, anahtarlar = ["id", "cariId", "kaynakCariId", "hedefCariId", "cariAd", "tarih", "belgeNo", "faturaNo", "siparisNo", "belgeTipi", "tutar", "toplam", "genelToplam", "netTutar", "belgeTarihi", "islemTarihi", "siparisTarihi", "faturaTarihi"];
+    anahtarlar.forEach(function (a) { var v = body && body[a]; if (v !== undefined && v !== null && typeof v !== "object") g[a] = v; });
+    var s = {};
+    ["ok", "id", "belgeNo", "faturaNo", "siparisNo", "error", "hata"].forEach(function (a) { var v = result && result[a]; if (v !== undefined && v !== null && typeof v !== "object") s[a] = v; });
+    YerelYedek.islemBitir(JSON.stringify({ action: String(action || ""), kullanici: String((oturum && oturum.kullaniciAdi) || ""), govde: g, sonuc: s }));
+  } catch (e) { /* günlük hatası işlemi bozmaz */ }
+}
 function bulutYazmaAcikMi_() {
   try { return PropertiesService.getScriptProperties().getProperty("BULUT_YAZMA_ACIK") === "1"; } catch (e) { return false; }
 }
@@ -1151,7 +1163,7 @@ const OTURUMSUZ_ACTIONLAR = { girisYap: true, yerelYedekYukle: true };
 const ADMIN_ACTIONLAR = {
   eskiPanelStokKartlariniAktar: true, yilStokKartlariAktar: true, bulutYazmaAyarla: true, bulutAynaSimdi: true, bulutAynaKur: true, getEskiBulutStokKartlari: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, sirketDuzeniKur: true, yerelYedekDurum: true, yerelYedekAyarKaydet: true, yerelYedekSimdi: true, yerelGuncelleDurum: true, yerelGuncelleKontrol: true, yerelGuncelleUygula: true, yerelGuncelleGeriAl: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
-  getYedekDurumu: true, yedekAlSimdi: true, yedekTetikleyiciKurWeb: true, saveYedekEpostalari: true, yedekEpostaGonderSimdi: true, // Yedekleme: sadece Admin
+  getYedekDurumu: true, yerelYedekAktivite: true, yerelYedekAktiviteOzet: true, yedekAlSimdi: true, yedekTetikleyiciKurWeb: true, saveYedekEpostalari: true, yedekEpostaGonderSimdi: true, // Yedekleme: sadece Admin
   getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, kayitDefteriHatalariTemizle: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
 };
 
@@ -1196,6 +1208,7 @@ function handleRequest(e) {
     }
     _tKilit = Date.now();
     try {
+    if (yazmaIslemi && yerelMi_()) { try { YerelYedek.islemBasla(); } catch (x) { /* işlem günlüğü asıl işlemi engellemez */ } }
     if (KD_ACTIONLAR[action]) kdToplayiciBaslat_(); // Kayıt Defteri: bu işlemde oluşan karşı kayıtları topla
     switch (action) {
       case "girisYap":        result = girisYap(body); break;
@@ -1317,6 +1330,8 @@ function handleRequest(e) {
       case "yerelYedekDurum": result = yerelYedekDurum(); break;
       case "yerelYedekAyarKaydet": result = yerelYedekAyarKaydet(body); break;
       case "yerelYedekSimdi": result = yerelYedekSimdi(body); break;
+      case "yerelYedekAktivite": result = yerelYedekAktivite(body); break;
+      case "yerelYedekAktiviteOzet": result = yerelYedekAktiviteOzet(); break;
       case "yerelGuncelleDurum": result = yerelGuncelleDurum(); break;
       case "yerelGuncelleKontrol": result = yerelGuncelleKontrol(); break;
       case "yerelGuncelleUygula": result = yerelGuncelleUygula(); break;
@@ -1417,6 +1432,7 @@ function handleRequest(e) {
       const kdBacaklar = KD_TOPLAYICI_; KD_TOPLAYICI_ = null;
       try { kdIsle_(action, body, result, kdBacaklar); } catch (kdHata) { logError(kdHata); }
     }
+    if (yazmaIslemi && yerelMi_()) { yerelIslemGunlugu_(action, body, result, oturum); }
     if (result && typeof result === "object" && !Array.isArray(result)) {
       result.dv = veriSurumuOku_(); // istemci: başka kullanıcı veri değiştirdi mi?
       const _tSon = Date.now();
@@ -1429,6 +1445,7 @@ function handleRequest(e) {
     }
   } catch (err) {
     KD_TOPLAYICI_ = null;
+    if (yerelMi_()) { try { YerelYedek.islemBitir(JSON.stringify({ action: "islemHatasi", kullanici: "", govde: {}, sonuc: { ok: false, error: String(err && err.message || err) } })); } catch (x) {} }
     logError(err);
     return jsonResponse({ error: err.message });
   }
