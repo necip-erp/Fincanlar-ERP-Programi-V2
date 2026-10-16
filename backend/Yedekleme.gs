@@ -506,6 +506,134 @@ function yerelYedekBuda_(klasor) {
   return adet;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// ★ 16 Eki 2026 — SORUN UYARISI (e-posta). Normal işleyişte olmaması gereken sorunlar her gün elle kontrol edilmesin diye sistem uyarır.
+// Yerel sunucu her 5 dk'da buluta "nabız" gönderir (yerelNabiz): hayatta olduğunu + kendi tespit ettiği sorunları (3 ardışık yedek gönderilemedi,
+// yedek durduruldu, disk/Drive dolu...). Bulut (bu bölüm) şunlarda e-posta atar:
+//   • NABIZ yok: son nabızdan beri esikDk (varsayılan 15 dk = 3 nabız) geçti — sunucu kapandı / bilgisayar bozuldu / internet gitti.
+//     Yalnız ÇALIŞMA SAATLERİNDE (varsayılan 08:00-20:00) denetlenir; gece bilgisayar kapalıysa uyarı atılmaz.
+//   • Yerelin bildirdiği sorun var (e-posta işaretli olanlar): sorun başına 1 e-posta, sürerse 6 saatte bir hatırlatma.
+//   • Her iki durum düzelince "düzeldi" e-postası.
+// Alıcı ve saatler Script Özellikleri'nde NABIZ_AYAR (JSON: {eposta, esikDk, baslangicSaat, bitisSaat, hatirlatSaat}) ile değiştirilir.
+// Tetikleyici (nabizKontrolTetikleyici, 5 dk) ilk nabızla kendiliğinden kurulur; elle kurmak gerekmez.
+// ════════════════════════════════════════════════════════════════════════════
+var NABIZ_VARSAYILAN_ = { eposta: "fincanlaryapi@gmail.com", esikDk: 15, baslangicSaat: 8, bitisSaat: 20, hatirlatSaat: 6 };
+
+function nabizAyar_() {
+  var a = {}; Object.keys(NABIZ_VARSAYILAN_).forEach(function (k) { a[k] = NABIZ_VARSAYILAN_[k]; });
+  try {
+    var j = JSON.parse(PropertiesService.getScriptProperties().getProperty("NABIZ_AYAR") || "{}") || {};
+    if (typeof j.eposta === "string" && /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(j.eposta.trim())) a.eposta = j.eposta.trim();
+    ["esikDk", "baslangicSaat", "bitisSaat", "hatirlatSaat"].forEach(function (k) { var n = parseFloat(j[k]); if (isFinite(n) && n >= 0) a[k] = n; });
+  } catch (e) { /* bozuk ayar varsayılana düşer */ }
+  if (a.esikDk < 10) a.esikDk = 10;   // nabız 5 dk'da bir gelir; 10 dk altı sahte alarm üretir
+  return a;
+}
+function nabizSaatOndalik_(t) {
+  var d = new Date(t);
+  return parseInt(Utilities.formatDate(d, "Europe/Istanbul", "H"), 10) + parseInt(Utilities.formatDate(d, "Europe/Istanbul", "mm"), 10) / 60;
+}
+function nabizZamanMetni_(t) { return Utilities.formatDate(new Date(t), "Europe/Istanbul", "dd/MM/yyyy HH:mm"); }
+function nabizMail_(konu, govde) {
+  try {
+    var ayar = nabizAyar_();
+    if (MailApp.getRemainingDailyQuota() < 1) return false;
+    MailApp.sendEmail({ to: ayar.eposta, subject: "Fincanlar ERP UYARI — " + konu, body: govde + "\n\n—\nBu ileti Fincanlar ERP bulut tarafından otomatik gönderildi (" + nabizZamanMetni_(Date.now()) + ")." });
+    return true;
+  } catch (e) { return false; }
+}
+
+// body: { anahtar, uyarilar: [{k, m, e}], yedekT, test } — oturumsuz, yükleme anahtarıyla korunur (yerelYedekYukle ile aynı).
+function yerelNabiz(body) {
+  if (yerelMi_()) return { ok: false, hata: "Nabız yalnızca bulutta alınır" };
+  body = body || {};
+  var hata = yerelYedekAnahtarKontrol_(body.anahtar);
+  if (hata) return { ok: false, hata: hata };
+  var uy = [];
+  (Array.isArray(body.uyarilar) ? body.uyarilar : []).slice(0, 10).forEach(function (u) {
+    if (u && u.k) uy.push({ k: String(u.k).slice(0, 30), m: String(u.m || "").slice(0, 300), e: u.e === true });
+  });
+  var props = PropertiesService.getScriptProperties();
+  props.setProperty("NABIZ", JSON.stringify({ t: Date.now(), uyarilar: uy, yedekT: parseInt(body.yedekT, 10) || 0 }));
+  nabizTetikleyiciGuvence_();
+  var sonuc = { ok: true, eposta: nabizAyar_().eposta };
+  if (body.test) {
+    sonuc.testGonderildi = nabizMail_("deneme", "Bu bir DENEME iletisidir. Yerel sunucudan \"Uyarı e-postasını dene\" düğmesine basıldı.\nUyarı e-postaları bu adrese gelecek: " + sonuc.eposta + "\nÇalışma saatleri: " + nabizAyar_().baslangicSaat + ":00 - " + nabizAyar_().bitisSaat + ":00, nabız eşiği: " + nabizAyar_().esikDk + " dk.");
+    if (!sonuc.testGonderildi) { sonuc.ok = false; sonuc.hata = "E-posta gönderilemedi (kota dolu ya da izin yok)"; }
+  }
+  try { nabizDegerlendir_(); } catch (e) { /* değerlendirme hatası nabzı bozmaz */ }
+  return sonuc;
+}
+
+// Çekirdek: durumu değerlendirir, gerekirse e-posta atar. Test edilebilsin diye tetikleyiciden ayrı.
+function nabizDegerlendir_() {
+  var props = PropertiesService.getScriptProperties();
+  var nb = null;
+  try { nb = JSON.parse(props.getProperty("NABIZ") || "null"); } catch (e) { nb = null; }
+  if (!nb || !nb.t) return { durum: "nabiz-yok" };            // yerel sunucu henüz hiç nabız göndermedi
+  var ayar = nabizAyar_(), simdi = Date.now();
+  var durum = {}; try { durum = JSON.parse(props.getProperty("NABIZ_DURUM") || "{}") || {}; } catch (e) { durum = {}; }
+  var yasDk = (simdi - nb.t) / 60000;
+  var saatSimdi = nabizSaatOndalik_(simdi), saatSon = nabizSaatOndalik_(nb.t);
+  var calismaSaati = function (h) { return h >= ayar.baslangicSaat && h < ayar.bitisSaat; };
+  var gonderilen = [];
+
+  // 1) Nabız kesildi (sunucu yanıt vermiyor). 12 saati geçmişse (gece/hafta sonu kapalı) yeniden uyarılmaz.
+  var sessiz = yasDk >= ayar.esikDk && yasDk < 12 * 60 && calismaSaati(saatSimdi) && calismaSaati(saatSon);
+  if (sessiz && !durum.sessiz) {
+    durum.sessiz = { t: simdi }; props.setProperty("NABIZ_DURUM", JSON.stringify(durum));
+    nabizMail_("Yerel sunucudan " + Math.round(yasDk) + " dakikadır haber alınamıyor",
+      "Yerel sunucudan (SATIS bilgisayarı) son nabız: " + nabizZamanMetni_(nb.t) + " (" + Math.round(yasDk) + " dk önce).\n\nOlası nedenler: sunucu penceresi kapanmış, bilgisayar kapalı/uykuda, internet kesilmiş.\n" +
+      "Bu sırada girilen işlemler yerelde durur ama buluta GİTMEZ. Kontrol edin: SATIS bilgisayarında sunucu penceresi açık mı, internet var mı.\n" +
+      "Son başarılı bulut yedeği: " + (nb.yedekT ? nabizZamanMetni_(nb.yedekT) : "bilinmiyor") + ".");
+    gonderilen.push("sessiz");
+  } else if (durum.sessiz && yasDk < ayar.esikDk) {
+    durum.sessiz = null; props.setProperty("NABIZ_DURUM", JSON.stringify(durum));
+    nabizMail_("Yerel sunucu yeniden bağlandı", "Yerel sunucudan nabız tekrar geliyor (" + nabizZamanMetni_(nb.t) + "). Önceki uyarı geçersiz.");
+    gonderilen.push("sessiz-duzeldi");
+  } else if (durum.sessiz && yasDk >= 12 * 60) {
+    durum.sessiz = null; props.setProperty("NABIZ_DURUM", JSON.stringify(durum));   // gece/uzun kapanış: sessizce sıfırla
+  }
+
+  // 2) Yerelin kendi bildirdiği sorunlar (yalnız nabız tazeyken; e-posta işaretli olanlar)
+  if (yasDk < ayar.esikDk) {
+    var e = (nb.uyarilar || []).filter(function (u) { return u.e; });
+    var imza = e.map(function (u) { return u.k; }).sort().join(",");
+    var metin = e.map(function (u) { return "• " + u.m; }).join("\n");
+    if (imza && imza !== (durum.imza || "")) {
+      durum.imza = imza; durum.mailT = simdi; props.setProperty("NABIZ_DURUM", JSON.stringify(durum));
+      nabizMail_(e.length === 1 ? e[0].m.slice(0, 70) : e.length + " sorun var", "Yerel sunucu şu sorun(lar)ı bildirdi:\n\n" + metin + "\n\nAyrıntı: ERP > Yedekleme > Günlük Rapor ve sağ üstteki zil.");
+      gonderilen.push("sorun");
+    } else if (imza && simdi - (durum.mailT || 0) > ayar.hatirlatSaat * 3600000) {
+      durum.mailT = simdi; props.setProperty("NABIZ_DURUM", JSON.stringify(durum));
+      nabizMail_("HATIRLATMA: sorun sürüyor", "Aşağıdaki sorun(lar) hâlâ düzelmedi:\n\n" + metin);
+      gonderilen.push("hatirlatma");
+    } else if (!imza && durum.imza) {
+      durum.imza = ""; props.setProperty("NABIZ_DURUM", JSON.stringify(durum));
+      nabizMail_("Sorun(lar) düzeldi", "Yerel sunucunun bildirdiği sorun(lar) artık görünmüyor.");
+      gonderilen.push("sorun-duzeldi");
+    }
+  }
+  return { durum: "tamam", yasDk: Math.round(yasDk), gonderilen: gonderilen };
+}
+
+function nabizKontrolTetikleyici() { try { nabizDegerlendir_(); } catch (e) { /* tetikleyici hatası sessiz */ } }
+function nabizTetikleyiciGuvence_() {
+  try {
+    var onb = CacheService.getScriptCache();
+    if (onb.get("nabizTetikleyici")) return;
+    var var_ = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === "nabizKontrolTetikleyici"; });
+    if (!var_) ScriptApp.newTrigger("nabizKontrolTetikleyici").timeBased().everyMinutes(5).create();
+    onb.put("nabizTetikleyici", "1", 6 * 3600);
+  } catch (e) { /* kurulamazsa nabız yine de işler; her nabızda yeniden denenir */ }
+}
+
+// Ekrandaki kırmızı uyarı bandı için (her oturum açmış kullanıcıya açık, salt okunur). Ayrıntıyı ekran yalnız Admin'e gösterir.
+function yerelYedekSaglik() {
+  if (typeof YerelYedek === "undefined" || !YerelYedek) return { ok: true, yerel: false };
+  return JSON.parse(JSON.stringify(YerelYedek.saglik()));
+}
+
 // ── Yerel sunucuda çalışırken Yedekleme ekranının kullandığı işlemler (yerel sunucu src/yedek.js ile konuşur) ──
 function yerelYedekDurum() {
   if (typeof YerelYedek === "undefined" || !YerelYedek) return { ok: true, yerel: false };

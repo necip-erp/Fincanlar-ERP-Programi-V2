@@ -7,6 +7,8 @@
 //  3) "Şimdi yedekle": Ayarlar > Yedekleme ekranından anında.
 //  4) KORUMA (16 Eki 2026): veri boş/eksik görünüyorsa (kayıt sayısı veya dosya boyutu yarıdan fazla düştüyse) bulut ve flash yedeği DURDURULUR,
 //     sağlam kopyaların üzerine yazılmaz; ekranda kırmızı uyarı çıkar. Kullanıcı "Yine de gönder" derse (simdi 'bulut-onay') geçer.
+//  6) UYARI (16 Eki 2026): sorun olunca sistem kendisi uyarır — ekranda kırmızı bant + buluttan e-posta (bkz. sorunlar / nabizGonder).
+//     Her 5 dk'da buluta nabız gider; bulut 15 dk nabız alamazsa e-posta atar. 3 ardışık yedek gönderilemezse de e-posta gider.
 //  5) İŞLEM GÜNLÜĞÜ: her veri değiştiren işlem veri\aktivite\ günlüğüne yazılır; "yedeğe gitti / bekliyor" durumu son bulut yedeğinin
 //     zamanından hesaplanır. Sağ üst bildirim zili ve Yedekleme modülündeki günlük rapor bunu gösterir (aktiviteOzet / aktiviteListe).
 // Ayar dosyası: veri\yedek-ayar.json   Durum dosyası: veri\yedek-durum.json
@@ -81,8 +83,8 @@ function baslat(o) {
   // sonSatir/sonHamBayt: son BAŞARILI bulut yedeğindeki kayıt satırı sayısı ve dosya boyutu (boş/eksik veri koruması bunlarla kıyaslar)
   // sonSnapshotT: son başarılı bulut yedeğinin veriyi okuduğu an; bundan önceki işlemler "yedeğe gitti" sayılır
   // durduruldu: koruma yedeği durdurduysa nedeni (ekranda kırmızı uyarı olarak görünür)
-  let durum = { bulut: { sonBasari: 0, sonDeneme: 0, sonHata: '', sonAd: '', sonBoyutKB: 0, sonDriveYuzde: null, sonSatir: 0, sonHamBayt: 0, sonSnapshotT: 0, durduruldu: '' }, flash: { sonBasari: 0, sonSlot: '', sonHata: '', sonYol: '', sonSurucu: '' } };
-  try { const j = JSON.parse(fs.readFileSync(DURUM, 'utf8')); durum.bulut = Object.assign(durum.bulut, j.bulut); durum.flash = Object.assign(durum.flash, j.flash); } catch (e) {}
+  let durum = { bulut: { sonBasari: 0, sonDeneme: 0, sonHata: '', sonAd: '', sonBoyutKB: 0, sonDriveYuzde: null, sonSatir: 0, sonHamBayt: 0, sonSnapshotT: 0, durduruldu: '', ardisik: 0 }, nabiz: { sonBasari: 0, sonHata: '' }, flash: { sonBasari: 0, sonSlot: '', sonHata: '', sonYol: '', sonSurucu: '' } };
+  try { const j = JSON.parse(fs.readFileSync(DURUM, 'utf8')); durum.bulut = Object.assign(durum.bulut, j.bulut); durum.flash = Object.assign(durum.flash, j.flash); durum.nabiz = Object.assign(durum.nabiz, j.nabiz); } catch (e) {}
   const islem = { bulut: false, flash: false };
   let sonSurum = -1;               // bellekte: başlangıçta ilk turda mutlaka gönderilir
   let flashTarama = { t: 0, liste: [] };
@@ -132,6 +134,7 @@ function baslat(o) {
       const ozet = veriOzeti();
       const neden = onay ? '' : guvenlikKontrol(ozet, ham);
       if (neden) {                           // BOŞ/EKSİK VERİ KORUMASI: buluta (ve aynaya) gönderilmez, ekranda kırmızı uyarı çıkar
+        durum.bulut.ardisik = (durum.bulut.ardisik || 0) + 1;
         durum.bulut.durduruldu = neden; durum.bulut.sonHata = 'Yedek DURDURULDU (veri boş/eksik görünüyor): ' + neden;
         durumYaz(); log('bulut yedeği durduruldu:', neden);
         aktiviteUyari('Buluta yedek DURDURULDU: ' + neden);
@@ -149,10 +152,11 @@ function baslat(o) {
       }
       sonSurum = surum;
       durum.bulut.sonBasari = Date.now(); durum.bulut.sonHata = ''; durum.bulut.sonAd = son.ad || ''; if (son.driveYuzde !== undefined) durum.bulut.sonDriveYuzde = son.driveYuzde;
-      durum.bulut.sonSatir = ozet.satir; durum.bulut.sonHamBayt = ham.length; durum.bulut.sonSnapshotT = snapT; durum.bulut.durduruldu = '';
+      durum.bulut.sonSatir = ozet.satir; durum.bulut.sonHamBayt = ham.length; durum.bulut.sonSnapshotT = snapT; durum.bulut.durduruldu = ''; durum.bulut.ardisik = 0;
       durumYaz();
       return { ok: true };
     } catch (e) {
+      durum.bulut.ardisik = (durum.bulut.ardisik || 0) + 1;
       durum.bulut.sonHata = e.message; durumYaz(); log('bulut yedeği başarısız:', e.message);
       return { ok: false, hata: e.message };
     } finally { islem.bulut = false; }
@@ -470,6 +474,60 @@ function baslat(o) {
       islemde: !!islem.bulut, son: aktSon.slice(-30).reverse().map(zengin), sunucuSaati: Date.now() };
   }
 
+  // ───── SAĞLIK UYARILARI + NABIZ (16 Eki 2026) ─────
+  // Normal işleyişte olmaması gereken sorunlar her gün elle kontrol edilmesin diye sistem kendisi uyarır:
+  //  • sorunlar(): şu an var olan sorunların listesi. e:true olanlar buluttan e-postayla da bildirilir.
+  //  • nabizGonder(): her 5 dk'da buluta küçük bir "yaşıyorum" mesajı + sorun listesi gider. Bulut 15 dk nabız alamazsa (sunucu kapandı,
+  //    bilgisayar bozuldu, internet gitti) e-posta atar; yerel sunucu ölünce kendi uyaramayacağı için bu kontrol bulutta yapılır.
+  //  • saglik(): ekrandaki kırmızı uyarı bandı için (her kullanıcıya açık, ayrıntı yalnız Admin ekranında gösterilir).
+  const NABIZ_DK = 5;
+  function sorunlar() {
+    const l = [], b = durum.bulut, simdi = Date.now();
+    if (b.durduruldu) l.push({ k: 'durduruldu', e: true, m: 'Buluta yedek DURDURULDU (veri boş/eksik görünüyor): ' + b.durduruldu });
+    else if ((b.ardisik || 0) >= 3) l.push({ k: 'yedek', e: true, m: 'Buluta son ' + b.ardisik + ' yedek gönderilemedi: ' + (b.sonHata || 'bilinmeyen hata') });
+    if (b.sonDriveYuzde !== null && b.sonDriveYuzde !== undefined && b.sonDriveYuzde >= 90) l.push({ k: 'drive', e: true, m: 'Google Drive %' + b.sonDriveYuzde + ' dolu; yer azalıyor, eski yedekler budanacak' });
+    try {
+      if (typeof fs.statfsSync === 'function') {
+        const st = fs.statfsSync(VERIKL), bos = st.bavail * st.bsize;
+        if (bos < 1.5 * 1024 * 1024 * 1024) l.push({ k: 'disk', e: true, m: 'Sunucu bilgisayarın diskinde yer azaldı (' + (bos / 1073741824).toFixed(1) + ' GB kaldı)' });
+      }
+    } catch (e) { /* eski Node sürümünde disk denetimi yok; diğer denetimler sürer */ }
+    const hatalar = aktSon.filter((x) => x.a === 'islemHatasi' && simdi - x.t < 30 * 60000).length;
+    if (hatalar) l.push({ k: 'islemhata', e: true, m: 'Son 30 dakikada ' + hatalar + ' işlem yarıda hata verdi (kısmen kaydedilmiş olabilir); Yedekleme > Günlük Rapor\'a bakın' });
+    // flash: yalnız ekranda uyarır (çekmeceye koyulan flash bilerek çıkarılmış olabilir, e-posta atılmaz)
+    try {
+      const slot = bekleyenSlot();
+      if (slot && durum.flash.sonBasari) {
+        const sl = new Date(slot.replace(' ', 'T') + ':00+03:00').getTime();
+        if (simdi - sl > 2 * 3600000) l.push({ k: 'flash', e: false, m: 'Flash yedeği ' + slot.slice(11) + ' saatinden beri alınamadı (flash takılı değil mi?)' });
+      }
+    } catch (e) { /* tarih çözülemezse flash uyarısı atlanır */ }
+    return l;
+  }
+  function saglik() {
+    const l = sorunlar();
+    return { ok: true, yerel: true, sorun: l.length > 0, sayi: l.length, mesajlar: l.map((x) => x.m) };
+  }
+  async function nabizGonder(test) {
+    const adres = bulutAdresi();
+    if (!adres) return { ok: false, hata: 'Bulut adresi bulunamadı' };
+    try {
+      const y = await postla(adres, JSON.stringify({ action: 'yerelNabiz', anahtar: ayar.anahtar, uyarilar: sorunlar(), yedekT: durum.bulut.sonBasari, test: !!test }));
+      if (!y || !y.ok) throw new Error((y && y.hata) || 'Bulut nabzı kabul etmedi');
+      durum.nabiz.sonBasari = Date.now(); durum.nabiz.sonHata = '';
+      if (test) durum.nabiz.sonTest = { t: Date.now(), ok: true, eposta: y.eposta || '' };
+      durumYaz();
+      return y;
+    } catch (e) {
+      durum.nabiz.sonHata = e.message;
+      if (test) durum.nabiz.sonTest = { t: Date.now(), ok: false, hata: e.message };
+      durumYaz();
+      return { ok: false, hata: e.message };
+    }
+  }
+  const nabizIlk = setTimeout(() => { nabizGonder(false); }, 25000); if (nabizIlk.unref) nabizIlk.unref();
+  const nabizZaman = setInterval(() => { nabizGonder(false); }, NABIZ_DK * 60000); if (nabizZaman.unref) nabizZaman.unref();
+
   // ───── Ekranın (Admin) kullandığı arayüz ─────
   function ayarKaydet(yeni) {
     const a = birlestir(Object.assign({}, yeni, { anahtar: ayar.anahtar }));
@@ -481,6 +539,7 @@ function baslat(o) {
     if (hedef === 'bulut' || hedef === 'ikisi') { bulutSon = Date.now(); bulutYukle(true); }
     // "Yine de gönder": boş/eksik veri koruması durdurduysa ve kullanıcı verinin doğru olduğunu onayladıysa
     if (hedef === 'bulut-onay') { bulutSon = Date.now(); bulutYukle(true, true); }
+    if (hedef === 'nabiz-test') return { ok: true, baslatildi: hedef, tamam: nabizGonder(true) };
     if (hedef === 'flash' || hedef === 'ikisi') flashYedekle('elle', '');
     return { ok: true, baslatildi: hedef };
   }
@@ -496,7 +555,7 @@ function baslat(o) {
       simdi: { islem: JSON.parse(JSON.stringify(islem)), bulutKalanSn, sunucuSaati: Date.now() },
     };
   }
-  return { durum: durumVer, ayarKaydet, simdi, bulutYukle, flashYedekle, flashTara, islemBasla, islemBitir, aktiviteListe, aktiviteOzet, _ayar: () => ayar };
+  return { durum: durumVer, ayarKaydet, simdi, bulutYukle, flashYedekle, flashTara, islemBasla, islemBitir, aktiviteListe, aktiviteOzet, saglik, sorunlar, nabizGonder, _ayar: () => ayar };
 }
 
 module.exports = { baslat };

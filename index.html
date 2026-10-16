@@ -1846,6 +1846,7 @@ setInterval(topbarSaatGuncelle, 10000);
           <button class="btn" onclick="yyAktiviteExcel()">📊 Excel</button>
           <button class="btn" onclick="yyAktiviteYazdir()">🖨 Yazdır</button>
           <button class="btn btn-primary" onclick="yerelYedekSimdi('bulut')">☁ Şimdi buluta gönder</button>
+          <button class="btn" onclick="yyUyariEpostaDene()" title="Bulut, uyarı adresine bir deneme e-postası gönderir (adresin ve iznin doğru olduğunu görmek için)">✉ Uyarı e-postasını dene</button>
         </div>
         <div id="yy-akt-ozet" style="font-size:13px;margin-bottom:6px"></div>
         <div id="yy-akt-liste"><div class="cari-empty">Yükleniyor...</div></div>
@@ -3973,12 +3974,12 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261016d";
+const FRONT_SURUM = "20261016e";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
     if(!localStorage.getItem("fincanlar_oturum_token")) return;
-    cariApi("getBulutDurum").then(res=>{ if(res && res.ok){ _bulutDurum = res; bulutDurumCiz_(); if(res.yerel) yyZilBaslat_(); } }).catch(()=>{});
+    cariApi("getBulutDurum").then(res=>{ if(res && res.ok){ _bulutDurum = res; bulutDurumCiz_(); if(res.yerel){ yyZilBaslat_(); yySaglikBaslat_(); } } }).catch(()=>{});
   }catch(_){}
 }
 function bulutBantGetir_(){
@@ -4349,6 +4350,57 @@ document.addEventListener("click", e=>{ if(_yyZil.acik && !e.target.closest("#yy
 function yyZilSimdiGonder_(){
   yerelYedekSimdi("bulut");
   setTimeout(yyZilYukle_, 1500); setTimeout(yyZilYukle_, 5000);
+}
+
+// ── ★ 16 Eki 2026: SORUN UYARISI — sorun varsa her kullanıcının ekranında kırmızı bant (ayrıntı yalnız Admin'e). E-posta bulut tarafından atılır. ──
+let _yySaglik = { zaman:null, veri:null };
+function yySaglikBaslat_(){
+  if(window._yySaglikBasladi) return;
+  window._yySaglikBasladi = true;
+  yySaglikYukle_();
+}
+function yySaglikYukle_(){
+  clearTimeout(_yySaglik.zaman);
+  const sonraki = ()=>{ _yySaglik.zaman = setTimeout(yySaglikYukle_, document.hidden ? 120000 : 60000); };
+  if(!localStorage.getItem("fincanlar_oturum_token")){ sonraki(); return; }
+  cariApi("yerelYedekSaglik").then(res=>{
+    if(!res || !res.ok || !res.yerel){ yySaglikBantCiz_(null); if(res && res.ok && !res.yerel) return; sonraki(); return; }
+    _yySaglik.veri = res; yySaglikBantCiz_(res); sonraki();
+  }).catch(()=>{ sonraki(); });
+}
+function yySaglikBantCiz_(r){
+  let b = document.getElementById("yy-saglik-bandi");
+  if(!r || !r.sorun){ if(b) b.style.display = "none"; return; }
+  if(!b){
+    b = document.createElement("div"); b.id = "yy-saglik-bandi";
+    b.style.cssText = "position:fixed;left:50%;bottom:46px;transform:translateX(-50%);z-index:99999;max-width:92vw;padding:7px 16px;border-radius:20px;font-size:13px;font-weight:800;background:#c62828;color:#fff;box-shadow:0 2px 12px rgba(0,0,0,.35);cursor:pointer;text-align:center";
+    b.onclick = ()=>{ const v = _yySaglik.veri || {}; if(yedekAdminMi_()){ modulAc("yedekleme"); } else { alert("Yedekleme sisteminde bir sorun var.\n\nLütfen yöneticiye haber verin."); } };
+    document.body.appendChild(b);
+  }
+  const admin = yedekAdminMi_();
+  b.textContent = "⚠ Yedekleme sorunu" + (admin ? " — " + (r.mesajlar && r.mesajlar[0] ? r.mesajlar[0].slice(0,90) : "") + (r.sayi > 1 ? " (+" + (r.sayi-1) + ")" : "") : " — yöneticiye haber verin");
+  b.title = admin ? (r.mesajlar||[]).join("\n") + "\n\nTıkla: Yedekleme modülü" : "Yedekleme sisteminde sorun var";
+  b.style.display = "";
+}
+function yyUyariEpostaDene(){
+  const basla = Date.now();
+  cariApi("yerelYedekSimdi", {hedef:"nabiz-test"}).then(res=>{
+    if(!res || !res.ok){ alert((res&&res.hata)||"Başlatılamadı"); return; }
+    toastGoster("Deneme e-postası isteniyor...");
+    let deneme = 0;
+    const sor = ()=>{
+      deneme++;
+      cariApi("yerelYedekDurum").then(d=>{
+        const t = d && d.durum && d.durum.nabiz && d.durum.nabiz.sonTest;
+        if(t && t.t >= basla - 2000){
+          alert(t.ok ? "Deneme e-postası bulut tarafından gönderildi.\n\n" + (t.eposta || "Uyarı adresi") + " gelen kutusunu (gerekirse Spam klasörünü) kontrol edin.\n\nGelmezse bana haber verin."
+                     : "Deneme e-postası gönderilemedi:\n" + (t.hata || "bilinmeyen hata"));
+        } else if(deneme < 12){ setTimeout(sor, 2000); }
+        else alert("Bulut yanıt vermedi. İnternet bağlantısını kontrol edin.");
+      }).catch(()=>{ if(deneme < 12) setTimeout(sor, 2000); });
+    };
+    setTimeout(sor, 2000);
+  }).catch(()=>alert("Sunucuya ulaşılamadı"));
 }
 
 // Günlük rapor (Yedekleme modülü). Başlığa tıklayınca önce büyükten küçüğe, tekrar tıklayınca küçükten büyüğe sıralanır; başlıklar sürüklenerek yer değiştirir.

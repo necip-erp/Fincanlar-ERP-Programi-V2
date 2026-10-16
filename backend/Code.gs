@@ -1104,7 +1104,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261016d";
+const PROGRAM_SURUM_ = "20261016e";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -1122,7 +1122,7 @@ function bulutYazmaAcikMi_() {
   try { return PropertiesService.getScriptProperties().getProperty("BULUT_YAZMA_ACIK") === "1"; } catch (e) { return false; }
 }
 // Bulutta kilitli olsa bile çalışacak (veri kaydı yapmayan / yedek alan / oturum) işlemler:
-const BULUT_KILIT_SERBEST_ = /^(girisYap|cikisYap|parolaDegistir|yerelYedekYukle|bulutYazmaAyarla|bulutAynaSimdi|bulutAynaKur|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|edmOrtamDurumu)$/;
+const BULUT_KILIT_SERBEST_ = /^(girisYap|cikisYap|parolaDegistir|yerelYedekYukle|yerelNabiz|bulutYazmaAyarla|bulutAynaSimdi|bulutAynaKur|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|edmOrtamDurumu)$/;
 // Bulutta, kilit açık olsa bile ÇALIŞMAYAN işlemler (veri iki yerde ayrışmasın): şirket düzeni / yeni yıl / şirketler arası stok aktarımı.
 const YALNIZ_YEREL_ACTIONLAR_ = { sirketDuzeniKur: true, yeniCalismaYiliOlustur: true, yilStokKartlariAktar: true };
 function bulutKilitKontrol_(action) {
@@ -1157,8 +1157,8 @@ function bulutYazmaAyarla(body, oturum) {
 // Bu action'lar oturum/token gerektirmeden çalışır (login ekranı henüz token
 // almadan bunlara ihtiyaç duyar).
 // Veriyi değiştirmeyen işlemler kilit beklemez (istemcideki CARI_API_YAZMA_DEGIL_ ile aynı mantık).
-const YAZMA_DEGIL_ = /^(get|yerelYedek|yerelGuncelle|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|cekSeriNoUret|nakliyeSorunluFaturalar$)/; // giriş/çıkış/parola oturum satırı yazar → kilitli (satır kayması olmasın)
-const OTURUMSUZ_ACTIONLAR = { girisYap: true, yerelYedekYukle: true };
+const YAZMA_DEGIL_ = /^(get|yerelYedek|yerelNabiz|yerelGuncelle|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|cekSeriNoUret|nakliyeSorunluFaturalar$)/; // giriş/çıkış/parola oturum satırı yazar → kilitli (satır kayması olmasın)
+const OTURUMSUZ_ACTIONLAR = { girisYap: true, yerelYedekYukle: true, yerelNabiz: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
   eskiPanelStokKartlariniAktar: true, yilStokKartlariAktar: true, bulutYazmaAyarla: true, bulutAynaSimdi: true, bulutAynaKur: true, getEskiBulutStokKartlari: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, sirketDuzeniKur: true, yerelYedekDurum: true, yerelYedekAyarKaydet: true, yerelYedekSimdi: true, yerelGuncelleDurum: true, yerelGuncelleKontrol: true, yerelGuncelleUygula: true, yerelGuncelleGeriAl: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
@@ -1331,6 +1331,8 @@ function handleRequest(e) {
       case "yerelYedekAyarKaydet": result = yerelYedekAyarKaydet(body); break;
       case "yerelYedekSimdi": result = yerelYedekSimdi(body); break;
       case "yerelYedekAktivite": result = yerelYedekAktivite(body); break;
+      case "yerelNabiz": result = yerelNabiz(body); break;
+      case "yerelYedekSaglik": result = yerelYedekSaglik(); break;
       case "yerelYedekAktiviteOzet": result = yerelYedekAktiviteOzet(); break;
       case "yerelGuncelleDurum": result = yerelGuncelleDurum(); break;
       case "yerelGuncelleKontrol": result = yerelGuncelleKontrol(); break;
