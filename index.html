@@ -2149,6 +2149,10 @@ setInterval(topbarSaatGuncelle, 10000);
           <div class="fld" style="width:220px;margin-bottom:0"><label>Kaynak (eski) şirket</label><select id="stok-aktar-kaynak"></select></div>
           <button class="btn btn-primary" id="stok-aktar-btn" onclick="stokKartiAktarGonder()">Önizle ve Aktar</button>
         </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border,#e2e8f0)">
+          <div style="color:var(--text3);font-size:13px;margin-bottom:6px">Bulutun ESKİ orijinal "2026" e-tablosundaki stok kartları (çok sayıda kart orada kalmış olabilir). Bulut şifrenizi (yerelle aynı) bir kez sorar.</div>
+          <button class="btn" id="stok-aktar-bulut-btn" onclick="eskiBulutStokAktarGonder()">☁ Eski bulut stok kartlarını aktar</button>
+        </div>
       </div>
       <div style="margin-bottom:14px"><button class="btn btn-primary" id="sirket-duzeni-btn" style="display:none" onclick="sirketDuzeniKurGonder()" title="Mevcut şirketlerin başına ESKİ yazar, boş yeni 2026 şirketini oluşturur ve açılışta onu getirir. Tek seferlik, sadece Admin.">🏢 Şirket Düzenini Kur (ESKİ 2026 / ESKİ 2026-2 + boş yeni 2026)</button></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
@@ -3946,7 +3950,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261016b";
+const FRONT_SURUM = "20261016c";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -4038,6 +4042,38 @@ function stokKartiAktarKaynakDoldur_(){
     sel.innerHTML = digerleri.map(y=>`<option value="${y}">${yilEtiketi_(y)} (${y})</option>`).join("");
     const eski = digerleri.find(y=>/^ESKİ/.test(yilEtiketi_(y))); if(eski) sel.value = eski;
   }).catch(()=>{});
+}
+const BULUT_API_ASIL_ = "https://script.google.com/macros/s/AKfycbxlsbGdDPP42Cxm11jkDG7W9XK_SelXOrmKBxhK9PxUtZSXifFERC2yCkrUhamFJaqFPA/exec";
+function bulutApiDogrudan_(govde){
+  const m = JSON.stringify(govde);
+  return fetch(BULUT_API_ASIL_ + "?payload=" + encodeURIComponent(m)).then(r=>r.json());
+}
+function eskiBulutStokAktarGonder(){
+  const kul = (()=>{ try{ return (JSON.parse(localStorage.getItem("fincanlar_oturum_kullanici")||"null")||{}).ad || ""; }catch(e){ return ""; } })();
+  const ad = prompt("Bulut kullanıcı adı:", kul); if(!ad) return;
+  const parola = prompt("Bulut parolası (yerel sunucudakiyle aynı; ekranda gizlenmez):"); if(!parola) return;
+  const btn = document.getElementById("stok-aktar-bulut-btn"); btn.disabled = true; const e0 = btn.textContent; btn.textContent = "Buluttan alınıyor...";
+  const bitir = ()=>{ btn.disabled = false; btn.textContent = e0; };
+  const yil = localStorage.getItem("fincanlar_calisma_yili") || "";
+  bulutApiDogrudan_({action:"girisYap", kullaniciAdi: ad, parola: parola, yil: yil}).then(g=>{
+    if(!g || !g.ok){ bitir(); alert((g && g.hata) || "Bulut girişi başarısız"); return; }
+    return bulutApiDogrudan_({action:"getEskiBulutStokKartlari", token: g.token, yil: yil}).then(r=>{
+      bulutApiDogrudan_({action:"cikisYap", token: g.token, yil: yil}).catch(()=>{});
+      if(!r || !r.ok){ bitir(); alert((r && r.hata) || "Bulut stok kartları alınamadı (bulutta Admin ile giriş gerekir)"); return; }
+      return cariApi("yilStokKartlariAktar", {satirlar: r.satirlar, kaynakAd: "ESKİ BULUT 2026", onizleme: true}).then(on=>{
+        if(!on || !on.ok){ bitir(); alert((on && on.hata) || "Önizleme alınamadı"); return; }
+        if(!on.eklenecek){ bitir(); alert("Aktarılacak yeni stok kartı yok.\n\nBulutta " + on.kaynakAdet + " kart var, " + on.zatenVar + " tanesi bu şirkette zaten mevcut."); return; }
+        if(!confirm("Eski bulut e-tablosundan " + on.eklenecek + " stok kartı " + yilEtiketi_(on.hedefYil) + " şirketine aktarılsın mı?\n\n(Bulutta toplam " + on.kaynakAdet + " kart, " + on.zatenVar + " tanesi zaten var. Miktar/hareket aktarılmaz.)")){ bitir(); return; }
+        btn.textContent = "Aktarılıyor...";
+        return cariApi("yilStokKartlariAktar", {satirlar: r.satirlar, kaynakAd: "ESKİ BULUT 2026"}).then(res=>{
+          bitir();
+          if(!res || !res.ok){ alert((res && res.hata) || "Aktarılamadı"); return; }
+          toastGoster(res.eklenen + " stok kartı aktarıldı");
+          alert(res.eklenen + " stok kartı aktarıldı (" + res.zatenVar + " tanesi zaten vardı).\n\nAlt+V ile verileri yenileyin. Bulut aynası birkaç dakika içinde bunları da gösterir.");
+        });
+      });
+    });
+  }).catch(()=>{ bitir(); alert("Buluta ulaşılamadı"); });
 }
 function stokKartiAktarGonder(){
   const kaynak = (document.getElementById("stok-aktar-kaynak")||{}).value;

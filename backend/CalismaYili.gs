@@ -121,13 +121,20 @@ function yilStokKartlariAktar(body) {
   if (!yerelMi_()) return { ok: false, hata: "Bu işlem yalnızca yerel sunucuda yapılır" };
   const kayit = yilKayitlari_();
   const hedefYil = aktifYil_();
-  const kaynakYil = String((body && body.kaynakYil) || "").trim();
-  if (!kaynakYil || !kayit[kaynakYil]) return { ok: false, hata: "Kaynak şirket bulunamadı: " + kaynakYil };
-  if (kaynakYil === hedefYil) return { ok: false, hata: "Kaynak ve hedef aynı şirket; önce giriş ekranında YENİ şirkete girin, sonra eski şirketi kaynak seçin" };
-  const kSS = SpreadsheetApp.openById(kayit[kaynakYil]);
-  const kSheet = kSS.getSheetByName(SHEETS.stokTanimlari);
-  if (!kSheet) return { ok: false, hata: "Kaynak şirkette stok kartı sayfası yok" };
-  const kData = kSheet.getDataRange().getValues();
+  let kaynakYil = String((body && body.kaynakYil) || "").trim();
+  let kData;
+  if (body && Array.isArray(body.satirlar)) {
+    // Dışarıdan gelen satırlar (ör. bulutun ESKİ orijinal 2026 e-tablosundaki stok kartları): başlık satırı yok, sütun sırası StokTanimlari ile aynı
+    kaynakYil = String(body.kaynakAd || "ESKİ BULUT");
+    kData = [STOK_TANIM_BASLIKLAR].concat(body.satirlar);
+  } else {
+    if (!kaynakYil || !kayit[kaynakYil]) return { ok: false, hata: "Kaynak şirket bulunamadı: " + kaynakYil };
+    if (kaynakYil === hedefYil) return { ok: false, hata: "Kaynak ve hedef aynı şirket; önce giriş ekranında YENİ şirkete girin, sonra eski şirketi kaynak seçin" };
+    const kSS = SpreadsheetApp.openById(kayit[kaynakYil]);
+    const kSheet = kSS.getSheetByName(SHEETS.stokTanimlari);
+    if (!kSheet) return { ok: false, hata: "Kaynak şirkette stok kartı sayfası yok" };
+    kData = kSheet.getDataRange().getValues();
+  }
 
   const ss = acikSS_();
   const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
@@ -183,4 +190,21 @@ function bfmFaturaYilUygunMu_(tarih) {
   const aktif = parseInt(aktifYil_(), 10);
   if (String(aktif) === TEMEL_YIL_) return fy <= aktif;
   return fy === aktif;
+}
+
+// ★ 16 Eki 2026 — Bulutun ESKİ orijinal e-tablosundaki (SHEET_ID_TEMEL_) stok kartlarını döndürür. Ayna açıldıktan sonra bu e-tablo
+// şirket listesinde görünmez ama silinmemiştir; yerel sunucudaki "Eski bulut stok kartlarını aktar" bu işlemle kartları alır. Yalnız bulut, yalnız Admin, salt okuma.
+function getEskiBulutStokKartlari() {
+  if (yerelMi_()) return { ok: false, hata: "Bu işlem yalnızca bulutta çalışır" };
+  const ss = SpreadsheetApp.openById(SHEET_ID_TEMEL_);
+  const sh = ss.getSheetByName(SHEETS.stokTanimlari);
+  if (!sh) return { ok: false, hata: "Eski bulut e-tablosunda stok kartı sayfası yok" };
+  const data = sh.getDataRange().getValues();
+  const satirlar = [];
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    if (!r[0] && !r[1]) continue;
+    satirlar.push(r.map(function (v) { return v instanceof Date ? Utilities.formatDate(v, "Europe/Istanbul", "dd/MM/yyyy HH:mm") : v; }));
+  }
+  return { ok: true, satirlar: satirlar, adet: satirlar.length };
 }
