@@ -1104,7 +1104,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261017a";
+const PROGRAM_SURUM_ = "20261017b";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -10810,6 +10810,44 @@ function edmTarihIso_(t) {
   return "";
 }
 const EDM_GECERLI_KDV_ = [0, 1, 10, 20];
+// ════════════════════════════════════════════════
+// ★ (17 Eki 2026) e-FATURA / e-ARŞİV TARİH PROTOKOLÜ  (ÇOK ÖNEMLİ — kullanıcı kararı)
+//  1) GİB, işlem tarihinden itibaren 7 güne kadar geriye dönük fatura düzenlemeye izin verir; güvenlik payıyla
+//     burada EN FAZLA 6 GÜN geriye kesilebilir. Fatura tarihi = ERP'deki fatura tarihi (artık gönderim günü değil).
+//     İleri tarihli fatura kesilemez.
+//  2) Daha önce kesilmiş (gönderilmiş) son faturanın tarihinden ÖNCEKİ bir tarihe fatura kesilemez (numara sırası/tarih sırası bozulmasın).
+//  3) Bu kural e-Fatura ve e-Arşiv için AYRI AYRI işler (her türün kendi "son kesim tarihi" vardır) ve TEST/CANLI ayrı tutulur.
+//     Son kesim tarihi Script Özelliği olarak saklanır: EDM_SON_TARIH_<EFATURA|EARSIV>_<TEST|PROD> (+ EDM_SON_NO_...).
+//  4) Geriye tarihli kesimde eski tarihli faturalar mutlaka TARİH SIRASIYLA (eskiden yeniye) gönderilmelidir.
+// ════════════════════════════════════════════════
+const EDM_GERI_TARIH_GUN_ = 6;
+function edmGunFarki_(bugunIso, tarihIso) { // bugün - tarih (gün)
+  const a = bugunIso.split("-").map(Number), b = tarihIso.split("-").map(Number);
+  return Math.round((Date.UTC(a[0], a[1] - 1, a[2]) - Date.UTC(b[0], b[1] - 1, b[2])) / 86400000);
+}
+function edmSonKesim_(tur, testMi) {
+  const p = PropertiesService.getScriptProperties();
+  const k = (tur === "EARSIV" ? "EARSIV" : "EFATURA") + "_" + (testMi ? "TEST" : "PROD");
+  return { tarih: String(p.getProperty("EDM_SON_TARIH_" + k) || ""), no: String(p.getProperty("EDM_SON_NO_" + k) || "") };
+}
+function edmSonKesimKaydet_(tur, testMi, tarihIso, no) {
+  const p = PropertiesService.getScriptProperties();
+  const k = (tur === "EARSIV" ? "EARSIV" : "EFATURA") + "_" + (testMi ? "TEST" : "PROD");
+  const eski = String(p.getProperty("EDM_SON_TARIH_" + k) || "");
+  if (!eski || tarihIso >= eski) { p.setProperty("EDM_SON_TARIH_" + k, tarihIso); p.setProperty("EDM_SON_NO_" + k, String(no || "")); }
+}
+// Tür bazlı sıra kuralı: fatura tarihi, aynı türde en son kesilen faturanın tarihinden önce olamaz.
+// Dönüş: { hata: "" | metin, bilgi: "" | metin }  (bilgi = son kesim bilgisi)
+function edmSiraKontrol_(tarihIso, tur, testMi) {
+  const sk = edmSonKesim_(tur, testMi);
+  const ad = tur === "EARSIV" ? "e-Arşiv" : "e-Fatura";
+  if (!sk.tarih) return { hata: "", bilgi: "Bu türde (" + ad + ") daha önce kesilmiş fatura kaydı yok." };
+  const bilgi = "En son kesilen " + ad + ": " + sk.tarih + (sk.no ? " (" + sk.no + ")" : "") + ".";
+  if (tarihIso && tarihIso < sk.tarih) {
+    return { hata: ad + " için fatura tarihi (" + tarihIso + "), en son kesilen " + ad + " faturasının tarihinden (" + sk.tarih + (sk.no ? ", " + sk.no : "") + ") önce olamaz. Daha eski tarihli faturaları bu tarihten önce göndermeliydiniz; bu fatura için tarihi " + sk.tarih + " veya sonrası yapın.", bilgi: bilgi };
+  }
+  return { hata: "", bilgi: bilgi };
+}
 // satis: getSatisDetay().satis (veya iade); kalemler: kalem listesi; cari: {ad,vergiNo,il,ilce,adres,eFatura,eArsiv} veya null
 // o: { testMi, iadeMi, earsiv }
 function edmOnKontrolHesapla_(satis, kalemler, cari, o) {
@@ -10847,8 +10885,13 @@ function edmOnKontrolHesapla_(satis, kalemler, cari, o) {
   if (o.iadeMi && !String(satis.iadeFaturaNo || "").trim()) hatalar.push("İade için 'iade edilen fatura no' boş.");
   const bugun = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd");
   const faturaTarih = edmTarihIso_(satis.tarih);
-  if (faturaTarih && faturaTarih !== bugun) {
-    uyarilar.push("Fatura tarihi " + faturaTarih + " ama e-Fatura/e-Arşiv GİB'e gönderim günü (" + bugun + ") tarihiyle düzenlenir. ERP'deki tarih ile resmi fatura tarihi farklı olacak.");
+  if (!faturaTarih) {
+    hatalar.push("Fatura tarihi okunamadı (\"" + (satis.tarih || "boş") + "\").");
+  } else {
+    const gun = edmGunFarki_(bugun, faturaTarih);
+    if (gun < 0) hatalar.push("Fatura tarihi (" + faturaTarih + ") ileri tarihli; e-Fatura/e-Arşiv ileri tarihe kesilemez (bugün " + bugun + ").");
+    else if (gun > EDM_GERI_TARIH_GUN_) hatalar.push("Fatura tarihi (" + faturaTarih + ") " + gun + " gün geride. En fazla " + EDM_GERI_TARIH_GUN_ + " gün geriye kesilebilir (GİB sınırı 7 gün; güvenlik için " + EDM_GERI_TARIH_GUN_ + "). Fatura tarihini en erken " + Utilities.formatDate(new Date(new Date().getTime() - EDM_GERI_TARIH_GUN_ * 86400000), "Europe/Istanbul", "yyyy-MM-dd") + " yapın.");
+    else if (gun > 0) uyarilar.push("⏪ GERİYE TARİHLİ KESİM: Fatura " + gun + " gün geriye (" + faturaTarih + ") kesilecek (en fazla " + EDM_GERI_TARIH_GUN_ + " gün). Resmi fatura tarihi " + faturaTarih + " olur; en son kesilen faturanın tarihinden önceye kesilemez.");
   }
   if (satis.efaturaUuid) {
     (o.testMi ? uyarilar : hatalar).push("Bu belge zaten gönderilmiş (" + (satis.efaturaNo || satis.efaturaUuid) + "). Aynı belge ikinci kez gönderilemez; hata varsa iptal/iade faturası gerekir." + ek);
@@ -10919,7 +10962,28 @@ function getEdmFaturaOnKontrol(body) {
         sonuc.uyarilar.push("GİB mükellefiyet sorgusu yapılamadı: " + e.message);
       }
     }
-    return { ok: true, hatalar: sonuc.hatalar, uyarilar: sonuc.uyarilar, onerilenTur: onerilenTur, testMi: testMi };
+    const faturaTarihIso = edmTarihIso_(satis.tarih);
+    const turMesajlari = {};
+    ["EFATURA", "EARSIV"].forEach(function (t) { turMesajlari[t] = edmSiraKontrol_(faturaTarihIso, t, testMi); });
+    // Daha eski tarihli, henüz gönderilmemiş (pencere içindeki) faturalar varsa: önce onlar gitmeli (protokol 4)
+    if (body.hafif !== true && faturaTarihIso && !iadeMi) {
+      try {
+        const sl = getSatisListesi();
+        const bugunIso = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd");
+        const cariMap = {};
+        ((cl && cl.ok) ? cl.cariler : []).forEach(function (c) { cariMap[c.id] = c; });
+        let bekleyen = 0;
+        ((sl && sl.ok) ? sl.satislar : []).forEach(function (x) {
+          if (x.belgeTipi !== "Fatura" || x.efaturaNo || x.id === String(id)) return;
+          const c = cariMap[x.cariId];
+          if (!c || (String(c.eFatura) !== "Evet" && String(c.eArsiv) !== "Evet")) return;
+          const t = edmTarihIso_(x.tarih);
+          if (t && t < faturaTarihIso && edmGunFarki_(bugunIso, t) <= EDM_GERI_TARIH_GUN_) bekleyen++;
+        });
+        if (bekleyen > 0) sonuc.uyarilar.push("Bu faturadan DAHA ESKİ tarihli, henüz gönderilmemiş " + bekleyen + " e-Fatura/e-Arşiv faturası var (son " + EDM_GERI_TARIH_GUN_ + " gün içinde). Bu faturayı gönderirseniz onlar daha eski tarihe kesilemez hale gelir — önce eski tarihlileri (eskiden yeniye) gönderin.");
+      } catch (e3) { /* uyarı üretilemezse sessiz geç */ }
+    }
+    return { ok: true, hatalar: sonuc.hatalar, uyarilar: sonuc.uyarilar, onerilenTur: onerilenTur, testMi: testMi, turMesajlari: turMesajlari, faturaTarihi: faturaTarihIso };
   } catch (err) {
     return { ok: false, hata: "Ön kontrol hatası: " + err.message };
   }
@@ -10984,6 +11048,9 @@ function edmFaturaGonder(body) {
   {
     const onk = edmOnKontrolHesapla_(satis, detay.kalemler, cari, { testMi: testMi, iadeMi: iadeMi, cariKontrol: !testMi });
     if (onk.hatalar.length) return { ok: false, hata: "Gönderim öncesi kontrol — düzeltilmesi gerekenler:\n- " + onk.hatalar.join("\n- ") };
+    // ★ Tarih protokolü madde 2-3: tür bazlı "son kesilenden önceye kesilemez" (yalnız canlıda engel; testte tarih sırası zorlanmaz)
+    const sira = edmSiraKontrol_(edmTarihIso_(satis.tarih), earsiv ? "EARSIV" : "EFATURA", testMi);
+    if (sira.hata && !testMi) return { ok: false, hata: "Gönderim öncesi kontrol — düzeltilmesi gerekenler:\n- " + sira.hata };
   }
   if (!testMi) {
     if (kimlikHam.length !== 10 && kimlikHam.length !== 11) return { ok: false, hata: "Carinin Vergi No / TCKN alanı 10 (VKN) veya 11 (TCKN) haneli olmalı (şu an: \"" + (cari.vergiNo || "boş") + "\")." };
@@ -11025,7 +11092,7 @@ function edmFaturaGonder(body) {
     const xmlParams = {
       uuid: Utilities.getUuid(),
       faturaNo: edmFaturaNoUret_(),
-      tarih: Utilities.formatDate(now, "Europe/Istanbul", "yyyy-MM-dd"),
+      tarih: edmTarihIso_(satis.tarih) || Utilities.formatDate(now, "Europe/Istanbul", "yyyy-MM-dd"), // ★ fatura tarihi = ERP fatura tarihi (en fazla 6 gün geri; ön kontrol doğrular)
       saat: Utilities.formatDate(now, "Europe/Istanbul", "HH:mm:ss"),
       saticiVkn: kendi.identifier,
       alici: alici,
@@ -11080,6 +11147,7 @@ function edmFaturaGonder(body) {
     };
     if (iadeMi) iadeEfaturaNoKaydet_(satisId, gercekFaturaNo, gercekUuid, invoiceXml, JSON.stringify(gorselVeri));
     else satisEfaturaNoKaydet_(satisId, gercekFaturaNo, gercekUuid, invoiceXml, JSON.stringify(gorselVeri));
+    try { edmSonKesimKaydet_(earsiv ? "EARSIV" : "EFATURA", testMi, xmlParams.tarih, gercekFaturaNo); } catch (e4) { /* kayıt başarısız olsa da gönderim tamam */ }
 
     let otomatikDurum = null;
     if (earsiv) {
