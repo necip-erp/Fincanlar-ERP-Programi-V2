@@ -1104,7 +1104,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261017h";
+const PROGRAM_SURUM_ = "20261017i";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -1122,7 +1122,7 @@ function bulutYazmaAcikMi_() {
   try { return PropertiesService.getScriptProperties().getProperty("BULUT_YAZMA_ACIK") === "1"; } catch (e) { return false; }
 }
 // Bulutta kilitli olsa bile çalışacak (veri kaydı yapmayan / yedek alan / oturum) işlemler:
-const BULUT_KILIT_SERBEST_ = /^(girisYap|cikisYap|parolaDegistir|yerelYedekYukle|yerelNabiz|bulutYazmaAyarla|bulutAynaSimdi|bulutAynaKur|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|edmOrtamDurumu)$/;
+const BULUT_KILIT_SERBEST_ = /^(girisYap|resimOkuAyarKaydet|cikisYap|parolaDegistir|yerelYedekYukle|yerelNabiz|bulutYazmaAyarla|bulutAynaSimdi|bulutAynaKur|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|edmOrtamDurumu)$/;
 // Bulutta, kilit açık olsa bile ÇALIŞMAYAN işlemler (veri iki yerde ayrışmasın): şirket düzeni / yeni yıl / şirketler arası stok aktarımı.
 // ★ 17 Eki 2026: edmFaturaGonder de burada — e-Fatura/e-Arşiv GİB'e yalnız yerel sunucudan gider (fatura numara sayacı EDM_FATURA_SAYAC_<yıl> ve
 // "gönderildi" kaydı iki tarafta ayrı tutulduğundan, bulut yazma kilidi açık olsa bile ikinci yerden gönderim aynı faturayı/numarayı çiftleyebilirdi).
