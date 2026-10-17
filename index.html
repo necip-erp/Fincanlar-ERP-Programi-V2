@@ -3974,7 +3974,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261017b";
+const FRONT_SURUM = "20261017c";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -6692,6 +6692,7 @@ function satisFormDurumuAl_(){
     cariId: v("sm-cari") || "", cariAd: v("sm-cari-arama") || "",
     tarih: v("sm-tarih") || "", odemeTipi: v("sm-odeme") || "", vade: v("sm-vade") || "",
     aciklama: v("sm-aciklama") || "", projeKodu: v("sm-proje-kodu") || "", faturaTipi: v("sm-fatura-tipi") || "",
+    teslimEden: v("sm-teslim-eden") || "", teslimAlan: v("sm-teslim-alan") || "",
     siparisDurumu: v("sm-siparis-durumu") || "",
     dipIskontoYuzde: v("sm-dip-iskonto") || "", tutarIskontosu: v("sm-tutar-iskontosu") || "",
     tutarIskontoKdvSonra: c("sm-tutar-iskonto-kdv-sonra"), stokIsle: c("sm-stok-isle"), cariIsle: c("sm-cari-isle"),
@@ -6741,6 +6742,7 @@ function satisTaslakDevamEt(id){
   satisOdemeTipiDegisti();
   set("sm-vade", d.vade); set("sm-aciklama", d.aciklama); set("sm-proje-kodu", d.projeKodu);
   set("sm-fatura-tipi", d.faturaTipi); set("sm-siparis-durumu", d.siparisDurumu);
+  set("sm-teslim-eden", d.teslimEden); set("sm-teslim-alan", d.teslimAlan);
   set("sm-dip-iskonto", d.dipIskontoYuzde); set("sm-tutar-iskontosu", d.tutarIskontosu);
   set("sm-odeme-tutar", d.odemeTutari);
   const ck = (i, val)=>{ const e = document.getElementById(i); if(e && val !== undefined) e.checked = !!val; };
@@ -7068,6 +7070,7 @@ function satisDetayCiz(res){
     ${s.aciklama ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Açıklama</div><div class="v">${s.aciklama}</div></div></div>` : ""}
     ${s.projeKodu ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Proje Kodu</div><div class="v">${s.projeKodu}</div></div></div>` : ""}
     ${s.faturaTipi ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Fatura Tipi</div><div class="v">${s.faturaTipi}</div></div></div>` : ""}
+    ${(s.teslimEden || s.teslimAlan) ? `<div class="cari-info-grid">${s.teslimEden ? `<div class="cari-info-item"><div class="k">Teslim Eden</div><div class="v">${htmlKacis(s.teslimEden)}</div></div>` : ""}${s.teslimAlan ? `<div class="cari-info-item"><div class="k">Teslim Alan</div><div class="v">${htmlKacis(s.teslimAlan)}</div></div>` : ""}</div>` : ""}
     <div class="btnrow">
       ${siparis && s.siparisDurumu !== "Muhasebelendi" ? `<button class="btn btn-primary" onclick="siparisFaturaModalAc('${s.id}')">🧾 Fatura Oluştur</button>` : ''}
       ${(s.belgeTipi==='Sipariş'||s.belgeTipi==='Teklif') ? `<button class="btn btn-primary" onclick="satisDuzenleAc('${s.id}')">✏️ Düzenle</button>` : ''}
@@ -7633,6 +7636,18 @@ function belgeFormuHTMLOlustur(s, kalemler, t, c){
         ${t.tutarIskontosu>0 ? `<tr><td style="padding:2px 10px 2px 0;color:#555">Tutar İskontosu</td><td style="text-align:right">: -${paraFormat(t.tutarIskontosu)}</td></tr>` : ""}
         <tr style="font-weight:800;font-size:15px"><td style="padding:6px 10px 0 0">GENEL TOPLAM</td><td style="padding:6px 0 0;text-align:right">: ${paraFormat(t.genelToplam||0)}</td></tr>
       </table>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:40px;margin-top:36px;font-size:13.5px;page-break-inside:avoid">
+      <div style="flex:1;text-align:center">
+        <div style="color:#555;font-weight:700;letter-spacing:.5px">TESLİM EDEN</div>
+        <div style="margin-top:6px;min-height:18px"><b>${htmlKacis(s.teslimEden||'')}</b></div>
+        <div style="margin-top:34px;border-top:1px solid #333;padding-top:4px;color:#777;font-size:11.5px">Ad Soyad / İmza</div>
+      </div>
+      <div style="flex:1;text-align:center">
+        <div style="color:#555;font-weight:700;letter-spacing:.5px">TESLİM ALAN</div>
+        <div style="margin-top:6px;min-height:18px"><b>${htmlKacis(s.teslimAlan||'')}</b></div>
+        <div style="margin-top:34px;border-top:1px solid #333;padding-top:4px;color:#777;font-size:11.5px">Ad Soyad / İmza</div>
+      </div>
     </div>`;
 }
 
@@ -7780,6 +7795,10 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
         <div style="flex:1;min-width:340px;display:flex;flex-direction:column;gap:8px">
           <div class="fld" style="margin-bottom:0"><label>Açıklama</label><input id="sm-aciklama" type="text" placeholder="İsteğe bağlı" value="${s ? (s.aciklama||'') : ''}"></div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <div class="fld" style="flex:1;min-width:150px;margin-bottom:0"><label>Teslim Eden</label><input id="sm-teslim-eden" type="text" autocomplete="off" placeholder="Malı teslim eden kişi" value="${s ? htmlKacis(s.teslimEden||'') : ''}"></div>
+            <div class="fld" style="flex:1;min-width:150px;margin-bottom:0"><label>Teslim Alan</label><input id="sm-teslim-alan" type="text" autocomplete="off" placeholder="Malı teslim alan kişi" value="${s ? htmlKacis(s.teslimAlan||'') : ''}"></div>
+          </div>
           <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
             <div class="fld" id="sm-tutar-iskonto-fld" style="flex:1;min-width:200px;max-width:260px;margin-bottom:0;display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'flex':'none'}">
               <label class="sm-isk-etiket">Tutar İskontosu (₺)</label>
@@ -9936,6 +9955,8 @@ function satisKaydet(){
     aciklama: document.getElementById("sm-aciklama").value,
     projeKodu: document.getElementById("sm-proje-kodu").value,
     faturaTipi: document.getElementById("sm-fatura-tipi").value,
+    teslimEden: (document.getElementById("sm-teslim-eden")||{}).value || "",
+    teslimAlan: (document.getElementById("sm-teslim-alan")||{}).value || "",
     siparisDurumu: belgeTipi === "Sipariş" ? document.getElementById("sm-siparis-durumu").value : undefined,
     stokIsle: belgeTipi === "Fatura" ? !!(document.getElementById("sm-stok-isle")||{}).checked : undefined,
     cariIsle: belgeTipi === "Fatura" ? !!(document.getElementById("sm-cari-isle")||{}).checked : undefined,
