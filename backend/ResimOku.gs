@@ -60,7 +60,7 @@ function resimOkuAyarKaydet(body) {
   }
   const gemini = String(body.geminiAnahtar || "").trim();
   if (gemini) {
-    if (!/^AIza[A-Za-z0-9_\-]{30,}$/.test(gemini)) return { ok: false, hata: "Gemini anahtarı 'AIza' ile başlamalı; boşluk/satır sonu olmadan yapıştırın." };
+    if (!/^[A-Za-z0-9_\-.]{20,}$/.test(gemini)) return { ok: false, hata: "Gemini anahtarı geçersiz görünüyor (eski anahtarlar 'AIza', yenileri 'AQ.' ile başlar); boşluk/satır sonu olmadan yapıştırın." };
     p.setProperty("RESIM_OKU_GEMINI_ANAHTARI", gemini);
   }
   if (body.model !== undefined) p.setProperty("RESIM_OKU_MODEL", String(body.model || "").trim());
