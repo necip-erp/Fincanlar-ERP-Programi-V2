@@ -148,6 +148,7 @@ class Sayfa {
     return this;
   }
   insertRowsAfter(n, adet) { this.satirSayisi = Math.max(this.satirSayisi, this.satirlar.length) + adet; return this; }
+  insertColumnsAfter() { return this; }   // taklitte sütun sınırı yok; gerçek Sheets uyumluluğu için boş yöntem
   insertRowAfter(n) { while (this.satirlar.length < n) this.satirlar.push([]); this.satirlar.splice(n, 0, []); this.kitap.depo.kirlet(this.ad, 'satirEkle', { satir: n + 1 }); return this; }
   insertRowBefore(n) { return this.insertRowAfter(n - 1); }
   clearContents() { this.satirlar = []; this.kitap.depo.kirlet(this.ad, 'temizle', {}); return this; }

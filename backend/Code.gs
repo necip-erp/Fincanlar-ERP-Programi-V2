@@ -1104,7 +1104,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261017c";
+const PROGRAM_SURUM_ = "20261017d";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -2190,7 +2190,13 @@ function ensureSatisBelgeTipiColonu_orj_(sheet) {
 // ★ (17 Eki 2026) Satış belgesinde (Sipariş/Teklif/Fatura) malı TESLİM EDEN ve TESLİM ALAN kişi adı.
 // 24. ve 25. sütunlar (POS_HESAP_ID, ODEME_TUTARI) başlıksız kullanılıyor; yeni alanlar 26 ve 27. sütunlardadır.
 function ensureSatisTeslimKolonlari_orj_(sheet) {
-  if (sheet.getMaxColumns() < 27) sheet.insertColumnsAfter(sheet.getMaxColumns(), 27 - sheet.getMaxColumns());
+  // Gerçek Google Sheets'te 26'dan fazla sütun için sütun eklenmesi gerekir; yerel sunucu taklidinde
+  // (shim) sütun sınırı yoktur ve insertColumnsAfter bulunmayabilir — o yüzden önce metot var mı bakılır.
+  try {
+    if (typeof sheet.insertColumnsAfter === "function" && sheet.getMaxColumns() < 27) {
+      sheet.insertColumnsAfter(sheet.getMaxColumns(), 27 - sheet.getMaxColumns());
+    }
+  } catch (e) { /* sütun zaten varsa ya da taklit ortamdaysa sessizce devam */ }
   if (String(sheet.getRange(1, 26).getValue() || "") !== "TESLIM_EDEN") {
     sheet.getRange(1, 26).setValue("TESLIM_EDEN").setFontWeight("bold").setBackground("#e8edf5");
   }

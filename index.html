@@ -84,10 +84,16 @@ body.desen-acik{
 /* ── SEKME ŞERİDİ: her modül tarayıcı sekmesi/yeni pencere yerine burada, uygulamanın
    kendi içinde bir "sekme" olarak açılır (PWA kurulu haldeyken window.open görev
    çubuğunda ayrı bir program penceresi gibi göründüğü için bu yönteme geçildi). ── */
-.sekme-seridi{display:flex;align-items:stretch;gap:2px;padding:0 10px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:thin}
-.sekme{display:flex;align-items:center;justify-content:center;gap:9px;padding:8px 20px 7px;min-width:var(--sekme-genislik,140px);font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;cursor:pointer;border-bottom:2px solid transparent;user-select:none;transition:background var(--t),color var(--t)}
-.sekme:hover{background:var(--bg2);color:var(--text)}
+.sekme-seridi{display:flex;align-items:stretch;gap:0;padding:5px 12px 0;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:thin}
+.sekme{position:relative;display:flex;align-items:center;justify-content:center;gap:9px;padding:8px 20px 7px;min-width:var(--sekme-genislik,140px);font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;cursor:pointer;border-bottom:2px solid transparent;border-right:1px solid rgba(127,127,127,.38);user-select:none;transform-origin:50% 100%;transition:background var(--t),color var(--t),transform .14s ease,box-shadow .14s ease}
+.sekme:first-child{border-left:1px solid rgba(127,127,127,.38)}
+/* sekmeler arası ton farkı: tek/çift sıradaki sekmeler hafifçe farklı tonda */
+.sekme:nth-child(odd){background:rgba(127,127,127,.07)}
+.sekme:nth-child(even){background:rgba(127,127,127,.17)}
+.sekme:hover{background:var(--bg2);color:var(--text);transform:translateY(-1px) scale(1.06);box-shadow:0 3px 10px -3px rgba(0,0,0,.28);z-index:3}
 .sekme.aktif{color:var(--blue);border-bottom-color:var(--blue);background:var(--bg2)}
+.sekme.aktif:hover{background:var(--bg2)}
+.lr-kisayol-ipucu{margin-left:6px;padding:1px 6px;border-radius:5px;background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.35);font:600 10.5px/1.5 inherit;font-family:inherit;letter-spacing:.2px}
 .sekme .sekme-kapat{font-size:13px;line-height:1;padding:2px 4px;border-radius:5px;color:var(--text3,#9ca3af);opacity:.7}
 .sekme .sekme-kapat:hover{background:var(--red-l,#fee2e2);color:var(--red,#dc2626);opacity:1}
 .sayfa-baslik{font-size:13px;font-weight:700;color:var(--text2);padding:4px 12px;background:var(--bg3);border-radius:20px;white-space:nowrap;display:none}
@@ -3225,6 +3231,10 @@ function kisayollariAl(){
   MODULLER.filter(m=>m.id!=="ayarlar").forEach((m,i)=>{ varsayilan[m.id] = "Alt+Shift+"+(i+1); });
   return varsayilan;
 }
+// Liste ekranlarındaki "➕ Yeni ..." düğmesinin içinde gösterilen kısayol (Ayarlar > Kısayol Tuşları'ndaki "Yeni kayıt")
+function lrYeniKisayol_(){
+  try{ return String(kisayollariAl()._yeniKayit || "Ctrl+Y").replace("ArrowLeft","←").replace("ArrowRight","→"); }catch(e){ return "Ctrl+Y"; }
+}
 function kisayolMetni(e){
   const parcalar = [];
   if(e.ctrlKey) parcalar.push("Ctrl");
@@ -3974,7 +3984,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261017c";
+const FRONT_SURUM = "20261017d";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -23554,7 +23564,7 @@ document.addEventListener("keydown", function(e){
       <div class="fld"><label>Bitiş</label><input type="date" id="${fid(m,"bit")}" onchange="lrTarihDegisti('${m}')"></div>
       <div class="sr-hizli"><button class="btn" onclick="lrTarihHizli('${m}','bugun')">Bugün</button><button class="btn" onclick="lrTarihHizli('${m}','7')">7 gün</button><button class="btn" onclick="lrTarihHizli('${m}','30')">30 gün</button><button class="btn" onclick="lrTarihHizli('${m}','yil')">Bu yıl</button><button class="btn" onclick="lrTarihHizli('${m}','tumu')">Tümü</button></div>` : "";
     k.innerHTML = `<div class="sr-ust"><div class="sr-baslik">${T.ikon} ${T.baslik}</div>
-        <button class="btn btn-primary" style="margin-left:auto" onclick="lrYeni('${m}')">${T.yeni}</button>
+        <button class="btn btn-primary" style="margin-left:auto" onclick="lrYeni('${m}')" title="${T.yeni.replace(/^➕\s*/,'')} (${htmlKacis(lrYeniKisayol_())})">${T.yeni} <kbd class="lr-kisayol-ipucu">${htmlKacis(lrYeniKisayol_())}</kbd></button>
         <button class="btn" onclick="lrExcel('${m}')" title="Listeyi Excel'e aktar">📊 Excel</button>
         <button class="btn" onclick="lrYazdir('${m}')" title="Listeyi yazdır">🖨 Yazdır</button>
         <button class="btn" onclick="lrYenile('${m}')" title="Listeyi sunucudan yenile">↻</button>
