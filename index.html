@@ -808,8 +808,14 @@ body.giris-yapildi #login-ekran{display:none}
   <div class="login-kutu">
     <img src="./fincanlar-logo.png" alt="Fincanlar">
     <h1>Fincanlar ERP — Giriş</h1>
-    <div class="fld"><label>Kullanıcı Adı</label><input id="login-kullanici" type="text" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('login-yil').focus()"></div>
-    <div class="fld"><label>Çalışma Yılı</label><select id="login-yil" onkeydown="if(event.key==='Enter')document.getElementById('login-parola').focus()"><option value="2026">2026</option></select></div>
+    <div class="fld"><label>Kullanıcı Adı</label><input id="login-kullanici" type="text" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('login-parola').focus()"></div>
+    <div class="fld"><label>Şirket</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div id="login-sirket-ad" style="flex:1;min-width:150px;padding:9px 12px;border-radius:8px;background:var(--bg3);font-weight:700">⏳ Şirket yükleniyor…</div>
+        <button type="button" id="login-sirket-degistir" class="btn" style="display:none" onclick="girisSirketListesiAc_()" title="Farklı bir şirkete (ör. ESKİ şirketler) girmek için listeyi açar">Başka şirket</button>
+      </div>
+      <select id="login-yil" style="display:none;margin-top:8px;width:100%" onchange="girisSirketSecildi_()" onkeydown="if(event.key==='Enter'){girisSirketSecildi_();document.getElementById('login-parola').focus();}"></select>
+    </div>
     <div class="fld"><label>Parola</label><input id="login-parola" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')girisDene()"></div>
     <div class="login-hata" id="login-hata"></div>
     <button id="login-btn" onclick="girisDene()">Giriş Yap</button>
@@ -3984,7 +3990,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261017e";
+const FRONT_SURUM = "20261017f";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -22381,15 +22387,62 @@ function yilEtiketleriKaydet_(et){ try{ localStorage.setItem("fincanlar_yil_etik
 function yilEtiketi_(y){
   try{ const et = JSON.parse(localStorage.getItem("fincanlar_yil_etiketleri")||"{}")||{}; return et[y] || y; }catch(e){ return y; }
 }
+// ★ (17 Eki 2026) GİRİŞ ŞİRKETİ: ekrana HER ZAMAN güncel (varsayılan) şirket gelir; liste yalnız "Başka şirket" ile açılır.
+// Eskiden sayfa içinde sabit "2026" seçeneği vardı ve sunucu listesi geç gelince yanlış (ESKİ 2026) şirkete girilebiliyordu.
+// Şimdi: son bilinen varsayılan şirket tarayıcı önbelleğinden anında gösterilir, sunucudan gelince güncellenir;
+// hiç bilinmiyorsa şirket gelene kadar Giriş düğmesi kapalıdır. ESKİ şirket seçilirse ekranda sarı uyarı çıkar.
+let _girisSirket = { manuel: false, sunucudan: false };
+function girisSirketGoster_(){
+  const sel = document.getElementById("login-yil"), ad = document.getElementById("login-sirket-ad"), btn = document.getElementById("login-btn");
+  if(!sel || !ad) return;
+  const y = sel.value;
+  if(!y){ ad.textContent = "⏳ Şirket yükleniyor…"; ad.style.background = "var(--bg3)"; ad.style.color = ""; if(btn) btn.disabled = true; return; }
+  const et = yilEtiketi_(y), eski = /^ESKİ/.test(et);
+  ad.textContent = (eski ? "⚠ " + et + " (eski şirket)" : "🏢 " + et) + (_girisSirket.sunucudan ? "" : "  ·  doğrulanıyor…");
+  ad.style.background = eski ? "#fff3cd" : "var(--bg3)"; ad.style.color = eski ? "#8a5a00" : "";
+  if(btn && btn.textContent === "Giriş Yap") btn.disabled = false;
+}
+function girisSirketDoldur_(yillar, varsayilan, sunucudan){
+  const sel = document.getElementById("login-yil"), dg = document.getElementById("login-sirket-degistir"); if(!sel) return;
+  const onceki = sel.value;
+  sel.innerHTML = yillar.map(y => `<option value="${htmlKacis(y)}">${htmlKacis(yilEtiketi_(y))}</option>`).join("");
+  const hedef = (_girisSirket.manuel && yillar.indexOf(onceki) >= 0) ? onceki : varsayilan;
+  sel.value = hedef;
+  _girisSirket.sunucudan = !!sunucudan;
+  if(dg) dg.style.display = yillar.length > 1 ? "" : "none";
+  girisSirketGoster_();
+}
+function girisSirketListesiAc_(){
+  const sel = document.getElementById("login-yil"); if(!sel) return;
+  sel.style.display = "block"; sel.size = Math.min(Math.max(sel.options.length, 2), 6); sel.focus();
+}
+function girisSirketSecildi_(){
+  const sel = document.getElementById("login-yil"); if(!sel) return;
+  _girisSirket.manuel = true;
+  sel.style.display = "none"; sel.size = 1;
+  girisSirketGoster_();
+}
 function girisYilListesiYukle_(){
   const sel = document.getElementById("login-yil"); if(!sel) return;
+  _girisSirket = { manuel: false, sunucudan: false };
+  sel.style.display = "none"; sel.size = 1;
+  // 1) Önbellekteki son bilinen güncel şirket hemen görünsün
+  let onbellekVar = false;
+  try{
+    const c = JSON.parse(localStorage.getItem("fincanlar_giris_sirket") || "null");
+    if(c && Array.isArray(c.yillar) && c.yillar.length && c.varsayilan){ girisSirketDoldur_(c.yillar, c.varsayilan, false); onbellekVar = true; }
+  }catch(e){}
+  if(!onbellekVar){ sel.innerHTML = ""; girisSirketGoster_(); }
+  // 2) Sunucudaki gerçek liste/güncel şirket
+  const hata = () => { if(!sel.value){ const ad = document.getElementById("login-sirket-ad"); if(ad) ad.innerHTML = '⚠ Şirket listesi alınamadı <button type="button" class="btn" style="padding:2px 9px;margin-left:6px" onclick="girisYilListesiYukle_()">Yeniden dene</button>'; } };
   cariApi("calismaYillariGetir", {yil: "-"}).then(res=>{ // yıl istekte kullanılmaz, sadece listeyi alır
-    if(!res || !res.ok || !res.yillar || !res.yillar.length) return;
+    if(!res || !res.ok || !res.yillar || !res.yillar.length){ hata(); return; }
     yilEtiketleriKaydet_(res.etiketler);
-    // Açılışta HER ZAMAN sunucunun belirlediği güncel şirket seçili gelir (eskilere girmek için listeden seçilir).
+    // Açılışta HER ZAMAN sunucunun belirlediği güncel şirket seçili gelir (eskilere girmek için "Başka şirket").
     const secili = (res.yillar.indexOf(res.varsayilan) >= 0) ? res.varsayilan : res.yillar[res.yillar.length-1];
-    sel.innerHTML = res.yillar.map(y=>`<option value="${y}" ${y===secili?"selected":""}>${yilEtiketi_(y)}</option>`).join("");
-  }).catch(()=>{});
+    try{ localStorage.setItem("fincanlar_giris_sirket", JSON.stringify({ yillar: res.yillar, varsayilan: secili })); }catch(e){}
+    girisSirketDoldur_(res.yillar, secili, true);
+  }).catch(hata);
 }
 function girisEkraniGoster_(hataMesaji){
   document.body.classList.remove("giris-yapildi");
@@ -22415,6 +22468,7 @@ function girisDene(){
   hataEl.textContent = "";
   btn.disabled = true; btn.textContent = "Giriş yapılıyor...";
   const yil = (document.getElementById("login-yil")||{}).value || "";
+  if(!yil){ hataEl.textContent = "Şirket henüz yüklenmedi; birkaç saniye bekleyin."; btn.disabled = false; btn.textContent = "Giriş Yap"; return; }
   cariApi("girisYap", {kullaniciAdi, parola, yil}).then(res=>{
     btn.disabled = false; btn.textContent = "Giriş Yap";
     if(!res || !res.ok){ hataEl.textContent = (res && res.hata) || "Giriş başarısız"; return; }
