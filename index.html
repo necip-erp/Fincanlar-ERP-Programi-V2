@@ -3984,7 +3984,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261017d";
+const FRONT_SURUM = "20261017e";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -4014,7 +4014,10 @@ function bulutDurumCiz_(){
   const b = bulutBantGetir_();
   if(d.bulutKilitli){
     b.style.display = ""; b.style.background = "#fee2e2"; b.style.color = "#991b1b"; b.style.border = "1px solid #ef4444";
-    b.textContent = "🔒 BULUT — yerelin salt okunur AYNASI" + (d.aynaSon ? " · son eşitleme " + d.aynaSon.slice(-5) : "") + " · kayıt için YEREL SUNUCU";
+    // ★ (17 Eki 2026) Bulutta hangi ŞİRKETİN görüldüğü bantta yazsın; ESKİ şirkette uyarı (yereldeki güncel şirketle karışmasın)
+    let sirketNot = "";
+    try{ const yk = localStorage.getItem("fincanlar_calisma_yili"); if(yk){ const et = yilEtiketi_(yk); sirketNot = (/^ESKİ/.test(et) ? " · ⚠ ŞİRKET: " + et + " (güncel şirket değil)" : " · Şirket: " + et); } }catch(e){}
+    b.textContent = "🔒 BULUT — yerelin salt okunur AYNASI" + (d.aynaSon ? " · son eşitleme " + d.aynaSon.slice(-5) : "") + sirketNot + " · kayıt için YEREL SUNUCU";
     b.title = "Bulutta kayıt/ayar yazılamaz (veri iki yerde ayrışmasın). Acil durumda Admin: Ayarlar > Bulut Yazma Kilidi.";
   } else if(d.bulutYazmaAcik){
     b.style.display = ""; b.style.background = "#ffedd5"; b.style.color = "#9a3412"; b.style.border = "1px solid #f97316";
@@ -7798,6 +7801,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       <div class="sm-liste-alt">
         <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
         <button class="btn" onclick="hizliSatisToggle()" title="Hızlı Satış listesini aç/kapat (F12)">⚡ Hızlı Satış (F12)</button>
+        <button class="btn" onclick="resimOkuBaslat()" title="Fotoğraf / ekran görüntüsünden bu forma cari ve ürün satırlarını okuyup aktarır">📷 Resimden Oluştur</button>
         <div id="sm-agirlik-bar" class="sm-agirlik-bar"></div>
       </div>
 
@@ -8066,6 +8070,437 @@ function satisKalemEkleUI(){
   _yeniSatisKalemleri.push({urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""});
   satisKalemlerCiz();
   satisSonSatiraKaydir_();
+}
+
+// ════════════════════════════════════════════════
+// 📷 RESİMDEN SİPARİŞ / TEKLİF / FATURA OLUŞTUR (17 Eki 2026)
+// Açık Sipariş/Teklif/Fatura formunda "📷 Resimden Oluştur": fotoğraf ya da ekran görüntüsü (dosya, kamera, yapıştır, sürükle)
+// okunur (backend getResimOku), cari ve stok kartlarıyla eşleştirilip ONAY ekranında gösterilir; "Forma Aktar" ile forma yazılır.
+// Kayıt işlemini kullanıcı formdan her zaman kendisi yapar. Cari kodu her zaman gösterilir; tablo başlıkları standart rapor
+// tablosu gibi sürüklenip sıralanır (table.rapor-tbl).
+// ════════════════════════════════════════════════
+let _ro = null;
+function roSayi_(v){
+  if(v === null || v === undefined || v === "") return null;
+  if(typeof v === "number") return isFinite(v) ? v : null;
+  let t = String(v).replace(/[^\d.,\-]/g, "");
+  if(t.indexOf(",") > -1) t = t.replace(/\./g, "").replace(",", ".");
+  else if((t.match(/\./g) || []).length > 1) t = t.replace(/\./g, "");
+  const n = parseFloat(t);
+  return isFinite(n) ? n : null;
+}
+function roKodN_(t){ return String(t || "").replace(/[^0-9a-zA-Z]/g, "").toLowerCase(); }
+function roFmt_(n){ return (n === null || n === undefined || !isFinite(n)) ? "" : paraFormat(n); }
+
+// ── Eşleştirme ──
+function roCariEsle_(c){
+  const sonuc = { secili: null, yontem: "", adaylar: [], uyari: "" };
+  if(!c) return sonuc;
+  const liste = (_cariListe || []).filter(x => x.aktif !== false);
+  const kod = roKodN_(c.kod);
+  const ad = String(c.ad || "").trim();
+  if(kod){
+    const b = liste.find(x => roKodN_(x.cariKodu) === kod);
+    if(b){
+      sonuc.secili = b; sonuc.yontem = "Cari kodu";
+      if(ad && !esnekEslesirMi(b.ad, ad.split(/\s+/)[0]) && !esnekEslesirMi(ad, (b.ad || "").split(/\s+/)[0])) sonuc.uyari = "Kod eşleşti ama resimdeki ad (“" + ad + "”) farklı — kontrol edin.";
+      return sonuc;
+    }
+  }
+  const vn = String(c.vergiNo || "").replace(/\D/g, "");
+  if(vn.length >= 10){
+    const b = liste.filter(x => String(x.vergiNo || "").replace(/\D/g, "") === vn);
+    if(b.length === 1){ sonuc.secili = b[0]; sonuc.yontem = "Vergi no"; return sonuc; }
+  }
+  const tel = String(c.telefon || "").replace(/\D/g, "").slice(-10);
+  if(tel.length === 10){
+    const b = liste.filter(x => String(x.telefon || "").replace(/\D/g, "").slice(-10) === tel);
+    if(b.length === 1){ sonuc.secili = b[0]; sonuc.yontem = "Telefon"; return sonuc; }
+    if(b.length > 1) sonuc.adaylar = b.slice(0, 6);
+  }
+  if(ad){
+    const n = esnekNormalize_(ad);
+    const tam = liste.filter(x => esnekNormalize_(x.ad) === n);
+    if(tam.length === 1){ sonuc.secili = tam[0]; sonuc.yontem = "Ad"; return sonuc; }
+    const ay = liste.filter(x => esnekEslesirMi(x.ad, ad)).slice(0, 6);
+    ay.forEach(x => { if(sonuc.adaylar.indexOf(x) < 0) sonuc.adaylar.push(x); });
+    if(sonuc.adaylar.length === 1){ sonuc.secili = sonuc.adaylar[0]; sonuc.yontem = "Ad (benzer)"; }
+  }
+  return sonuc;
+}
+function roStokEsle_(k){
+  const sonuc = { stok: null, yontem: "", adaylar: [] };
+  const liste = (_stokTanimListe || []).filter(x => !x.pasif);
+  const kod = roKodN_(k.stokKodu);
+  if(kod){
+    const b = liste.find(x => roKodN_(x.stokKodu) === kod);
+    if(b){ sonuc.stok = b; sonuc.yontem = "kod"; return sonuc; }
+  }
+  const ad = String(k.urunAdi || "").trim();
+  if(ad){
+    let ay = liste.filter(x => stokEslesirMi(x, ad));
+    if(!ay.length){
+      // Resimdeki ad ile kart adı birebir değilse: uzun/anlamlı kelimelerin çoğunu içerenler
+      const kel = stokAramaNormalize_(ad).split(" ").filter(w => w.length >= 3);
+      if(kel.length >= 2){
+        ay = liste.map(x => { const h = stokAramaNormalize_(x.stokAdi + " " + x.stokKodu); return { x, p: kel.filter(w => h.includes(w)).length }; })
+                  .filter(o => o.p >= Math.max(2, Math.ceil(kel.length * 0.7))).sort((a, b) => b.p - a.p).map(o => o.x);
+      }
+    }
+    sonuc.adaylar = ay.slice(0, 5);
+    if(ay.length === 1){ sonuc.stok = ay[0]; sonuc.yontem = "ad"; }
+  }
+  if(kod && kod.length >= 10 && sonuc.adaylar.length < 5){
+    // Kod bir hane yanlış okunmuş olabilir: ilk 8 hanesi aynı olan kartlar da aday
+    liste.filter(x => roKodN_(x.stokKodu).slice(0, 8) === kod.slice(0, 8)).slice(0, 5).forEach(x => { if(sonuc.adaylar.indexOf(x) < 0 && sonuc.adaylar.length < 5) sonuc.adaylar.push(x); });
+  }
+  return sonuc;
+}
+function roSatirKur_(k, i){
+  const e = roStokEsle_(k);
+  const miktar = roSayi_(k.miktar);
+  const fiyat = roSayi_(k.birimFiyat);
+  const r = {
+    i, okunan: k, stok: e.stok, yontem: e.yontem, adaylar: e.adaylar, sec: true,
+    miktar: miktar === null ? 1 : miktar,
+    birim: (e.stok && e.stok.birim1) || String(k.birim || "adet"),
+    fiyat: (fiyat !== null && fiyat > 0) ? fiyat : ((e.stok && e.stok.satisFiyati) || 0),
+    isk: roSayi_(k.iskontoYuzde) || 0,
+    kdv: roSayi_(k.kdvYuzde),
+  };
+  if(r.kdv === null) r.kdv = e.stok ? ((e.stok.kdvSatis === undefined || e.stok.kdvSatis === null || e.stok.kdvSatis === "") ? 20 : parseFloat(e.stok.kdvSatis)) : 20;
+  return r;
+}
+function roSatirDurum_(r){
+  const u = [];
+  if(!r.stok) return { sinif: "kirmizi", metin: "❌ Stok kartı eşleşmedi", uyari: u };
+  if(r.okunan.uyari) u.push(String(r.okunan.uyari));
+  const amb = r.stok.ambalajMiktari;
+  if(amb > 0 && r.miktar > 0){
+    const kat = r.miktar / amb;
+    if(Math.abs(kat - Math.round(kat)) > 0.01) u.push("Miktar kutu katı değil (kutu: " + amb + ")");
+  }
+  if(r.stok && r.stok.satisFiyati > 0 && r.fiyat > 0 && Math.abs(r.fiyat - r.stok.satisFiyati) > 0.005) u.push("Kart fiyatı " + paraFormat(r.stok.satisFiyati));
+  if(r.yontem === "kod") return { sinif: u.length ? "sari" : "yesil", metin: "✅ Kod eşleşti" + (u.length ? " · ⚠ " + u.join(" · ") : ""), uyari: u };
+  return { sinif: "sari", metin: "🟡 Ada göre eşleşti — kontrol edin" + (u.length ? " · ⚠ " + u.join(" · ") : ""), uyari: u };
+}
+
+// ── Görsel hazırlama (küçült + JPEG) ──
+function roGorselHazirla_(dosya){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(dosya);
+    const img = new Image();
+    img.onload = () => {
+      try{
+        const MAX = 2400;
+        let w = img.naturalWidth, h = img.naturalHeight;
+        const o = Math.min(1, MAX / Math.max(w, h));
+        w = Math.max(1, Math.round(w * o)); h = Math.max(1, Math.round(h * o));
+        const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+        const cx = cv.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, w, h); cx.drawImage(img, 0, 0, w, h);
+        const d = cv.toDataURL("image/jpeg", 0.88);
+        URL.revokeObjectURL(url);
+        res({ b64: d.split(",")[1], mime: "image/jpeg", onizleme: d });
+      }catch(e){ URL.revokeObjectURL(url); rej(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("Görsel açılamadı. JPG/PNG ya da ekran görüntüsü deneyin (HEIC desteklenmeyebilir).")); };
+    img.src = url;
+  });
+}
+
+// ── Pencere: görsel seçme ──
+function resimOkuBaslat(){
+  if(!document.getElementById("sm-kalemler")){ alert("Önce ➕ Yeni ile bir Sipariş / Teklif / Fatura açın; resim bu forma aktarılır."); return; }
+  if(document.getElementById("resim-oku-overlay")) return;
+  if(!_cariYuklendi) cariListesiYukle();
+  if(!_stokTanimYuklendi) stokTanimListesiYukle();
+  _ro = { satirlar: [], cari: null, okunanVeri: null, onizleme: "", yukleniyor: false };
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay"; ov.id = "resim-oku-overlay";
+  ov.dataset.escKapat = "resimOkuKapat"; ov.dataset.escUyarisiz = "1";
+  ov.onclick = e => { if(e.target === ov) resimOkuKapat(); };
+  ov.innerHTML = `
+    <div class="modal-box" style="max-width:1280px;width:96vw;max-height:94vh;overflow:auto" onclick="event.stopPropagation()">
+      <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span>📷 Resimden Oluştur</span>
+        <button class="btn" onclick="resimOkuKapat()" title="Kapat (Esc)">✕</button></h3>
+      <div id="ro-icerik"></div>
+    </div>`;
+  document.body.appendChild(ov);
+  document.addEventListener("paste", roYapistir_, true);
+  roSecimCiz_();
+  cariApi("getResimOkuAyar").then(r => { if(_ro){ _ro.ayar = r; roAyarDurumYaz_(); } }).catch(() => {});
+}
+function resimOkuKapat(){
+  document.removeEventListener("paste", roYapistir_, true);
+  const ov = document.getElementById("resim-oku-overlay"); if(ov) ov.remove();
+  _ro = null;
+}
+function roYapistir_(e){
+  if(!document.getElementById("resim-oku-overlay") || !_ro || _ro.yukleniyor) return;
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  const dosyalar = [];
+  for(let i = 0; i < items.length; i++){ if(items[i].kind === "file" && /^image\//.test(items[i].type)){ const f = items[i].getAsFile(); if(f) dosyalar.push(f); } }
+  if(dosyalar.length){ e.preventDefault(); roDosyalarSecildi_(dosyalar); }
+}
+function roSecimCiz_(){
+  const k = document.getElementById("ro-icerik"); if(!k) return;
+  const admin = modulGorunurMu_({ admin: true });
+  k.innerHTML = `
+    <div id="ro-surukle" style="border:2px dashed var(--border);border-radius:12px;padding:26px 16px;text-align:center;background:var(--bg3)"
+         ondragover="event.preventDefault();this.style.borderColor='var(--blue)'" ondragleave="this.style.borderColor=''"
+         ondrop="event.preventDefault();this.style.borderColor='';roDosyalarSecildi_(Array.from(event.dataTransfer.files||[]).filter(f=>/^image\\//.test(f.type)))">
+      <div style="font-size:15px;margin-bottom:12px">Sipariş / teklif / fatura fotoğrafını ya da ekran görüntüsünü buraya <b>sürükleyin</b>, <b>Ctrl+V</b> ile yapıştırın veya seçin</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button class="btn" onclick="document.getElementById('ro-dosya').click()">📁 Dosya / Galeri seç</button>
+        <button class="btn" onclick="document.getElementById('ro-kamera').click()">📷 Kamera ile çek</button>
+      </div>
+      <input id="ro-dosya" type="file" accept="image/*" multiple style="display:none" onchange="roDosyalarSecildi_(Array.from(this.files)); this.value=''">
+      <input id="ro-kamera" type="file" accept="image/*" capture="environment" style="display:none" onchange="roDosyalarSecildi_(Array.from(this.files)); this.value=''">
+      <div class="fld" style="max-width:520px;margin:14px auto 0;text-align:left"><label>Not / ipucu (isteğe bağlı)</label>
+        <input id="ro-ipucu" type="text" placeholder="Örn: sağdaki sütun KDV dahil fiyat, el yazısı miktarlar" autocomplete="off"></div>
+      <div id="ro-ayar-durum" style="margin-top:10px;font-size:12.5px;color:var(--text2)"></div>
+    </div>
+    ${admin ? `
+    <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">⚙ Okuma Ayarı (Admin)</summary>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+        <div class="fld" style="margin:0;min-width:320px;flex:1"><label>Claude API anahtarı (sk-ant-…)</label><input id="ro-anahtar" type="password" autocomplete="new-password" placeholder="Boş bırakırsanız mevcut anahtar korunur"></div>
+        <div class="fld" style="margin:0;min-width:200px"><label>Model (boşsa varsayılan)</label><input id="ro-model" type="text" autocomplete="off" placeholder="claude-sonnet-5-5"></div>
+        <button class="btn" onclick="roAyarKaydet_()">💾 Kaydet</button>
+        <button class="btn" onclick="roAyarKaydet_(true)" title="Kayıtlı anahtarı siler">🗑 Anahtarı sil</button>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-top:6px">Anahtarı console.anthropic.com adresinden alırsınız. Sunucuda saklanır, tarayıcıya geri gönderilmez. Her fotoğraf için küçük bir API ücreti kesilir.</div>
+    </details>` : ``}
+    <div id="ro-durum" style="margin-top:12px"></div>`;
+  roAyarDurumYaz_();
+}
+function roAyarDurumYaz_(){
+  const e = document.getElementById("ro-ayar-durum"); if(!e || !_ro || !_ro.ayar) return;
+  const a = _ro.ayar;
+  e.innerHTML = a.anahtarVar
+    ? "✅ Okuma servisi hazır (anahtar …" + htmlKacis(a.anahtarSonu) + ", model " + htmlKacis(a.model) + ")"
+    : "⚠️ Okuma servisi için API anahtarı tanımlı değil." + (modulGorunurMu_({ admin: true }) ? " Aşağıdaki ⚙ Okuma Ayarı'ndan girin." : " Admin kullanıcıdan girmesini isteyin.");
+  const m = document.getElementById("ro-model"); if(m && !m.value && a.model) m.placeholder = a.model;
+}
+function roAyarKaydet_(sil){
+  const anahtar = (document.getElementById("ro-anahtar") || {}).value || "";
+  const model = (document.getElementById("ro-model") || {}).value;
+  if(sil && !confirm("Kayıtlı API anahtarı silinsin mi?")) return;
+  cariApi("resimOkuAyarKaydet", { anahtar: anahtar.trim(), anahtarSil: !!sil, model: model === undefined ? undefined : model.trim() }).then(r => {
+    if(!r.ok){ alert(r.hata || r.error || "Kaydedilemedi"); return; }
+    if(_ro){ _ro.ayar = r; roAyarDurumYaz_(); }
+    const a = document.getElementById("ro-anahtar"); if(a) a.value = "";
+  }).catch(() => alert("Sunucuya ulaşılamadı."));
+}
+
+// ── Okuma ──
+async function roDosyalarSecildi_(dosyalar){
+  if(!_ro || _ro.yukleniyor || !dosyalar || !dosyalar.length) return;
+  if(_ro.ayar && !_ro.ayar.anahtarVar){ alert("Okuma servisi için API anahtarı tanımlı değil.\n" + (modulGorunurMu_({ admin: true }) ? "⚙ Okuma Ayarı'ndan girin." : "Admin kullanıcıdan girmesini isteyin.")); return; }
+  const ipucu = ((document.getElementById("ro-ipucu") || {}).value || "").trim();
+  _ro.yukleniyor = true;
+  const durum = document.getElementById("ro-durum");
+  const yaz = t => { if(durum) durum.innerHTML = '<div style="padding:14px;border-radius:10px;background:var(--bg3)">⏳ ' + t + '</div>'; };
+  const tumu = { cari: null, belgeNo: null, belgeTipi: null, tarih: null, kalemler: [], toplamlar: null, notlar: [] };
+  let onizleme = "";
+  try{
+    for(let i = 0; i < dosyalar.length; i++){
+      yaz("Resim " + (i + 1) + "/" + dosyalar.length + " hazırlanıyor ve okunuyor… (genelde 10–30 sn)");
+      const g = await roGorselHazirla_(dosyalar[i]);
+      if(!onizleme) onizleme = g.onizleme;
+      const r = await cariApi("getResimOku", { gorsel: g.b64, mime: g.mime, ipucu });
+      if(!r || !r.ok){
+        _ro.yukleniyor = false;
+        if(durum) durum.innerHTML = '<div style="padding:14px;border-radius:10px;background:#fdecec;color:#a11">❌ ' + htmlKacis((r && (r.hata || r.error)) || "Okunamadı") + '</div>';
+        return;
+      }
+      const v = r.veri || {};
+      if(!tumu.cari && v.cari && (v.cari.kod || v.cari.ad || v.cari.vergiNo || v.cari.telefon)) tumu.cari = v.cari;
+      tumu.belgeNo = tumu.belgeNo || v.belgeNo; tumu.belgeTipi = tumu.belgeTipi || v.belgeTipi; tumu.tarih = tumu.tarih || v.tarih;
+      (v.kalemler || []).forEach(k => tumu.kalemler.push(k));
+      if(dosyalar.length === 1) tumu.toplamlar = v.toplamlar || null;
+      if(v.okumaNotu) tumu.notlar.push(String(v.okumaNotu));
+      if(r.kesildi) tumu.notlar.push("Belge uzun olduğu için okuma yarıda kesilmiş olabilir; son satırları kontrol edin.");
+    }
+  }catch(e){
+    _ro.yukleniyor = false;
+    if(durum) durum.innerHTML = '<div style="padding:14px;border-radius:10px;background:#fdecec;color:#a11">❌ ' + htmlKacis(e.message || String(e)) + '</div>';
+    return;
+  }
+  _ro.yukleniyor = false;
+  if(!tumu.kalemler.length){
+    if(durum) durum.innerHTML = '<div style="padding:14px;border-radius:10px;background:#fff6e0;color:#8a5a00">Resimde ürün satırı bulunamadı. Daha net/yakın bir görüntü deneyin' + (tumu.notlar.length ? " — " + htmlKacis(tumu.notlar.join(" ")) : "") + '.</div>';
+    return;
+  }
+  // Cari listesi / stok listesi gelmiş olmalı; gelmediyse bekle
+  try{ await stokListesiIste_(); }catch(e){}
+  _ro.okunanVeri = tumu; _ro.onizleme = onizleme;
+  _ro.cari = roCariEsle_(tumu.cari);
+  _ro.satirlar = tumu.kalemler.map((k, i) => roSatirKur_(k, i));
+  roOnayCiz_();
+}
+
+// ── Onay ekranı ──
+function roAlanlariOku_(){
+  if(!_ro) return;
+  _ro.satirlar.forEach(r => {
+    const g = id => document.getElementById(id + "-" + r.i);
+    if(!g("ro-m")) return;
+    r.sec = g("ro-sec").checked;
+    r.miktar = parseFloat(g("ro-m").value) || 0;
+    r.birim = g("ro-b").value;
+    r.fiyat = parseFloat(g("ro-f").value) || 0;
+    r.isk = parseFloat(g("ro-i").value) || 0;
+    const kv = parseFloat(g("ro-k").value); r.kdv = isNaN(kv) ? 20 : kv;
+  });
+}
+function roOnayCiz_(){
+  const k = document.getElementById("ro-icerik"); if(!k || !_ro) return;
+  const v = _ro.okunanVeri, c = _ro.cari, o = v.cari || {};
+  const cariSatir = c.secili
+    ? `<b>${htmlKacis(c.secili.cariKodu || "—")}</b> · ${htmlKacis(c.secili.ad)} <span style="color:var(--text2);font-size:12px">(${htmlKacis(c.yontem)} ile eşleşti)</span>`
+    : `<span style="color:#a11"><b>Cari eşleşmedi</b></span>`;
+  const adayCipleri = (!c.secili && c.adaylar.length) ? '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">' + c.adaylar.map((x, j) => `<button class="btn" style="padding:3px 9px;font-size:12px" onclick="roCariSec_(${j})">${htmlKacis((x.cariKodu || "—") + " · " + x.ad)}</button>`).join("") + '</div>' : "";
+  const okunanCari = [o.kod && ("Kod: " + o.kod), o.ad, o.telefon, o.vergiNo && ("VN: " + o.vergiNo)].filter(Boolean).join(" · ");
+  const hesap = roHesapToplam_();
+  const okToplam = v.toplamlar ? (roSayi_(v.toplamlar.araToplam) !== null ? roSayi_(v.toplamlar.araToplam) : roSayi_(v.toplamlar.brut)) : null;
+  const fark = (okToplam !== null) ? Math.abs(okToplam - hesap.ara) : null;
+  const toplamNot = okToplam === null ? "" : (fark < 0.05
+    ? `<span style="color:#1a7f37">✅ Hesaplanan ara toplam resimdekiyle aynı (${paraFormat(okToplam)})</span>`
+    : `<span style="color:#b45309">⚠️ Resimdeki ara toplam ${paraFormat(okToplam)}, hesaplanan ${paraFormat(hesap.ara)} (fark ${paraFormat(fark)}) — satırları kontrol edin</span>`);
+  const dis = _ro.satirlar.filter(r => !r.stok).length;
+  k.innerHTML = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+      ${_ro.onizleme ? `<img src="${_ro.onizleme}" alt="Okunan resim" style="width:150px;max-height:200px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in" onclick="roResimBuyut_()" title="Büyüt">` : ""}
+      <div style="flex:1;min-width:300px">
+        <div style="font-size:13px;color:var(--text2)">Resimde okunan cari: ${htmlKacis(okunanCari || "—")}${v.belgeNo ? " · Belge no: " + htmlKacis(v.belgeNo) : ""}${v.tarih ? " · Tarih: " + htmlKacis(v.tarih) : ""}${v.belgeTipi ? " · Tür: " + htmlKacis(v.belgeTipi) : ""}</div>
+        <div style="margin-top:6px;font-size:15px">Cari: ${cariSatir} <button class="btn" style="padding:3px 10px;font-size:12px" onclick="roCariRehber_()">🔍 Cari seç</button></div>
+        ${c.uyari ? `<div style="color:#b45309;font-size:12.5px;margin-top:4px">⚠️ ${htmlKacis(c.uyari)}</div>` : ""}
+        ${adayCipleri}
+        ${v.notlar && v.notlar.length ? `<div style="color:#b45309;font-size:12.5px;margin-top:6px">📝 ${htmlKacis(v.notlar.join(" · "))}</div>` : ""}
+      </div>
+    </div>
+    <div style="margin-top:12px;overflow:auto;max-height:52vh">
+      <table class="rapor-tbl" id="ro-tablo" style="min-width:1100px">
+        <thead><tr>
+          <th>Seç</th><th>Sıra</th><th>Okunan Kod</th><th>Okunan Ürün</th><th>Stok Kodu</th><th>Stok Adı</th><th>Durum</th>
+          <th>Miktar</th><th>Birim</th><th>Birim Fiyat</th><th>İsk.%</th><th>KDV%</th><th>Tutar</th>
+        </tr></thead>
+        <tbody>${_ro.satirlar.map(roSatirHTML_).join("")}</tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:12px">
+      <div style="font-size:13px">${toplamNot}<br><span id="ro-ozet" style="color:var(--text2)">${roOzetMetni_(hesap, dis)}</span></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" onclick="roSecimCiz_(); roAyarDurumYaz_()">↩ Başka resim</button>
+        <button class="btn" onclick="resimOkuKapat()">Vazgeç</button>
+        <button class="btn btn-primary" style="font-weight:700" onclick="roAktar_()">✔ Forma Aktar</button>
+      </div>
+    </div>`;
+}
+function roOzetMetni_(h, dis){
+  return h.adet + " satır seçili · Ara toplam " + paraFormat(h.ara) + " · KDV " + paraFormat(h.kdv) + " · Genel " + paraFormat(h.genel) + (dis ? " · ❌ eşleşmeyen " + dis + " satır (stok kartsız aktarılır)" : "");
+}
+function roHesapToplam_(){
+  let ara = 0, kdv = 0, adet = 0;
+  (_ro ? _ro.satirlar : []).forEach(r => {
+    if(!r.sec) return; adet++;
+    const t = r.miktar * r.fiyat * (1 - (r.isk || 0) / 100);
+    ara += t; kdv += t * ((r.kdv === null || r.kdv === undefined ? 20 : r.kdv) / 100);
+  });
+  return { ara, kdv, genel: ara + kdv, adet };
+}
+function roSatirHTML_(r){
+  const d = roSatirDurum_(r);
+  const renk = d.sinif === "yesil" ? "#1a7f37" : (d.sinif === "sari" ? "#b45309" : "#a11");
+  const tutar = r.miktar * r.fiyat * (1 - (r.isk || 0) / 100);
+  const adayBtn = (!r.stok && r.adaylar.length) ? '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">' + r.adaylar.map((x, j) => `<button class="btn" style="padding:2px 7px;font-size:11px;text-align:left;white-space:normal" onclick="roStokAday_(${r.i},${j})" title="${htmlKacis(x.stokAdi)}">${htmlKacis(x.stokKodu)}</button>`).join("") + '</div>' : "";
+  const inp = (id, v, w, ekstra) => `<input id="${id}-${r.i}" type="number" step="any" value="${v}" style="width:${w}px;text-align:right" oninput="roSatirDegisti_()" ${ekstra || ""}>`;
+  return `<tr data-i="${r.i}">
+    <td><input id="ro-sec-${r.i}" type="checkbox" ${r.sec ? "checked" : ""} onchange="roSatirDegisti_()"></td>
+    <td data-sirala="${r.i + 1}">${r.i + 1}</td>
+    <td>${htmlKacis(r.okunan.stokKodu || "—")}</td>
+    <td>${htmlKacis(r.okunan.urunAdi || "")}</td>
+    <td>${r.stok ? "<b>" + htmlKacis(r.stok.stokKodu) + "</b>" : "—"}</td>
+    <td>${r.stok ? htmlKacis(r.stok.stokAdi) : ""}<div style="margin-top:4px"><button class="btn" style="padding:2px 8px;font-size:11px" onclick="roStokRehber_(${r.i})">🔍 ${r.stok ? "Değiştir" : "Stok seç"}</button></div>${adayBtn}</td>
+    <td style="color:${renk};font-size:12.5px;min-width:150px">${d.metin}</td>
+    <td data-sirala="${r.miktar}">${inp("ro-m", r.miktar, 84)}</td>
+    <td><input id="ro-b-${r.i}" type="text" value="${htmlKacis(r.birim)}" style="width:58px" oninput="roSatirDegisti_()"></td>
+    <td data-sirala="${r.fiyat}">${inp("ro-f", r.fiyat, 96)}</td>
+    <td data-sirala="${r.isk}">${inp("ro-i", r.isk, 56)}</td>
+    <td data-sirala="${r.kdv}">${inp("ro-k", r.kdv, 52)}</td>
+    <td data-sirala="${tutar}" id="ro-t-${r.i}" style="text-align:right;white-space:nowrap">${paraFormat(tutar)}</td>
+  </tr>`;
+}
+function roSatirDegisti_(){
+  if(!_ro) return;
+  roAlanlariOku_();
+  _ro.satirlar.forEach(r => { const t = document.getElementById("ro-t-" + r.i); if(t) t.textContent = paraFormat(r.miktar * r.fiyat * (1 - (r.isk || 0) / 100)); });
+  const e = document.getElementById("ro-ozet"); if(e) e.textContent = roOzetMetni_(roHesapToplam_(), _ro.satirlar.filter(r => !r.stok).length);
+}
+function roStokAta_(i, s){
+  roAlanlariOku_();
+  const r = _ro.satirlar.find(x => x.i === i); if(!r || !s) return;
+  r.stok = s; r.yontem = "ad"; r.birim = s.birim1 || r.birim;
+  if(!(roSayi_(r.okunan.birimFiyat) > 0) && s.satisFiyati) r.fiyat = s.satisFiyati;
+  r.kdv = (s.kdvSatis === undefined || s.kdvSatis === null || s.kdvSatis === "") ? r.kdv : parseFloat(s.kdvSatis);
+  roOnayCiz_();
+}
+function roStokAday_(i, j){ const r = _ro.satirlar.find(x => x.i === i); if(r && r.adaylar[j]) roStokAta_(i, r.adaylar[j]); }
+function roStokRehber_(i){
+  roAlanlariOku_();
+  const r = _ro.satirlar.find(x => x.i === i);
+  rehberAc("stok", s => roStokAta_(i, s));
+  setTimeout(() => { const a = document.getElementById("rehber-ara"); if(a && r){ a.value = String(r.okunan.urunAdi || r.okunan.stokKodu || ""); try{ a.dispatchEvent(new Event("input")); }catch(e){} } }, 120);
+}
+function roCariSec_(j){ if(_ro && _ro.cari.adaylar[j]){ _ro.cari.secili = _ro.cari.adaylar[j]; _ro.cari.yontem = "elle seçildi"; _ro.cari.uyari = ""; roAlanlariOku_(); roOnayCiz_(); } }
+function roCariRehber_(){
+  roAlanlariOku_();
+  rehberAc("cari", c => { _ro.cari.secili = c; _ro.cari.yontem = "elle seçildi"; _ro.cari.uyari = ""; roOnayCiz_(); });
+}
+function roResimBuyut_(){
+  if(!_ro || !_ro.onizleme) return;
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay"; ov.style.zIndex = 100000;
+  ov.onclick = () => ov.remove();
+  ov.innerHTML = `<img src="${_ro.onizleme}" style="max-width:96vw;max-height:94vh;border-radius:8px;background:#fff">`;
+  document.body.appendChild(ov);
+}
+
+// ── Forma aktar ──
+function roAktar_(){
+  if(!_ro) return;
+  roAlanlariOku_();
+  const secili = _ro.satirlar.filter(r => r.sec && (r.miktar > 0 || r.okunan.urunAdi));
+  if(!secili.length){ alert("Aktarılacak satır seçilmedi."); return; }
+  if(!document.getElementById("sm-kalemler")){ alert("Sipariş/Teklif/Fatura formu kapatılmış; resim aktarılamadı."); return; }
+  const eksik = secili.filter(r => !r.stok).length;
+  if(!_ro.cari.secili && !confirm("Cari eşleşmedi; formdaki cari değişmeden kalır ve cariyi sonra siz seçersiniz.\n\nDevam edilsin mi?")) return;
+  if(eksik && !confirm(eksik + " satırın stok kartı eşleşmedi. Bu satırlar stok kodsuz, resimdeki adla forma yazılır (stoktan düşmez).\n\nDevam edilsin mi?")) return;
+  // Cari
+  if(_ro.cari.secili){
+    const c = _ro.cari.secili;
+    const h = document.getElementById("sm-cari"), a = document.getElementById("sm-cari-arama");
+    if(h) h.value = c.id; if(a) a.value = c.ad;
+    try{ smCariSecildi_(c); }catch(e){}
+  }
+  // Satırlar: formda dolu satır yoksa değiştir, varsa sona ekle
+  const yeni = secili.map(r => ({
+    urunAdi: r.stok ? r.stok.stokAdi : (r.okunan.urunAdi || ""),
+    miktar: r.miktar, birim: r.birim || "adet", birimFiyat: r.fiyat, iskontoYuzde: r.isk || 0,
+    kdvOrani: (r.kdv === null || r.kdv === undefined) ? 20 : r.kdv, stokKodu: r.stok ? (r.stok.stokKodu || "") : "",
+  }));
+  const dolu = _yeniSatisKalemleri.filter(k => String(k.stokKodu || k.urunAdi || "").trim());
+  _yeniSatisKalemleri = dolu.concat(yeni);
+  // Açıklama boşsa kaynağı not düş
+  const ac = document.getElementById("sm-aciklama");
+  const v = _ro.okunanVeri;
+  if(ac && !ac.value.trim()) ac.value = "Resimden aktarıldı" + (v.belgeNo ? " (kaynak belge: " + v.belgeNo + ")" : "");
+  satisKalemlerCiz();
+  satisToplamGuncelle();
+  satisSonSatiraKaydir_();
+  const n = yeni.length;
+  resimOkuKapat();
+  try{ toastGoster("📷 " + n + " satır forma aktarıldı — kontrol edip kaydedin."); }catch(e){}
 }
 
 // ════════════════════════════════════════════════

@@ -1104,7 +1104,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261017d";
+const PROGRAM_SURUM_ = "20261017e";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -1166,6 +1166,7 @@ const ADMIN_ACTIONLAR = {
   eskiPanelStokKartlariniAktar: true, yilStokKartlariAktar: true, bulutYazmaAyarla: true, bulutAynaSimdi: true, bulutAynaKur: true, getEskiBulutStokKartlari: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, sirketDuzeniKur: true, yerelYedekDurum: true, yerelYedekAyarKaydet: true, yerelYedekSimdi: true, yerelGuncelleDurum: true, yerelGuncelleKontrol: true, yerelGuncelleUygula: true, yerelGuncelleGeriAl: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
   getYedekDurumu: true, yerelYedekAktivite: true, yerelYedekAktiviteOzet: true, yedekAlSimdi: true, yedekTetikleyiciKurWeb: true, saveYedekEpostalari: true, yedekEpostaGonderSimdi: true, // Yedekleme: sadece Admin
+  resimOkuAyarKaydet: true, // API anahtarı: yalnız Admin
   getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, kayitDefteriHatalariTemizle: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
 };
 
@@ -1326,6 +1327,9 @@ function handleRequest(e) {
       case "getSonIslemler": result = getSonIslemler(body); break;
       case "gunlukIslemRaporuUret": result = gunlukIslemRaporuUret(body); break;
       case "getZRaporu": result = zRaporuGetir(body); break;
+      case "getResimOku": result = getResimOku(body); break;
+      case "getResimOkuAyar": result = getResimOkuAyar(); break;
+      case "resimOkuAyarKaydet": result = resimOkuAyarKaydet(body); break;
       case "getYedekDurumu": result = getYedekDurumu(); break;
       case "yedekAlSimdi": result = yedekAlSimdi(); break;
       case "yerelYedekYukle": result = yerelYedekYukle(body); break;
