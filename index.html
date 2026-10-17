@@ -3990,7 +3990,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261017f";
+const FRONT_SURUM = "20261017g";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -8262,6 +8262,8 @@ function roSecimCiz_(){
       </div>
       <input id="ro-dosya" type="file" accept="image/*" multiple style="display:none" onchange="roDosyalarSecildi_(Array.from(this.files)); this.value=''">
       <input id="ro-kamera" type="file" accept="image/*" capture="environment" style="display:none" onchange="roDosyalarSecildi_(Array.from(this.files)); this.value=''">
+      <div id="ro-motor-sec-kap" class="fld" style="display:none;max-width:520px;margin:14px auto 0;text-align:left"><label>Bu okuma için motor</label>
+        <select id="ro-motor-sec"><option value="gemini">Gemini (ücretsiz)</option><option value="claude">Claude (ücretli)</option></select></div>
       <div class="fld" style="max-width:520px;margin:14px auto 0;text-align:left"><label>Not / ipucu (isteğe bağlı)</label>
         <input id="ro-ipucu" type="text" placeholder="Örn: sağdaki sütun KDV dahil fiyat, el yazısı miktarlar" autocomplete="off"></div>
       <div id="ro-ayar-durum" style="margin-top:10px;font-size:12.5px;color:var(--text2)"></div>
@@ -8269,39 +8271,71 @@ function roSecimCiz_(){
     ${admin ? `
     <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">⚙ Okuma Ayarı (Admin)</summary>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
-        <div class="fld" style="margin:0;min-width:320px;flex:1"><label>Claude API anahtarı (sk-ant-…)</label><input id="ro-anahtar" type="password" autocomplete="new-password" placeholder="Boş bırakırsanız mevcut anahtar korunur"></div>
-        <div class="fld" style="margin:0;min-width:200px"><label>Model (boşsa varsayılan)</label><input id="ro-model" type="text" autocomplete="off" placeholder="claude-sonnet-5-5"></div>
-        <button class="btn" onclick="roAyarKaydet_()">💾 Kaydet</button>
-        <button class="btn" onclick="roAyarKaydet_(true)" title="Kayıtlı anahtarı siler">🗑 Anahtarı sil</button>
+        <div class="fld" style="margin:0;min-width:240px"><label>Varsayılan okuma motoru</label>
+          <select id="ro-motor"><option value="gemini">Gemini (ücretsiz katman var)</option><option value="claude">Claude (ücretli)</option></select></div>
       </div>
-      <div style="font-size:12px;color:var(--text2);margin-top:6px">Anahtarı console.anthropic.com adresinden alırsınız. Sunucuda saklanır, tarayıcıya geri gönderilmez. Her fotoğraf için küçük bir API ücreti kesilir.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+        <div class="fld" style="margin:0;min-width:300px;flex:1"><label>Gemini API anahtarı (AIza…) <span id="ro-gem-durum" style="font-weight:400;color:var(--text2)"></span></label><input id="ro-g-anahtar" type="password" autocomplete="new-password" placeholder="Boş bırakırsanız mevcut anahtar korunur"></div>
+        <div class="fld" style="margin:0;min-width:180px"><label>Gemini model</label><input id="ro-g-model" type="text" autocomplete="off" placeholder="gemini-3.6-flash"></div>
+        <button class="btn" onclick="roAyarKaydet_('gemini')" title="Kayıtlı Gemini anahtarını siler">🗑 Gemini anahtarını sil</button>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+        <div class="fld" style="margin:0;min-width:300px;flex:1"><label>Claude API anahtarı (sk-ant-…) <span id="ro-cl-durum" style="font-weight:400;color:var(--text2)"></span></label><input id="ro-anahtar" type="password" autocomplete="new-password" placeholder="Boş bırakırsanız mevcut anahtar korunur"></div>
+        <div class="fld" style="margin:0;min-width:180px"><label>Claude model</label><input id="ro-model" type="text" autocomplete="off" placeholder="claude-sonnet-5-5"></div>
+        <button class="btn" onclick="roAyarKaydet_('claude')" title="Kayıtlı Claude anahtarını siler">🗑 Claude anahtarını sil</button>
+      </div>
+      <div style="margin-top:10px"><button class="btn btn-primary" onclick="roAyarKaydet_()">💾 Kaydet</button></div>
+      <div style="font-size:12px;color:var(--text2);margin-top:6px">
+        Gemini anahtarı: aistudio.google.com &gt; Get API key (ücretsiz katman; limitler Google'ın sayfasında). ⚠ Ücretsiz katmanda gönderilen içerik Google tarafından ürün geliştirmede kullanılabilir (cari adı/telefon/fiyat dahil). Ücretli (faturalandırma açık) projede kullanılmaz.<br>
+        Claude anahtarı: console.anthropic.com (ücretli, fotoğraf başına küçük bir ücret). Anahtarlar sunucuda saklanır, tarayıcıya geri gönderilmez.
+      </div>
     </details>` : ``}
     <div id="ro-durum" style="margin-top:12px"></div>`;
   roAyarDurumYaz_();
 }
+function roMotorAdi_(m){ return m === "gemini" ? "Gemini" : "Claude"; }
 function roAyarDurumYaz_(){
   const e = document.getElementById("ro-ayar-durum"); if(!e || !_ro || !_ro.ayar) return;
   const a = _ro.ayar;
-  e.innerHTML = a.anahtarVar
-    ? "✅ Okuma servisi hazır (anahtar …" + htmlKacis(a.anahtarSonu) + ", model " + htmlKacis(a.model) + ")"
-    : "⚠️ Okuma servisi için API anahtarı tanımlı değil." + (modulGorunurMu_({ admin: true }) ? " Aşağıdaki ⚙ Okuma Ayarı'ndan girin." : " Admin kullanıcıdan girmesini isteyin.");
-  const m = document.getElementById("ro-model"); if(m && !m.value && a.model) m.placeholder = a.model;
+  const adminMi = modulGorunurMu_({ admin: true });
+  if(a.anahtarVar){
+    e.innerHTML = "✅ Okuma servisi hazır: <b>" + roMotorAdi_(a.motor) + "</b> (anahtar …" + htmlKacis(a.anahtarSonu) + ", model " + htmlKacis(a.model) + ")"
+      + (a.motor === "gemini" ? '<div style="color:#8a5a00;margin-top:4px">ℹ Ücretsiz Gemini katmanında içerik Google tarafından ürün geliştirmede kullanılabilir.</div>' : "");
+  } else {
+    e.innerHTML = "⚠️ " + roMotorAdi_(a.motor) + " için API anahtarı tanımlı değil." + (adminMi ? " Aşağıdaki ⚙ Okuma Ayarı'ndan girin." : " Admin kullanıcıdan girmesini isteyin.");
+  }
+  // İki motor da hazırsa tek seferlik motor seçimi (karşılaştırma için)
+  const kap = document.getElementById("ro-motor-sec-kap");
+  if(kap){
+    if(a.geminiVar && a.claudeVar){
+      kap.style.display = "";
+      const ms = document.getElementById("ro-motor-sec"); if(ms && !ms.dataset.k){ ms.value = a.motor; ms.dataset.k = "1"; }
+    } else kap.style.display = "none";
+  }
+  const mm = document.getElementById("ro-motor"); if(mm && !mm.dataset.k){ mm.value = a.motor; mm.dataset.k = "1"; }
+  const gd = document.getElementById("ro-gem-durum"); if(gd) gd.textContent = a.geminiVar ? "· kayıtlı …" + a.geminiSonu : "· tanımlı değil";
+  const cd = document.getElementById("ro-cl-durum"); if(cd) cd.textContent = a.claudeVar ? "· kayıtlı …" + a.claudeSonu : "· tanımlı değil";
+  const gm = document.getElementById("ro-g-model"); if(gm && !gm.value && a.geminiModel) gm.placeholder = a.geminiModel;
+  const cm = document.getElementById("ro-model"); if(cm && !cm.value && a.claudeModel) cm.placeholder = a.claudeModel;
 }
 function roAyarKaydet_(sil){
-  const anahtar = (document.getElementById("ro-anahtar") || {}).value || "";
-  const model = (document.getElementById("ro-model") || {}).value;
-  if(sil && !confirm("Kayıtlı API anahtarı silinsin mi?")) return;
-  cariApi("resimOkuAyarKaydet", { anahtar: anahtar.trim(), anahtarSil: !!sil, model: model === undefined ? undefined : model.trim() }).then(r => {
+  const v = id => ((document.getElementById(id) || {}).value || "").trim();
+  if(sil && !confirm(roMotorAdi_(sil) + " anahtarı silinsin mi?")) return;
+  const govde = { motor: v("ro-motor") || undefined, geminiAnahtar: v("ro-g-anahtar"), anahtar: v("ro-anahtar"), anahtarSil: sil || undefined };
+  if(document.getElementById("ro-g-model") && v("ro-g-model")) govde.geminiModel = v("ro-g-model");
+  if(document.getElementById("ro-model") && v("ro-model")) govde.model = v("ro-model");
+  cariApi("resimOkuAyarKaydet", govde).then(r => {
     if(!r.ok){ alert(r.hata || r.error || "Kaydedilemedi"); return; }
     if(_ro){ _ro.ayar = r; roAyarDurumYaz_(); }
-    const a = document.getElementById("ro-anahtar"); if(a) a.value = "";
+    ["ro-g-anahtar", "ro-anahtar"].forEach(id => { const a = document.getElementById(id); if(a) a.value = ""; });
   }).catch(() => alert("Sunucuya ulaşılamadı."));
 }
 
 // ── Okuma ──
 async function roDosyalarSecildi_(dosyalar){
   if(!_ro || _ro.yukleniyor || !dosyalar || !dosyalar.length) return;
-  if(_ro.ayar && !_ro.ayar.anahtarVar){ alert("Okuma servisi için API anahtarı tanımlı değil.\n" + (modulGorunurMu_({ admin: true }) ? "⚙ Okuma Ayarı'ndan girin." : "Admin kullanıcıdan girmesini isteyin.")); return; }
+  const motorSec = (document.getElementById("ro-motor-sec-kap") && document.getElementById("ro-motor-sec-kap").style.display !== "none") ? (document.getElementById("ro-motor-sec") || {}).value : "";
+  if(_ro.ayar && !motorSec && !_ro.ayar.anahtarVar){ alert("Okuma servisi için API anahtarı tanımlı değil.\n" + (modulGorunurMu_({ admin: true }) ? "⚙ Okuma Ayarı'ndan girin." : "Admin kullanıcıdan girmesini isteyin.")); return; }
   const ipucu = ((document.getElementById("ro-ipucu") || {}).value || "").trim();
   _ro.yukleniyor = true;
   const durum = document.getElementById("ro-durum");
@@ -8313,7 +8347,8 @@ async function roDosyalarSecildi_(dosyalar){
       yaz("Resim " + (i + 1) + "/" + dosyalar.length + " hazırlanıyor ve okunuyor… (genelde 10–30 sn)");
       const g = await roGorselHazirla_(dosyalar[i]);
       if(!onizleme) onizleme = g.onizleme;
-      const r = await cariApi("getResimOku", { gorsel: g.b64, mime: g.mime, ipucu });
+      const r = await cariApi("getResimOku", { gorsel: g.b64, mime: g.mime, ipucu, motor: motorSec || undefined });
+      if(r && r.ok && r.motor) tumu.motor = r.motor + " / " + (r.model || "");
       if(!r || !r.ok){
         _ro.yukleniyor = false;
         if(durum) durum.innerHTML = '<div style="padding:14px;border-radius:10px;background:#fdecec;color:#a11">❌ ' + htmlKacis((r && (r.hata || r.error)) || "Okunamadı") + '</div>';
@@ -8378,7 +8413,7 @@ function roOnayCiz_(){
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
       ${_ro.onizleme ? `<img src="${_ro.onizleme}" alt="Okunan resim" style="width:150px;max-height:200px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in" onclick="roResimBuyut_()" title="Büyüt">` : ""}
       <div style="flex:1;min-width:300px">
-        <div style="font-size:13px;color:var(--text2)">Resimde okunan cari: ${htmlKacis(okunanCari || "—")}${v.belgeNo ? " · Belge no: " + htmlKacis(v.belgeNo) : ""}${v.tarih ? " · Tarih: " + htmlKacis(v.tarih) : ""}${v.belgeTipi ? " · Tür: " + htmlKacis(v.belgeTipi) : ""}</div>
+        <div style="font-size:13px;color:var(--text2)">Resimde okunan cari: ${htmlKacis(okunanCari || "—")}${v.motor ? " · Okuyan: " + htmlKacis(v.motor) : ""}${v.belgeNo ? " · Belge no: " + htmlKacis(v.belgeNo) : ""}${v.tarih ? " · Tarih: " + htmlKacis(v.tarih) : ""}${v.belgeTipi ? " · Tür: " + htmlKacis(v.belgeTipi) : ""}</div>
         <div style="margin-top:6px;font-size:15px">Cari: ${cariSatir} <button class="btn" style="padding:3px 10px;font-size:12px" onclick="roCariRehber_()">🔍 Cari seç</button></div>
         ${c.uyari ? `<div style="color:#b45309;font-size:12.5px;margin-top:4px">⚠️ ${htmlKacis(c.uyari)}</div>` : ""}
         ${adayCipleri}

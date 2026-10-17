@@ -5,45 +5,67 @@
 // kullanıcı onay ekranında kontrol eder. Bu dosya yalnızca "resmi oku" kısmıdır ve hiçbir kayıt yazmaz.
 //
 // Ayarlar (Script Properties — yerel sunucuda da kalıcıdır):
-//   RESIM_OKU_API_ANAHTARI → Claude API anahtarı (console.anthropic.com). Yalnız Admin kaydeder; istemciye ASLA geri gönderilmez.
-//   RESIM_OKU_MODEL        → (isteğe bağlı) model adı, boşsa varsayılan
-//   RESIM_OKU_MOTOR        → şimdilik yalnız "claude"
+//   RESIM_OKU_MOTOR              → "gemini" (ücretsiz katman var) ya da "claude" (ücretli). Boşsa: Gemini anahtarı varsa gemini, yoksa claude.
+//   RESIM_OKU_GEMINI_ANAHTARI    → Google AI Studio API anahtarı (AIza...). Yalnız Admin kaydeder; istemciye ASLA geri gönderilmez.
+//   RESIM_OKU_GEMINI_MODEL       → (isteğe bağlı) boşsa varsayılan
+//   RESIM_OKU_API_ANAHTARI       → Claude API anahtarı (console.anthropic.com), RESIM_OKU_MODEL → Claude model adı
+// UYARI: Gemini ÜCRETSİZ katmanında gönderilen içerik Google tarafından ürün geliştirmede kullanılabilir (Google fiyat/şart sayfasında "Used to improve our products: Yes");
+// ücretli katmanda kullanılmaz. Cari adı/telefon/fiyat bilgisi gönderildiğinden bu bilinerek seçilmelidir.
 // ════════════════════════════════════════════════
 
 const RESIM_OKU_VARSAYILAN_MODEL_ = "claude-sonnet-5-5";
+const RESIM_OKU_GEMINI_VARSAYILAN_MODEL_ = "gemini-3.6-flash";   // Google'ın kararlı (preview olmayan) çok kipli Flash modeli; ücretsiz katmanı var
 const RESIM_OKU_MAX_BASE64_ = 9 * 1024 * 1024; // ~6.7 MB resim; tarayıcı zaten küçültüp gönderir
 
 function resimOkuAyarlari_() {
   const p = PropertiesService.getScriptProperties();
+  const claudeAnahtar = (p.getProperty("RESIM_OKU_API_ANAHTARI") || "").trim();
+  const geminiAnahtar = (p.getProperty("RESIM_OKU_GEMINI_ANAHTARI") || "").trim();
+  let motor = (p.getProperty("RESIM_OKU_MOTOR") || "").trim();
+  if (motor !== "gemini" && motor !== "claude") motor = geminiAnahtar ? "gemini" : "claude";
   return {
-    anahtar: (p.getProperty("RESIM_OKU_API_ANAHTARI") || "").trim(),
-    model: (p.getProperty("RESIM_OKU_MODEL") || "").trim() || RESIM_OKU_VARSAYILAN_MODEL_,
-    motor: (p.getProperty("RESIM_OKU_MOTOR") || "").trim() || "claude",
+    motor: motor,
+    claudeAnahtar: claudeAnahtar,
+    claudeModel: (p.getProperty("RESIM_OKU_MODEL") || "").trim() || RESIM_OKU_VARSAYILAN_MODEL_,
+    geminiAnahtar: geminiAnahtar,
+    geminiModel: (p.getProperty("RESIM_OKU_GEMINI_MODEL") || "").trim() || RESIM_OKU_GEMINI_VARSAYILAN_MODEL_,
   };
 }
 
-// Anahtarın kendisi dönmez; yalnız var mı + son 4 hane.
+// Anahtarların kendisi dönmez; yalnız var mı + son 4 hane. anahtarVar/model = SEÇİLİ motor için.
 function getResimOkuAyar() {
   const a = resimOkuAyarlari_();
+  const sec = a.motor === "gemini" ? { anahtar: a.geminiAnahtar, model: a.geminiModel } : { anahtar: a.claudeAnahtar, model: a.claudeModel };
   return {
     ok: true,
-    anahtarVar: !!a.anahtar,
-    anahtarSonu: a.anahtar ? a.anahtar.slice(-4) : "",
-    model: a.model,
     motor: a.motor,
+    anahtarVar: !!sec.anahtar,
+    anahtarSonu: sec.anahtar ? sec.anahtar.slice(-4) : "",
+    model: sec.model,
+    claudeVar: !!a.claudeAnahtar, claudeSonu: a.claudeAnahtar ? a.claudeAnahtar.slice(-4) : "", claudeModel: a.claudeModel,
+    geminiVar: !!a.geminiAnahtar, geminiSonu: a.geminiAnahtar ? a.geminiAnahtar.slice(-4) : "", geminiModel: a.geminiModel,
   };
 }
 
-// body: { anahtar?: "sk-ant-...", model?: "..." , anahtarSil?: true } — yalnız Admin (ADMIN_ACTIONLAR)
+// body: { motor?: "gemini"|"claude", geminiAnahtar?, geminiModel?, anahtar? (Claude), model? (Claude), anahtarSil?: "gemini"|"claude" } — yalnız Admin (ADMIN_ACTIONLAR)
 function resimOkuAyarKaydet(body) {
   const p = PropertiesService.getScriptProperties();
-  if (body && body.anahtarSil) p.setProperty("RESIM_OKU_API_ANAHTARI", "");
-  const anahtar = String((body && body.anahtar) || "").trim();
-  if (anahtar) {
-    if (!/^sk-ant-[A-Za-z0-9_\-]{20,}$/.test(anahtar)) return { ok: false, hata: "Anahtar 'sk-ant-' ile başlamalı; boşluk/satır sonu olmadan yapıştırın." };
-    p.setProperty("RESIM_OKU_API_ANAHTARI", anahtar);
+  body = body || {};
+  if (body.anahtarSil === "claude" || body.anahtarSil === true) p.setProperty("RESIM_OKU_API_ANAHTARI", "");
+  if (body.anahtarSil === "gemini") p.setProperty("RESIM_OKU_GEMINI_ANAHTARI", "");
+  const claude = String(body.anahtar || "").trim();
+  if (claude) {
+    if (!/^sk-ant-[A-Za-z0-9_\-]{20,}$/.test(claude)) return { ok: false, hata: "Claude anahtarı 'sk-ant-' ile başlamalı; boşluk/satır sonu olmadan yapıştırın." };
+    p.setProperty("RESIM_OKU_API_ANAHTARI", claude);
   }
-  if (body && body.model !== undefined) p.setProperty("RESIM_OKU_MODEL", String(body.model || "").trim());
+  const gemini = String(body.geminiAnahtar || "").trim();
+  if (gemini) {
+    if (!/^AIza[A-Za-z0-9_\-]{30,}$/.test(gemini)) return { ok: false, hata: "Gemini anahtarı 'AIza' ile başlamalı; boşluk/satır sonu olmadan yapıştırın." };
+    p.setProperty("RESIM_OKU_GEMINI_ANAHTARI", gemini);
+  }
+  if (body.model !== undefined) p.setProperty("RESIM_OKU_MODEL", String(body.model || "").trim());
+  if (body.geminiModel !== undefined) p.setProperty("RESIM_OKU_GEMINI_MODEL", String(body.geminiModel || "").trim());
+  if (body.motor === "gemini" || body.motor === "claude") p.setProperty("RESIM_OKU_MOTOR", body.motor);
   return getResimOkuAyar();
 }
 
@@ -68,58 +90,95 @@ function resimOkuIstemi_(ipucu) {
   ].filter(function (s) { return s !== ""; }).join("\n");
 }
 
-// body: { gorsel: "<base64, data: öneki olmadan>", mime: "image/jpeg|image/png|image/webp", ipucu?: "..." }
+// Modelin döndürdüğü metinden JSON nesnesini ayıklar.
+function resimOkuJsonAyikla_(ham) {
+  ham = String(ham || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const bas = ham.indexOf("{"), son = ham.lastIndexOf("}");
+  if (bas < 0 || son <= bas) return { hata: "Belge okunamadı (yanıt JSON değil). Daha net bir görüntü deneyin." };
+  try { return { veri: JSON.parse(ham.slice(bas, son + 1)) }; } catch (e) { return { hata: "Okunan veri çözümlenemedi; görüntüyü yeniden deneyin." }; }
+}
+
+function resimOkuClaude_(ayar, b64, mime, ipucu) {
+  if (!ayar.claudeAnahtar) return { ok: false, anahtarYok: true, hata: "Resim okuma için Claude API anahtarı tanımlı değil (Admin: 📷 Resimden Oluştur penceresinde ⚙ Okuma Ayarı)." };
+  const istek = {
+    model: ayar.claudeModel,
+    max_tokens: 6000,
+    messages: [{ role: "user", content: [
+      { type: "image", source: { type: "base64", media_type: mime, data: b64 } },
+      { type: "text", text: resimOkuIstemi_(ipucu) },
+    ] }],
+  };
+  let yanit, kod, metin;
+  try {
+    yanit = UrlFetchApp.fetch("https://api.anthropic.com/v1/messages", {
+      method: "post", contentType: "application/json",
+      headers: { "x-api-key": ayar.claudeAnahtar, "anthropic-version": "2023-06-01" },
+      payload: JSON.stringify(istek), muteHttpExceptions: true,
+    });
+    kod = yanit.getResponseCode(); metin = yanit.getContentText();
+  } catch (e) { return { ok: false, hata: "Okuma servisine ulaşılamadı: " + e.message }; }
+  let j;
+  try { j = JSON.parse(metin); } catch (e) { return { ok: false, hata: "Okuma servisi geçersiz yanıt verdi (HTTP " + kod + ")." }; }
+  if (kod !== 200) {
+    const m = (j && j.error && j.error.message) ? String(j.error.message) : ("HTTP " + kod);
+    if (kod === 401) return { ok: false, hata: "Claude API anahtarı geçersiz ya da iptal edilmiş. Anahtarı yeniden girin." };
+    if (kod === 402 || /credit|billing/i.test(m)) return { ok: false, hata: "Claude API hesabında bakiye/ödeme sorunu: " + m };
+    if (kod === 429) return { ok: false, hata: "Okuma servisi şu an yoğun/limit aşıldı; biraz sonra tekrar deneyin." };
+    return { ok: false, hata: "Okuma hatası: " + m };
+  }
+  const ham = (j.content || []).filter(function (c) { return c.type === "text"; }).map(function (c) { return c.text; }).join("\n");
+  const a = resimOkuJsonAyikla_(ham);
+  if (a.hata) return { ok: false, hata: a.hata };
+  if (!Array.isArray(a.veri.kalemler)) a.veri.kalemler = [];
+  return { ok: true, veri: a.veri, motor: "claude", model: ayar.claudeModel, kesildi: j.stop_reason === "max_tokens" };
+}
+
+function resimOkuGemini_(ayar, b64, mime, ipucu) {
+  if (!ayar.geminiAnahtar) return { ok: false, anahtarYok: true, hata: "Resim okuma için Gemini API anahtarı tanımlı değil (Admin: 📷 Resimden Oluştur penceresinde ⚙ Okuma Ayarı)." };
+  const istek = {
+    contents: [{ role: "user", parts: [
+      { inline_data: { mime_type: mime, data: b64 } },
+      { text: resimOkuIstemi_(ipucu) },
+    ] }],
+    generationConfig: { temperature: 0, responseMimeType: "application/json", maxOutputTokens: 16384 },
+  };
+  let yanit, kod, metin;
+  try {
+    yanit = UrlFetchApp.fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(ayar.geminiModel) + ":generateContent", {
+      method: "post", contentType: "application/json",
+      headers: { "x-goog-api-key": ayar.geminiAnahtar },
+      payload: JSON.stringify(istek), muteHttpExceptions: true,
+    });
+    kod = yanit.getResponseCode(); metin = yanit.getContentText();
+  } catch (e) { return { ok: false, hata: "Okuma servisine ulaşılamadı: " + e.message }; }
+  let j;
+  try { j = JSON.parse(metin); } catch (e) { return { ok: false, hata: "Okuma servisi geçersiz yanıt verdi (HTTP " + kod + ")." }; }
+  if (kod !== 200) {
+    const m = (j && j.error && j.error.message) ? String(j.error.message) : ("HTTP " + kod);
+    if (kod === 400 && /API key/i.test(m)) return { ok: false, hata: "Gemini API anahtarı geçersiz. Anahtarı yeniden girin." };
+    if (kod === 403) return { ok: false, hata: "Gemini anahtarı bu modele/bölgeye erişemiyor ya da yetkisiz: " + m };
+    if (kod === 404) return { ok: false, hata: "Gemini modeli bulunamadı (" + ayar.geminiModel + "). Okuma Ayarı'ndan model adını değiştirin: " + m };
+    if (kod === 429) return { ok: false, hata: "Gemini ücretsiz kullanım sınırı doldu (dakikalık/günlük); biraz sonra tekrar deneyin ya da Claude'a geçin." };
+    return { ok: false, hata: "Gemini okuma hatası: " + m };
+  }
+  const cand = (j.candidates || [])[0];
+  if (!cand) return { ok: false, hata: "Gemini yanıt vermedi" + (j.promptFeedback && j.promptFeedback.blockReason ? " (engellendi: " + j.promptFeedback.blockReason + ")" : "") + "." };
+  const ham = ((cand.content && cand.content.parts) || []).map(function (x) { return x.text || ""; }).join("\n");
+  const a = resimOkuJsonAyikla_(ham);
+  if (a.hata) return { ok: false, hata: a.hata };
+  if (!Array.isArray(a.veri.kalemler)) a.veri.kalemler = [];
+  return { ok: true, veri: a.veri, motor: "gemini", model: ayar.geminiModel, kesildi: cand.finishReason === "MAX_TOKENS" };
+}
+
+// body: { gorsel: "<base64, data: öneki olmadan>", mime: "image/jpeg|image/png|image/webp", ipucu?: "...", motor?: "gemini"|"claude" (verilmezse ayardaki) }
 function getResimOku(body) {
   const ayar = resimOkuAyarlari_();
-  if (ayar.motor !== "claude") return { ok: false, hata: "Okuma motoru tanımsız: " + ayar.motor };
-  if (!ayar.anahtar) return { ok: false, anahtarYok: true, hata: "Resim okuma için Claude API anahtarı tanımlı değil (Admin: 📷 Resimden Oluştur penceresinde ⚙ Okuma Ayarı)." };
   const b64 = String((body && body.gorsel) || "");
   const mime = String((body && body.mime) || "image/jpeg").toLowerCase();
   if (!b64) return { ok: false, hata: "Görsel gelmedi." };
   if (b64.length > RESIM_OKU_MAX_BASE64_) return { ok: false, hata: "Görsel çok büyük; daha küçük çekim/ekran görüntüsü deneyin." };
   if (["image/jpeg", "image/png", "image/webp", "image/gif"].indexOf(mime) < 0) return { ok: false, hata: "Desteklenmeyen görsel türü: " + mime };
-
-  const istek = {
-    model: ayar.model,
-    max_tokens: 6000,
-    messages: [{
-      role: "user",
-      content: [
-        { type: "image", source: { type: "base64", media_type: mime, data: b64 } },
-        { type: "text", text: resimOkuIstemi_(String((body && body.ipucu) || "").slice(0, 300)) },
-      ],
-    }],
-  };
-  let yanit, kod, metin;
-  try {
-    yanit = UrlFetchApp.fetch("https://api.anthropic.com/v1/messages", {
-      method: "post",
-      contentType: "application/json",
-      headers: { "x-api-key": ayar.anahtar, "anthropic-version": "2023-06-01" },
-      payload: JSON.stringify(istek),
-      muteHttpExceptions: true,
-    });
-    kod = yanit.getResponseCode();
-    metin = yanit.getContentText();
-  } catch (e) {
-    return { ok: false, hata: "Okuma servisine ulaşılamadı: " + e.message };
-  }
-  let j;
-  try { j = JSON.parse(metin); } catch (e) { return { ok: false, hata: "Okuma servisi geçersiz yanıt verdi (HTTP " + kod + ")." }; }
-  if (kod !== 200) {
-    const m = (j && j.error && j.error.message) ? String(j.error.message) : ("HTTP " + kod);
-    if (kod === 401) return { ok: false, hata: "API anahtarı geçersiz ya da iptal edilmiş. Anahtarı yeniden girin." };
-    if (kod === 402 || /credit|billing/i.test(m)) return { ok: false, hata: "API hesabında bakiye/ödeme sorunu: " + m };
-    if (kod === 429) return { ok: false, hata: "Okuma servisi şu an yoğun/limit aşıldı; biraz sonra tekrar deneyin." };
-    return { ok: false, hata: "Okuma hatası: " + m };
-  }
-  const parcalar = (j.content || []).filter(function (c) { return c.type === "text"; }).map(function (c) { return c.text; });
-  let ham = parcalar.join("\n").trim();
-  ham = ham.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  const bas = ham.indexOf("{"), son = ham.lastIndexOf("}");
-  if (bas < 0 || son <= bas) return { ok: false, hata: "Belge okunamadı (yanıt JSON değil). Daha net bir görüntü deneyin." };
-  let veri;
-  try { veri = JSON.parse(ham.slice(bas, son + 1)); } catch (e) { return { ok: false, hata: "Okunan veri çözümlenemedi; görüntüyü yeniden deneyin." }; }
-  if (!Array.isArray(veri.kalemler)) veri.kalemler = [];
-  return { ok: true, veri: veri, model: ayar.model, kesildi: j.stop_reason === "max_tokens" };
+  const motor = (body && (body.motor === "gemini" || body.motor === "claude")) ? body.motor : ayar.motor;
+  const ipucu = String((body && body.ipucu) || "").slice(0, 300);
+  return motor === "gemini" ? resimOkuGemini_(ayar, b64, mime, ipucu) : resimOkuClaude_(ayar, b64, mime, ipucu);
 }
