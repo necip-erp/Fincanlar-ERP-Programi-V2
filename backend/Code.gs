@@ -1104,7 +1104,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261017g";
+const PROGRAM_SURUM_ = "20261017h";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -1159,8 +1159,8 @@ function bulutYazmaAyarla(body, oturum) {
 // Bu action'lar oturum/token gerektirmeden çalışır (login ekranı henüz token
 // almadan bunlara ihtiyaç duyar).
 // Veriyi değiştirmeyen işlemler kilit beklemez (istemcideki CARI_API_YAZMA_DEGIL_ ile aynı mantık).
-const YAZMA_DEGIL_ = /^(get|yerelYedek|yerelNabiz|yerelGuncelle|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|cekSeriNoUret|nakliyeSorunluFaturalar$)/; // giriş/çıkış/parola oturum satırı yazar → kilitli (satır kayması olmasın)
-const OTURUMSUZ_ACTIONLAR = { girisYap: true, yerelYedekYukle: true, yerelNabiz: true };
+const YAZMA_DEGIL_ = /^(get|yerelYedek|yerelNabiz|yerelDisFatura|yerelGuncelle|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|cekSeriNoUret|nakliyeSorunluFaturalar$)/; // giriş/çıkış/parola oturum satırı yazar → kilitli (satır kayması olmasın)
+const OTURUMSUZ_ACTIONLAR = { girisYap: true, yerelYedekYukle: true, yerelNabiz: true, yerelDisFatura: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
   eskiPanelStokKartlariniAktar: true, yilStokKartlariAktar: true, bulutYazmaAyarla: true, bulutAynaSimdi: true, bulutAynaKur: true, getEskiBulutStokKartlari: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, sirketDuzeniKur: true, yerelYedekDurum: true, yerelYedekAyarKaydet: true, yerelYedekSimdi: true, yerelGuncelleDurum: true, yerelGuncelleKontrol: true, yerelGuncelleUygula: true, yerelGuncelleGeriAl: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
@@ -1338,6 +1338,7 @@ function handleRequest(e) {
       case "yerelYedekSimdi": result = yerelYedekSimdi(body); break;
       case "yerelYedekAktivite": result = yerelYedekAktivite(body); break;
       case "yerelNabiz": result = yerelNabiz(body); break;
+      case "yerelDisFatura": result = yerelDisFatura(body); break;
       case "yerelYedekSaglik": result = yerelYedekSaglik(); break;
       case "yerelYedekAktiviteOzet": result = yerelYedekAktiviteOzet(); break;
       case "yerelGuncelleDurum": result = yerelGuncelleDurum(); break;
@@ -5668,6 +5669,25 @@ function getTopluOdemeGrubu(topluOdemeNo) {
 // ════════════════════════════════════════════════
 const DIS_FIYAT_SHEET_ID  = "19t4MsvudC8X7knZ_dymBm5fghcbZcpAMwOmUXZxDPPQ";
 const DIS_FIYAT_SHEET_ADI = "FATURAFIYAT";
+
+// ★ (17 Eki 2026) Dış fatura e-tablosu (FATURAFIYAT) okuması TEK YERDEN. Bulutta e-tablo doğrudan okunur; YEREL SUNUCUDA bu e-tabloya
+// ve Drive'a erişim yoktur (shim bilinmeyen kimlikte şirket kitabına düşüyordu → "FATURAFIYAT sayfası bulunamadı"). Yerel sunucu bu veriyi
+// buluttan "yerelDisFatura" işlemiyle (yedek/nabızdaki ortak anahtarla) alıp YerelDisVeri.satirlar içinde tutar (bkz. yerel-sunucu/src/dis-veri.js).
+// donusum=true: Date değerleri metne çevrilir (JSON ile yerele giderken).
+function disFaturaTabloOku_(donusum) {
+  if (yerelMi_()) {
+    const d = (typeof YerelDisVeri !== "undefined" && YerelDisVeri) ? YerelDisVeri : null;
+    if (!d || !Array.isArray(d.satirlar)) return { ok: false, hata: "Fatura kaynağı buluttan alınamadı" + ((d && d.hata) ? ": " + d.hata : " (bulut bağlantısını/ortak anahtarı kontrol edin)") };
+    return { ok: true, veri: d.satirlar };
+  }
+  let sh;
+  try { sh = SpreadsheetApp.openById(DIS_FIYAT_SHEET_ID).getSheetByName(DIS_FIYAT_SHEET_ADI); }
+  catch (e) { return { ok: false, hata: "Fatura kaynağına erişilemedi: " + e.message }; }
+  if (!sh) return { ok: false, hata: "FATURAFIYAT sayfası bulunamadı" };
+  let veri = sh.getDataRange().getValues();
+  if (donusum) veri = veri.map(function (r) { return r.map(function (v) { return v instanceof Date ? Utilities.formatDate(v, "Europe/Istanbul", "dd/MM/yyyy HH:mm") : v; }); });
+  return { ok: true, veri: veri };
+}
 const ALIS_FATURA_DURUM_BASLIKLAR = ["FATURA_NO","DURUM","ALIS_ID","ACIKLAMA","ISLEM_TARIHI"];
 
 // ════════════════════════════════════════════════
@@ -6040,15 +6060,9 @@ function getBekleyenAlisFaturalari() {
 }
 
 function getBekleyenAlisFaturalariHesapla_() {
-  let disData;
-  try {
-    const disSs = SpreadsheetApp.openById(DIS_FIYAT_SHEET_ID);
-    const disSh = disSs.getSheetByName(DIS_FIYAT_SHEET_ADI);
-    if (!disSh) return { ok: false, hata: "FATURAFIYAT sayfası bulunamadı" };
-    disData = disSh.getDataRange().getValues();
-  } catch (e) {
-    return { ok: false, hata: "Fatura kaynağına erişilemedi: " + e.message };
-  }
+  const disOku = disFaturaTabloOku_();
+  if (!disOku.ok) return { ok: false, hata: disOku.hata };
+  const disData = disOku.veri;
   if (disData.length < 2) return { ok: true, faturalar: [] };
 
   const h = disData[0];
@@ -10473,6 +10487,17 @@ function satisEfaturaBilgisiAl_(satisId) {
 // dosyasını DOĞRUDAN okur (aynı hesap sahibi). Böylece "Faturayı Gör" tarayıcıdaki Google hesap seçimine
 // (/macros/u/N/ yönlendirmesi, "dosyayı açamıyoruz" hatası) bağlı kalmaz; ERP kendi sunucusundan görseli getirir.
 function alisFaturaGorselHtmlAl(body) {
+  // Yerel sunucuda Drive yok: görsel, sunucunun buluttan önceden alıp tuttuğu kopyadan verilir (dis-veri.js).
+  if (yerelMi_()) {
+    const fn = String((body && body.faturaNo) || "").trim();
+    const d = (typeof YerelDisVeri !== "undefined" && YerelDisVeri) ? YerelDisVeri : null;
+    const g = d && d.gorsel ? d.gorsel[fn] : null;
+    if (g) return g;
+    return { ok: false, hata: "Fatura görseli buluttan alınamadı" + ((d && d.hata) ? ": " + d.hata : "") };
+  }
+  return alisFaturaGorselHtmlAlBulut_(body);
+}
+function alisFaturaGorselHtmlAlBulut_(body) {
   const faturaNo = String((body && body.faturaNo) || "").trim();
   if (!faturaNo) return { ok: false, hata: "faturaNo gerekli" };
   const dosyaAdi = faturaNo + "_orijinal.html";

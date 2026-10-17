@@ -321,6 +321,7 @@ function kurulum(depo, secenek) {
     encodeURIComponent, decodeURIComponent, encodeURI, decodeURI, escape, unescape, Symbol, TypeError, RangeError, WeakMap,
     setTimeout, clearTimeout,
     YerelGuncelle: globalThis.__YEREL_GUNCELLE__ || null,   // yalnızca yerel sunucuda var (src/guncelle.js)
+    YerelDisVeri: globalThis.__YEREL_DIS_VERI__ || null,   // dış fatura köprüsü verisi (src/dis-veri.js)
     YerelYedek: globalThis.__YEREL_YEDEK__ || null,   // yalnızca yerel sunucuda var (src/yedek.js)
     Logger: { log: (...a) => { if (secenek.sessiz !== true) console.log('[GAS]', ...a); } },
     SpreadsheetApp: {

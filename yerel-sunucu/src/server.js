@@ -23,6 +23,8 @@ const yedek = require('./yedek').baslat({ depo, VERI, KOK, ONYUZ });
 globalThis.__YEREL_YEDEK__ = yedek;
 // Güncelleme motoru (GitHub'dan program güncelleme + önceki sürüme dönüş): Ayarlar ekranı bunu 'YerelGuncelle' adıyla görür.
 globalThis.__YEREL_GUNCELLE__ = require('./guncelle').baslat({ depo, VERI, KOK, ONYUZ, ARKA });
+const dis = require('./dis-veri').baslat({ yedek });
+globalThis.__YEREL_DIS_VERI__ = dis.durum;
 const rt = calistir(depo, ARKA, { sessiz: true });
 let istekSayisi = 0, yazmaSayisi = 0;
 // Canlı bildirim (SSE): bir bilgisayar veri yazınca bağlı tüm ekranlara haber verilir.
@@ -69,8 +71,14 @@ const sunucu = http.createServer(async (req, res) => {
       let cikti;
       if (req.method === 'POST') {
         const govde = await govdeOku(req, 60 * 1024 * 1024);
+        try { let j = {}; try { j = JSON.parse(govde); } catch (_) {} await dis.hazirla(j.action || url.searchParams.get('action'), j); } catch (_) {}
         cikti = rt.istek('POST', Object.fromEntries(url.searchParams), govde);
       } else {
+        try {
+          const p = Object.fromEntries(url.searchParams); let j = {};
+          if (p.payload) { try { j = JSON.parse(p.payload); } catch (_) { try { j = JSON.parse(decodeURIComponent(p.payload)); } catch (_2) {} } }
+          await dis.hazirla(p.action || j.action, j);
+        } catch (_) {}
         cikti = rt.istek('GET', Object.fromEntries(url.searchParams));
       }
       res.writeHead(200, Object.assign({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }, cors));

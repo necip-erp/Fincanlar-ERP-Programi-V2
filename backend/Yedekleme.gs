@@ -454,6 +454,21 @@ function yerelYedekAnahtarKontrol_(anahtar) {
   return kayitli === ozet ? "" : "Anahtar uyuşmuyor";
 }
 
+// ★ (17 Eki 2026) YEREL SUNUCUNUN DIŞ FATURA KÖPRÜSÜ (yalnız OKUMA): yerel sunucu, dış e-tablo (FATURAFIYAT) ve Drive'daki fatura görsellerine
+// erişemediğinden bunları buluttan ister. Oturumsuz; yedek/nabızdaki ortak anahtarla korunur. body: { anahtar, islem: "satirlar" | "gorsel", faturaNo? }
+function yerelDisFatura(body) {
+  body = body || {};
+  var hata = yerelYedekAnahtarKontrol_(body.anahtar);
+  if (hata) return { ok: false, hata: "Bulut anahtarı reddetti: " + hata };
+  if (yerelMi_()) return { ok: false, hata: "Bu işlem yalnızca bulutta çalışır" };
+  if (body.islem === "satirlar") {
+    var r = disFaturaTabloOku_(true);
+    return r.ok ? { ok: true, satirlar: r.veri } : r;
+  }
+  if (body.islem === "gorsel") return alisFaturaGorselHtmlAlBulut_({ faturaNo: body.faturaNo });
+  return { ok: false, hata: "Bilinmeyen işlem" };
+}
+
 // body: { anahtar, damga: "2026-10-15_03-55-10", parca: 1, toplam: 1, veri: <base64 gzip> } — oturumsuz, anahtarla korunur.
 function yerelYedekYukle(body) {
   body = body || {};

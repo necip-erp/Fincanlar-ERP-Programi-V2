@@ -525,6 +525,13 @@ function baslat(o) {
       return { ok: false, hata: e.message };
     }
   }
+  // Dış fatura köprüsü: buluta ortak anahtarla tek seferlik soru (UrlFetchApp yerine Node'da, yönlendirmeleri postla izler).
+  async function bulutaSor(obj) {
+    const adres = bulutAdresi();
+    if (!adres) return { ok: false, hata: 'Bulut adresi bulunamadı' };
+    try { return await postla(adres, JSON.stringify(Object.assign({ anahtar: ayar.anahtar }, obj))); }
+    catch (e) { return { ok: false, hata: e.message }; }
+  }
   const nabizIlk = setTimeout(() => { nabizGonder(false); }, 25000); if (nabizIlk.unref) nabizIlk.unref();
   const nabizZaman = setInterval(() => { nabizGonder(false); }, NABIZ_DK * 60000); if (nabizZaman.unref) nabizZaman.unref();
 
@@ -555,7 +562,7 @@ function baslat(o) {
       simdi: { islem: JSON.parse(JSON.stringify(islem)), bulutKalanSn, sunucuSaati: Date.now() },
     };
   }
-  return { durum: durumVer, ayarKaydet, simdi, bulutYukle, flashYedekle, flashTara, islemBasla, islemBitir, aktiviteListe, aktiviteOzet, saglik, sorunlar, nabizGonder, _ayar: () => ayar };
+  return { durum: durumVer, ayarKaydet, simdi, bulutYukle, flashYedekle, flashTara, islemBasla, islemBitir, aktiviteListe, aktiviteOzet, saglik, sorunlar, nabizGonder, bulutaSor, _ayar: () => ayar };
 }
 
 module.exports = { baslat };

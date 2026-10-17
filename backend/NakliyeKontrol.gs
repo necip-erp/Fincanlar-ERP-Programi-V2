@@ -34,13 +34,10 @@ function nkM2Urunu_(stokKodu, adUpper) {
 // FATURAFIYAT'ı fatura no bazında tarar. {ok, faturalar:[{faturaNo, tedarikci, satirlar:[1-tabanlı satır no], toplamNakliye,
 // sorunluKalemler:[{kod, ad, miktar}], durum, alisId, alisVar}]}
 function nkSorunluFaturalariBul_() {
-  let disSh;
-  try {
-    disSh = SpreadsheetApp.openById(DIS_FIYAT_SHEET_ID).getSheetByName(DIS_FIYAT_SHEET_ADI);
-  } catch (e) { return { ok: false, hata: "Fatura kaynağına erişilemedi: " + e.message }; }
-  if (!disSh) return { ok: false, hata: "FATURAFIYAT sayfası bulunamadı" };
-  if (disSh.getLastRow() < 2) return { ok: true, faturalar: [] };
-  const veri = disSh.getDataRange().getValues();
+  const disOku = disFaturaTabloOku_();
+  if (!disOku.ok) return { ok: false, hata: disOku.hata };
+  if (disOku.veri.length < 2) return { ok: true, faturalar: [] };
+  const veri = disOku.veri;
   const h = veri[0];
   const c = { kod: h.indexOf("STOK_KODU"), ad: h.indexOf("STOK_ADI"), mik: h.indexOf("MIKTAR"), nak: h.indexOf("NAKLIYE_PAYI"),
               fno: h.indexOf("FATURA_NO"), ted: h.indexOf("TEDARIKCI") };
@@ -103,6 +100,7 @@ function nakliyeSorunluFaturalar() {
 // body: { faturaNolar?: [..] }  (verilmezse bulunan TÜM sorunlu faturalar). Silme sırası: Alış (varsa) → durum kaydı → FATURAFIYAT satırları.
 function nakliyeSorunluFaturalariSil(body) {
   body = body || {};
+  if (yerelMi_()) return { ok: false, hata: "Bu işlem dış fatura e-tablosundan satır sildiği için yalnızca BULUTTA yapılır (yerel sunucu bu e-tabloya erişemez)." };
   const b = nkSorunluFaturalariBul_();
   if (!b.ok) return b;
   const secili = Array.isArray(body.faturaNolar) ? new Set(body.faturaNolar.map(x => String(x).trim())) : null;
