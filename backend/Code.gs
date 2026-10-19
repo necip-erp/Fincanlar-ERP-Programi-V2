@@ -1104,7 +1104,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261017j";
+const PROGRAM_SURUM_ = "20261019a";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -1327,6 +1327,8 @@ function handleRequest(e) {
       case "getSonIslemler": result = getSonIslemler(body); break;
       case "gunlukIslemRaporuUret": result = gunlukIslemRaporuUret(body); break;
       case "getZRaporu": result = zRaporuGetir(body); break;
+      case "getHsYapi": result = getHsYapi(); break;
+      case "hsYapiKaydet": result = hsYapiKaydet(body); break;
       case "getResimOku": result = getResimOku(body); break;
       case "getResimOkuAyar": result = getResimOkuAyar(); break;
       case "resimOkuAyarKaydet": result = resimOkuAyarKaydet(body); break;

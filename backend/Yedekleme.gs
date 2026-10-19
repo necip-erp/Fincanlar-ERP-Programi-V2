@@ -466,6 +466,16 @@ function yerelDisFatura(body) {
     return r.ok ? { ok: true, satirlar: r.veri } : r;
   }
   if (body.islem === "gorsel") return alisFaturaGorselHtmlAlBulut_({ faturaNo: body.faturaNo });
+  // ★ (19 Eki 2026) Resimden Oluştur okuma ayarı (Gemini/Claude anahtarı + motor + model) yerel sunucuya aynı ortak anahtarla verilir; yerelde ayrıca girmek gerekmez.
+  if (body.islem === "resimOkuAyar") {
+    var pr = PropertiesService.getScriptProperties();
+    var g = function (k) { return (pr.getProperty(k) || "").trim(); };
+    return { ok: true, ayar: {
+      motor: g("RESIM_OKU_MOTOR"), geminiAnahtar: g("RESIM_OKU_GEMINI_ANAHTARI"), geminiModel: g("RESIM_OKU_GEMINI_MODEL"),
+      claudeAnahtar: g("RESIM_OKU_API_ANAHTARI"), claudeModel: g("RESIM_OKU_MODEL")
+    } };
+  }
+  if (body.islem === "hsYapi") { var hy = hsYapiOku_(); return { ok: true, hsYapi: hy && !hsYapiBos_(hy) ? hy : null }; }
   return { ok: false, hata: "Bilinmeyen işlem" };
 }
 

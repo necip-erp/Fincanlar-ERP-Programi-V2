@@ -19,16 +19,32 @@ const RESIM_OKU_MAX_BASE64_ = 9 * 1024 * 1024; // ~6.7 MB resim; tarayıcı zate
 
 function resimOkuAyarlari_() {
   const p = PropertiesService.getScriptProperties();
-  const claudeAnahtar = (p.getProperty("RESIM_OKU_API_ANAHTARI") || "").trim();
-  const geminiAnahtar = (p.getProperty("RESIM_OKU_GEMINI_ANAHTARI") || "").trim();
+  let claudeAnahtar = (p.getProperty("RESIM_OKU_API_ANAHTARI") || "").trim();
+  let geminiAnahtar = (p.getProperty("RESIM_OKU_GEMINI_ANAHTARI") || "").trim();
   let motor = (p.getProperty("RESIM_OKU_MOTOR") || "").trim();
+  let claudeModel = (p.getProperty("RESIM_OKU_MODEL") || "").trim();
+  let geminiModel = (p.getProperty("RESIM_OKU_GEMINI_MODEL") || "").trim();
+  // ★ 19 Eki 2026: yerel sunucuda boş kalan alanlar buluttaki ayardan tamamlanır (yerelde ayrıca girilen değer öncelikli).
+  let buluttan = false;
+  if (typeof yerelMi_ === "function" && yerelMi_()) {
+    const d = (typeof YerelDisVeri !== "undefined" && YerelDisVeri) ? YerelDisVeri : null;
+    const b = d && d.resimOku;
+    if (b) {
+      if (!claudeAnahtar && b.claudeAnahtar) { claudeAnahtar = b.claudeAnahtar; buluttan = true; }
+      if (!geminiAnahtar && b.geminiAnahtar) { geminiAnahtar = b.geminiAnahtar; buluttan = true; }
+      if (!motor && b.motor) motor = b.motor;
+      if (!claudeModel && b.claudeModel) claudeModel = b.claudeModel;
+      if (!geminiModel && b.geminiModel) geminiModel = b.geminiModel;
+    }
+  }
   if (motor !== "gemini" && motor !== "claude") motor = geminiAnahtar ? "gemini" : "claude";
   return {
     motor: motor,
     claudeAnahtar: claudeAnahtar,
-    claudeModel: (p.getProperty("RESIM_OKU_MODEL") || "").trim() || RESIM_OKU_VARSAYILAN_MODEL_,
+    claudeModel: claudeModel || RESIM_OKU_VARSAYILAN_MODEL_,
     geminiAnahtar: geminiAnahtar,
-    geminiModel: (p.getProperty("RESIM_OKU_GEMINI_MODEL") || "").trim() || RESIM_OKU_GEMINI_VARSAYILAN_MODEL_,
+    geminiModel: geminiModel || RESIM_OKU_GEMINI_VARSAYILAN_MODEL_,
+    buluttan: buluttan,
   };
 }
 
@@ -44,6 +60,7 @@ function getResimOkuAyar() {
     model: sec.model,
     claudeVar: !!a.claudeAnahtar, claudeSonu: a.claudeAnahtar ? a.claudeAnahtar.slice(-4) : "", claudeModel: a.claudeModel,
     geminiVar: !!a.geminiAnahtar, geminiSonu: a.geminiAnahtar ? a.geminiAnahtar.slice(-4) : "", geminiModel: a.geminiModel,
+    buluttan: !!a.buluttan,
   };
 }
 

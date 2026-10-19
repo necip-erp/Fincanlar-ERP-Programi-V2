@@ -90,9 +90,12 @@ body.desen-acik{
 /* sekmeler arası ton farkı: tek/çift sıradaki sekmeler hafifçe farklı tonda */
 .sekme:nth-child(odd){background:rgba(127,127,127,.07)}
 .sekme:nth-child(even){background:rgba(127,127,127,.17)}
-.sekme:hover{background:var(--bg2);color:var(--text);transform:translateY(-1px) scale(1.06);box-shadow:0 3px 10px -3px rgba(0,0,0,.28);z-index:3}
+.sekme:hover{background:#d9f7e3;color:#14532d;transform:translateY(-1px) scale(1.06);box-shadow:0 3px 10px -3px rgba(0,0,0,.28);z-index:3}   /* 19 Eki: üzerine gelince açık yeşil */
 .sekme.aktif{color:var(--blue);border-bottom-color:var(--blue);background:var(--bg2)}
-.sekme.aktif:hover{background:var(--bg2)}
+.sekme.aktif:hover{background:#d9f7e3;color:#14532d}
+.sekme:hover .sekme-kapat{color:#166534}
+/* 19 Eki: üstteki "← Ana Sayfa" düğmesi kaldırıldı (sekme şeridindeki 🏠 Ana Sayfa ve Ctrl+" kısayolu duruyor) */
+#home-btn{display:none!important}
 .lr-kisayol-ipucu{margin-left:6px;padding:1px 6px;border-radius:5px;background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.35);font:600 10.5px/1.5 inherit;font-family:inherit;letter-spacing:.2px}
 .sekme .sekme-kapat{font-size:13px;line-height:1;padding:2px 4px;border-radius:5px;color:var(--text3,#9ca3af);opacity:.7}
 .sekme .sekme-kapat:hover{background:var(--red-l,#fee2e2);color:var(--red,#dc2626);opacity:1}
@@ -1456,7 +1459,7 @@ setInterval(topbarSaatGuncelle, 10000);
           <button class="belge-tab" data-tip="Teklif" onclick="satisBelgeTipiDegistir('Teklif')">Teklif</button>
           <button class="belge-tab" data-tip="Sipariş" onclick="satisBelgeTipiDegistir('Sipariş')">Sipariş</button>
         </div>
-        <button class="btn btn-primary" id="sr-yeni-btn" style="margin-left:auto" onclick="satisRaporYeni()">➕ Yeni</button>
+        <button class="btn btn-primary" id="sr-yeni-btn" style="margin-left:auto" onclick="satisRaporYeni()">➕ Yeni <kbd class="lr-kisayol-ipucu">Ctrl+Y</kbd></button>
         <button class="btn" onclick="satisRaporYazdir()" title="Listeyi yazdır">🖨 Yazdır</button>
         <button class="btn" onclick="satisListesiYukle()" title="Listeyi sunucudan yenile">↻</button>
       </div>
@@ -3995,7 +3998,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261017j";
+const FRONT_SURUM = "20261019a";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -4703,7 +4706,7 @@ function hizPaneliIndir(){
 // ★ (1 Eki 2026) Okuma olsa da yavaş olduğu için "İşlem yapılıyor + geçen süre" bandı gösterilen çağrılar:
 // Portaldan Gelen Faturalar listesi (dış e-tablo + birkaç sayfa okuyor). Başka ekran eklemek için buraya ekle.
 const CARI_API_BANT_OKUMA_ = /^(yerelYedekDurum|yerelYedekAktivite|yerelYedekAktiviteOzet|yerelGuncelleDurum|yerelGuncelleKontrol|getBekleyenAlisFaturalari|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi)$/;
-const CARI_API_YAZMA_DEGIL_ = /^(get|yerelYedek|yerelGuncelle|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|edmOrtamDurumu|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
+const CARI_API_YAZMA_DEGIL_ = /^(get|hsYapiKaydet|yerelYedek|yerelGuncelle|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|edmOrtamDurumu|kullaniciListesiGetir|seriSonrakiNoUret|girisYap|cikisYap|parolaDegistir)/;
 // Yapı/tanım verisini değiştiren işlemler (banka, hesap, pos, kart, seri, tanım, marka, plasiyer, birim...).
 const CARI_API_YAPI_ISLEMI_ = /(Banka|Hesap|Pos|KrediKart|Seri|BasitTanim|Marka|Plasiyer|Birim|AciklamaSablon|SiparisDurum|SiraGuncelle)/;
 
@@ -6603,7 +6606,7 @@ function satisRaporCiz_(){
   const qCari = norm(document.getElementById("sr-cari").value.trim());
   const qNo = norm(document.getElementById("sr-no").value.trim());
   document.getElementById("sr-baslik").textContent = (tip === "Sipariş" ? "Sipariş" : tip === "Teklif" ? "Teklif" : "Fatura") + " Raporu (Satış Yönetimi)";
-  const yeniBtn = document.getElementById("sr-yeni-btn"); if(yeniBtn) yeniBtn.textContent = "➕ Yeni " + tip;
+  const yeniBtn = document.getElementById("sr-yeni-btn"); if(yeniBtn){ yeniBtn.innerHTML = "➕ Yeni " + htmlKacis(tip) + ' <kbd class="lr-kisayol-ipucu">' + htmlKacis(lrYeniKisayol_()) + "</kbd>"; yeniBtn.title = "Yeni " + tip + " (" + lrYeniKisayol_() + ")"; }
   const tipListe = (_satisListe||[]).filter(s=>(s.belgeTipi||"Fatura") === tip);
   // Durum / ödeme tipi filtre seçenekleri o türdeki kayıtlardan çıkar (seçili değer korunur)
   const doldur = (id, degerler)=>{
@@ -8635,7 +8638,74 @@ function hsAyar_(){
 // Boyut (sütun genişliği) ve Yükseklik kaydırıcıları her sekme/grup için ayrıdır; ayarlanmamış sekme genel değeri kullanır.
 function hsW_(sekme){ const ay = hsAyar_(); return ay.wSekme[sekme] !== undefined ? ay.wSekme[sekme] : ay.w; }
 function hsYukToplu_(sekme){ const ay = hsAyar_(); return ay.yukSekme[sekme] !== undefined ? ay.yukSekme[sekme] : (ay.yukToplu || 0); }
-function hsAyarYaz_(){ try{ localStorage.setItem("hs_ayar", JSON.stringify(hsAyar_())); }catch(e){} }
+function hsAyarYaz_(){ try{ localStorage.setItem("hs_ayar", JSON.stringify(hsAyar_())); }catch(e){} hsYapiGonderPlanla_(); }
+
+// ★ (19 Eki 2026) Hızlı Satış DÜZENİ (alt grup, ara grup, ürün-alt grup eşleşmesi, kısayollar, sütun/ürün sırası, sekme sırası) artık sunucuda ortak:
+// başka tarayıcıda / yerel sunucuda da aynı görünür. Boyut, yükseklik, renk, seçili sekme gibi ayarlar kasa/bilgisayar başına tarayıcıda kalır.
+// Eşitleme: Hızlı Satış her açıldığında sunucudaki düzen alınır (sunucu daha yeniyse ve bu tarayıcıda gönderilmemiş değişiklik yoksa o geçerli olur;
+// sunucu boşsa bu tarayıcıdaki düzen gönderilir; ikisi de doluysa gruplar birleştirilir); sonraki her değişiklik 1,5 sn sonra sunucuya gider.
+const HS_YAPI_ANAHTARLAR_ = ["kolonSira","altGrup","urunAlt","hizliGrup","araGrup","uye","sira","sekmeSira"];
+let _hsYapiEsitlendi = false, _hsYapiEsitleniyor = false, _hsYapiZamanlayici = null, _hsYapiSonEsitleme = 0;
+function hsYapiParca_(a){ const o = {}; HS_YAPI_ANAHTARLAR_.forEach(k=>{ if(a[k] !== undefined) o[k] = a[k]; }); return o; }
+function hsYapiBos_(o){
+  return !o || !Object.keys(o).some(k=>{ const v = o[k]; return Array.isArray(v) ? v.length > 0 : (v && typeof v === "object" ? Object.keys(v).length > 0 : !!v); });
+}
+function hsYapiLocalYaz_(){ try{ localStorage.setItem("hs_ayar", JSON.stringify(hsAyar_())); }catch(e){} }
+function hsYapiGonderPlanla_(){
+  if(!_hsYapiEsitlendi) return;   // ilk eşitleme bitmeden gönderme (boş düzen sunucudakini ezmesin)
+  clearTimeout(_hsYapiZamanlayici);
+  _hsYapiZamanlayici = setTimeout(hsYapiGonder_, 1500);
+}
+async function hsYapiGonder_(){
+  try{
+    const a = hsAyar_(), parca = hsYapiParca_(a), imza = JSON.stringify(parca);
+    if(imza === a._yapiImza) return;   // düzen değişmemiş (yalnız boyut/renk gibi yerel ayarlar değişti)
+    const ts = Date.now();
+    const r = await cariApi("hsYapiKaydet", { yapi: parca, ts: ts });
+    if(r && r.ok){ a._yapiImza = imza; a._yapiTs = r.ts || ts; hsYapiLocalYaz_(); }
+  }catch(e){ console.warn("Hızlı Satış düzeni sunucuya gönderilemedi:", e); }
+}
+function hsYapiBirlestir_(yerel, sunucu){
+  // İkisi de doluyken: obje alanlarında sunucudaki + yerel gruplar birlikte kalır (aynı grup/ürün için sunucu öncelikli); dizilerde sunucu.
+  const s = {};
+  HS_YAPI_ANAHTARLAR_.forEach(k=>{
+    const y = yerel[k], v = sunucu[k];
+    if(Array.isArray(v)) s[k] = v.length ? v : (y || v);
+    else if(v && typeof v === "object") s[k] = Object.assign({}, (y && typeof y === "object" && !Array.isArray(y)) ? y : {}, v);
+    else s[k] = (v !== undefined ? v : y);
+  });
+  return s;
+}
+async function hsYapiEsitle_(zorla){
+  if(_hsYapiEsitleniyor) return;
+  if(!zorla && _hsYapiEsitlendi && Date.now() - _hsYapiSonEsitleme < 120000) return;   // 2 dk içinde tekrar sorma
+  _hsYapiEsitleniyor = true;
+  try{
+    const r = await cariApi("getHsYapi", {});
+    if(!r || !r.ok) return;   // sunucu bu özelliği henüz bilmiyor (arka plan güncellenmemiş) → eski davranış, sessiz
+    const a = hsAyar_(), yerel = hsYapiParca_(a), imza = JSON.stringify(yerel);
+    const sunucuVar = r.yapi && !hsYapiBos_(r.yapi), yerelVar = !hsYapiBos_(yerel);
+    const yerelDegisti = imza !== a._yapiImza;       // son eşitlemeden beri bu tarayıcıda düzen değişmiş (gönderilmemiş)
+    let degisti = false, gonder = false;
+    if(sunucuVar && !yerelVar){ HS_YAPI_ANAHTARLAR_.forEach(k=>{ if(r.yapi[k] !== undefined) a[k] = r.yapi[k]; }); degisti = true; }
+    else if(sunucuVar && yerelVar){
+      if(!a._yapiTs){                                      // bu tarayıcı daha hiç eşitlenmedi, ikisinde de düzen var → birleştir
+        const b = hsYapiBirlestir_(yerel, r.yapi); HS_YAPI_ANAHTARLAR_.forEach(k=>{ if(b[k] !== undefined) a[k] = b[k]; }); degisti = true; gonder = true;
+      } else if(yerelDegisti){ gonder = true; }            // bu tarayıcıdaki gönderilmemiş değişiklik öncelikli
+      else if((r.ts || 0) > a._yapiTs){ HS_YAPI_ANAHTARLAR_.forEach(k=>{ if(r.yapi[k] !== undefined) a[k] = r.yapi[k]; }); degisti = true; }
+    } else if(!sunucuVar && yerelVar){ gonder = true; }
+    if(degisti){
+      a._yapiImza = JSON.stringify(hsYapiParca_(a)); a._yapiTs = r.ts || Date.now();
+      hsYapiLocalYaz_();
+      // yerel sunucuda buluttan gelen düzen yerele de yazılsın (bir kez)
+      if(r.buluttan && !gonder){ try{ await cariApi("hsYapiKaydet", { yapi: hsYapiParca_(a), ts: a._yapiTs }); }catch(e){} }
+      if(document.getElementById("hs-overlay")){ try{ hizliSatisCiz(); }catch(e){} }
+    }
+    _hsYapiEsitlendi = true; _hsYapiSonEsitleme = Date.now();
+    if(gonder){ a._yapiImza = ""; await hsYapiGonder_(); }
+  }catch(e){ console.warn("Hızlı Satış düzeni eşitlenemedi:", e); }
+  finally{ _hsYapiEsitleniyor = false; }
+}
 
 // ── Stok listesi: tek istek + tarayıcı önbelleği ────────────────────────────────────────────
 // Satış formu açılışı, Stok Tanımları ve Hızlı Satış aynı listeyi ayrı ayrı istiyordu (3 istek birden).
@@ -8726,6 +8796,7 @@ function hizliSatisAc(){
   // tazeyse sunucuya hiç gidilmez ve ekran yeniden düzenlenmez.
   hsStokOnbellektenYukle_();
   hsVeriYenile_(false);
+  hsYapiEsitle_();   // alt/ara grup düzenini sunucuyla eşitle (arka planda)
   const ay = hsAyar_();
   const ov = document.createElement("div");
   ov.className = "modal-overlay";
