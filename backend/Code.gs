@@ -1104,7 +1104,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261019b";
+const PROGRAM_SURUM_ = "20261019c";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -11014,9 +11014,12 @@ function getEdmFaturaOnKontrol(body) {
         const kimlik = String(cari.vergiNo || "").replace(/[^0-9]/g, "");
         if (kimlik.length === 10 || kimlik.length === 11) {
           const sessionId = edmLogin_(ayar);
-          const gib = edmVknBilgiAl_(ayar, sessionId, kimlik);
+          // ★ 19 Eki 2026: TEST ortamında gerçek carinin VKN'si EDM test mükellef listesinde olmadığından GİB sorgusu hep "mükellef değil" döner ve
+          // gönderim türü kendiliğinden e-Arşiv seçilirdi (e-Fatura carisi için de) → EDM "EARSIVFATURA geçersiz ProfileID" hatası. Testte öneri cari kartından gelir.
+          const gib = testMi ? (String(cari.eArsiv) === "Evet" && String(cari.eFatura) !== "Evet" ? null : true) : edmVknBilgiAl_(ayar, sessionId, kimlik);
           onerilenTur = gib ? "EFATURA" : "EARSIV";
-          if (gib && String(cari.eFatura) !== "Evet") sonuc.uyarilar.push("GİB'de e-Fatura mükellefi görünüyor ama cari kartında e-Fatura işaretli değil — kartı güncelleyin.");
+          if (testMi) { /* testte GİB mükellefiyet uyarıları üretilmez */ }
+          else if (gib && String(cari.eFatura) !== "Evet") sonuc.uyarilar.push("GİB'de e-Fatura mükellefi görünüyor ama cari kartında e-Fatura işaretli değil — kartı güncelleyin.");
           if (!gib && String(cari.eFatura) === "Evet") sonuc.uyarilar.push("Cari kartında e-Fatura işaretli ama GİB'de e-Fatura mükellefi görünmüyor — bu alıcıya e-Arşiv kesilmeli, kartı güncelleyin.");
         }
       } catch (e) {
