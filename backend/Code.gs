@@ -852,7 +852,7 @@ function logError(err) {
 // bankacılık düzeyinde güvenlik hedeflenmemiştir, amaç kimin ne yaptığını
 // ayırt edebilmek ve rastgele erişimi engellemektir.
 // ════════════════════════════════════════════════
-const KULLANICI_BASLIKLAR = ["ID","KULLANICI_ADI","PAROLA_HASH","ROL","AKTIF","KAYIT_TARIHI"];
+const KULLANICI_BASLIKLAR = ["ID","KULLANICI_ADI","PAROLA_HASH","ROL","AKTIF","KAYIT_TARIHI","PROFIL"];   // 7. sütun PROFIL: profil resmi (JSON; 19-20 Eki 2026), eski sayfalarda yoksa ilk kayıtta eklenir
 const OTURUM_BASLIKLAR = ["TOKEN","KULLANICI_ID","KULLANICI_ADI","ROL","OLUSTURMA_TARIHI"];
 const OTURUM_SURESI_SAAT = 12;
 const VARSAYILAN_KULLANICILAR = [
@@ -886,6 +886,57 @@ function kullanicilarSheetHazirla_(ss) {
   return sheet;
 }
 
+// ★ (20 Eki 2026) PROFİL RESMİ: Kullanicilar 7. sütun (JSON metin). Biçimler:
+//   {"tip":"harf","renk":"#2563eb"}                 → kullanıcı adının baş harfi, renkli daire (varsayılan: boş = renk addan türetilir)
+//   {"tip":"avatar","simge":"🦊","renk":"#f59e0b"}   → hazır avatar (emoji + zemin rengi)
+//   {"tip":"foto","data":"data:image/jpeg;base64,…"} → kendi fotoğrafı (tarayıcı 96x96'ya küçültür; en çok ~30 KB)
+function profilCoz_(ham) {
+  const m = String(ham === undefined || ham === null ? "" : ham).trim();
+  if (!m) return null;
+  try { return profilTemizle_(JSON.parse(m)); } catch (e) { return null; }
+}
+function profilTemizle_(p) {
+  if (!p || typeof p !== "object") return null;
+  const renk = /^#[0-9a-fA-F]{6}$/.test(String(p.renk || "")) ? String(p.renk) : "";
+  if (p.tip === "harf") return { tip: "harf", renk: renk };
+  if (p.tip === "avatar") {
+    const simge = String(p.simge || "").trim();
+    if (!simge || simge.length > 8 || /[<>"'&\\]/.test(simge)) return null;
+    return { tip: "avatar", simge: simge, renk: renk };
+  }
+  if (p.tip === "foto") {
+    const d = String(p.data || "");
+    if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(d) || d.length > 30000) return null;
+    return { tip: "foto", data: d };
+  }
+  return null;
+}
+// body: { profil: {...} | "" } — giriş yapan kullanıcı YALNIZ KENDİ profil resmini değiştirir.
+function profilKaydet(body, oturum) {
+  if (!oturum || !oturum.kullaniciId) return { ok: false, hata: "Oturum bulunamadı" };
+  const ham = body ? body.profil : "";
+  let temiz = null;
+  if (ham !== "" && ham !== null && ham !== undefined) {
+    temiz = profilTemizle_(ham);
+    if (!temiz) return { ok: false, hata: "Profil resmi geçersiz ya da çok büyük (fotoğraf en çok ~30 KB olmalı)" };
+  }
+  const ss = acikSS_();
+  const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
+  const k = satirlar.find(x => x.id === oturum.kullaniciId);
+  if (!k) return { ok: false, hata: "Kullanıcı bulunamadı" };
+  if (!String(sheet.getRange(1, 7).getValue() || "").trim()) sheet.getRange(1, 7).setValue("PROFIL");
+  sheet.getRange(k.rowIdx, 7).setValue(temiz ? JSON.stringify(temiz) : "");
+  return { ok: true, profil: temiz };
+}
+// Giriş yapmış herkes görebilir (işlem listelerinde "kim yaptı" yanındaki küçük resim): { kullaniciAdı(küçük harf): profil }
+function getProfilResimleri() {
+  const ss = acikSS_();
+  const { satirlar } = kullaniciSatirlariniOku_(ss);
+  const harita = {};
+  satirlar.forEach(k => { if (k.profil) harita[k.kullaniciAdi.toLowerCase()] = k.profil; });
+  return { ok: true, harita: harita };
+}
+
 function kullaniciSatirlariniOku_(ss) {
   const sheet = kullanicilarSheetHazirla_(ss);
   const data = sheet.getDataRange().getValues();
@@ -898,6 +949,7 @@ function kullaniciSatirlariniOku_(ss) {
       parolaHash: String(data[i][2]),
       rol: String(data[i][3]),
       aktif: String(data[i][4]) === "Evet",
+      profil: profilCoz_(data[i][6]),
     });
   }
   return { sheet, satirlar };
@@ -923,7 +975,7 @@ function girisYap(body) {
   oturumSheet.appendRow([token, kullanici.id, kullanici.kullaniciAdi, kullanici.rol, String(Date.now())]);
   oturumlarTemizle_(oturumSheet);
 
-  return { ok: true, token: token, kullaniciAdi: kullanici.kullaniciAdi, rol: kullanici.rol, yil: aktifYil_() };
+  return { ok: true, token: token, kullaniciAdi: kullanici.kullaniciAdi, rol: kullanici.rol, yil: aktifYil_(), profil: kullanici.profil || null };
 }
 
 // Süresi dolmuş oturum satırlarını sayfadan temizler (sayfa sınırsız büyümesin diye).
@@ -1005,7 +1057,7 @@ function kullaniciListesiGetir() {
   const ss = acikSS_();
   const { satirlar } = kullaniciSatirlariniOku_(ss);
   // PAROLA_HASH asla frontend'e gönderilmez.
-  return { ok: true, liste: satirlar.map(k => ({ id: k.id, kullaniciAdi: k.kullaniciAdi, rol: k.rol, aktif: k.aktif })) };
+  return { ok: true, liste: satirlar.map(k => ({ id: k.id, kullaniciAdi: k.kullaniciAdi, rol: k.rol, aktif: k.aktif, profil: k.profil || null })) };
 }
 
 function kullaniciEkle(body) {
@@ -1104,7 +1156,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261019c";
+const PROGRAM_SURUM_ = "20261020a";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -1225,6 +1277,8 @@ function handleRequest(e) {
       case "bulutAynaKur": result = bulutAynaKur(); break;
       case "getEskiBulutStokKartlari": result = getEskiBulutStokKartlari(); break;
       case "parolaDegistir":  result = parolaDegistir(body, oturum); break;
+      case "profilKaydet":    result = profilKaydet(body, oturum); break;
+      case "getProfilResimleri": result = getProfilResimleri(); break;
       case "kullaniciListesiGetir": result = kullaniciListesiGetir(); break;
       case "kullaniciEkle":         result = kullaniciEkle(body); break;
       case "kullaniciDurumGuncelle":result = kullaniciDurumGuncelle(body); break;

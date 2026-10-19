@@ -851,8 +851,9 @@ body.giris-yapildi #login-ekran{display:none}
   </div>
   <span id="topbar-saat" class="topbar-saat"></span>
   <div id="kullanici-menu-wrap" style="position:relative">
-    <button class="homebtn" style="display:inline-block" id="kullanici-menu-btn" onclick="kullaniciMenuAcKapat(event)">👤 <span id="kullanici-menu-ad"></span></button>
+    <button class="homebtn" style="display:inline-block" id="kullanici-menu-btn" onclick="kullaniciMenuAcKapat(event)"><span id="kullanici-menu-av" style="display:inline-flex;vertical-align:middle;margin-right:4px">👤</span><span id="kullanici-menu-ad"></span></button>
     <div id="kullanici-menu-liste" class="modul-switcher-liste" style="display:none;min-width:170px">
+      <div class="modul-switcher-satir" onclick="kullaniciMenuKapat();profilModalAc()">🖼 Profil Resmim</div>
       <div class="modul-switcher-satir" onclick="kullaniciMenuKapat();parolaDegistirModalAc()">🔑 Parolamı Değiştir</div>
       <div class="modul-switcher-satir" onclick="cikisYapButon()">🚪 Çıkış Yap</div>
     </div>
@@ -3085,6 +3086,8 @@ document.addEventListener("click", (ev)=>{
 function uygulamaKullanicisiUyGoster_(){
   try{
     const k = JSON.parse(localStorage.getItem("fincanlar_oturum_kullanici") || "null");
+    const av = document.getElementById("kullanici-menu-av");
+    if(av) av.innerHTML = (k && typeof profilAvatarHTML_ === "function") ? profilAvatarHTML_(k.ad, k.profil, 22) : "👤";
     const el = document.getElementById("kullanici-menu-ad");
     if(el){
       const y = localStorage.getItem("fincanlar_calisma_yili");
@@ -3998,7 +4001,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261019c";
+const FRONT_SURUM = "20261020a";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -4346,12 +4349,14 @@ function yyZilCiz_(){
 function yyZilListeCiz_(){
   const kap = document.getElementById("yy-zil-liste"), r = _yyZil.ozet; if(!kap || !r) return;
   const renk = YY_ZIL_RENK[r.renk] || "#64748b";
+  if(!_profilHarita) profilHaritaYukle_(()=>{ try{ yyZilListeCiz_(); }catch(_){} });   // kim yaptı → küçük profil resmi
   const satirlar = (r.son||[]).map(e=>{
     const durum = e.yedek === "gitti" ? '<span style="color:#1a8f3c" title="Yedeğe gitti">✅</span>' : e.yedek === "uyari" ? '<span title="Uyarı">⚠️</span>' : '<span style="color:#b07a00" title="Yedeğe gitmeyi bekliyor">⏳</span>';
     const cari = yyAktCariMetin_(e);
     const kenar = (e.kr || e.u) ? "#c62828" : (e.gd ? "#b07a00" : "transparent");
     return `<div style="display:flex;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);border-left:4px solid ${kenar};font-size:12.5px">
       <div style="min-width:54px;color:var(--text3)">${yyAktSaat_(e.t)}</div>
+      <div style="flex-shrink:0" title="${htmlKacis(e.k||"")}">${e.k ? profilKucuk_(e.k) : ""}</div>
       <div style="flex:1;min-width:0"><div style="font-weight:700">${(e.kr&&!e.u)?"⚠ ":""}${htmlKacis(e.e||"")}${e.gd?' <span style="font-weight:600;color:#b07a00">↩ geriye dönük</span>':""}</div>
       <div style="color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${htmlKacis([e.k, cari, e.tt!=null&&!e.u?paraFormat(e.tt):""].filter(Boolean).join(" · "))}</div></div>
       <div>${durum}</div></div>`;
@@ -20608,7 +20613,7 @@ function kullaniciYonetimiCiz(){
     if(!res || !res.ok){ el.innerHTML = `<div class="cari-empty">${(res&&res.hata)||"Yüklenemedi"}</div>`; return; }
     el.innerHTML = res.liste.map(k=>`
       <div class="hizli-erisim-satir" style="cursor:default">
-        <span class="lbl" style="flex:1">${k.kullaniciAdi}</span>
+        <span class="lbl" style="flex:1;display:flex;align-items:center;gap:8px">${profilAvatarHTML_(k.kullaniciAdi, k.profil, 26)}<span>${k.kullaniciAdi}</span></span>
         <select style="margin-right:8px" onchange="kullaniciRolDegistir('${k.id}', this.value)">
           <option value="Standart" ${k.rol==="Standart"?"selected":""}>Standart</option>
           <option value="Admin" ${k.rol==="Admin"?"selected":""}>Admin</option>
@@ -22608,7 +22613,7 @@ function girisDene(){
     localStorage.setItem("fincanlar_oturum_token", res.token);
     setTimeout(bulutDurumYukle_, 1200);
     localStorage.setItem("fincanlar_calisma_yili", String(res.yil || yil));
-    localStorage.setItem("fincanlar_oturum_kullanici", JSON.stringify({ad: res.kullaniciAdi, rol: res.rol}));
+    localStorage.setItem("fincanlar_oturum_kullanici", JSON.stringify({ad: res.kullaniciAdi, rol: res.rol, profil: res.profil || null}));
     document.getElementById("login-parola").value = "";
     document.body.classList.add("giris-yapildi");
     uygulamaKullanicisiUyGoster_();
@@ -24420,6 +24425,168 @@ document.addEventListener("keydown", function(e){
   });
   setInterval(guncelle,400);
 })();
+</script>
+
+<!-- ══════════════ 20 Eki 2026: PROFİL RESMİ (baş harf / hazır avatar / kendi fotoğrafı) ══════════════ -->
+<style>
+.pf-av{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;overflow:hidden;color:#fff;font-weight:700;vertical-align:middle;flex-shrink:0;line-height:1;box-shadow:0 0 0 1px rgba(0,0,0,.12)}
+.pf-av img{width:100%;height:100%;object-fit:cover;display:block}
+.pf-kutu{max-width:420px}
+.pf-onizleme{display:flex;align-items:center;gap:14px;margin:4px 0 14px}
+.pf-baslik{font-size:12px;font-weight:700;color:var(--text3);margin:12px 0 6px;text-transform:uppercase;letter-spacing:.03em}
+.pf-izgara{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+.pf-simge{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:20px;border:2px solid transparent;border-radius:10px;background:var(--bg3);cursor:pointer;transition:transform .12s,border-color .12s}
+.pf-simge:hover{transform:scale(1.1);border-color:var(--border)}
+.pf-simge.sec{border-color:var(--blue);background:var(--blue-l)}
+.pf-renkler{display:flex;gap:8px;flex-wrap:wrap}
+.pf-renk{width:26px;height:26px;border-radius:50%;border:3px solid transparent;box-shadow:0 0 0 1px rgba(0,0,0,.18);cursor:pointer;transition:transform .12s}
+.pf-renk:hover{transform:scale(1.15)}
+.pf-renk.sec{border-color:var(--bg2);box-shadow:0 0 0 2px var(--blue)}
+.pf-satir{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+</style>
+<script>
+const PF_RENKLER_ = ["#2563eb","#0891b2","#059669","#65a30d","#d97706","#dc2626","#c026d3","#7c3aed","#475569","#be185d"];
+const PF_SIMGELER_ = ["🦊","🐻","🐼","🦁","🐯","🐸","🐵","🐧","🦉","🦅","🐢","🐬","🦋","🐝","🌻","🌵","🍀","🔥","⭐","🌙","⚡","🚀","🎯","🏆","🔧","🧱","📦","🚚","🛠️","💼","☕","🎧"];
+let _profilHarita = null, _profilHaritaZaman = 0, _profilHaritaYukleniyor = false, _profilHaritaBekleyen = [], _pf = null;
+
+function profilRenkGecerli_(r){ return /^#[0-9a-fA-F]{6}$/.test(String(r||"")); }
+function profilFotoGecerli_(d){ return /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(String(d||"")); }
+function profilRenkAd_(ad){
+  let h = 0; const s = String(ad||"").toLowerCase();
+  for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0;
+  return PF_RENKLER_[h % PF_RENKLER_.length];
+}
+// profil: null (baş harf, addan türetilen renk) | {tip:"harf",renk} | {tip:"avatar",simge,renk} | {tip:"foto",data}
+function profilAvatarHTML_(ad, profil, px){
+  px = px || 28;
+  const p = profil && typeof profil === "object" ? profil : null;
+  const kutu = "width:"+px+"px;height:"+px+"px;font-size:"+Math.round(px*0.5)+"px";
+  if(p && p.tip === "foto" && profilFotoGecerli_(p.data)) return '<span class="pf-av" style="'+kutu+'"><img src="'+p.data+'" alt=""></span>';
+  const renk = (p && profilRenkGecerli_(p.renk)) ? p.renk : profilRenkAd_(ad);
+  if(p && p.tip === "avatar" && p.simge) return '<span class="pf-av" style="'+kutu+';background:'+renk+'">'+htmlKacis(p.simge)+'</span>';
+  const harf = (String(ad||"?").trim().charAt(0) || "?").toLocaleUpperCase("tr");
+  return '<span class="pf-av" style="'+kutu+';background:'+renk+'">'+htmlKacis(harf)+'</span>';
+}
+function profilBenim_(){ try{ const k = JSON.parse(localStorage.getItem("fincanlar_oturum_kullanici")||"null"); return k ? (k.profil||null) : null; }catch(e){ return null; } }
+function profilBenimYaz_(profil){
+  try{ const k = JSON.parse(localStorage.getItem("fincanlar_oturum_kullanici")||"null"); if(!k) return; k.profil = profil || null; localStorage.setItem("fincanlar_oturum_kullanici", JSON.stringify(k)); }catch(e){}
+}
+function profilKucuk_(ad){
+  const h = _profilHarita || {};
+  return profilAvatarHTML_(ad, h[String(ad||"").toLowerCase()] || null, 20);
+}
+// Tüm kullanıcıların profil resimleri (işlem listelerinde "kim yaptı" yanında); 10 dk önbellek
+function profilHaritaYukle_(cb, zorla){
+  if(_profilHarita && !zorla && Date.now() - _profilHaritaZaman < 600000){ if(cb) cb(_profilHarita); return; }
+  if(cb) _profilHaritaBekleyen.push(cb);
+  if(_profilHaritaYukleniyor) return;
+  _profilHaritaYukleniyor = true;
+  const bitir = (h)=>{
+    _profilHarita = h || {}; _profilHaritaZaman = Date.now(); _profilHaritaYukleniyor = false;
+    const l = _profilHaritaBekleyen; _profilHaritaBekleyen = [];
+    l.forEach(f=>{ try{ f(_profilHarita); }catch(e){} });
+  };
+  cariApi("getProfilResimleri", {}).then(r=> bitir(r && r.ok ? r.harita : {})).catch(()=> bitir({}));
+}
+
+// ── Profil resmi penceresi ──
+function profilModalAc(){
+  const eski = document.getElementById("profil-overlay"); if(eski) eski.remove();
+  let k = null; try{ k = JSON.parse(localStorage.getItem("fincanlar_oturum_kullanici")||"null"); }catch(e){}
+  if(!k) return;
+  const m = profilBenim_();
+  _pf = m ? JSON.parse(JSON.stringify(m)) : {tip:"harf", renk:""};
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay"; ov.id = "profil-overlay";
+  ov.onclick = (e)=>{ if(e.target === ov) ov.remove(); };
+  ov.innerHTML = `
+    <div class="modal-box pf-kutu">
+      <h3 style="margin-top:0">🖼 Profil Resmim</h3>
+      <div class="pf-onizleme"><div id="pf-onizleme"></div><div><b>${htmlKacis(k.ad)}</b><div style="font-size:12px;color:var(--text3)">Sağ üstte ve işlem listelerinde bu resim görünür.</div></div></div>
+      <div class="pf-baslik">Zemin rengi</div>
+      <div class="pf-renkler" id="pf-renkler">${PF_RENKLER_.map((r,i)=>`<span class="pf-renk" style="background:${r}" data-r="${r}" onclick="profilRenkSec(${i})" title="Renk seç"></span>`).join("")}</div>
+      <div class="pf-baslik">Hazır avatar</div>
+      <div class="pf-izgara" id="pf-izgara">${PF_SIMGELER_.map((s,i)=>`<div class="pf-simge" data-i="${i}" onclick="profilAvatarSec(${i})">${s}</div>`).join("")}</div>
+      <div class="pf-baslik">Seçenekler</div>
+      <div class="pf-satir">
+        <button class="btn" onclick="profilHarfSec()" title="Kullanıcı adının baş harfi">🔤 Baş harf</button>
+        <button class="btn" onclick="this.nextElementSibling.click()" title="Telefonda doğrudan fotoğraf çekebilirsiniz">📷 Fotoğraf seç / çek</button><input type="file" accept="image/*" style="display:none" onchange="profilFotoSec(this)">
+      </div>
+      <div class="login-hata" id="pf-hata"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('profil-overlay').remove()">Vazgeç</button>
+        <button class="btn btn-primary" id="pf-kaydet-btn" onclick="profilKaydetGonder()">Kaydet</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  profilOnizlemeGuncelle_();
+}
+function profilOnizlemeGuncelle_(){
+  let k = null; try{ k = JSON.parse(localStorage.getItem("fincanlar_oturum_kullanici")||"null"); }catch(e){}
+  const ad = k ? k.ad : "";
+  const el = document.getElementById("pf-onizleme"); if(el) el.innerHTML = profilAvatarHTML_(ad, _pf, 72);
+  document.querySelectorAll("#pf-izgara .pf-simge").forEach(d=>{ d.classList.toggle("sec", !!(_pf && _pf.tip === "avatar" && PF_SIMGELER_[+d.dataset.i] === _pf.simge)); });
+  const gecerliRenk = (_pf && profilRenkGecerli_(_pf.renk)) ? _pf.renk : (_pf && _pf.tip !== "foto" ? profilRenkAd_(ad) : "");
+  document.querySelectorAll("#pf-renkler .pf-renk").forEach(d=>{ d.classList.toggle("sec", d.dataset.r === gecerliRenk); });
+}
+function profilRenkSec(i){
+  if(!_pf || _pf.tip === "foto") _pf = {tip:"harf", renk:""};
+  _pf.renk = PF_RENKLER_[i]; profilOnizlemeGuncelle_();
+}
+function profilAvatarSec(i){
+  const renk = (_pf && _pf.tip !== "foto" && profilRenkGecerli_(_pf.renk)) ? _pf.renk : "";
+  _pf = {tip:"avatar", simge: PF_SIMGELER_[i], renk: renk}; profilOnizlemeGuncelle_();
+}
+function profilHarfSec(){
+  const renk = (_pf && _pf.tip !== "foto" && profilRenkGecerli_(_pf.renk)) ? _pf.renk : "";
+  _pf = {tip:"harf", renk: renk}; profilOnizlemeGuncelle_();
+}
+// Seçilen fotoğrafı ortadan kare keserek 96x96'ya küçültür (JPEG, ~5-15 KB)
+function profilFotoSec(inp){
+  const hata = document.getElementById("pf-hata"); if(hata) hata.textContent = "";
+  const f = inp.files && inp.files[0]; inp.value = "";
+  if(!f) return;
+  const fr = new FileReader();
+  fr.onerror = ()=>{ if(hata) hata.textContent = "Dosya okunamadı."; };
+  fr.onload = ()=>{
+    const img = new Image();
+    img.onerror = ()=>{ if(hata) hata.textContent = "Bu resim biçimi açılamadı. JPG/PNG deneyin."; };
+    img.onload = ()=>{
+      try{
+        const N = 96, c = document.createElement("canvas"); c.width = N; c.height = N;
+        const x = c.getContext("2d"), kare = Math.min(img.width, img.height);
+        x.fillStyle = "#fff"; x.fillRect(0,0,N,N);
+        x.drawImage(img, (img.width-kare)/2, (img.height-kare)/2, kare, kare, 0, 0, N, N);
+        let q = 0.85, d = c.toDataURL("image/jpeg", q);
+        while(d.length > 28000 && q > 0.4){ q -= 0.15; d = c.toDataURL("image/jpeg", q); }
+        if(d.length > 28000){ if(hata) hata.textContent = "Fotoğraf çok büyük kaldı, başka bir resim deneyin."; return; }
+        _pf = {tip:"foto", data:d}; profilOnizlemeGuncelle_();
+      }catch(e){ if(hata) hata.textContent = "Fotoğraf işlenemedi: " + e.message; }
+    };
+    img.src = fr.result;
+  };
+  fr.readAsDataURL(f);
+}
+function profilKaydetGonder(){
+  const btn = document.getElementById("pf-kaydet-btn"), hata = document.getElementById("pf-hata");
+  if(btn){ btn.disabled = true; btn.textContent = "Kaydediliyor..."; }
+  // Varsayılan görünüm (renksiz baş harf) kayıt gerektirmez: boş gönderilir
+  const gonder = (!_pf || (_pf.tip === "harf" && !_pf.renk)) ? "" : _pf;
+  cariApi("profilKaydet", {profil: gonder}).then(res=>{
+    if(btn){ btn.disabled = false; btn.textContent = "Kaydet"; }
+    if(!res || !res.ok){ if(hata) hata.textContent = (res && res.hata) || "Kaydedilemedi"; return; }
+    profilBenimYaz_(res.profil || null);
+    _profilHarita = null;
+    uygulamaKullanicisiUyGoster_();
+    const ov = document.getElementById("profil-overlay"); if(ov) ov.remove();
+    if(typeof toastGoster === "function") toastGoster("Profil resmi kaydedildi");
+  }).catch(()=>{
+    if(btn){ btn.disabled = false; btn.textContent = "Kaydet"; }
+    if(hata) hata.textContent = "Sunucuya ulaşılamadı, tekrar deneyin.";
+  });
+}
+// Sayfa açıkken oturum zaten varsa üst çubuktaki resim de çizilsin
+try{ uygulamaKullanicisiUyGoster_(); }catch(e){}
 </script>
 </body>
 </html>
