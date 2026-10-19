@@ -307,7 +307,15 @@ function kurulum(depo, secenek) {
     removeAll(ks) { for (const k of ks) onbellek.delete(k); },
   };
   const ozellikTutucu = {
-    getProperty(k) { return k in depo.ozellikler ? depo.ozellikler[k] : null; },
+    // EDM_* değerleri yerelde tanımlı değilse (ozellikler.json) buluttan köprüyle alınan kopya BELLEKTE okunur; diske/yedeğe yazılmaz (src/dis-veri.js edm).
+    getProperty(k) {
+      if (k in depo.ozellikler) return depo.ozellikler[k];
+      if (typeof k === 'string' && k.indexOf('EDM_') === 0) {
+        const d = globalThis.__YEREL_DIS_VERI__, e = d && d.edm;
+        if (e && Object.prototype.hasOwnProperty.call(e, k)) return e[k];
+      }
+      return null;
+    },
     setProperty(k, v) { depo.ozellikler[k] = String(v); depo.kirlet('__ozellik', 'ozellik', { k }); return ozellikTutucu; },
     setProperties(o, sil) { if (sil) depo.ozellikler = {}; Object.assign(depo.ozellikler, o); depo.kirlet('__ozellik', 'ozellik', {}); return ozellikTutucu; },
     deleteProperty(k) { delete depo.ozellikler[k]; depo.kirlet('__ozellik', 'ozellik', { k }); return ozellikTutucu; },

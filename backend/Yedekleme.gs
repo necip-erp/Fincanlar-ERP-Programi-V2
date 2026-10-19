@@ -475,6 +475,12 @@ function yerelDisFatura(body) {
       claudeAnahtar: g("RESIM_OKU_API_ANAHTARI"), claudeModel: g("RESIM_OKU_MODEL")
     } };
   }
+  // ★ (19 Eki 2026) EDM bağlantı ayarları (EDM_URL/USER/PASSWORD ve EDM_* seçenekleri; sayaçlar EDM_SON_* hariç) yerel sunucuya YALNIZ BELLEKTE verilir; yerelde ozellikler.json'da tanımlı değer öncelikli.
+  if (body.islem === "edmAyar") {
+    var pe = PropertiesService.getScriptProperties().getProperties(), eo = {};
+    Object.keys(pe).forEach(function (k) { if (/^EDM_/.test(k) && !/^EDM_SON_/.test(k)) eo[k] = String(pe[k]); });
+    return { ok: true, edm: eo };
+  }
   if (body.islem === "hsYapi") { var hy = hsYapiOku_(); return { ok: true, hsYapi: hy && !hsYapiBos_(hy) ? hy : null }; }
   return { ok: false, hata: "Bilinmeyen işlem" };
 }

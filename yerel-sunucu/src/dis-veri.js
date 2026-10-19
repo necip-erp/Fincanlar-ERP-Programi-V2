@@ -3,7 +3,7 @@
 // Bu modül ilgili işlemden ÖNCE (async) buluttan veriyi alıp `durum` içinde tutar; arka uç (senkron) bunu YerelDisVeri adıyla okur.
 function baslat(o) {
   const yedek = o.yedek;
-  const durum = { satirlar: null, zaman: 0, hata: '', gorsel: {}, resimOku: null, resimOkuZaman: 0, resimOkuHata: '', hsYapi: null, hsYapiZaman: 0 };
+  const durum = { satirlar: null, zaman: 0, hata: '', gorsel: {}, resimOku: null, resimOkuZaman: 0, resimOkuHata: '', hsYapi: null, hsYapiZaman: 0, edm: null, edmZaman: 0, edmHata: '' };
   const TAZE_MS = 20000, GORSEL_LIMIT = 30;
   let bekleyen = null, bekleyenResim = null;
 
@@ -59,7 +59,20 @@ function baslat(o) {
     } catch (e) {}
   }
 
+  // EDM bağlantı ayarı buluttan (yalnız bellekte tutulur, diske yazılmaz); 5 dk önbellek. Yerelde ozellikler.json'daki değer öncelikli (shim.js).
+  async function edmAyariYenile() {
+    if (durum.edm && Date.now() - durum.edmZaman < 300000) return;
+    if (!durum.edm && durum.edmDeneme && Date.now() - durum.edmDeneme < 30000) return;   // bulut yanıt vermediyse 30 sn içinde tekrar sorma
+    durum.edmDeneme = Date.now();
+    try {
+      const y = await yedek.bulutaSor({ action: 'yerelDisFatura', islem: 'edmAyar' });
+      if (!y || !y.ok || !y.edm) throw new Error((y && y.hata) || 'Bulut yanıt vermedi');
+      durum.edm = y.edm; durum.edmZaman = Date.now(); durum.edmHata = '';
+    } catch (e) { durum.edmHata = e.message; }
+  }
+
   async function hazirla(action, body) {
+    if (/edm/i.test(String(action || ''))) return edmAyariYenile();
     if (action === 'getHsYapi') return hsYapiYenile();
     if (/^(getResimOku|resimOku)/.test(String(action || ''))) return resimAyariYenile();
     if (action === 'getAlisFaturaGorselHtml') return gorselIste(body && body.faturaNo);
