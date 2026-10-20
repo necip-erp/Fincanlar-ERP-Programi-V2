@@ -990,6 +990,11 @@ setInterval(topbarSaatGuncelle, 10000);
           <div class="lbl">Ambalaj Tanımları</div>
           <div class="desc">Kutu, Koli, Palet, Rulo vb.</div>
         </div>
+        <div class="modtile" onclick="stokTanimAltAc('renkliste')">
+          <span class="ic">🌈</span>
+          <div class="lbl">Renk Listeleri</div>
+          <div class="desc">Renkli ürünler (süpürgelik vb.) — Excel'den toplu aktar</div>
+        </div>
         <div class="modtile" onclick="stokTanimAltAc('agirlik')">
           <span class="ic">⚖️</span>
           <div class="lbl">Ağırlık Tanımları</div>
@@ -1045,6 +1050,40 @@ setInterval(topbarSaatGuncelle, 10000);
     </div>
 
     <!-- KADEME 3: Ağırlık Tanımları (tek tek + filtrelenen listeye toplu uygulama) -->
+    <div id="stok-renkliste-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
+      <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('tanimlar')">← Geri</button>
+      <div class="rapor-baslik" style="margin:8px 0 6px">🌈 Renk Listeleri <span style="font-size:12px;font-weight:600;color:var(--text3)">(model bazında renk; satış/alış/hareketlerde seçilir, stok renk bazında tutulur)</span></div>
+      <p style="color:var(--text3);font-size:12.5px;margin:0 0 10px">Bir renk listesi birden çok stok kartına atanabilir (örn. 6 cm ve 8 cm süpürgelik aynı 40 renk). Renk listesi atanmayan kartlar renksiz çalışır. Bu ekran, eski "Renk Tanımları"ndan (kart başına tek renk) ayrıdır.</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+        <div style="flex:1;min-width:300px;max-width:460px">
+          <button class="btn btn-primary" onclick="renkListeDuzenle_('')">+ Yeni Renk Listesi</button>
+          <div id="rl-liste" style="margin-top:10px"><div class="cari-empty">Yükleniyor...</div></div>
+        </div>
+        <div id="rl-editor" style="flex:2;min-width:340px;display:none;background:var(--bg3);border-radius:10px;padding:12px">
+          <div class="fld"><label>Liste Adı</label><input id="rl-ad" type="text" placeholder="Örn. Süpürgelik Renkleri" autocomplete="off"></div>
+          <div class="fld"><label>Renkler — her satırda <b>Renk Kodu</b> ve <b>Renk Adı</b> (Excel'den iki sütunu kopyalayıp yapıştırın; tek sütun ise ad = kod)</label>
+            <textarea id="rl-metin" rows="14" style="font-family:monospace;font-size:13px" placeholder="01&#9;Beyaz&#10;02&#9;Gri&#10;03&#9;Antrasit"></textarea></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <label class="btn" style="cursor:pointer;margin:0">📂 Excel dosyası seç<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="renkListeDosyaOku_(this)"></label>
+            <button class="btn btn-primary" onclick="renkListeKaydet_()">Kaydet</button>
+            <button class="btn" onclick="document.getElementById('rl-editor').style.display='none'">Vazgeç</button>
+            <span id="rl-durum" style="font-size:12.5px;color:var(--text2)"></span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:18px;padding:10px 12px;background:var(--bg3);border-radius:10px">
+        <b style="font-size:13.5px">Stok kartlarına renk listesi ata</b>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+          <input id="rl-ara" placeholder="Ara: ürün adı, stok kodu (örn. 3618)..." oninput="renkAtaFiltrele_()" autocomplete="off" style="flex:1;min-width:240px">
+          <select id="rl-ata-liste" style="min-width:200px"></select>
+          <button class="btn btn-primary" id="rl-ata-btn" onclick="renkAtaUygula_()">Filtrelenen stoklara ata</button>
+          <span id="rl-ata-durum" style="font-size:12.5px;color:var(--text2)"></span>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin:6px 0">Önce arama kutusuyla ilgili kartları listeleyin; "Listesiz (renksiz)" seçeneği atamayı kaldırır.</div>
+        <div id="rl-ata-items" class="cari-items"></div>
+      </div>
+    </div>
+
     <div id="stok-agirlik-view" style="display:none;height:100%;overflow-y:auto" class="finans-panel">
       <div>
         <button class="cari-back-btn" style="display:inline-flex" onclick="stokAltModulAc('tanimlar')">← Geri</button>
@@ -5521,6 +5560,103 @@ function onbellekOku(anahtar, maxYasMs){
 }
 // ★ (13 Eki 2026) Pasif stok/cari kartları tarayıcı önbelleğine girmez (sessiz beklerler; tam liste sunucudan gelir).
 function stokAktifler(){ return (_stokTanimListe||[]).filter(s=>!s.pasif); }
+
+// ══════ RENKLİ ÜRÜN (20 Eki 2026) ══════
+// Renk listesi MODEL (stok kartı) bazında atanır (Stok > Tanımlar > Renk Listeleri). Renkli kartta satır/hareket başına
+// renk seçilir; seçim zorunlu değildir ama seçilmezse kayıt öncesi "renk seçimi yapılmadı" uyarısı çıkar.
+// Stok renk bazında tutulur (hareketin RENK kolonu). Not: eski "Renk Tanımları" (kart başına tek renk) ayrı bir özelliktir.
+let _renkListeleri = [], _renkMiktarHaritasi = {}, _renkYuklemeZamani = 0, _renkYukleniyor = null;
+function renkAnahtar(v){
+  if(v===null || v===undefined) return "";
+  const s = String(v).trim(); if(!s) return "";
+  return /^\d+$/.test(s) ? String(parseInt(s,10)) : s.toLocaleLowerCase("tr");
+}
+function renkVerileriYukle_(zorla){
+  if(_renkYukleniyor) return _renkYukleniyor;
+  if(!zorla && _renkYuklemeZamani && Date.now()-_renkYuklemeZamani < 60000) return Promise.resolve(false);
+  _renkYukleniyor = Promise.all([cariApi("getRenkListeleri"), cariApi("getStokRenkMiktarlari")]).then(([a,b])=>{
+    if(a && a.ok) _renkListeleri = a.listeler || [];
+    if(b && b.ok) _renkMiktarHaritasi = b.harita || {};
+    _renkYuklemeZamani = Date.now();
+    return true;
+  }).catch(()=>false).then(r=>{ _renkYukleniyor = null; return r; });
+  return _renkYukleniyor;
+}
+function renkStokKarti_(stokKodu){
+  const kod = String(stokKodu||"").trim(); if(!kod) return null;
+  return (_stokTanimListe||[]).find(x=>x.stokKodu===kod) || null;
+}
+function renkRozet_(k){
+  if(!k || !String(k.renk||"").trim()) return "";
+  return ` <span class="tip-badge" style="background:var(--bg3);color:var(--text2)" title="Renk">🎨 ${htmlKacis(k.renk)}${(function(){ const a = renkAdiBul_(k.stokKodu, k.renk); return a && a!==String(k.renk) ? " — "+htmlKacis(a) : ""; })()}</span>`;
+}
+function renkListeSecenekHtml_(secili){
+  if(!_renkListeleri.length && !_renkYuklemeZamani) renkVerileriYukle_().then(()=>{ const el = document.getElementById("st-renkliste"); if(el){ const v = el.value; el.innerHTML = renkListeSecenekHtml_(secili); el.value = v || secili || ""; } });
+  return '<option value="">— Renksiz —</option>' + _renkListeleri.map(l=>`<option value="${htmlKacis(l.id)}" ${l.id===secili?"selected":""}>${htmlKacis(l.ad)} (${l.renkler.length})</option>`).join("");
+}
+function renkListesiBul_(id){ return (_renkListeleri||[]).find(l=>l.id===id) || null; }
+function renkAdiBul_(stokKodu, renkKod){
+  const k = String(renkKod||"").trim(); if(!k) return "";
+  const st = renkStokKarti_(stokKodu); const l = st && st.renkListeId ? renkListesiBul_(st.renkListeId) : null;
+  const r = l ? l.renkler.find(x=>renkAnahtar(x.kod)===renkAnahtar(k)) : null;
+  return r ? r.ad : k;
+}
+// Kalem satırlarına (her render sonrası) renk seçicisi ekler; yalnız stok kartında renk listesi olan satırlarda görünür.
+function renkSatirlariUygula_(kapId, kalemler, ikinciTur){
+  const kap = document.getElementById(kapId); if(!kap) return;
+  const satirlar = kap.querySelectorAll(".satis-kalem-satir");
+  let beklenen = false;
+  satirlar.forEach((satir, idx)=>{
+    const k = kalemler[idx]; if(!k) return;
+    const eski = satir.querySelector(".kalem-renk-sec"); if(eski) eski.remove();
+    const kodEl = satir.querySelector(".satis-kalem-stokkodu");
+    if(kodEl && !kodEl.dataset.renkBagli){
+      kodEl.dataset.renkBagli = "1";
+      kodEl.addEventListener("change", ()=>renkSatirlariUygula_(kapId, kalemler));
+    }
+    if(k._renkStok !== undefined && k._renkStok !== String(k.stokKodu||"")){ k.renk = ""; delete k._renkStok; }
+    const st = renkStokKarti_(k.stokKodu);
+    if(!st || !st.renkListeId || k.stoksuz) return;
+    const l = renkListesiBul_(st.renkListeId);
+    if(!l){ beklenen = true; return; }
+    const harita = (_renkMiktarHaritasi[st.id]) || {};
+    const secili = renkAnahtar(k.renk);
+    const sel = document.createElement("select");
+    sel.className = "kalem-renk-sec";
+    sel.title = "Renk seçimi (zorunlu değil; seçilmezse uyarı verilir)";
+    sel.style.cssText = "flex:0 0 170px;max-width:170px;padding:7px 4px;border:1px solid "+(secili?"var(--border)":"var(--yellow,#d97706)")+";border-radius:7px;background:var(--bg3);font-family:inherit;font-size:12.5px";
+    let opts = '<option value="">🎨 Renk seç...</option>';
+    let bulundu = false;
+    l.renkler.forEach(r=>{
+      const an = renkAnahtar(r.kod);
+      const stok = Object.prototype.hasOwnProperty.call(harita, an) ? harita[an] : 0;
+      if(an===secili) bulundu = true;
+      opts += `<option value="${htmlKacis(r.kod)}" ${an===secili?"selected":""}>${htmlKacis(r.kod)} — ${htmlKacis(r.ad)}${_renkYuklemeZamani?" ("+miktarFormat(stok)+")":""}</option>`;
+    });
+    if(secili && !bulundu) opts += `<option value="${htmlKacis(k.renk)}" selected>${htmlKacis(k.renk)} (listede yok)</option>`;
+    sel.innerHTML = opts;
+    sel.onchange = ()=>{ k.renk = sel.value; k._renkStok = String(k.stokKodu||""); sel.style.borderColor = sel.value ? "var(--border)" : "var(--yellow,#d97706)"; };
+    const urunKap = satir.querySelector(".satis-kalem-urun");
+    const ankraj = urunKap ? urunKap.parentElement : null;
+    if(ankraj) ankraj.after(sel);
+  });
+  if(!ikinciTur && (beklenen || !_renkYuklemeZamani)){
+    // Veri henüz yok/bayat: yükle, gelince satırları (odağı bozmadan) yeniden işle.
+    if(beklenen || (kalemler||[]).some(k=>{ const st=renkStokKarti_(k.stokKodu); return st && st.renkListeId; }))
+      renkVerileriYukle_(beklenen).then(()=>renkSatirlariUygula_(kapId, kalemler, true));
+  }
+}
+// Kayıttan önce: renkli kartlarda renk seçilmemiş kalem varsa uyarı (iptal edilebilir; zorunlu değil).
+function renkEksikOnay_(kalemler){
+  const eksik = (kalemler||[]).filter(k=>{
+    if(k.stoksuz) return false;
+    const st = renkStokKarti_(k.stokKodu);
+    return st && st.renkListeId && !String(k.renk||"").trim();
+  });
+  if(!eksik.length) return true;
+  const liste = eksik.slice(0,8).map(k=>"• "+(k.urunAdi||k.stokKodu)).join("\n") + (eksik.length>8 ? "\n• ... (+"+(eksik.length-8)+")" : "");
+  return confirm("⚠ Renk seçimi yapılmadı\n\nRenkli üründe renk seçilmeyen kalemler:\n"+liste+"\n\nRenk belirtilmeden kaydedilsin mi?\n(Tamam: renksiz kaydet · İptal: forma dön)");
+}
 function onbellekYaz(anahtar, veri){
   try{
     if(anahtar==="stokTanimListesi" && Array.isArray(veri)) veri = veri.filter(s=>!s.pasif);
@@ -7121,7 +7257,7 @@ function satisDetayCiz(res){
         ${kalemler.map(k=>`
           <tr>
             <td>${k.stokKodu||'—'}</td>
-            <td>${k.urunAdi}</td>
+            <td>${k.urunAdi}${renkRozet_(k)}</td>
             <td>${miktarFormat(k.miktar)}</td>
             ${siparis?`<td>${miktarFormat(k.faturalananMiktar||0)}</td><td class="${k.kalanMiktar>0?'hk-borc':'hk-alacak'}">${miktarFormat(k.kalanMiktar)}</td>`:''}
             <td>${k.birim}</td>
@@ -7263,7 +7399,7 @@ function siparisFaturaKalemlerCiz(){
     return `
     <tr style="${devamEdiyor?'':'opacity:.5'}">
       <td>${k.stokKodu||'—'}</td>
-      <td>${k.urunAdi}</td>
+      <td>${k.urunAdi}${renkRozet_(k)}</td>
       <td style="text-align:right">${miktarFormat(k.miktar)} ${k.birim}</td>
       <td style="text-align:right">${miktarFormat(k.kalanMiktar)} ${k.birim}</td>
       <td style="text-align:right">${paraFormat(k.birimFiyat)}</td>
@@ -7650,7 +7786,7 @@ function belgeFormuHTMLOlustur(s, kalemler, t, c){
       </tr></thead>
       <tbody>
         ${kalemler.map(k=>{ const m2 = belgeFormuMiktar2(k); return `<tr>
-          <td>${k.stokKodu||'—'}</td><td>${k.urunAdi}</td>
+          <td>${k.stokKodu||'—'}</td><td>${k.urunAdi}${renkRozet_(k)}</td>
           <td style="text-align:right">${miktarFormat(k.miktar)} ${k.birim||''}</td>
           <td style="text-align:right">${miktarFormat(m2.miktar)} ${m2.birim||''}</td>
           <td style="text-align:right">${fiyatFormat(k.birimFiyat)}</td>
@@ -7712,7 +7848,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
   const s = duzenle ? duzenle.satis : null;
   _satisDuzenleId = s ? s.id : null;
   _yeniSatisKalemleri = duzenle
-    ? duzenle.kalemler.map(k=>({urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:k.birimFiyat, iskontoYuzde:k.iskontoYuzde||0, kdvOrani:k.kdvOrani===undefined?20:k.kdvOrani, stokKodu:k.stokKodu||""}))
+    ? duzenle.kalemler.map(k=>({urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:k.birimFiyat, iskontoYuzde:k.iskontoYuzde||0, kdvOrani:k.kdvOrani===undefined?20:k.kdvOrani, stokKodu:k.stokKodu||"", renk:k.renk||""}))
     : [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""}];
   if(!_cariYuklendi) cariListesiYukle();
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
@@ -9995,7 +10131,8 @@ function hizliSatisFormaEkle_(kalemler){
   const bos = _yeniSatisKalemleri.length === 1 && !_yeniSatisKalemleri[0].urunAdi && !_yeniSatisKalemleri[0].stokKodu;
   if(bos) _yeniSatisKalemleri = [];
   kalemler.forEach(k=>{
-    const mevcut = k.stokKodu ? _yeniSatisKalemleri.find(x => x.stokKodu === k.stokKodu) : null;
+    const renkliKart = k.stokKodu ? renkStokKarti_(k.stokKodu) : null;   // renkli üründe her ekleme ayrı satır (renkler farklı olabilir)
+    const mevcut = (k.stokKodu && !(renkliKart && renkliKart.renkListeId)) ? _yeniSatisKalemleri.find(x => x.stokKodu === k.stokKodu) : null;
     if(mevcut) mevcut.miktar = (parseFloat(mevcut.miktar)||0) + k.miktar;
     else _yeniSatisKalemleri.push(k);
   });
@@ -10239,6 +10376,7 @@ function satisKalemlerCiz(){
     </div>`).join("");
   satisToplamGuncelle();
   satisToplamGizleUygula_();
+  renkSatirlariUygula_("sm-kalemler", _yeniSatisKalemleri);
 }
 
 // Ürün adı alanına yazarken, Stok Tanımlama listesinden eşleşen ürünleri önerir.
@@ -10467,6 +10605,7 @@ function satisKaydet(){
   if(!cariId){ alert("Cari (müşteri) seçimi zorunludur."); document.getElementById("sm-cari-arama").focus(); return; }
   const kalemler = _yeniSatisKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
   if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
+  if(!renkEksikOnay_(kalemler)) return;
   for(const k of kalemler){
     if(!k.stoksuz && !String(k.stokKodu||"").trim()){
       alert("\""+k.urunAdi+"\" kalemi için Stok Rehberi'nden bir Stok Kodu seçin, ya da 'Stoksuz' işaretleyin.");
@@ -11262,7 +11401,7 @@ function satisIadeDetayCiz(res){
       <tbody>
         ${kalemler.map(k=>`
           <tr>
-            <td>${k.urunAdi}</td>
+            <td>${k.urunAdi}${renkRozet_(k)}</td>
             <td>${miktarFormat(k.miktar)}</td>
             <td>${k.birim}</td>
             <td>${fiyatFormat(k.birimFiyat)}</td>
@@ -11441,6 +11580,7 @@ function satisIadeKalemlerCiz(){
       ${_yeniSatisIadeKalemleri.length>1 ? `<span class="hk-sil" onclick="satisIadeKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
   satisIadeToplamGuncelle();
+  renkSatirlariUygula_("stim-kalemler", _yeniSatisIadeKalemleri);
 }
 
 let _stimOneriTimer = null;
@@ -11486,6 +11626,7 @@ function satisIadeKaydet(){
   const serbestAd = document.getElementById("stim-serbest-ad").value.trim();
   const kalemler = _yeniSatisIadeKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
   if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
+  if(!renkEksikOnay_(kalemler)) return;
   for(const k of kalemler){
     if(!k.stoksuz && !String(k.stokKodu||"").trim()){
       alert("\""+k.urunAdi+"\" kalemi için Stok Rehberi'nden bir Stok Kodu seçin, ya da 'Stoksuz' işaretleyin.");
@@ -11840,7 +11981,7 @@ function alisDetayCiz(res){
         ${kalemler.map(k=>`
           <tr>
             <td>${k.stokKodu||'—'}</td>
-            <td>${k.urunAdi}</td>
+            <td>${k.urunAdi}${renkRozet_(k)}</td>
             <td>${miktarFormat(k.miktar)}</td>
             <td>${k.birim}</td>
             <td>${fiyatFormat(k.birimFiyat)}</td>
@@ -11887,7 +12028,7 @@ function alisModalAc(duzenle){
     ? duzenle.kalemler.map(k=>{
         const isk = parseFloat(k.iskontoYuzde)||0;
         const fiyat = (isk>0 && parseFloat(k.brutFiyat)>0) ? parseFloat(k.brutFiyat) : k.birimFiyat;
-        return {urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:fiyat, iskontoYuzde:isk, stokKodu:k.stokKodu||"", kdvOrani:k.kdvOrani||0, netKilit:k.birimFiyat, satilanCariId:k.satilanCariId||"", satilanCariAd:k.satilanCariAd||""};
+        return {urunAdi:k.urunAdi, miktar:k.miktar, birim:k.birim, birimFiyat:fiyat, iskontoYuzde:isk, stokKodu:k.stokKodu||"", kdvOrani:k.kdvOrani||0, netKilit:k.birimFiyat, satilanCariId:k.satilanCariId||"", satilanCariAd:k.satilanCariAd||"", renk:k.renk||""};
       })
     : [{urunAdi:"", miktar:1, birim:"adet", birimFiyat:0, iskontoYuzde:0, kdvOrani:20, stokKodu:""}];
   if(!_cariYuklendi) cariListesiYukle();
@@ -12149,6 +12290,7 @@ function alisKalemlerCiz(){
       <span class="hk-sil" style="flex:0 0 22px;text-align:center;visibility:${_yeniAlisKalemleri.length>1?'visible':'hidden'}" onclick="alisKalemSilUI(${idx})" title="Sil">🗑</span>
     </div>`).join("");
   alisToplamGuncelle();
+  renkSatirlariUygula_("am-kalemler", _yeniAlisKalemleri);
 }
 
 // Alış kalemlerinde de Stok Tanımlama listesinden ürün arama/otomatik birim (satış ile aynı biçim).
@@ -12228,6 +12370,7 @@ function alisKaydet(){
   const serbestAd = document.getElementById("am-serbest-ad").value.trim();
   const secili = _yeniAlisKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
   if(secili.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
+  if(!renkEksikOnay_(secili)) return;
   // ★ Stok kodu tüm modüller arası ana bağlantı — manuel Alış girişinde de zorunlu
   // (ya da bilerek "Stoksuz" işaretlenmiş bir hizmet/masraf kalemi olmalı).
   const kodsuz = secili.find(k=>!k.stoksuz && !String(k.stokKodu||"").trim());
@@ -12374,7 +12517,7 @@ function alisIadeDetayCiz(res){
       <tbody>
         ${kalemler.map(k=>`
           <tr>
-            <td>${k.urunAdi}</td>
+            <td>${k.urunAdi}${renkRozet_(k)}</td>
             <td>${miktarFormat(k.miktar)}</td>
             <td>${k.birim}</td>
             <td>${fiyatFormat(k.birimFiyat)}</td>
@@ -12525,6 +12668,7 @@ function alisIadeKalemlerCiz(){
       ${_yeniAlisIadeKalemleri.length>1 ? `<span class="hk-sil" onclick="alisIadeKalemSilUI(${idx})" title="Sil">🗑</span>` : ''}
     </div>`).join("");
   alisIadeToplamGuncelle();
+  renkSatirlariUygula_("aim-kalemler", _yeniAlisIadeKalemleri);
 }
 
 let _aimOneriTimer = null;
@@ -12569,6 +12713,7 @@ function alisIadeKaydet(){
   const serbestAd = document.getElementById("aim-serbest-ad").value.trim();
   const kalemler = _yeniAlisIadeKalemleri.filter(k=>String(k.urunAdi).trim() && parseFloat(k.miktar)>0);
   if(kalemler.length===0){ alert("En az bir geçerli ürün kalemi ekleyin (ürün adı ve miktar gerekli)"); return; }
+  if(!renkEksikOnay_(kalemler)) return;
   for(const k of kalemler){
     if(!k.stoksuz && !String(k.stokKodu||"").trim()){
       alert("\""+k.urunAdi+"\" kalemi için Stok Rehberi'nden bir Stok Kodu seçin, ya da 'Stoksuz' işaretleyin.");
@@ -12934,7 +13079,7 @@ function alisBekleyenListesiCiz(){
       </div>
       <div id="bfk-kalemler-${fi}" style="display:none;margin-top:8px;overflow:auto">
         <table class="hk-tablo"><thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim Fiyat</th><th>İsk.</th><th>Net Fiyat</th><th>KDV</th></tr></thead>
-        <tbody>${f.kalemler.map(k=>`<tr><td>${k.stokKodu||'—'}${k.stokVarMi===false?' <span class=\"hk-borc\">yeni</span>':''}${k.otomatikEslesme?' <span class=\"hk-alacak\" title=\"Tedarikçi ürün kodundan otomatik eşleşti\">oto</span>':''}</td><td>${k.urunAdi}</td><td>${k.miktar>0?k.miktar:'—'}</td><td>${paraFormat(k.birimFiyat)}</td><td>%${k.iskonto}</td><td>${paraFormat(k.netFiyat)}</td><td>%${k.kdvOrani}</td></tr>`).join("")}</tbody></table>
+        <tbody>${f.kalemler.map(k=>`<tr><td>${k.stokKodu||'—'}${k.stokVarMi===false?' <span class=\"hk-borc\">yeni</span>':''}${k.otomatikEslesme?' <span class=\"hk-alacak\" title=\"Tedarikçi ürün kodundan otomatik eşleşti\">oto</span>':''}</td><td>${k.urunAdi}${renkRozet_(k)}</td><td>${k.miktar>0?k.miktar:'—'}</td><td>${paraFormat(k.birimFiyat)}</td><td>%${k.iskonto}</td><td>${paraFormat(k.netFiyat)}</td><td>%${k.kdvOrani}</td></tr>`).join("")}</tbody></table>
       </div>
       <div class="btnrow" style="margin-top:8px">
         ${f.faturaNo ? `<button type="button" class="btn" onclick="faturaGorsalAc('${f.faturaNo}')">📄 Faturayı Gör</button>` : ""}
@@ -13152,7 +13297,7 @@ function alisKdvGecmisCiz(res){
         <table class="rapor-tbl" style="margin-top:8px">
           <thead><tr><th>Ürün</th><th>Miktar</th><th>Birim Fiyat</th><th>Tutar (KDV Hariç)</th></tr></thead>
           <tbody>
-            ${f.kalemler.map(k=>`<tr><td>${k.urunAdi}</td><td>${miktarFormat(k.miktar)} ${k.birim}</td><td>${paraFormat(k.birimFiyat)}</td><td>${paraFormat(k.tutar)}</td></tr>`).join("")}
+            ${f.kalemler.map(k=>`<tr><td>${k.urunAdi}${renkRozet_(k)}</td><td>${miktarFormat(k.miktar)} ${k.birim}</td><td>${paraFormat(k.birimFiyat)}</td><td>${paraFormat(k.tutar)}</td></tr>`).join("")}
           </tbody>
         </table>
         <div style="display:flex;gap:24px;margin-top:8px;font-size:13px;flex-wrap:wrap">
@@ -21065,7 +21210,7 @@ function sekmeGenisligiKaydet(px){
 // Tüm Stok alt panelleri — bir tanesi gösterilirken diğerleri gizlenir.
 const STOK_PANELLER = ["stok-secim","stok-islemler-secim","stok-tanimlar-secim","stok-raporlar-secim",
   "stok-panel-view","stok-tanim-view","stok-birim-view","stok-marka-view","stok-urunGrubu-view",
-  "stok-altUrunGrubu-view","stok-ebat-view","stok-renk-view","stok-ambalaj-view","stok-agirlik-view",
+  "stok-altUrunGrubu-view","stok-ebat-view","stok-renk-view","stok-ambalaj-view","stok-agirlik-view","stok-renkliste-view",
   "stok-giris-view","stok-cikis-view","stok-toplu-view","stok-hareket-rapor-view","stok-kritik-rapor-view"];
 
 function stokPaneliGoster(id){
@@ -21096,6 +21241,9 @@ function stokTanimAltAc(hangisi){
   } else if(hangisi === "birim"){
     stokPaneliGoster("stok-birim-view");
     birimListesiYukle();
+  } else if(hangisi === "renkliste"){
+    stokPaneliGoster("stok-renkliste-view");
+    renkListeSayfaYukle_();
   } else if(hangisi === "agirlik"){
     stokPaneliGoster("stok-agirlik-view");
     agirlikTanimYukle_();
@@ -21306,6 +21454,131 @@ async function agirlikTanimTopluUygula(){
   }
   if(btn) btn.disabled = false;
   agirlikTanimFiltrele();
+}
+
+// ══════ RENK LİSTELERİ SAYFASI ══════
+let _rlDuzenleId = "", _rlAtaFiltreli = [], _rlAtaLimit = 100;
+function renkListeSayfaYukle_(){
+  if(!_stokTanimYuklendi) stokTanimListesiYukle();
+  renkVerileriYukle_(true).then(()=>{ renkListeCiz_(); renkAtaSecimDoldur_(); renkAtaFiltrele_(); });
+}
+function renkListeCiz_(){
+  const el = document.getElementById("rl-liste"); if(!el) return;
+  if(!_renkListeleri.length){ el.innerHTML = '<div class="cari-empty">Henüz renk listesi yok. "+ Yeni Renk Listesi" ile oluşturup renkleri Excel\'den yapıştırın.</div>'; return; }
+  el.innerHTML = _renkListeleri.map(l=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--bg2,transparent)">
+      <div style="flex:1"><b>${htmlKacis(l.ad)}</b><div style="font-size:12px;color:var(--text3)">${l.renkler.length} renk · ${l.stokSayisi||0} stok kartında kullanılıyor</div></div>
+      <button class="btn" onclick="renkListeDuzenle_('${htmlKacis(l.id)}')">Düzenle</button>
+      <button class="btn btn-danger" onclick="renkListeSil_('${htmlKacis(l.id)}')">Sil</button>
+    </div>`).join("");
+}
+function renkListeDuzenle_(id){
+  _rlDuzenleId = id || "";
+  const l = id ? renkListesiBul_(id) : null;
+  document.getElementById("rl-editor").style.display = "block";
+  document.getElementById("rl-ad").value = l ? l.ad : "";
+  document.getElementById("rl-metin").value = l ? l.renkler.map(r=>r.kod+"\t"+r.ad).join("\n") : "";
+  document.getElementById("rl-durum").textContent = "";
+  document.getElementById("rl-ad").focus();
+}
+// Yapıştırılan metin → [{kod, ad}] (Excel: sekmeyle ayrılı; ayrıca ; ve , ile ayrılmış CSV de kabul edilir)
+function renkListeMetniniCoz_(metin){
+  const cikti = [];
+  String(metin||"").split(/\r?\n/).forEach(satir=>{
+    if(!satir.trim()) return;
+    let parca = satir.split("\t");
+    if(parca.length < 2 && satir.indexOf(";")>=0) parca = satir.split(";");
+    const kod = String(parca[0]||"").trim();
+    const ad = String(parca.slice(1).join(" ")||"").trim();
+    if(!kod && !ad) return;
+    cikti.push({kod: kod || ad, ad: ad || kod});
+  });
+  return cikti;
+}
+function renkListeDosyaOku_(inp){
+  const f = inp.files && inp.files[0]; if(!f) return;
+  if(typeof XLSX === "undefined"){ alert("Excel kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edin."); return; }
+  const fr = new FileReader();
+  fr.onload = ()=>{
+    try{
+      const wb = XLSX.read(fr.result, {type:"array"});
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:""});
+      const satirlar = aoa.filter(r=>r.some(x=>String(x).trim())).map(r=>r.slice(0,2).join("\t"));
+      // Başlık satırı (örn. "Renk Kodu / Renk Adı") varsa atla
+      if(satirlar.length && /^(renk|kod)/i.test(satirlar[0].trim())) satirlar.shift();
+      document.getElementById("rl-metin").value = satirlar.join("\n");
+      document.getElementById("rl-durum").textContent = satirlar.length+" satır okundu — kontrol edip Kaydet'e basın.";
+    }catch(e){ alert("Dosya okunamadı: "+e.message); }
+    inp.value = "";
+  };
+  fr.readAsArrayBuffer(f);
+}
+function renkListeKaydet_(){
+  const ad = document.getElementById("rl-ad").value.trim();
+  const renkler = renkListeMetniniCoz_(document.getElementById("rl-metin").value);
+  if(!ad){ alert("Liste adı gerekli."); return; }
+  if(!renkler.length){ alert("En az bir renk girin."); return; }
+  const d = document.getElementById("rl-durum"); d.textContent = "Kaydediliyor...";
+  cariApi("saveRenkListesi", {id: _rlDuzenleId || undefined, ad, renkler}).then(res=>{
+    if(!res || !res.ok){ d.textContent = ""; alert("Kaydedilemedi: "+((res&&(res.hata||res.error))||"bilinmiyor")); return; }
+    d.textContent = "✓ Kaydedildi ("+renkler.length+" renk)";
+    _rlDuzenleId = res.id || _rlDuzenleId;
+    return renkVerileriYukle_(true).then(()=>{ renkListeCiz_(); renkAtaSecimDoldur_(); });
+  }).catch(err=>{ d.textContent = ""; alert("Bağlantı hatası: "+err.message); });
+}
+function renkListeSil_(id){
+  const l = renkListesiBul_(id); if(!l) return;
+  if(!confirm('"'+l.ad+'" renk listesi silinsin mi?')) return;
+  cariApi("silRenkListesi", {id}).then(res=>{
+    if(!res || !res.ok){ alert("Silinemedi: "+((res&&(res.hata||res.error))||"bilinmiyor")); return; }
+    document.getElementById("rl-editor").style.display = "none";
+    return renkVerileriYukle_(true).then(()=>{ renkListeCiz_(); renkAtaSecimDoldur_(); });
+  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+}
+function renkAtaSecimDoldur_(){
+  const sel = document.getElementById("rl-ata-liste"); if(!sel) return;
+  const eski = sel.value;
+  sel.innerHTML = '<option value="">— Listesiz (renksiz) —</option>' + _renkListeleri.map(l=>`<option value="${htmlKacis(l.id)}">${htmlKacis(l.ad)} (${l.renkler.length})</option>`).join("");
+  sel.value = _renkListeleri.some(l=>l.id===eski) ? eski : (_renkListeleri[0] ? _renkListeleri[0].id : "");
+}
+function renkAtaFiltrele_(){
+  _rlAtaLimit = 100;
+  const q = ((document.getElementById("rl-ara")||{}).value||"").trim();
+  _rlAtaFiltreli = q ? stokAktifler().filter(k=>stokEslesirMi(k, q)) : [];
+  renkAtaCiz_();
+}
+function renkAtaCiz_(){
+  const el = document.getElementById("rl-ata-items"); if(!el) return;
+  const btn = document.getElementById("rl-ata-btn");
+  if(btn) btn.textContent = "Filtrelenen "+_rlAtaFiltreli.length.toLocaleString("tr-TR")+" stoğa ata";
+  if(!_rlAtaFiltreli.length){ el.innerHTML = '<div class="cari-empty">Arama yazın; eşleşen stok kartları burada listelenir.</div>'; return; }
+  el.innerHTML = `<table class="hareket-tbl stoktanim-tbl"><thead><tr><th>Stok Kodu</th><th>Stok Adı</th><th>Renk Listesi</th></tr></thead><tbody>
+    ${_rlAtaFiltreli.slice(0,_rlAtaLimit).map(k=>{ const l = k.renkListeId ? renkListesiBul_(k.renkListeId) : null; return `<tr><td>${htmlKacis(k.stokKodu||"—")}</td><td>${htmlKacis(k.stokAdi)}</td><td>${l ? htmlKacis(l.ad) : '<span style="color:var(--text3)">—</span>'}</td></tr>`; }).join("")}
+    </tbody></table>${_rlAtaFiltreli.length>_rlAtaLimit ? `<div class="liste-daha-fazla" onclick="_rlAtaLimit+=100; renkAtaCiz_()">+ ${_rlAtaFiltreli.length-_rlAtaLimit} kayıt daha göster</div>` : ""}`;
+}
+async function renkAtaUygula_(){
+  const listeId = (document.getElementById("rl-ata-liste")||{}).value || "";
+  const hedef = _rlAtaFiltreli.slice();
+  const d = document.getElementById("rl-ata-durum");
+  if(!hedef.length){ alert("Önce arama ile hedef stok kartlarını listeleyin."); return; }
+  const l = listeId ? renkListesiBul_(listeId) : null;
+  if(!confirm(hedef.length.toLocaleString("tr-TR")+" stok kartı için renk listesi: "+(l ? '"'+l.ad+'"' : "KALDIRILACAK (renksiz)")+"\nDevam edilsin mi?")) return;
+  let yapilan = 0, uyari = "";
+  try{
+    for(let i=0;i<hedef.length;i+=200){
+      const parca = hedef.slice(i,i+200);
+      d.textContent = "Kaydediliyor... "+Math.min(i+200,hedef.length)+" / "+hedef.length;
+      const res = await cariApi("stokRenkListesiAta", {idler: parca.map(k=>k.id), renkListeId: listeId});
+      if(!res || (!res.ok && !res.guncellenen)) throw new Error((res&&(res.hata||res.error))||"bilinmiyor");
+      if(res.hata) uyari = res.hata;
+      yapilan += res.guncellenen||0;
+      const set = new Set(parca.map(k=>k.id));
+      (_stokTanimListe||[]).forEach(k=>{ if(set.has(k.id)) k.renkListeId = listeId; });
+    }
+    try{ onbellekYaz("stokTanimListesi", _stokTanimListe); }catch(e){}
+    d.textContent = "✓ "+yapilan+" kart güncellendi."+(uyari ? " ⚠ "+uyari : "");
+  }catch(err){ d.textContent = "⚠ "+err.message; }
+  await renkVerileriYukle_(true); renkListeCiz_(); renkAtaCiz_();
 }
 
 // ── STOK TANIMLAMA MODÜLÜ ──
@@ -21597,6 +21870,7 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
         <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Alt Ürün Grubu</label><div class="st-tanimli-satir"><select id="st-alturungrubu">${secenekHtml(_tanimListeCache.altUrunGrubu, k?k.altUrunGrubuId:'')}</select>${stokTanimlaBtn_('altUrunGrubu')}</div></div>
         <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Ebat</label><div class="st-tanimli-satir"><select id="st-ebat">${secenekHtml(_tanimListeCache.ebat, k?k.ebatId:'')}</select>${stokTanimlaBtn_('ebat')}</div></div>
         <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Renk</label><div class="st-tanimli-satir"><select id="st-renk">${secenekHtml(_tanimListeCache.renk, k?k.renkId:'')}</select>${stokTanimlaBtn_('renk')}</div></div>
+        <div class="fld" style="flex:1;min-width:190px;margin-bottom:0"><label>🌈 Renk Listesi (renkli ürün)</label><select id="st-renkliste" title="Seçilirse satış/alış/hareketlerde renk seçilir ve stok renk bazında tutulur">${renkListeSecenekHtml_(k?k.renkListeId:'')}</select></div>
       </div>
       ${k ? `<div class="btnrow"><button class="btn btn-danger" onclick="stokTanimSilOnay('${k.id}')">🗑 Sil</button>
         <button class="btn" onclick="stokPasifDegistir('${k.id}', ${k.pasif?'false':'true'})" title="${k.pasif?'Stok kartını tekrar aktif eder':'Silmeden pasife alır; aramalarda, F2 rehberinde ve Hızlı Satış\'ta çıkmaz, hareketleri korunur'}">${k.pasif?'▶ Aktif Et':'⏸ Pasife Al'}</button>${k.pasif?' <span class="tip-badge">PASİF</span>':''}</div>` : ''}
@@ -21717,10 +21991,19 @@ function stokTanimKaydet(id){
     minStok: document.getElementById("st-minstok").value,
     agirlik: (document.getElementById("st-agirlik")||{}).value || "0",
   };
+  const yeniRenkListe = (document.getElementById("st-renkliste")||{}).value || "";
+  const eskiK = id ? (_stokTanimListe||[]).find(x=>x.id===id) : null;
+  const eskiRenkListe = eskiK ? (eskiK.renkListeId||"") : "";
   cariApi("saveStokTanim", body).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
     document.getElementById("stoktanim-modal-overlay").remove();
     stokTanimListesiYukle();
+    if(yeniRenkListe !== eskiRenkListe && (res.id || id)){
+      cariApi("stokRenkListesiAta", {id: res.id || id, renkListeId: yeniRenkListe}).then(r=>{
+        if(!r || !r.ok) alert("Stok kaydedildi ama renk listesi atanamadı: "+((r&&(r.hata||r.error))||"bilinmiyor"));
+        stokTanimListesiYukle(true);
+      }).catch(()=>{});
+    }
     // Ürün görseli: seçildiyse yüklenir, kaldırıldıysa silinir (kart kaydı bittikten sonra, id belli olunca)
     const gorselId = res.id || id;
     if(gorselId && window._stGorselBekleyen){
@@ -22030,6 +22313,7 @@ function stokHareketKalemlerCiz(mod){
       </select>` : ``}
       ${kalemler.length>1 ? `<span class="hk-sil" onclick="stokHareketSatirSilUI('${mod}',${idx})" title="Sil">🗑</span>` : ""}
     </div>`).join("");
+  renkSatirlariUygula_("sh-"+mod+"-kalemler", kalemler);
 }
 
 let _shOneriTimer = null;
@@ -22074,6 +22358,7 @@ function stokHareketKaydet(mod){
   if(!tarih){ alert("Tarih seçin"); return; }
   const kalemler = _stokHareketKalemleri[mod].filter(k => k.urunAdi && k.urunAdi.trim() && (parseFloat(k.miktar)||0) > 0);
   if(kalemler.length===0){ alert("En az bir ürün ve miktar girin"); return; }
+  if(!renkEksikOnay_(kalemler)) return;
   const genelBelgeTipi = document.getElementById("sh-"+mod+"-belgetipi").value;
   const genelBelgeNo = document.getElementById("sh-"+mod+"-belgeno").value;
   cariApi("stokHareketTopluEkle", { tarih, kayitlar: kalemler, genelBelgeTipi, genelBelgeNo }).then(res=>{
@@ -22245,6 +22530,7 @@ const SHR_SUTUNLAR = [
   { anahtar: "tarih",     baslik: "Tarih",      al: h => h.tarih || "" },
   { anahtar: "stokKodu",  baslik: "Stok Kodu",  al: h => (h.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
   { anahtar: "stokAdi",   baslik: "Ürün",       al: h => (h.stokAdi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
+  { anahtar: "renk",      baslik: "Renk",       al: h => (h.renk||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
   { anahtar: "giris",     baslik: "Giriş",      al: h => h.hareketTipi==="Giriş" ? (parseFloat(h.miktar)||0) : 0 },
   { anahtar: "cikis",     baslik: "Çıkış",      al: h => h.hareketTipi==="Çıkış" ? (parseFloat(h.miktar)||0) : 0 },
   { anahtar: "kalan",     baslik: "Kalan",      al: h => h.kalan||0 },
@@ -22294,6 +22580,7 @@ function stokHareketRaporuCiz(){
       const eslesti = (h.stokAdi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
         (h.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
         (h.belgeNo||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
+        (h.renk||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
         (h.belgeTipi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
         (h.aciklama||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q);
       if(!eslesti) return false;
@@ -22346,7 +22633,7 @@ function stokHareketRaporuCiz(){
           const btn = belgeliMi ? `<button class="btn" style="font-size:11px;padding:4px 8px" onclick="stokHareketBelgeAc('${h.belgeTipi}','${h.belgeNo}')" title="İlgili belgeyi aç">📄 Aç</button>` : "";
           const giris = h.hareketTipi==="Giriş" ? miktarFormat(h.miktar) : "";
           const cikis = h.hareketTipi==="Çıkış" ? miktarFormat(h.miktar) : "";
-          return `<tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td class="hk-alacak">${giris}</td><td class="hk-borc">${cikis}</td><td>${miktarFormat(h.kalan)}</td><td>${h.birim}</td><td style="text-align:right">${shrAlisFiyat_(h)>0 ? paraFormat(shrAlisFiyat_(h)) : ''}</td><td style="text-align:right">${shrSatisFiyat_(h)>0 ? paraFormat(shrSatisFiyat_(h)) : ''}</td><td>${h.belgeTipi||''}${h.islemTuru?`<div style="margin-top:2px">${mrIslemTuruRozet({islemTuru:h.islemTuru})}</div>`:''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td><td>${btn}</td></tr>`;
+          return `<tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td>${h.renk ? htmlKacis(h.renk)+(renkAdiBul_(h.stokKodu,h.renk)!==String(h.renk) ? " — "+htmlKacis(renkAdiBul_(h.stokKodu,h.renk)) : "") : ""}</td><td class="hk-alacak">${giris}</td><td class="hk-borc">${cikis}</td><td>${miktarFormat(h.kalan)}</td><td>${h.birim}</td><td style="text-align:right">${shrAlisFiyat_(h)>0 ? paraFormat(shrAlisFiyat_(h)) : ''}</td><td style="text-align:right">${shrSatisFiyat_(h)>0 ? paraFormat(shrSatisFiyat_(h)) : ''}</td><td>${h.belgeTipi||''}${h.islemTuru?`<div style="margin-top:2px">${mrIslemTuruRozet({islemTuru:h.islemTuru})}</div>`:''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td><td>${btn}</td></tr>`;
         }).join("")}
       </tbody>
     </table>

@@ -128,6 +128,7 @@ const SHEETS = {
   altUrunGruplari: "AltUrunGruplari",
   ebatlar: "Ebatlar",
   renkler: "Renkler",
+  renkListeleri: "RenkListeleri",
   ambalajTanimlari: "AmbalajTanimlari",
   giderUstGruplari: "GiderUstGruplari",
   giderAltGruplari: "GiderAltGruplari",
@@ -536,6 +537,7 @@ function ensureAlisIadeKalemStokKoduColonu_orj_(sheet) {
   if (String(mevcutBaslik || "") !== "STOK_KODU") {
     sheet.getRange(1, 8).setValue("STOK_KODU").setFontWeight("bold").setBackground("#e8edf5");
   }
+  renkKolonuGarantiEt_(sheet, 9); // ★ (20 Eki 2026) AlisIadeKalemleri 9. kolon RENK
 }
 
 // Alış kalemlerinde KDV oranı (9. kolon). Eskiden Alış modülünde KDV hiç
@@ -567,9 +569,23 @@ function ensureAlisKalemBrutIskontoColonlari_orj_(sheet) {
   }
 }
 
+// ★ (20 Eki 2026) Renkli ürünler: kalem/hareket sayfalarında RENK (renk kodu) kolonu. Kolon numaraları:
+// SatisKalemleri 12, AlisKalemleri 14, AlisIadeKalemleri 9, SatisIadeKalemleri 10, StokHareketleri 14.
+// "01" gibi kodlar sayıya çevrilmesin diye kolon METİN biçimine alınır.
+function renkKolonuGarantiEt_(sheet, kolon) {
+  if (sheet.getMaxColumns() < kolon && typeof sheet.insertColumnsAfter === "function") {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), kolon - sheet.getMaxColumns());
+  }
+  if (String(sheet.getRange(1, kolon).getValue() || "") !== "RENK") {
+    sheet.getRange(1, kolon).setValue("RENK").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  metinKolonuGarantiEt_(sheet, kolon);
+}
+
 // Alış kaleminin "Satılan Ürün" bilgisi: bu alış kalemi hangi cariye satılan ürünün tedariği?
-// AlisKalemleri 12. kolon SATILAN_CARI_ID, 13. kolon SATILAN_CARI_AD (30 Eyl 2026 isteği).
+// AlisKalemleri 12. kolon SATILAN_CARI_ID, 13. kolon SATILAN_CARI_AD (30 Eyl 2026 isteği); 14. kolon RENK (20 Eki 2026).
 function ensureAlisKalemSatilanCariColonlari_orj_(sheet) {
+  renkKolonuGarantiEt_(sheet, 14);
   const h12 = sheet.getRange(1, 12).getValue();
   if (String(h12 || "") !== "SATILAN_CARI_ID") {
     sheet.getRange(1, 12).setValue("SATILAN_CARI_ID").setFontWeight("bold").setBackground("#e8edf5");
@@ -1359,6 +1375,11 @@ function handleRequest(e) {
       case "stokGorselKaydet":    result = stokGorselKaydet(body); break;
       case "stokHizliKaydet":     result = stokHizliKaydet(body); break;
       case "stokGrupKaydet":      result = stokGrupKaydet(body); break;
+      case "getRenkListeleri":    result = getRenkListeleri(); break;
+      case "saveRenkListesi":     result = saveRenkListesi(body); break;
+      case "silRenkListesi":      result = silRenkListesi(body); break;
+      case "stokRenkListesiAta":  result = stokRenkListesiAta(body); break;
+      case "getStokRenkMiktarlari": result = { ok: true, harita: stokRenkMiktarHaritasi() }; break;
       case "stokKdvTopluKaydet": result = stokKdvTopluKaydet(body); break;
       case "getUrunFiyatGecmisi": result = getUrunFiyatGecmisi(body.urunAdi); break;
       case "getBirimListesi": result = getBirimListesi(); break;
@@ -2288,6 +2309,7 @@ function ensureSatisKalemVergiKolonlari_orj_(sheet) {
   if (String(h11 || "") !== "STOK_KODU") {
     sheet.getRange(1, 11).setValue("STOK_KODU").setFontWeight("bold").setBackground("#e8edf5");
   }
+  renkKolonuGarantiEt_(sheet, 12); // ★ (20 Eki 2026) SatisKalemleri 12. kolon RENK
 }
 
 // Bir satış kaleminin (miktar, birim fiyat, iskonto %, kdv %) üzerinden
@@ -2475,7 +2497,7 @@ function getSatisDetay(satisId) {
       tutar: parseFloat(row[6]) || 0, iskontoYuzde: iskontoYuzde, kdvOrani: kdvOrani,
       iskontoTutari: h.iskontoTutari, kdvTutari: h.kdvTutari, kalemGenelToplam: h.genelToplam,
       faturalananMiktar: faturalananMiktar, kalanMiktar: Math.max(0, miktar - faturalananMiktar),
-      stokKodu: String(row[10] || ""),
+      stokKodu: String(row[10] || ""), renk: metinOku_(row[11]),
     });
   }
   if (satis.belgeTipi === "Sipariş") {
@@ -2652,7 +2674,7 @@ function saveSatis(body) {
     const birimFiyat = parseFloat(k.birimFiyat) || 0;
     const iskontoYuzde = parseFloat(k.iskontoYuzde) || 0;
     const kdvOrani = k.kdvOrani === undefined ? 20 : (parseFloat(k.kdvOrani) || 0);
-    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, iskontoYuzde, kdvOrani, 0, String(k.stokKodu || "").trim()]);
+    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, iskontoYuzde, kdvOrani, 0, String(k.stokKodu || "").trim(), String(k.renk || "").trim()]);
   });
   kalemSatirlariTopluYaz_(kSheet, _kSatirlar);
 
@@ -2761,7 +2783,7 @@ function siparistenFaturaOlustur(body) {
     kalemBilgi[kId] = {
       urunAdi: String(row[2] || ""), miktar: parseFloat(row[3]) || 0, birim: String(row[4] || ""),
       birimFiyat: parseFloat(row[5]) || 0, iskontoYuzde: parseFloat(row[7]) || 0, kdvOrani: parseFloat(row[8]) || 0,
-      faturalananMiktar: parseFloat(row[9]) || 0, stokKodu: String(row[10] || ""),
+      faturalananMiktar: parseFloat(row[9]) || 0, stokKodu: String(row[10] || ""), renk: metinOku_(row[11]),
     };
   }
 
@@ -2780,7 +2802,7 @@ function siparistenFaturaOlustur(body) {
     yeniFaturaKalemleri.push({
       urunAdi: bilgi.urunAdi, miktar: aktarilan, birim: bilgi.birim,
       birimFiyat: bilgi.birimFiyat, iskontoYuzde: bilgi.iskontoYuzde, kdvOrani: bilgi.kdvOrani,
-      stokKodu: bilgi.stokKodu,
+      stokKodu: bilgi.stokKodu, renk: bilgi.renk,
     });
     guncellenecekler.push({ satirIdx: kalemSatirIdx[kId], yeniFaturalananMiktar: bilgi.faturalananMiktar + aktarilan });
   }
@@ -2964,7 +2986,7 @@ function silSatis(body) {
       anlikKalemler.push({
         urunAdi: String(kDataOn[i][2] || ""), miktar: parseFloat(kDataOn[i][3]) || 0, birim: String(kDataOn[i][4] || "adet"),
         birimFiyat: parseFloat(kDataOn[i][5]) || 0, iskontoYuzde: parseFloat(kDataOn[i][7]) || 0,
-        kdvOrani: parseFloat(kDataOn[i][8]) || 0, stokKodu: String(kDataOn[i][10] || ""),
+        kdvOrani: parseFloat(kDataOn[i][8]) || 0, stokKodu: String(kDataOn[i][10] || ""), renk: metinOku_(kDataOn[i][11]),
       });
     }
   }
@@ -3004,7 +3026,7 @@ function silSatis(body) {
   const silinenKalemler = []; // {urunAdi, miktar} — kaynak sipariş varsa faturalanan miktarı geri almak için
   for (let i = kData.length - 1; i >= 1; i--) {
     if (String(kData[i][1]) === id) {
-      if (kaynakSiparisId) silinenKalemler.push({ urunAdi: String(kData[i][2] || ""), miktar: parseFloat(kData[i][3]) || 0 });
+      if (kaynakSiparisId) silinenKalemler.push({ urunAdi: String(kData[i][2] || ""), miktar: parseFloat(kData[i][3]) || 0, renk: renkAnahtar_(kData[i][11]) });
       kSheet.deleteRow(i + 1);
     }
   }
@@ -3016,7 +3038,7 @@ function silSatis(body) {
     const kData2 = kSheet.getDataRange().getValues();
     silinenKalemler.forEach(silinen => {
       for (let i = 1; i < kData2.length; i++) {
-        if (String(kData2[i][1]) === kaynakSiparisId && String(kData2[i][2] || "") === silinen.urunAdi) {
+        if (String(kData2[i][1]) === kaynakSiparisId && String(kData2[i][2] || "") === silinen.urunAdi && renkAnahtar_(kData2[i][11]) === silinen.renk) {
           const mevcutFaturalanan = parseFloat(kData2[i][9]) || 0;
           kSheet.getRange(i + 1, 10).setValue(Math.max(0, mevcutFaturalanan - silinen.miktar));
           break;
@@ -3112,10 +3134,11 @@ function updateSatis(body) {
 
   // Ürün adına göre eski FATURALANAN_MIKTAR'ı topluyoruz ki kısmen faturalanmış bir
   // Sipariş kalemi düzenlemede bu bilgi kaybolmasın (yeni miktarı aşamaz).
+  // (20 Eki 2026) Anahtar ürün adı + renk: aynı ürünün farklı renkli satırları birbirinin faturalanan miktarını almasın.
   const eskiFaturalanan = {};
   for (let i = 1; i < kData.length; i++) {
     if (String(kData[i][1]) === id) {
-      const ad = String(kData[i][2] || "");
+      const ad = String(kData[i][2] || "") + "\u0001" + renkAnahtar_(kData[i][11]);
       eskiFaturalanan[ad] = (eskiFaturalanan[ad] || 0) + (parseFloat(kData[i][9]) || 0);
     }
   }
@@ -3193,8 +3216,8 @@ function updateSatis(body) {
     const iskontoYuzde = parseFloat(k.iskontoYuzde) || 0;
     const kdvOrani = k.kdvOrani === undefined ? 20 : (parseFloat(k.kdvOrani) || 0);
     const ad = String(k.urunAdi).trim();
-    const faturalanan = Math.min(miktar, eskiFaturalanan[ad] || 0);
-    _kSatirlar.push([kId, id, ad, miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, iskontoYuzde, kdvOrani, faturalanan, String(k.stokKodu || "").trim()]);
+    const faturalanan = Math.min(miktar, eskiFaturalanan[ad + "\u0001" + renkAnahtar_(k.renk)] || 0);
+    _kSatirlar.push([kId, id, ad, miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, iskontoYuzde, kdvOrani, faturalanan, String(k.stokKodu || "").trim(), String(k.renk || "").trim()]);
   });
   kalemSatirlariTopluYaz_(kSheet, _kSatirlar);
 
@@ -3338,7 +3361,7 @@ function getAlisDetay(alisId) {
       birimFiyat: birimFiyat, tutar: parseFloat(row[6]) || 0,
       stokKodu: String(row[7] || ""), kdvOrani: parseFloat(row[8]) || 0,
       brutFiyat: parseFloat(row[9]) || birimFiyat, iskontoYuzde: parseFloat(row[10]) || 0,
-      satilanCariId: String(row[11] || ""), satilanCariAd: String(row[12] || ""),
+      satilanCariId: String(row[11] || ""), satilanCariAd: String(row[12] || ""), renk: metinOku_(row[13]),
     });
   }
 
@@ -3485,7 +3508,7 @@ function saveAlis(body) {
     const brutFiyat = parseFloat(k.brutFiyat) || birimFiyat;
     const iskontoYuzde = parseFloat(k.iskontoYuzde) || 0;
     const kalemTutar = miktar * birimFiyat * (1 + kdvOrani / 100);
-    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, kalemTutar, String(k.stokKodu || "").trim(), kdvOrani, brutFiyat, iskontoYuzde].concat(satilanCariCoz_(ss, k, _cariAdHrt)));
+    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, kalemTutar, String(k.stokKodu || "").trim(), kdvOrani, brutFiyat, iskontoYuzde].concat(satilanCariCoz_(ss, k, _cariAdHrt)).concat([String(k.renk || "").trim()]));
   });
   kalemSatirlariTopluYaz_(kSheet, _kSatirlar);
 
@@ -3528,7 +3551,7 @@ function silAlis(body) {
       anlikKalemler.push({
         urunAdi: String(kDataOn[i][2] || ""), miktar: parseFloat(kDataOn[i][3]) || 0,
         birim: String(kDataOn[i][4] || "adet"), birimFiyat: parseFloat(kDataOn[i][5] || 0),
-        stokKodu: String(kDataOn[i][7] || ""),
+        stokKodu: String(kDataOn[i][7] || ""), renk: metinOku_(kDataOn[i][13]),
       });
     }
   }
@@ -3734,7 +3757,7 @@ function updateAlis(body) {
     const kdvOrani = parseFloat(k.kdvOrani) || 0;
     const brutFiyat = parseFloat(k.brutFiyat) || birimFiyat;
     const iskontoYuzde = parseFloat(k.iskontoYuzde) || 0;
-    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat * (1 + kdvOrani / 100), String(k.stokKodu || "").trim(), kdvOrani, brutFiyat, iskontoYuzde].concat(satilanCariCoz_(ss, k, _cariAdHrt)));
+    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat * (1 + kdvOrani / 100), String(k.stokKodu || "").trim(), kdvOrani, brutFiyat, iskontoYuzde].concat(satilanCariCoz_(ss, k, _cariAdHrt)).concat([String(k.renk || "").trim()]));
   });
   kalemSatirlariTopluYaz_(kSheet, _kSatirlar);
 
@@ -3817,13 +3840,13 @@ function getAlisIadeDetay(iadeId) {
       id: String(row[0]), iadeId: String(row[1]), urunAdi: String(row[2] || ""),
       miktar: parseFloat(row[3]) || 0, birim: String(row[4] || ""),
       birimFiyat: parseFloat(row[5]) || 0, tutar: parseFloat(row[6]) || 0,
-      stokKodu: String(row[7] || ""),
+      stokKodu: String(row[7] || ""), renk: metinOku_(row[8]),
     });
   }
   return { ok: true, iade: iade, kalemler: kalemler };
 }
 
-// body: { cariId (opsiyonel), cariAd, tarih, aciklama, kalemler: [{urunAdi,miktar,birim,birimFiyat,stokKodu,stoksuz}] }
+// body: { cariId (opsiyonel), cariAd, tarih, aciklama, kalemler: [{urunAdi,miktar,birim,birimFiyat,stokKodu,stoksuz,renk}] }
 function saveAlisIade(body) {
   const kalemler = Array.isArray(body.kalemler) ? body.kalemler : [];
   if (kalemler.length === 0) return { ok: false, hata: "En az bir ürün kalemi eklemelisiniz" };
@@ -3866,7 +3889,7 @@ function saveAlisIade(body) {
     const kId = "aik_" + Date.now() + "_" + idx;
     const miktar = parseFloat(k.miktar) || 0;
     const birimFiyat = parseFloat(k.birimFiyat) || 0;
-    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, String(k.stokKodu || "").trim()]);
+    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, String(k.stokKodu || "").trim(), String(k.renk || "").trim()]);
   });
   kalemSatirlariTopluYaz_(kSheet, _kSatirlar);
 
@@ -3907,7 +3930,7 @@ function silAlisIade(body) {
       anlikKalemler.push({
         urunAdi: String(kDataOn[i][2] || ""), miktar: parseFloat(kDataOn[i][3]) || 0,
         birim: String(kDataOn[i][4] || "adet"), birimFiyat: parseFloat(kDataOn[i][5] || 0),
-        stokKodu: String(kDataOn[i][7] || ""),
+        stokKodu: String(kDataOn[i][7] || ""), renk: metinOku_(kDataOn[i][8]),
       });
     }
   }
@@ -3979,6 +4002,7 @@ function satisIadeSayfalari_(ss) {
   const mevcut = sSheet.getRange(1, 8, 1, sb.length).getValues()[0];
   if (mevcut.join("|") !== sb.join("|")) sSheet.getRange(1, 8, 1, sb.length).setValues([sb]).setFontWeight("bold").setBackground("#e8edf5");
   if (String(kSheet.getRange(1, 9).getValue() || "") !== "KDV_ORANI") kSheet.getRange(1, 9).setValue("KDV_ORANI").setFontWeight("bold").setBackground("#e8edf5");
+  if (String(kSheet.getRange(1, 10).getValue() || "") !== "RENK") renkKolonuGarantiEt_(kSheet, 10); // ★ (20 Eki 2026) SatisIadeKalemleri 10. kolon RENK
   return { sSheet: sSheet, kSheet: kSheet };
 }
 function iadeEfaturaSatiriBul_(iadeId) {
@@ -4057,7 +4081,7 @@ function getSatisIadeDetay(iadeId) {
       id: String(row[0]), iadeId: String(row[1]), urunAdi: String(row[2] || ""),
       miktar: miktar, birim: String(row[4] || ""),
       birimFiyat: birimFiyat, tutar: parseFloat(row[6]) || 0,
-      stokKodu: String(row[7] || ""), kdvOrani: kdvOrani, iskontoYuzde: 0,
+      stokKodu: String(row[7] || ""), kdvOrani: kdvOrani, iskontoYuzde: 0, renk: metinOku_(row[9]),
     });
   }
   return { ok: true, iade: iade, kalemler: kalemler };
@@ -4107,7 +4131,7 @@ function saveSatisIade(body) {
     const miktar = parseFloat(k.miktar) || 0;
     const birimFiyat = parseFloat(k.birimFiyat) || 0;
     const hs = iadeHesap.kalemler[idx];
-    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, String(k.stokKodu || "").trim(), hs.kdvOrani]);
+    _kSatirlar.push([kId, id, String(k.urunAdi).trim(), miktar, String(k.birim || "adet"), birimFiyat, miktar * birimFiyat, String(k.stokKodu || "").trim(), hs.kdvOrani, String(k.renk || "").trim()]);
   });
   kalemSatirlariTopluYaz_(kSheet, _kSatirlar);
 
@@ -4152,7 +4176,7 @@ function silSatisIade(body) {
       anlikKalemler.push({
         urunAdi: String(kDataOn[i][2] || ""), miktar: parseFloat(kDataOn[i][3]) || 0,
         birim: String(kDataOn[i][4] || "adet"), birimFiyat: parseFloat(kDataOn[i][5] || 0),
-        stokKodu: String(kDataOn[i][7] || ""),
+        stokKodu: String(kDataOn[i][7] || ""), renk: metinOku_(kDataOn[i][9]),
       });
     }
   }
@@ -7683,7 +7707,8 @@ function ensureStokTanimEkColonlari_orj_(sheet) {
   // AGIRLIK (4 Eki 2026): 1. birim başına ağırlık (kg) — siparişte toplam ağırlık için. STOK_TANIM_BASLIKLAR'a EKLENMEZ
   // (toplu yazan fonksiyonlar 20 sütunluk satır yazıyor); sütun yalnızca bu göç adımıyla eklenir.
   // GORSEL_URL (6 Eki 2026): Hızlı Satış ekranındaki ürün görseli (Drive linki, 22. sütun) — aynı şekilde yalnızca göç adımıyla eklenir.
-  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK","GORSEL_URL","HIZLI_URUN","HIZLI_RENK","KISA_AD","PASIF"];
+  // RENK_LISTE_ID (20 Eki 2026, 27. sütun): stok kartına bağlı renk listesi (RenkListeleri sayfası). Doluysa alış/satış/stok renk bazlı çalışır.
+  const eklenecek = ["MARKA_ID","URUN_GRUBU_ID","ALT_URUN_GRUBU_ID","EBAT_ID","RENK_ID","MIN_STOK","BARKOD","KDV_ALIS","KDV_SATIS","AGIRLIK","GORSEL_URL","HIZLI_URUN","HIZLI_RENK","KISA_AD","PASIF","RENK_LISTE_ID"];
   eklenecek.forEach((baslik, idx) => {
     const kolonNo = 12 + idx;
     const mevcut = sheet.getRange(1, kolonNo).getValue();
@@ -7724,6 +7749,7 @@ function stokTanimSatiriNesneYap(row) {
     hizliRenk: renkTemizle_(row[23]),     // Hızlı Satış'ta ürüne özel renk (#rrggbb ya da "")
     kisaAd: String(row[24] || ""),        // Hızlı Satış'ta tam ad yerine gösterilen kısa ad (KISA_AD, 25. sütun)
     pasif: String(row[25] || "") === "1", // ★ (13 Eki 2026) Pasif stok kartı: aramalarda/rehberde/Hızlı Satış'ta çıkmaz (PASIF, 26. sütun)
+    renkListeId: String(row[26] || ""),   // ★ (20 Eki 2026) Bağlı renk listesi (RENK_LISTE_ID, 27. sütun); boşsa kart renksizdir
   };
 }
 
@@ -7913,6 +7939,186 @@ function setStokPasif(body) {
   return { ok: false, hata: "Stok kartı bulunamadı" };
 }
 
+// ════════════════════════════════════════════════
+// RENK LİSTELERİ (20 Eki 2026) — renkli ürünler (örn. süpürgelik: 36183606001 / 36183608001, ~40 renk).
+// Bir renk listesi (örn. "AGT Süpürgelik Renkleri") birden fazla stok kartına bağlanabilir (StokTanimlari 27. sütun
+// RENK_LISTE_ID). Bağlı kartlarda alış/satış/iade/stok hareketi kalemlerinde RENK (renk kodu) tutulur ve stok
+// renk bazlı hesaplanır. Renk seçimi zorunlu DEĞİL; seçilmezse ekranda uyarı çıkar, hareket "renk belirtilmemiş" sayılır.
+// RenkListeleri sayfası: her satır bir renk — LISTE_ID, LISTE_ADI, RENK_KODU, RENK_ADI, SIRA.
+// ════════════════════════════════════════════════
+const RENK_LISTE_BASLIKLAR = ["LISTE_ID","LISTE_ADI","RENK_KODU","RENK_ADI","SIRA"];
+
+// Renk kodlarının karşılaştırma anahtarı: "01" ile 1 (E-Tablo sayıya çevirmiş olabilir) aynı sayılır; harf büyüklüğü yok sayılır.
+function renkAnahtar_(v) {
+  if (v === null || v === undefined) return "";
+  const s = String(v).trim();
+  if (!s) return "";
+  return /^\d+$/.test(s) ? String(parseInt(s, 10)) : s.toLocaleLowerCase("tr");
+}
+
+function renkListeSayfasi_(ss) {
+  const sh = getOrCreateSheet(ss, SHEETS.renkListeleri, RENK_LISTE_BASLIKLAR);
+  metinKolonuGarantiEt_(sh, 3); // RENK_KODU: "01" sayıya çevrilmesin
+  return sh;
+}
+
+function getRenkListeleri() {
+  return cacheOkuVeyaHesapla("renkListeleri", 300, function () {
+    const ss = acikSS_();
+    const data = renkListeSayfasi_(ss).getDataRange().getValues();
+    const harita = {}, sira = [];
+    for (let i = 1; i < data.length; i++) {
+      const lid = String(data[i][0] || "").trim();
+      if (!lid) continue;
+      if (!harita[lid]) { harita[lid] = { id: lid, ad: String(data[i][1] || ""), renkler: [] }; sira.push(lid); }
+      harita[lid].renkler.push({ kod: metinOku_(data[i][2]), ad: String(data[i][3] || ""), sira: parseFloat(data[i][4]) || 0 });
+    }
+    const stoklar = getStokTanimListesi().kalemler || [];
+    const kullanim = {};
+    stoklar.forEach(s => { if (s.renkListeId) kullanim[s.renkListeId] = (kullanim[s.renkListeId] || 0) + 1; });
+    const listeler = sira.map(id => {
+      const l = harita[id];
+      l.renkler.sort((a, b) => a.sira - b.sira);
+      l.stokSayisi = kullanim[id] || 0;
+      return l;
+    });
+    return { ok: true, listeler: listeler };
+  });
+}
+
+// body: { id (boşsa yeni liste), ad, renkler: [{kod, ad}, ...] } — Excel'den yapıştırılan toplu liste de bu uçtan gelir.
+// Listedeki renkler tamamen bu liste ile DEĞİŞTİRİLİR; stok hareketi görmüş bir renk listeden çıkarılamaz.
+function saveRenkListesi(body) {
+  const ad = String((body && body.ad) || "").trim();
+  if (!ad) return { ok: false, hata: "Liste adı gerekli" };
+  const ham = Array.isArray(body.renkler) ? body.renkler : [];
+  const renkler = [], gorulen = {};
+  for (let i = 0; i < ham.length; i++) {
+    const kod = String(ham[i].kod === undefined || ham[i].kod === null ? "" : ham[i].kod).trim();
+    const rAd = String(ham[i].ad || "").trim() || kod;
+    if (!kod && !rAd) continue;
+    const kodFinal = kod || rAd;
+    const anahtar = renkAnahtar_(kodFinal);
+    if (gorulen[anahtar]) return { ok: false, hata: "Renk kodu tekrar ediyor: " + kodFinal };
+    gorulen[anahtar] = true;
+    renkler.push({ kod: kodFinal, ad: rAd });
+  }
+  if (renkler.length === 0) return { ok: false, hata: "En az bir renk girilmeli" };
+
+  const ss = acikSS_();
+  const sheet = renkListeSayfasi_(ss);
+  const data = sheet.getDataRange().getValues();
+  let id = String(body.id || "").trim();
+  const mevcutMu = id && data.some((r, i) => i > 0 && String(r[0]) === id);
+  if (!mevcutMu) id = "rl_" + Date.now();
+
+  // Ad tekrarı (başka bir listede aynı ad) engellenir.
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) !== id && String(data[i][1] || "").trim().toLocaleLowerCase("tr") === ad.toLocaleLowerCase("tr")) {
+      return { ok: false, hata: "\"" + ad + "\" adında başka bir renk listesi var" };
+    }
+  }
+
+  // Hareket görmüş renk listeden çıkarılamaz (stok sayısı bozulmasın).
+  if (mevcutMu) {
+    const bagliStokIdler = {};
+    (getStokTanimListesi().kalemler || []).forEach(s => { if (s.renkListeId === id) bagliStokIdler[s.id] = true; });
+    if (Object.keys(bagliStokIdler).length) {
+      const yeniAnahtarlar = {};
+      renkler.forEach(r => { yeniAnahtarlar[renkAnahtar_(r.kod)] = true; });
+      const hSheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+      const hData = hSheet.getDataRange().getValues();
+      const eksik = {};
+      for (let i = 1; i < hData.length; i++) {
+        if (!bagliStokIdler[String(hData[i][2] || "")]) continue;
+        const k = renkAnahtar_(hData[i][13]);
+        if (k && !yeniAnahtarlar[k]) eksik[String(hData[i][13])] = true;
+      }
+      const eksikListe = Object.keys(eksik);
+      if (eksikListe.length) return { ok: false, hata: "Şu renklerde stok hareketi var, listeden çıkarılamaz: " + eksikListe.slice(0, 10).join(", ") + (eksikListe.length > 10 ? " …" : "") };
+    }
+    for (let i = data.length - 1; i >= 1; i--) if (String(data[i][0]) === id) sheet.deleteRow(i + 1);
+  }
+
+  const satirlar = renkler.map((r, i) => [id, ad, r.kod, r.ad, i + 1]);
+  const baslangic = sheet.getLastRow() + 1;
+  const bitis = baslangic + satirlar.length - 1;
+  if (bitis > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), bitis - sheet.getMaxRows());
+  sheet.getRange(baslangic, 3, satirlar.length, 1).setNumberFormat("@");
+  sheet.getRange(baslangic, 1, satirlar.length, RENK_LISTE_BASLIKLAR.length).setValues(satirlar);
+  cacheTemizle(["renkListeleri", "stokTanimListesi"]);
+  return { ok: true, id: id, renkSayisi: renkler.length };
+}
+
+// body: { id } — stok kartına bağlı liste silinemez.
+function silRenkListesi(body) {
+  const id = String((body && body.id) || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const baglanti = (getStokTanimListesi().kalemler || []).filter(s => s.renkListeId === id);
+  if (baglanti.length) return { ok: false, hata: "Bu liste " + baglanti.length + " stok kartına bağlı (" + baglanti.slice(0, 3).map(s => s.stokKodu).join(", ") + (baglanti.length > 3 ? " …" : "") + "); önce kartlardan kaldırın." };
+  const sheet = renkListeSayfasi_(acikSS_());
+  const data = sheet.getDataRange().getValues();
+  let silindi = 0;
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === id) { sheet.deleteRow(i + 1); silindi++; }
+  }
+  cacheTemizle(["renkListeleri"]);
+  return silindi ? { ok: true } : { ok: false, hata: "Liste bulunamadı" };
+}
+
+// body: { idler: [stokTanimId, ...] (ya da id), renkListeId ("" = renk listesini kaldır) }
+// Stok hareketinde renk görmüş bir karttan liste kaldırılamaz / başka listeye geçirilemez.
+function stokRenkListesiAta(body) {
+  const idler = Array.isArray(body && body.idler) ? body.idler.map(String) : (body && body.id ? [String(body.id)] : []);
+  if (!idler.length) return { ok: false, hata: "Stok kartı seçilmeli" };
+  const listeId = String((body && body.renkListeId) || "").trim();
+  const ss = acikSS_();
+  if (listeId) {
+    const liste = (getRenkListeleri().listeler || []).find(l => l.id === listeId);
+    if (!liste) return { ok: false, hata: "Renk listesi bulunamadı" };
+  }
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  ensureStokTanimEkColonlari(sheet);
+  const data = sheet.getDataRange().getValues();
+  const renkHaritasi = stokRenkMiktarHaritasi();
+  const hedef = {};
+  idler.forEach(i => { hedef[i] = true; });
+  let guncellenen = 0;
+  const engel = [];
+  for (let i = 1; i < data.length; i++) {
+    const id = String(data[i][0] || "");
+    if (!hedef[id]) continue;
+    const eskiListe = String(data[i][26] || "");
+    if (eskiListe === listeId) continue;
+    if (eskiListe && Object.keys(renkHaritasi[id] || {}).length) { engel.push(String(data[i][1] || "")); continue; }
+    sheet.getRange(i + 1, 27).setValue(listeId);
+    guncellenen++;
+  }
+  cacheTemizle(["stokTanimListesi", "renkListeleri"]);
+  if (engel.length) return { ok: guncellenen > 0, guncellenen: guncellenen, hata: "Renk bazlı stok hareketi görmüş kartların listesi değiştirilemez: " + engel.slice(0, 5).join(", ") };
+  return { ok: true, guncellenen: guncellenen };
+}
+
+// Stok + renk bazlı güncel miktar: { stokTanimId: { <renkAnahtari>: miktar } } — yalnız RENK dolu hareketler.
+function stokRenkMiktarHaritasi() {
+  return cacheOkuVeyaHesapla("stokRenkMiktarHaritasi", 60, function () {
+    const ss = acikSS_();
+    const sheet = getOrCreateSheet(ss, SHEETS.stokHareketleri, STOK_HAREKET_BASLIKLAR);
+    const data = sheet.getDataRange().getValues();
+    const harita = {};
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const stokTanimId = String(row[2] || "");
+      const renk = renkAnahtar_(row[13]);
+      if (!stokTanimId || !renk) continue;
+      const miktar = parseFloat(row[7]) || 0;
+      if (!harita[stokTanimId]) harita[stokTanimId] = {};
+      harita[stokTanimId][renk] = (harita[stokTanimId][renk] || 0) + (String(row[6] || "") === "Giriş" ? miktar : -miktar);
+    }
+    return harita;
+  });
+}
+
 function getStokTanimListesi() {
   return cacheOkuVeyaHesapla("stokTanimListesi", 180, function () {
   const ss = acikSS_();
@@ -7920,11 +8126,14 @@ function getStokTanimListesi() {
   ensureStokTanimEkColonlari(sheet);
   const data = sheet.getDataRange().getValues();
   const guncelMiktarHaritasi = stokGuncelMiktarHaritasi();
+  const renkMiktarHaritasi = stokRenkMiktarHaritasi();
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
     const nesne = stokTanimSatiriNesneYap(data[i]);
     nesne.guncelStok = guncelMiktarHaritasi[nesne.id] || 0;
+    // Renkli kartlarda renk bazlı miktar (anahtar: renkAnahtar_ biçimi); toplamdan farkı "renk belirtilmemiş" stoktur.
+    if (nesne.renkListeId) nesne.renkMiktar = renkMiktarHaritasi[nesne.id] || {};
     sonuc.push(nesne);
   }
   return { ok: true, kalemler: sonuc };
@@ -8562,10 +8771,11 @@ function stokHareketOtomatikYaz(ss, kalemler, tarih, hareketTipi, belgeTipi, bel
       String(k.urunAdi || "").trim(), String(k.birim || "adet"), hareketTipi, miktar,
       aciklamaOnEk, kayitTarihi, belgeTipi, belgeNo,
       parseFloat(k.birimFiyat) || 0,
+      String(k.renk || "").trim(), // ★ (20 Eki 2026) 14. kolon RENK
     ]);
   });
   if (satirlar.length) {
-    shSheet.getRange(shSheet.getLastRow() + 1, 1, satirlar.length, STOK_HAREKET_BASLIKLAR.length).setValues(satirlar);
+    shSheet.getRange(shSheet.getLastRow() + 1, 1, satirlar.length, satirlar[0].length).setValues(satirlar);
     kdBacakNotu_({ k: "stok", tip: hareketTipi, kaynak: SHEETS.stokHareketleri, kid: String(belgeNo), tutar: satirlar.reduce((t, x) => t + (parseFloat(x[7]) || 0) * (parseFloat(x[12]) || 0), 0), tarih: tarih, ek: "" });
     cacheTemizle(["stokHareketListesi"]);
   }
@@ -8822,6 +9032,7 @@ function ensureStokHareketBelgeColonlari_orj_(sheet) {
   if (String(h13 || "") !== "MALIYET_FIYATI") {
     sheet.getRange(1, 13).setValue("MALIYET_FIYATI").setFontWeight("bold").setBackground("#e8edf5");
   }
+  renkKolonuGarantiEt_(sheet, 14); // ★ (20 Eki 2026) StokHareketleri 14. kolon RENK (STOK_HAREKET_BASLIKLAR'a EKLENMEZ: günlük rapor sütunları bozulmasın)
 }
 
 function stokHareketSatiriNesneYap(row) {
@@ -8839,6 +9050,7 @@ function stokHareketSatiriNesneYap(row) {
     belgeTipi: String(row[10] || ""),
     belgeNo: String(row[11] || ""),
     maliyetFiyati: parseFloat(row[12]) || 0,
+    renk: metinOku_(row[13]),   // ★ (20 Eki 2026) renk kodu (renkli ürünlerde)
   };
 }
 
@@ -8884,6 +9096,7 @@ function stokHareketTopluEkle(body) {
       belgeTipi,
       String(k.belgeNo || body.genelBelgeNo || ""),
       maliyetFiyati,
+      String(k.renk || "").trim(), // ★ (20 Eki 2026) 14. kolon RENK
     ]);
     eklenen++;
     if (hareketTipi === "Giriş" && maliyetFiyati > 0 && k.stokTanimId && (belgeTipi === "Devir" || belgeTipi === "Stok Düzeltme")) {
@@ -8892,7 +9105,7 @@ function stokHareketTopluEkle(body) {
   });
 
   if (satirlar.length > 0) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, satirlar.length, STOK_HAREKET_BASLIKLAR.length).setValues(satirlar);
+    sheet.getRange(sheet.getLastRow() + 1, 1, satirlar.length, satirlar[0].length).setValues(satirlar);
   }
   maliyetGuncellenecek.forEach(m => stokTanimMaliyetGuncelle(m.id, m.alisFiyati));
   cacheTemizle(["stokHareketListesi"]);
@@ -11778,7 +11991,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20261017a";
+const ENSURE_SURUM_ = "20261020a";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}

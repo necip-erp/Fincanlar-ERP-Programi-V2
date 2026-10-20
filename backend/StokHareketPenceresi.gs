@@ -40,6 +40,7 @@ function getStokHareketPenceresi(body) {
       yon: (yon === "alis") === !iade ? "giris" : "cikis",
       miktar: miktar, birim: kalem.birim, brutFiyat: parseFloat(kalem.brut) || net, iskontoYuzde: parseFloat(kalem.isk) || 0,
       netFiyat: net, kdvOrani: kalem.kdv === "" || kalem.kdv === undefined ? null : (parseFloat(kalem.kdv) || 0), tutar: miktar * net,
+      renk: metinOku_(kalem.renk), // ★ (20 Eki 2026) renkli ürünlerde satırın rengi
     });
   };
 
@@ -50,23 +51,23 @@ function getStokHareketPenceresi(body) {
       const b = belgeler[String(r[1])];
       if (!b || b.belgeTipi !== "Fatura") return; // Sipariş/Teklif stok hareketi değildir
       const brut = parseFloat(r[5]) || 0, isk = parseFloat(r[7]) || 0;
-      ekle(b, "Satış Faturası", false, { miktar: r[3], birim: String(r[4] || ""), brut: brut, isk: isk, net: brut * (1 - isk / 100), kdv: r[8] });
+      ekle(b, "Satış Faturası", false, { miktar: r[3], birim: String(r[4] || ""), brut: brut, isk: isk, net: brut * (1 - isk / 100), kdv: r[8], renk: r[11] });
     });
     const iadeler = belgeHaritasi(SHEETS.satisIadeler, null);
     oku(SHEETS.satisIadeKalemleri).forEach(r => {
       if (String(r[7] || "").trim() !== kod) return;
-      ekle(iadeler[String(r[1])], "Satış İadesi", true, { miktar: r[3], birim: String(r[4] || ""), brut: r[5], isk: 0, net: r[5], kdv: "" });
+      ekle(iadeler[String(r[1])], "Satış İadesi", true, { miktar: r[3], birim: String(r[4] || ""), brut: r[5], isk: 0, net: r[5], kdv: "", renk: r[9] });
     });
   } else {
     const belgeler = belgeHaritasi(SHEETS.alislar, null);
     oku(SHEETS.alisKalemleri).forEach(r => {
       if (String(r[7] || "").trim() !== kod) return;
-      ekle(belgeler[String(r[1])], "Alış Faturası", false, { miktar: r[3], birim: String(r[4] || ""), brut: r[9], isk: r[10], net: r[5], kdv: r[8] });
+      ekle(belgeler[String(r[1])], "Alış Faturası", false, { miktar: r[3], birim: String(r[4] || ""), brut: r[9], isk: r[10], net: r[5], kdv: r[8], renk: r[13] });
     });
     const iadeler = belgeHaritasi(SHEETS.alisIadeler, null);
     oku(SHEETS.alisIadeKalemleri).forEach(r => {
       if (String(r[7] || "").trim() !== kod) return;
-      ekle(iadeler[String(r[1])], "Alış İadesi", true, { miktar: r[3], birim: String(r[4] || ""), brut: r[9] || r[5], isk: r[10] || 0, net: r[5], kdv: r[8] });
+      ekle(iadeler[String(r[1])], "Alış İadesi", true, { miktar: r[3], birim: String(r[4] || ""), brut: r[5], isk: 0, net: r[5], kdv: "", renk: r[8] });  // AlisIadeKalemleri: 8. kolon STOK_KODU, 9. kolon RENK (KDV/brüt/iskonto kolonu yok)
     });
   }
   satirlar.sort((a, b) => kdZamanSayisi_(b.tarih) - kdZamanSayisi_(a.tarih));
