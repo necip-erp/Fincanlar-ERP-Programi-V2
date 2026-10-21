@@ -25,6 +25,29 @@ bekliyorsa sunucu başlamaz. Çözüm: şifresiz otomatik oturum açma ya da Gö
 
 Doğrulama: bilgisayarı dükkân kapandıktan sonra yeniden başlatıp sunucunun kendiliğinden açıldığını görün.
 
+## 2b. Siyah pencere olmadan çalıştırma (önerilen)
+
+Sorun: `BASLAT.bat` penceresi kapanınca sunucu da kapanır ve bağlantı kopar.
+Çözüm: sunucuyu pencere açmadan, arka planda çalıştıran iki dosya (`yerel-sunucu/araclar/` klasöründe):
+
+- `BASLAT-GIZLI.vbs`: sunucuyu arka planda başlatır. Pencere açılmaz, kapatılacak bir şey yoktur. Çıktı `sunucu-kayit.log` dosyasına yazılır. Sunucu zaten çalışıyorsa ikinci kez açmaz.
+- `DURDUR.bat`: sunucuyu (yeniden başlatma döngüsüyle birlikte) tamamen durdurur.
+
+Kurulum:
+
+1. Açık siyah pencere(ler)i kapatın (sunucu kısa süre durur).
+2. İki dosyayı `BASLAT.bat` ile aynı klasöre koyun: `C:\YerelSunucu\FincanlarERP`. `BASLAT.bat` değişmez, silinmez.
+3. `BASLAT-GIZLI.vbs` dosyasına çift tıklayın. "Sunucu arka planda başlatıldı" mesajı çıkar. `http://localhost:3000` ve diğer bilgisayardan açılışı kontrol edin.
+4. Başlangıç klasöründeki (`shell:startup`) eski `BASLAT.bat` kısayolunu silin, yerine `BASLAT-GIZLI.vbs` kısayolu koyun.
+
+Bilmeniz gerekenler:
+
+- Sunucu çalışırken ekranda hiçbir pencere görünmez. Çalışıp çalışmadığını `http://localhost:3000` ile anlarsınız.
+- Program Güncelleme (GitHub) eskisi gibi çalışır; `node.exe` kapanınca döngü sunucuyu yeniden açar.
+- Durdurmak için yalnızca `DURDUR.bat` kullanın. Görev Yöneticisi'nde sadece `node.exe` kapatılırsa döngü onu yeniden açar.
+- Sunucu kapanma nedeni `sunucu-kayit.log` dosyasındadır (bölüm 5'teki satır değişikliği gerekmez).
+- Aynı anda yalnızca bir sunucu çalışmalıdır. Elle `node src\server.js` açmayın.
+
 ## 3. Sunucu açılmıyorsa (sabah kontrolü)
 
 1. SATIS bilgisayarında `C:\YerelSunucu\FincanlarERP` klasörünü açın.
