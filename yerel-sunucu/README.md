@@ -7,3 +7,4 @@ Dükkândaki yerel sunucunun (C:\YerelSunucu\FincanlarERP) **sunucu dosyaları**
 Güncelleme: yerel sunucuda Ayarlar > **Program Güncelleme (GitHub)** > Güncelle.
 Sunucu hiç açılmazsa (kapalıyken): `node src\geri-al.js`
 Veri yedeğinden geri dönüş: `node src\geri-yukle.js "<yedek dosyası>"`
+Yedek bilgisayarda hızlı kurulum (SATIS bozulursa): `yedek-kurulum\` klasörü + `protokoller\YEDEK-SUNUCU-KURULUM.md`.
