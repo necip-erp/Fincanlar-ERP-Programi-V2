@@ -189,6 +189,14 @@ body.desen-acik{
 .modtile:hover .ic{transform:scale(1.08) rotate(-4deg)}
 .modtile .lbl{font-weight:700;font-size:var(--mod-lblfont)}
 .modtile .desc{color:var(--text3);font-size:var(--mod-descfont);margin-top:2px;line-height:1.3}
+/* ★ (22 Eki 2026) Modül yerleşimi: sıralı (varsayılan) / serbest-belli yerler (ızgara) / tamamen serbest. Ayarlar > Genel Görünüm. */
+.modgrid.mod-izgara{grid-template-columns:repeat(var(--mod-cols),minmax(0,1fr));grid-auto-rows:var(--mod-rowh)}
+.modgrid.mod-serbest{display:block;position:relative}
+.modgrid.mod-serbest .modtile{position:absolute;box-sizing:border-box}
+.modgrid.mod-izgara .modtile,.modgrid.mod-serbest .modtile{cursor:grab;touch-action:none}
+.modgrid .modtile.mod-tasiniyor{cursor:grabbing;opacity:.92;z-index:60;box-shadow:0 14px 30px -8px rgba(0,0,0,.35);transition:none;transform:none}
+.modgrid .modtile.mod-tasiniyor::before,.modgrid .modtile.mod-tasiniyor::after{display:none}
+.mod-hedef{border:2px dashed var(--blue);border-radius:var(--r);background:rgba(79,70,229,.07);pointer-events:none;z-index:1}
 
 /* Modül içerik alanı */
 .modview{position:absolute;inset:0;display:none;flex-direction:column}
@@ -399,6 +407,8 @@ table.hareket-tbl tr.hk-row{cursor:pointer}
 table.rehber-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 table.rehber-tbl th{position:sticky;top:0;background:var(--bg2);text-align:left;padding:8px 12px;color:var(--text3);font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
 table.rehber-tbl th:hover{color:var(--text)}
+.rehber-cari-git{white-space:nowrap;font-size:11.5px;font-weight:700;padding:4px 10px;border:1px solid var(--border);border-radius:14px;background:var(--bg3);color:var(--text2);cursor:pointer;transition:background var(--t),border-color var(--t),color var(--t)}
+.rehber-cari-git:hover{background:var(--blue-l);border-color:var(--blue);color:var(--blue)}
 table.rehber-tbl th .ok{opacity:.5;margin-left:3px}
 table.rehber-tbl td{padding:8px 12px;border-bottom:1px solid var(--border)}
 table.rehber-tbl tr{cursor:pointer;transition:background var(--t)}
@@ -835,7 +845,10 @@ body.giris-yapildi #login-ekran{display:none}
     <input id="global-ara" placeholder="Ürün ara (kod, isim, ebat)..." oninput="globalAraDegisti(this.value)">
   </div>
   <button class="homebtn" id="ak-btn" onclick="akAc()" title="Akıllı Arama: ne yapmak istediğini yaz, doğrudan işleme geç (Ctrl+K)">⚡ Ne yapmak istiyorsun? <span class="kisayol-ipucu" id="ak-btn-kisayol">Ctrl+K</span></button>
-  <button class="homebtn" id="baglanti-rozet" style="display:inline-block;margin-left:8px;font-weight:800" onclick="baglantiGecisSor()" title="">…</button>
+  <span id="baglanti-kap" style="display:inline-flex;flex-direction:column;align-items:center;margin-left:8px;line-height:1">
+    <button class="homebtn" id="baglanti-rozet" style="display:inline-block;margin-left:0;padding:4px 14px;font-weight:800" onclick="baglantiGecisSor()" title="">…</button>
+    <span id="bulut-son-yazi" style="display:none;font-size:9.5px;font-weight:600;color:#64748b;white-space:nowrap;margin-top:2px;letter-spacing:.1px" title=""></span>
+  </span>
   <span id="surum-rozet" style="display:inline-block;margin-left:6px;font-size:11px;font-weight:700;color:#64748b;white-space:nowrap" title="Program sürümü">v…</span>
   <button class="homebtn" id="yedek-rozet" style="display:none" onclick="modulAc('yedekleme')" title="Yedekleme durumu — tıklayınca Yedekleme modülü açılır">💾 …</button>
   <div id="yy-zil-wrap" style="position:relative;display:none;margin-left:6px">
@@ -2071,6 +2084,18 @@ setInterval(topbarSaatGuncelle, 10000);
           <button type="button" class="belge-tab" id="mod-boyut-buyuk-btn" style="flex:1;padding:7px 10px" onclick="modulBoyutuSec('buyuk')">Büyük</button>
         </div>
       </div>
+      <div class="fld" style="margin-top:14px;max-width:520px">
+        <label>Modül Yerleşimi (Ana Sayfa)</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="belge-tab" id="mod-yerlesim-sirali-btn" style="flex:1;padding:7px 10px" onclick="modulYerlesimSec('sirali')" title="Kutular sırayla dizilir; sürükleyince sıra değişir">1 · Sıralı</button>
+          <button type="button" class="belge-tab" id="mod-yerlesim-izgara-btn" style="flex:1;padding:7px 10px" onclick="modulYerlesimSec('izgara')" title="Kutular belli hücrelere oturur; boş hücreye sürüklenir">2 · Serbest (belli yerler)</button>
+          <button type="button" class="belge-tab" id="mod-yerlesim-serbest-btn" style="flex:1;padding:7px 10px" onclick="modulYerlesimSec('serbest')" title="Kutu ekranda istediğin her yere bırakılır">3 · Tamamen serbest</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap">
+          <span style="color:var(--text3);font-size:12px">Ana Sayfa'da kutuyu tutup sürükleyin. Bu bilgisayarda saklanır; dar ekranda her zaman Sıralı.</span>
+          <button type="button" class="rapor-renk-btn" onclick="modulYerlesimSifirla()">↺ Konumları sıfırla</button>
+        </div>
+      </div>
     </div>
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Açılışta Gelecek Sayfa</div>
@@ -2343,6 +2368,7 @@ function modgridCiz(){
       <div class="desc">${m.desc}</div>
     </div>`;
   }).join("");
+  modulYerlesimUygula_();
 }
 function modulSiraDegistir(hedefId){
   if(!_surukleneId || _surukleneId === hedefId) return;
@@ -2355,6 +2381,146 @@ function modulSiraDegistir(hedefId){
   _surukleneId = null;
   modgridCiz();
 }
+
+// ── ★ (22 Eki 2026) MODÜL YERLEŞİMİ — Ayarlar > Genel Görünüm > "Modül Yerleşimi"
+//   1) Sıralı         : mevcut düzen (kutular sırayla dizilir, sürükleyince sıra değişir)
+//   2) Belli yerler   : kutular ızgara hücrelerine oturur; boş hücreye sürüklenir, dolu hücreyle yer değiştirir
+//   3) Tamamen serbest: kutu ekranda istenen her yere bırakılır (piksel konumu)
+// Seçim ve konumlar bu tarayıcıda (localStorage) tutulur. Dar ekranda (<700px) her zaman Sıralı.
+function modulYerlesimAl_(){ try{ const v = localStorage.getItem("fincanlar_modul_yerlesim"); return (v === "izgara" || v === "serbest") ? v : "sirali"; }catch(e){ return "sirali"; } }
+function modulYerlesimEtkin_(){ return window.innerWidth < 700 ? "sirali" : modulYerlesimAl_(); }
+function modulKonumAl_(mod){ try{ const k = JSON.parse(localStorage.getItem("fincanlar_modul_konum_" + mod) || "null"); return (k && typeof k === "object") ? k : {}; }catch(e){ return {}; } }
+function modulKonumKaydet_(mod, k){ try{ localStorage.setItem("fincanlar_modul_konum_" + mod, JSON.stringify(k)); }catch(e){} }
+let _modYerGen = 0;
+function modulYerlesimUygula_(){
+  const g = document.getElementById("modgrid"); if(!g) return;
+  const mod = modulYerlesimEtkin_();
+  g.classList.remove("mod-izgara", "mod-serbest");
+  g.style.removeProperty("--mod-cols"); g.style.removeProperty("--mod-rowh");
+  g.style.gridTemplateRows = ""; g.style.height = "";
+  const tiles = Array.from(g.querySelectorAll(".modtile"));
+  tiles.forEach(t=>{ t.style.gridColumn = ""; t.style.gridRow = ""; t.style.left = ""; t.style.top = ""; t.style.width = ""; t.style.transform = ""; t.draggable = (mod === "sirali"); t.onpointerdown = null; });
+  const eski = g.querySelector(".mod-hedef"); if(eski) eski.remove();
+  g._yerWidth = g.clientWidth;
+  if(mod === "sirali" || !tiles.length || !g.clientWidth) return;   // gizliyse (genişlik 0) ResizeObserver görününce yeniden dener
+
+  // Ölçüm: önce mevcut (sıralı) düzende hücre/kutu ölçüleri alınır
+  const cs = getComputedStyle(g);
+  const gap = parseFloat(cs.columnGap) || 10;
+  const cols = Math.max(1, cs.gridTemplateColumns.split(" ").filter(Boolean).length);
+  const rowH = Math.max(...tiles.map(t=>t.offsetHeight));
+  const gr = g.getBoundingClientRect();
+  const ilkDikdortgen = {}; tiles.forEach(t=>{ const r = t.getBoundingClientRect(); ilkDikdortgen[t.dataset.id] = {x: r.left - gr.left, y: r.top - gr.top, w: r.width, h: r.height}; });
+
+  if(mod === "izgara"){
+    const kayit = modulKonumAl_("izgara"), alan = {}, yeni = {};
+    g.style.setProperty("--mod-cols", cols); g.style.setProperty("--mod-rowh", rowH + "px");
+    const dolu = (c, r)=> Object.keys(alan).some(id=> alan[id].c === c && alan[id].r === r);
+    tiles.forEach(t=>{ const k = kayit[t.dataset.id]; if(k && k.c >= 1 && k.c <= cols && k.r >= 1 && !dolu(k.c, k.r)) alan[t.dataset.id] = {c: k.c, r: k.r}; });
+    tiles.forEach(t=>{ // konumu olmayan/sığmayan kutu: ilk boş hücre
+      if(alan[t.dataset.id]) return;
+      for(let r = 1; r < 500; r++){ let bulundu = false; for(let c = 1; c <= cols; c++){ if(!dolu(c, r)){ alan[t.dataset.id] = {c, r}; bulundu = true; break; } } if(bulundu) break; }
+    });
+    let enAlt = 1;
+    tiles.forEach(t=>{ const a = alan[t.dataset.id]; t.style.gridColumn = a.c; t.style.gridRow = a.r; enAlt = Math.max(enAlt, a.r); });
+    g.classList.add("mod-izgara");
+    g.style.gridTemplateRows = "repeat(" + (enAlt + 1) + ", " + rowH + "px)";   // en altta bir boş satır: aşağıya da bırakılabilsin
+    modulKonumKaydet_("izgara", alan);
+    g._izgara = {cols, gap, rowH, alan};
+  } else {
+    const kayit = modulKonumAl_("serbest"), yeni = {};
+    const genislik = Math.round(Math.max(...tiles.map(t=>t.offsetWidth)));
+    g.classList.add("mod-serbest");
+    let enAlt = 0;
+    tiles.forEach(t=>{
+      const id = t.dataset.id, k = kayit[id] || {x: ilkDikdortgen[id].x, y: ilkDikdortgen[id].y};
+      const x = Math.max(0, Math.min(k.x, Math.max(0, g.clientWidth - genislik))), y = Math.max(0, k.y);
+      t.style.width = genislik + "px"; t.style.left = x + "px"; t.style.top = y + "px"; t.style.height = "";
+      yeni[id] = {x: Math.round(x), y: Math.round(y)};
+      enAlt = Math.max(enAlt, y + t.offsetHeight);
+    });
+    g.style.height = Math.ceil(enAlt + 24) + "px";
+    modulKonumKaydet_("serbest", yeni);
+    g._serbest = {genislik};
+  }
+  modulSurukleKur_(g, tiles, mod);
+}
+function modulSurukleKur_(g, tiles, mod){
+  if(!g._tiklamaEngeli){ g._tiklamaEngeli = true; g.addEventListener("click", e=>{ if(g._sonTasima && Date.now() - g._sonTasima < 350){ e.stopPropagation(); e.preventDefault(); } }, true); }
+  tiles.forEach(t=>{
+    t.onpointerdown = function(e){
+      if(e.button !== 0 && e.pointerType === "mouse") return;
+      const bas = {x: e.clientX, y: e.clientY}; let tasiniyor = false, hedef = null, hedefEl = null;
+      const tr0 = t.getBoundingClientRect(), ofs = {x: e.clientX - tr0.left, y: e.clientY - tr0.top};
+      const id = t.dataset.id;
+      const hareket = ev=>{
+        const gr = g.getBoundingClientRect();
+        if(!tasiniyor){
+          if(Math.hypot(ev.clientX - bas.x, ev.clientY - bas.y) < 6) return;
+          tasiniyor = true; t.classList.add("mod-tasiniyor"); g._sonTasima = Date.now();
+          if(mod === "izgara"){ hedefEl = document.createElement("div"); hedefEl.className = "mod-hedef"; g.appendChild(hedefEl); }
+        }
+        g._sonTasima = Date.now();
+        if(mod === "serbest"){
+          const w = g._serbest.genislik;
+          const x = Math.max(0, Math.min(ev.clientX - gr.left - ofs.x, Math.max(0, g.clientWidth - w)));
+          const y = Math.max(0, ev.clientY - gr.top - ofs.y);
+          t.style.left = x + "px"; t.style.top = y + "px";
+          g.style.height = Math.max(parseFloat(g.style.height) || 0, Math.ceil(y + t.offsetHeight + 24)) + "px";
+        } else {
+          const iz = g._izgara, hw = (gr.width - (iz.cols - 1) * iz.gap) / iz.cols;
+          t.style.transform = "translate(" + (ev.clientX - bas.x) + "px," + (ev.clientY - bas.y) + "px)";
+          const cx = ev.clientX - gr.left, cy = ev.clientY - gr.top;
+          const c = Math.max(1, Math.min(iz.cols, Math.floor(cx / (hw + iz.gap)) + 1));
+          const rMax = (parseInt((g.style.gridTemplateRows.match(/repeat\((\d+)/) || [0, 1])[1], 10)) || 1;
+          const r = Math.max(1, Math.min(rMax, Math.floor(cy / (iz.rowH + iz.gap)) + 1));
+          hedef = {c, r}; hedefEl.style.gridColumn = c; hedefEl.style.gridRow = r;
+        }
+      };
+      const bitir = ()=>{
+        document.removeEventListener("pointermove", hareket); document.removeEventListener("pointerup", bitir); document.removeEventListener("pointercancel", bitir);
+        if(!tasiniyor) return;
+        // geri kayma animasyonu olmasın (kutu doğrudan yeni yerinde belirsin)
+        t.style.transition = "none"; t.classList.remove("mod-tasiniyor"); t.style.transform = ""; void t.offsetWidth;
+        requestAnimationFrame(()=>{ t.style.transition = ""; });
+        if(hedefEl) hedefEl.remove();
+        if(mod === "serbest"){
+          const k = modulKonumAl_("serbest"); k[id] = {x: Math.round(parseFloat(t.style.left) || 0), y: Math.round(parseFloat(t.style.top) || 0)};
+          modulKonumKaydet_("serbest", k); modulYerlesimUygula_();
+        } else if(hedef){
+          const k = modulKonumAl_("izgara"), eskiKonum = k[id], baska = Object.keys(k).find(o=> o !== id && k[o].c === hedef.c && k[o].r === hedef.r);
+          if(baska && eskiKonum) k[baska] = {c: eskiKonum.c, r: eskiKonum.r};   // dolu hücre: yer değiştir
+          k[id] = {c: hedef.c, r: hedef.r};
+          modulKonumKaydet_("izgara", k); modulYerlesimUygula_();
+        }
+        g._sonTasima = Date.now();
+      };
+      document.addEventListener("pointermove", hareket); document.addEventListener("pointerup", bitir); document.addEventListener("pointercancel", bitir);
+    };
+  });
+}
+function modulYerlesimSec(v){
+  try{ localStorage.setItem("fincanlar_modul_yerlesim", v); }catch(e){}
+  modulYerlesimButonlariGuncelle(v); modulYerlesimUygula_();
+}
+function modulYerlesimSifirla(){
+  if(!confirm("Seçili yerleşimdeki kutu konumları sıfırlansın mı? (Sıralı düzende kutu sırası değişmez.)")) return;
+  const v = modulYerlesimAl_();
+  if(v !== "sirali"){ try{ localStorage.removeItem("fincanlar_modul_konum_" + v); }catch(e){} }
+  modulYerlesimUygula_();
+}
+function modulYerlesimButonlariGuncelle(v){
+  ["sirali", "izgara", "serbest"].forEach(d=>{ const b = document.getElementById("mod-yerlesim-" + d + "-btn"); if(b) b.classList.toggle("active", d === v); });
+}
+function modulYerlesimAyarYukle(){ modulYerlesimButonlariGuncelle(modulYerlesimAl_()); }
+(function(){
+  const g = document.getElementById("modgrid"); if(!g || typeof ResizeObserver === "undefined") return;
+  let zaman = null;
+  new ResizeObserver(()=>{
+    clearTimeout(zaman);
+    zaman = setTimeout(()=>{ if(g.clientWidth && g.clientWidth !== g._yerWidth && modulYerlesimEtkin_() !== "sirali") modulYerlesimUygula_(); else if(g.clientWidth && g._yerWidth === 0) modulYerlesimUygula_(); }, 120);
+  }).observe(g);
+})();
 modgridCiz();
 
 // ── Ana sayfa "Bugünkü Özet" kartları: hangilerinin gösterileceği Ayarlar >
@@ -4040,7 +4206,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261020a";
+const FRONT_SURUM = "20261022a";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -4436,8 +4602,26 @@ function yySaglikYukle_(){
   if(!localStorage.getItem("fincanlar_oturum_token")){ sonraki(); return; }
   cariApi("yerelYedekSaglik").then(res=>{
     if(!res || !res.ok || !res.yerel){ yySaglikBantCiz_(null); if(res && res.ok && !res.yerel) return; sonraki(); return; }
-    _yySaglik.veri = res; yySaglikBantCiz_(res); sonraki();
+    _yySaglik.veri = res; yySaglikBantCiz_(res); yyBulutSonYaz_(res); sonraki();
   }).catch(()=>{ sonraki(); });
+}
+// ★ (22 Eki 2026) "YEREL SUNUCU" yazısının altında küçük: buluta (Drive yedeği) en son ne zaman veri gönderildi.
+function yyBulutSonYaz_(r){
+  const el = document.getElementById("bulut-son-yazi"); if(!el) return;
+  if(!r || !r.yerel){ el.style.display = "none"; return; }
+  const t = Number(r.bulutSon || 0);
+  const tz = {timeZone:"Europe/Istanbul"};
+  let yazi = "", renk = "#64748b";
+  if(t > 0){
+    const d = new Date(t);
+    const bugun = new Date().toLocaleDateString("sv-SE", tz) === d.toLocaleDateString("sv-SE", tz);
+    const saat = d.toLocaleTimeString("tr-TR", Object.assign({hour:"2-digit", minute:"2-digit"}, tz));
+    yazi = "☁ buluta son gönderim: " + (bugun ? saat : d.toLocaleDateString("tr-TR", Object.assign({day:"numeric", month:"short"}, tz)) + " " + saat);
+  } else if(r.bulutSon !== undefined){ yazi = "☁ buluta henüz gönderilmedi"; }
+  else { el.style.display = "none"; return; }   // eski sunucu sürümü: bilgi yok
+  if((r.bulutArdisik || 0) >= 1){ renk = "#b91c1c"; yazi += " · son deneme başarısız"; }
+  el.textContent = yazi; el.style.color = renk; el.style.display = "";
+  el.title = "Yerel sunucudaki verinin Drive'a (buluta) en son başarıyla gönderildiği an. Veri değişmediyse yeni yedek gönderilmez." + (r.bulutHata ? "\nSon hata: " + r.bulutHata : "");
 }
 function yySaglikBantCiz_(r){
   let b = document.getElementById("yy-saglik-bandi");
@@ -5342,11 +5526,13 @@ function rehberTabloCiz(){
           <th onclick="rehberSirala('tip')">Tip${okIsareti('tip')}</th>
           <th onclick="rehberSirala('bakiye')">Bakiye${okIsareti('bakiye')}</th>
           <th onclick="rehberSirala('sonIslemTarihi')">Son İşlem${okIsareti('sonIslemTarihi')}</th>
+          <th style="cursor:default;text-align:center" title="Carinin içine gir (ekstre / hareketler)">Cari</th>
         </tr></thead>
         <tbody>
-          ${liste.length===0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
+          ${liste.length===0 ? '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sonuç yok</td></tr>' :
           liste.map((c,i)=>`<tr class="${i===_rehberState.aktifIdx?'rehber-aktif':''}" onclick="rehberSecReal(${i})" ondblclick="rehberSecReal(${i})">
             <td>${c.cariKodu||'—'}</td><td>${c.ad}${c.aktif===false?' <span class="tip-badge" style="background:var(--red-l);color:var(--red)">⏸ PASİF</span>':''}</td><td>${c.telefon||'—'}</td><td>${c.tip}</td><td class="${bakiyeSinifi(c.bakiye)}">${paraFormat(c.bakiye)}</td><td>${c.sonIslemTarihi?tarihGoster(c.sonIslemTarihi):'—'}</td>
+            <td style="text-align:center;width:1%"><button type="button" class="rehber-cari-git" title="Carinin içine gir: ekstre ve hareketleri yeni sekmede açar (rehber kapanır)" onclick="event.stopPropagation();rehberCariyeGit(${i})" ondblclick="event.stopPropagation()">📂 Cariye Git</button></td>
           </tr>`).join("")}
         </tbody>
       </table>`;
@@ -5381,6 +5567,13 @@ function rehberTabloCiz(){
   }
 }
 
+// ★ (22 Eki 2026) F1 Cari Rehberi'nde en sağdaki "Cariye Git": seçmeden, carinin içine (ekstre/hareketler) yeni sekmede girer.
+function rehberCariyeGit(idx){
+  const c = _rehberState && _rehberState.filtreli ? _rehberState.filtreli[idx] : null;
+  if(!c || !c.id) return;
+  rehberKapat();
+  cariYeniSekmedeAc(c.id);
+}
 function rehberCiftTikModu(){ return localStorage.getItem("rehberCiftTik") === "kart" ? "kart" : "yaz"; }
 function rehberCiftTikModuKaydet(m){ try{ localStorage.setItem("rehberCiftTik", m); }catch(e){} }
 function rehberSecReal(idx){
@@ -20082,6 +20275,7 @@ function ayarlarYukle(){
   olcuBasaAlAyarYukle();
   arkaplanDeseniAyarYukle();
   modulBoyutuAyarYukle();
+  modulYerlesimAyarYukle();
   ayarlarBugunOzetListesiCiz();
   acilisSayfasiYukle();
   if(!_tanimListeYuklendi.giderUstGrup) tanimListesiYukle("giderUstGrup");

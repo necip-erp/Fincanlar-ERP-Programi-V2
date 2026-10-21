@@ -506,7 +506,8 @@ function baslat(o) {
   }
   function saglik() {
     const l = sorunlar();
-    return { ok: true, yerel: true, sorun: l.length > 0, sayi: l.length, mesajlar: l.map((x) => x.m) };
+    // bulutSon: son BAŞARILI bulut yedeği (ms; 0 = hiç) — ekranda "YEREL SUNUCU" yazısının altında gösterilir
+    return { ok: true, yerel: true, sorun: l.length > 0, sayi: l.length, mesajlar: l.map((x) => x.m), bulutSon: durum.bulut.sonBasari || 0, bulutArdisik: durum.bulut.ardisik || 0, bulutHata: durum.bulut.ardisik ? (durum.bulut.sonHata || '') : '' };
   }
   async function nabizGonder(test) {
     const adres = bulutAdresi();
