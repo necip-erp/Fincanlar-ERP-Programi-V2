@@ -4450,7 +4450,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261022f";
+const FRONT_SURUM = "20261023a";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -24732,6 +24732,7 @@ document.addEventListener("keydown", function(e){
   const ANAHTAR = "fincanlar_pano_v1", ADET = 9;
   const METIN_TIPLERI = ["text","search","tel","url","email","number",""];
   let tutulan = null;
+  let beklenen = null; // Ctrl+rakam bırakıldı ama ~0,4 sn içinde C/V gelirse yine pano işlemi sayılır ({n, zaman})
   let panelOdak = null;
   function oku(){
     const bos = Array(ADET).fill("");
@@ -24839,14 +24840,16 @@ document.addEventListener("keydown", function(e){
       if(e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && e.code === "KeyQ"){ durdur(e); panelAc(); return; }
       if(e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && n){
         durdur(e);
-        if(!tutulan || tutulan.code !== e.code) tutulan = { n: n, code: e.code, kullanildi: false };
+        if(!tutulan || tutulan.code !== e.code){ tutulan = { n: n, code: e.code, kullanildi: false }; beklenen = null; }
         return;
       }
-      if(tutulan && e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && (e.code === "KeyC" || e.code === "KeyV")){
+      if((tutulan || beklenen) && e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && (e.code === "KeyC" || e.code === "KeyV")){
         durdur(e);
-        tutulan.kullanildi = true;
+        let no;
+        if(tutulan){ tutulan.kullanildi = true; no = tutulan.n; }
+        else { no = beklenen.n; clearTimeout(beklenen.z); beklenen = null; }
         if(e.repeat) return;
-        if(e.code === "KeyC") kopyala(tutulan.n); else yapistir(tutulan.n);
+        if(e.code === "KeyC") kopyala(no); else yapistir(no);
       }
     }catch(err){ console.warn("Pano hata:", err); }
   }, true);
@@ -24857,9 +24860,17 @@ document.addEventListener("keydown", function(e){
       if(t.kullanildi) return;
       // Sadece Ctrl+rakam: eski davranış — Ana Sayfa'daki sıradaki modülü aç (önde pencere varsa hiçbir şey yapma).
       if(!document.body.classList.contains("giris-yapildi")) return;
-      const onda = (typeof onPlanPencereBul_ === "function" && onPlanPencereBul_()) || (typeof _shp !== "undefined" && _shp.acik);
-      const m = modulSirasiniAl()[t.n - 1];
-      if(m && !onda) modulAc(m.id);
+      // Ctrl+1 bırakılıp ardından (Ctrl hâlâ basılıyken) C/V'ye basılırsa o da pano işlemi sayılır; bu yüzden modül
+      // açma 400 ms beklenir (C/V gelirse modül açılmaz → seçili yazı kaybolmaz).
+      if(beklenen) clearTimeout(beklenen.z);
+      const b = { n: t.n };
+      b.z = setTimeout(() => {
+        if(beklenen === b) beklenen = null;
+        const onda = (typeof onPlanPencereBul_ === "function" && onPlanPencereBul_()) || (typeof _shp !== "undefined" && _shp.acik);
+        const m = modulSirasiniAl()[t.n - 1];
+        if(m && !onda) modulAc(m.id);
+      }, 400);
+      beklenen = b;
     }catch(err){ console.warn("Ctrl+rakam hata:", err); }
   }, true);
   window.addEventListener("blur", () => { tutulan = null; });
