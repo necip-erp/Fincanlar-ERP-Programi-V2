@@ -4450,7 +4450,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261023b";
+const FRONT_SURUM = "20261023c";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -8335,10 +8335,14 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
     <div class="modal-box modal-box-xwide fatura-modal siparis-duzen">
       <h3 class="fm-baslik" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <span>${duzenle ? "✏️ "+belgeTipiBaslangic+"'i Düzenle" : "🧾 Yeni "+belgeTipiBaslangic}</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">
         <span id="sm-efatura-rozet" title="Seçili carinin E-Fatura mükellefiyeti" style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;padding:4px 14px;border-radius:20px;white-space:nowrap;background:var(--bg3);color:var(--text3)">E-Fatura: —</span>
         <button type="button" id="sm-efatura-kapat" class="btn" style="display:none;padding:2px 9px;font-size:11px" title="Carinin E-Fatura durumunu kapatır (cari kartına da yansır). Tekrar açmak yalnız Cari kartından yapılır." onclick="smCariEfaturaKapat('eFatura')">✕ Kapat</button>
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">
         <span id="sm-earsiv-rozet" title="Seçili carinin E-Arşiv mükellefiyeti" style="display:inline-flex;align-items:center;font-size:13px;font-weight:800;padding:4px 14px;border-radius:20px;white-space:nowrap;background:var(--bg3);color:var(--text3)">E-Arşiv: —</span>
         <button type="button" id="sm-earsiv-kapat" class="btn" style="display:none;padding:2px 9px;font-size:11px" title="Carinin E-Arşiv durumunu kapatır (cari kartına da yansır). Tekrar açmak yalnız Cari kartından yapılır." onclick="smCariEfaturaKapat('eArsiv')">✕ Kapat</button>
+        </span>
         <span id="sm-siparis-no-badge" style="display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">
           # <span id="sm-siparis-no-metin">${s && s.siparisNo ? s.siparisNo : '—'}</span>
         </span>
