@@ -4324,7 +4324,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261022c";
+const FRONT_SURUM = "20261022d";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -24594,6 +24594,151 @@ document.addEventListener("keydown", function(e){
     if(!e.metaKey && kisayolMetni(e) === k){ e.preventDefault(); e.stopPropagation(); const o = document.getElementById("ak-overlay"); (o && o.style.display !== "none") ? akKapat() : akAc(); }
   }catch(_){}
 }, true);
+
+// ── ★ 22 Eki 2026: ÇOKLU PANO (9 hafıza) ──────────────────────────────────────────────────────
+// Ctrl+1+C … Ctrl+9+C = seçili metni 1…9 numaralı hafızaya kopyalar (Ctrl'ye ve rakama basılı tutup C'ye bas).
+// Ctrl+1+V … Ctrl+9+V = o hafızadaki metni imlecin olduğu alana yapıştırır. Normal Ctrl+C / Ctrl+V aynen çalışır.
+// Ctrl+Q = Pano paneli (içerikleri gösterir; satırdaki Yapıştır / panoya al / sil; panel açıkken 1…9 tuşu da yapıştırır).
+// İçerik bu bilgisayarın tarayıcısında (localStorage) saklanır, sayfa/oturum kapanınca silinmez.
+// NOT: Ctrl+rakam tek başına eskiden Ana Sayfa modülünü açıyordu; artık rakam BIRAKILINCA açılır (arada C/V
+// basıldıysa modül açılmaz) — böylece Ctrl+1+C ile modül açılması çakışmaz.
+(function(){
+  const ANAHTAR = "fincanlar_pano_v1", ADET = 9;
+  const METIN_TIPLERI = ["text","search","tel","url","email","number",""];
+  let tutulan = null;
+  let panelOdak = null;
+  function oku(){
+    const bos = Array(ADET).fill("");
+    try{ const a = JSON.parse(localStorage.getItem(ANAHTAR) || "[]"); if(!Array.isArray(a)) return bos; return bos.map((_, i) => typeof a[i] === "string" ? a[i] : ""); }
+    catch(_){ return bos; }
+  }
+  function yaz(r){ try{ localStorage.setItem(ANAHTAR, JSON.stringify(r)); return true; }catch(_){ bildir("Pano kaydedilemedi (tarayıcı depolaması kapalı/dolu)"); return false; } }
+  function bildir(m){
+    try{
+      let t = document.getElementById("pano-toast");
+      if(!t){ t = document.createElement("div"); t.id = "pano-toast"; t.style.cssText = "position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#1f2937;color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;z-index:2147483000;box-shadow:0 4px 14px rgba(0,0,0,.3);pointer-events:none"; document.body.appendChild(t); }
+      t.textContent = m; t.style.display = "block";
+      clearTimeout(t._z); t._z = setTimeout(() => { t.style.display = "none"; }, 2000);
+    }catch(_){}
+  }
+  function rakam(e){ const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code || ""); return m ? Number(m[1]) : 0; }
+  function metinAlanMi(el){
+    if(!el) return false;
+    if(el.tagName === "TEXTAREA") return true;
+    if(el.tagName === "INPUT") return METIN_TIPLERI.indexOf((el.type || "").toLowerCase()) >= 0;
+    return !!el.isContentEditable;
+  }
+  function seciliMetin(){
+    const a = document.activeElement;
+    if(a && metinAlanMi(a) && !a.isContentEditable){
+      try{ if(a.selectionStart != null && a.selectionEnd > a.selectionStart) return a.value.substring(a.selectionStart, a.selectionEnd); }catch(_){}
+      if(a.value) return a.value; // seçim yoksa alanın tamamı (ör. sayı alanlarında seçim yapılamaz)
+    }
+    const s = window.getSelection ? window.getSelection().toString() : "";
+    return s;
+  }
+  function kopyala(n){
+    const m = seciliMetin();
+    if(!m){ bildir("Pano " + n + ": kopyalanacak seçili metin yok"); return; }
+    const r = oku(); r[n-1] = m;
+    if(yaz(r)) bildir("Pano " + n + " ← " + (m.length > 40 ? m.slice(0, 40) + "…" : m));
+  }
+  function yapistirEl(el, metin){
+    if(!metinAlanMi(el) || el.readOnly || el.disabled) return false;
+    if(el.isContentEditable){ document.execCommand("insertText", false, metin); return true; }
+    try{
+      if(el.selectionStart != null) el.setRangeText(metin, el.selectionStart, el.selectionEnd, "end");
+      else el.value = el.value + metin;
+    }catch(_){ el.value = el.value + metin; }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+  function yapistir(n, hedef){
+    const m = oku()[n-1];
+    if(!m){ bildir("Pano " + n + " boş"); return false; }
+    const el = hedef || document.activeElement;
+    if(!yapistirEl(el, m)){ bildir("Yapıştırılacak bir yazı alanı seçili değil"); return false; }
+    return true;
+  }
+  function panelAcikMi(){ const o = document.getElementById("pano-overlay"); return !!(o && o.style.display !== "none"); }
+  function panelKapat(){ const o = document.getElementById("pano-overlay"); if(o) o.remove(); }
+  function panelAc(){
+    panelKapat();
+    panelOdak = document.activeElement;
+    const o = document.createElement("div");
+    o.id = "pano-overlay";
+    o.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2147482000;display:flex;align-items:center;justify-content:center";
+    o.addEventListener("mousedown", ev => { if(ev.target === o) panelKapat(); });
+    const k = document.createElement("div");
+    k.style.cssText = "background:#fff;color:#111;border-radius:10px;width:min(640px,94vw);max-height:84vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.4);font-size:13px";
+    const b = document.createElement("div");
+    b.style.cssText = "padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:10px;position:sticky;top:0;background:#fff";
+    b.innerHTML = '<b style="font-size:15px">📋 Panolarım</b><span style="color:#6b7280;flex:1">Kopyala: Ctrl+1…9 basılıyken C · Yapıştır: Ctrl+1…9 basılıyken V · panel açıkken 1…9 = yapıştır</span>';
+    const kap = document.createElement("button"); kap.textContent = "✕"; kap.style.cssText = "border:0;background:none;font-size:18px;cursor:pointer"; kap.onclick = panelKapat;
+    b.appendChild(kap); k.appendChild(b);
+    const r = oku();
+    r.forEach((m, i) => {
+      const s = document.createElement("div");
+      s.style.cssText = "display:flex;gap:8px;align-items:flex-start;padding:8px 16px;border-bottom:1px solid #f3f4f6";
+      const no = document.createElement("div"); no.textContent = String(i+1); no.style.cssText = "min-width:24px;height:24px;border-radius:6px;background:#1d4ed8;color:#fff;font-weight:700;text-align:center;line-height:24px";
+      const ic = document.createElement("div"); ic.style.cssText = "flex:1;white-space:pre-wrap;word-break:break-word;max-height:84px;overflow:auto;" + (m ? "" : "color:#9ca3af");
+      ic.textContent = m || "(boş)";
+      s.appendChild(no); s.appendChild(ic);
+      const dugme = (ad, ipucu, fn) => { const d = document.createElement("button"); d.textContent = ad; d.title = ipucu; d.style.cssText = "border:1px solid #d1d5db;background:#f9fafb;border-radius:6px;padding:3px 8px;cursor:pointer"; d.onmousedown = ev => ev.preventDefault(); d.onclick = fn; return d; };
+      if(m){
+        s.appendChild(dugme("Yapıştır", "Panel açılmadan önceki alana yapıştır", () => { const h = panelOdak; panelKapat(); if(h && h.focus) h.focus(); yapistir(i+1, h); }));
+        s.appendChild(dugme("📋", "Sistem panosuna kopyala", () => { try{ navigator.clipboard.writeText(m); bildir("Sistem panosuna kopyalandı"); }catch(_){ bildir("Kopyalanamadı"); } }));
+        s.appendChild(dugme("✕", "Bu hafızayı boşalt", () => { const x = oku(); x[i] = ""; yaz(x); panelAc(); }));
+      }
+      k.appendChild(s);
+    });
+    const alt = document.createElement("div"); alt.style.cssText = "padding:10px 16px;display:flex;justify-content:space-between;color:#6b7280";
+    alt.innerHTML = "<span>Esc veya Ctrl+Q ile kapanır</span>";
+    const temiz = document.createElement("button"); temiz.textContent = "Tümünü temizle"; temiz.style.cssText = "border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:6px;padding:3px 10px;cursor:pointer";
+    temiz.onclick = () => { if(confirm("9 hafızanın hepsi silinsin mi?")){ yaz(Array(ADET).fill("")); panelAc(); } };
+    alt.appendChild(temiz); k.appendChild(alt);
+    o.appendChild(k); document.body.appendChild(o);
+  }
+  function durdur(e){ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
+  document.addEventListener("keydown", function(e){
+    try{
+      if(!document.body.classList.contains("giris-yapildi")) return;
+      const n = rakam(e);
+      if(panelAcikMi()){
+        if(e.key === "Escape" || (e.ctrlKey && e.code === "KeyQ")){ durdur(e); panelKapat(); return; }
+        if(n && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey){ durdur(e); const h = panelOdak; panelKapat(); if(h && h.focus) h.focus(); yapistir(n, h); }
+        return;
+      }
+      if(e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && e.code === "KeyQ"){ durdur(e); panelAc(); return; }
+      if(e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && n){
+        durdur(e);
+        if(!tutulan || tutulan.code !== e.code) tutulan = { n: n, code: e.code, kullanildi: false };
+        return;
+      }
+      if(tutulan && e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && (e.code === "KeyC" || e.code === "KeyV")){
+        durdur(e);
+        tutulan.kullanildi = true;
+        if(e.repeat) return;
+        if(e.code === "KeyC") kopyala(tutulan.n); else yapistir(tutulan.n);
+      }
+    }catch(err){ console.warn("Pano hata:", err); }
+  }, true);
+  document.addEventListener("keyup", function(e){
+    try{
+      if(!tutulan || e.code !== tutulan.code) return;
+      const t = tutulan; tutulan = null;
+      if(t.kullanildi) return;
+      // Sadece Ctrl+rakam: eski davranış — Ana Sayfa'daki sıradaki modülü aç (önde pencere varsa hiçbir şey yapma).
+      if(!document.body.classList.contains("giris-yapildi")) return;
+      const onda = (typeof onPlanPencereBul_ === "function" && onPlanPencereBul_()) || (typeof _shp !== "undefined" && _shp.acik);
+      const m = modulSirasiniAl()[t.n - 1];
+      if(m && !onda) modulAc(m.id);
+    }catch(err){ console.warn("Ctrl+rakam hata:", err); }
+  }, true);
+  window.addEventListener("blur", () => { tutulan = null; });
+  document.addEventListener("visibilitychange", () => { tutulan = null; });
+})();
 </script>
 
 <!-- ══════════════ STANDART RAPOR TABLOSU (4 Eki 2026) ══════════════
