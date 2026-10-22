@@ -181,7 +181,8 @@ body.desen-acik{
 .modtile-no{position:absolute;top:6px;right:7px;font-size:9.5px;font-weight:800;letter-spacing:.02em;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:1px 5px;line-height:1.35;pointer-events:none}
 .modtile{background:var(--bg2);border:1px solid var(--border);border-top:3px solid var(--border);border-radius:var(--r);padding:var(--mod-pad);text-align:center;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),border-color .16s var(--ease);user-select:none;position:relative;overflow:hidden}
 .modtile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--blue),var(--amber));transform:scaleX(0);transform-origin:left;transition:transform .22s var(--ease)}
-.modtile:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:transparent}
+.modtile:hover{transform:translateY(-1px) scale(1.06);box-shadow:0 8px 20px -6px rgba(0,0,0,.3);border-color:#facc15;background:#fff7c2;color:#422006;z-index:3}   /* 22 Eki: üzerine gelince büyür + açık sarı (sekmelerdeki gibi) */
+.modtile:hover .lbl{color:#422006}.modtile:hover .desc{color:#713f12}
 .modtile:hover::before{transform:scaleX(1)}
 .modtile::after{content:"→";position:absolute;right:9px;bottom:6px;font-size:11px;color:var(--text3);opacity:0;transform:translateX(-4px);transition:opacity .18s var(--ease),transform .18s var(--ease)}
 .modtile:hover::after{opacity:1;transform:translateX(0)}
@@ -4323,7 +4324,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261022b";
+const FRONT_SURUM = "20261022c";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -8132,6 +8133,28 @@ function belgeFormuHTMLOlustur(s, kalemler, t, c){
 // Silme onaylarında ortak, ayrıntılı uyarı metni — "ne siliniyor" net görünsün diye.
 function silOnaySor(ozet){
   return confirm(ozet+"\n\nBu kaydı silmek istediğinize emin misiniz?\n(Bu işlem 'Silinenler' bölümünden geri alınabilir.)");
+}
+
+// ★ (22 Eki 2026) Sayfanın ortasında, kırmızı çerçeveli silme onayı (tarayıcının üstte çıkan confirm kutusu yerine). Ödeme/Tahsilat silmede kullanılır.
+function silOnayModal(ozet, onay){
+  const eski = document.getElementById("sil-onay-overlay"); if(eski) eski.remove();
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay"; ov.id = "sil-onay-overlay";
+  ov.innerHTML = `<div class="modal-box sil-onay-kutu">
+      <div class="sil-onay-baslik">⚠️ Silme Onayı</div>
+      <div class="sil-onay-ozet">${htmlKacis(ozet)}</div>
+      <div class="sil-onay-metin">Bu kaydı silmek istediğinize emin misiniz?<br><span>(Bu işlem 'Silinenler' bölümünden geri alınabilir.)</span></div>
+      <div class="om-aksiyon"><button class="btn" id="sil-onay-iptal">Vazgeç</button><button class="btn btn-danger" id="sil-onay-evet">🗑 Evet, Sil</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const kapat = ()=>{ document.removeEventListener("keydown", tus, true); ov.remove(); };
+  const tus = e=>{ if(e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); kapat(); } };
+  document.addEventListener("keydown", tus, true);
+  ov.onclick = e=>{ if(e.target === ov) kapat(); };
+  ov.querySelector("#sil-onay-iptal").onclick = kapat;
+  const evet = ov.querySelector("#sil-onay-evet");
+  evet.onclick = ()=>{ kapat(); onay(); };
+  evet.focus();
 }
 
 function satisSilOnay(id){
@@ -14652,7 +14675,7 @@ function tahsilatAc(id){
     <button class="cari-back-btn" onclick="tahsilatListeyeDon()">← Listeye dön</button>
     <div class="cari-detail-head">
       <div>
-        <h2>${t.cariAd} ${t.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${t.cariId}')" title="Cari Hareket ekranını sekme olarak aç">🔗 Cariyi Aç</button>` : ''}</h2>
+        <h2>${t.cariAd} ${(t.cariKodu||cariKoduBul_(t.cariId)) ? `<span class="tip-badge" title="Cari Kodu">${htmlKacis(t.cariKodu||cariKoduBul_(t.cariId))}</span>` : ''} ${t.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${t.cariId}')" title="Cari Hareket ekranını sekme olarak aç">🔗 Cariyi Aç</button>` : ''}</h2>
         <span class="tip-badge">${tarihGoster(t.tarih)} · ${t.yontem}</span>
       </div>
       <div class="cari-bakiye-box">
@@ -14681,15 +14704,16 @@ function tahsilatListeyeDon(){
 function tahsilatSilOnay(id){
   const t = _tahsilatListe.find(x=>x.id===id);
   const ozet = t ? ("Tahsilat ("+t.yontem+") — "+t.cariAd+" — "+paraFormat(t.tutar)) : "Bu tahsilat";
-  if(!silOnaySor(ozet)) return;
-  cariApi("silTahsilat", {id}).then(res=>{
-    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
-    tahsilatListeyeDon();
-    document.getElementById("tahsilat-detail-panel").innerHTML = '<div class="cari-detail-empty"><span class="ic">💰</span><p>Detayları görmek için soldan bir tahsilat seçin</p></div>';
-    _tahsilatSecili = null;
-    tahsilatListesiYukle();
-    cariListesiYukle();
-  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  silOnayModal(ozet, ()=>{
+    cariApi("silTahsilat", {id}).then(res=>{
+      if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+      tahsilatListeyeDon();
+      document.getElementById("tahsilat-detail-panel").innerHTML = '<div class="cari-detail-empty"><span class="ic">💰</span><p>Detayları görmek için soldan bir tahsilat seçin</p></div>';
+      _tahsilatSecili = null;
+      tahsilatListesiYukle();
+      cariListesiYukle();
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  });
 }
 
 function tahsilatModalAc(onCariId, editId){
@@ -14718,8 +14742,9 @@ function tahsilatModalAc(onCariId, editId){
             <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('tm-cari').value=c.id; document.getElementById('tm-cari-arama').value=c.ad; cariSonrasiOdak_('tm'); })">🔍</button>
             <input type="hidden" id="tm-cari" value="${baslangicCariId||''}">
             <div id="tm-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+            <div class="om-cari-bilgi" id="tm-cari-bilgi"></div>
           </div>
-          <div class="fld om-tutar"><label>Tutar</label><input id="tm-tutar" type="number" min="0" step="0.01" placeholder="0,00" value="${t?t.tutar:''}"></div>
+          <div class="fld om-tutar om-tam"><label>Tutar</label><input id="tm-tutar" type="number" min="0" step="0.01" placeholder="0,00" value="${t?t.tutar:''}"></div>
           <div class="fld"><label>Tarih</label><input id="tm-tarih" type="datetime-local" value="${datetimeLocalDeger(t?t.tarih:bugun)}"></div>
           <div class="fld"><label>Yöntem</label>
             <select id="tm-yontem" onchange="tahsilatYontemDegisti()">
@@ -14735,7 +14760,7 @@ function tahsilatModalAc(onCariId, editId){
             <select id="tm-banka-hesap"></select>
           </div>
           <div class="om-not om-tam">Çek ile tahsilat için Çek/Senet modülünü kullanın — orada vade takibi de yapılır.</div>
-          <div class="fld om-tam"><label>Açıklama</label><input id="tm-aciklama" type="text" placeholder="İsteğe bağlı" value="${t?(t.aciklama||''):''}"></div>
+          <div class="fld om-tam"><label>Açıklama</label><input id="tm-aciklama" type="text" placeholder="Boş bırakılırsa: Yöntem + tahsilat (örn. Nakit tahsilat)" value="${t?(t.aciklama||''):''}"></div>
         </div>
       </div>
       <div class="om-akordiyon">
@@ -14754,6 +14779,7 @@ function tahsilatModalAc(onCariId, editId){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  odemeCariBilgiGuncelle_("tm");
   tahsilatBankaSecenekleriYukle();
   tahsilatPosSecenekleriYukle();
   if(t){
@@ -14781,7 +14807,7 @@ function tahsilatPosSecenekleriYukle(){
 }
 
 function tmCariAramaDegisti(){
-  document.getElementById("tm-cari").value = "";
+  document.getElementById("tm-cari").value = ""; odemeCariBilgiGuncelle_("tm");
   tmCariOneriGoster();
 }
 function tmCariOneriGoster(){
@@ -14804,9 +14830,21 @@ function tmCariOneriKapat(){
   const kutu = document.getElementById("tm-cari-oneri");
   if(kutu) kutu.style.display = "none";
 }
+// ★ (22 Eki 2026) Ödeme/Tahsilat penceresinde seçili carinin kodu ve "Cariyi Aç" düğmesi (tip: "om" ödeme, "tm" tahsilat).
+function cariKoduBul_(id){ const c = (typeof _cariListe !== "undefined" ? _cariListe : []).find(x=>x.id===id); return c ? (c.cariKodu||"") : ""; }
+function odemeCariBilgiGuncelle_(tip){
+  const kap = document.getElementById(tip + "-cari-bilgi"), h = document.getElementById(tip + "-cari");
+  if(!kap || !h) return;
+  const id = h.value;
+  if(!id){ kap.innerHTML = ""; return; }
+  const kod = cariKoduBul_(id);
+  kap.innerHTML = (kod ? '<span class="om-cari-kod">Cari Kodu: <b>' + htmlKacis(kod) + '</b></span>' : '') +
+    ' <button type="button" class="btn om-cari-ac" onclick="cariYeniSekmedeAc(\'' + id + '\')" title="Cari Hareket ekranını sekme olarak aç">🔗 Cariyi Aç</button>';
+}
 // ★ (21 Eyl 2026) Cari seçilince (öneri kutusu / Rehber) imleç sıradaki asıl alana gider — Satış/Alış'taki gibi:
 // Tahsilat, Ödeme, Çek/Senet, Çek Ciro → Tutar; Satış/Alış İade → stok satırı (doluysa son stoğun Miktar'ı, yoksa ilk Ürün alanı).
 function cariSonrasiOdak_(tip){
+  if(tip === "om" || tip === "tm") odemeCariBilgiGuncelle_(tip);
   setTimeout(()=>{
     const hedefId = { tm:"tm-tutar", om:"om-tutar", csm:"csm-tutar", cekciro:"ci-tutar" }[tip];
     let el = hedefId ? document.getElementById(hedefId) : null;
@@ -14961,7 +14999,7 @@ function odemeAc(id){
     <button class="cari-back-btn" onclick="odemeListeyeDon()">← Listeye dön</button>
     <div class="cari-detail-head">
       <div>
-        <h2>${o.cariAd}</h2>
+        <h2>${o.cariAd} ${o.cariKodu ? `<span class="tip-badge" title="Cari Kodu">${htmlKacis(o.cariKodu)}</span>` : ''} ${o.cariId ? `<button class="btn" style="font-size:11px;padding:3px 9px;vertical-align:middle" onclick="cariYeniSekmedeAc('${o.cariId}')" title="Cari Hareket ekranını sekme olarak aç">🔗 Cariyi Aç</button>` : ''}</h2>
         <span class="tip-badge">${tarihGoster(o.tarih)} · ${o.yontem}${o.hedefTipi && o.hedefTipi!=='Cari' ? ' · '+o.hedefTipi : ''}</span>
       </div>
       <div class="cari-bakiye-box">
@@ -14991,15 +15029,16 @@ function odemeListeyeDon(){
 function odemeSilOnay(id){
   const o = _odemeListe.find(x=>x.id===id);
   const ozet = o ? ("Ödeme ("+o.yontem+") — "+(o.cariAd||o.hedefAd||"")+" — "+paraFormat(o.tutar)) : "Bu ödeme";
-  if(!silOnaySor(ozet)) return;
-  cariApi("silOdeme", {id}).then(res=>{
-    if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
-    odemeListeyeDon();
-    document.getElementById("odeme-detail-panel").innerHTML = '<div class="cari-detail-empty"><span class="ic">💳</span><p>Detayları görmek için soldan bir ödeme seçin</p></div>';
-    _odemeSecili = null;
-    odemeListesiYukle();
-    cariListesiYukle();
-  }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  silOnayModal(ozet, ()=>{
+    cariApi("silOdeme", {id}).then(res=>{
+      if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
+      odemeListeyeDon();
+      document.getElementById("odeme-detail-panel").innerHTML = '<div class="cari-detail-empty"><span class="ic">💳</span><p>Detayları görmek için soldan bir ödeme seçin</p></div>';
+      _odemeSecili = null;
+      odemeListesiYukle();
+      cariListesiYukle();
+    }).catch(err=>alert("Bağlantı hatası: "+err.message));
+  });
 }
 
 function odemeModalAc(onCariId, onSecenekler){
@@ -15039,6 +15078,7 @@ function odemeModalAc(onCariId, onSecenekler){
             <button type="button" class="rehber-ac-btn" title="Cari Rehberi" onclick="rehberAc('cari', c=>{ document.getElementById('om-cari').value=c.id; document.getElementById('om-cari-arama').value=c.ad; cariSonrasiOdak_('om'); })">🔍</button>
             <input type="hidden" id="om-cari" value="${onCariId||''}">
             <div id="om-cari-oneri" class="fiyat-gecmis-kutu" style="display:none"></div>
+            <div class="om-cari-bilgi" id="om-cari-bilgi"></div>
           </div>
           <div class="fld om-tam om-hedef" id="om-hedef-banka-fld" style="display:none"><label>Banka Hesabı / Kredi Kartı</label>
             <select id="om-hedef-banka"><option value="">— Seçiniz —</option></select>
@@ -15051,7 +15091,7 @@ function odemeModalAc(onCariId, onSecenekler){
               <select id="om-gider-alt"><option value="">— (isteğe bağlı) —</option></select>
             </div>
           </div>
-          <div class="fld om-tutar"><label>Tutar</label><input id="om-tutar" type="number" min="0" step="0.01" placeholder="0,00"></div>
+          <div class="fld om-tutar om-tam"><label>Tutar</label><input id="om-tutar" type="number" min="0" step="0.01" placeholder="0,00"></div>
           <div class="fld"><label>Tarih</label><input id="om-tarih" type="datetime-local" value="${bugun}"></div>
           <div class="fld"><label id="om-yontem-label">Yöntem</label>
             <select id="om-yontem" onchange="odemeYontemDegisti()">
@@ -15067,7 +15107,7 @@ function odemeModalAc(onCariId, onSecenekler){
             <select id="om-banka-hesap"></select>
           </div>
           <div class="om-not om-tam">Çek ile ödeme için Çek/Senet modülünü kullanın — orada vade takibi de yapılır.</div>
-          <div class="fld om-tam"><label>Açıklama</label><input id="om-aciklama" type="text" placeholder="İsteğe bağlı"></div>
+          <div class="fld om-tam"><label>Açıklama</label><input id="om-aciklama" type="text" placeholder="Boş bırakılırsa: Yöntem + ödeme (örn. Nakit ödeme)"></div>
         </div>
       </div>
       <div class="om-akordiyon">
@@ -15087,6 +15127,7 @@ function odemeModalAc(onCariId, onSecenekler){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  odemeCariBilgiGuncelle_("om");
   const bankaHesapPromise = odemeBankaSecenekleriYukle();
   odemePosSecenekleriYukle();
   odemeHedefBankaSecenekleriYukle();
@@ -15207,6 +15248,7 @@ function odemePosSecenekleriYukle(){
 }
 
 function omCariAramaDegisti(){
+  try{ document.getElementById("om-cari").value = ""; odemeCariBilgiGuncelle_("om"); }catch(e){}
   document.getElementById("om-cari").value = "";
   omCariOneriGoster();
 }
@@ -23961,6 +24003,15 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
 .odeme-modal{max-width:640px;background:var(--rp-alan,var(--bg2))}
 .odeme-modal .om-baslik{background:var(--rp-th-bg);color:var(--rp-th-fg);padding:9px 14px;border-radius:8px;border-left:4px solid var(--rp-th-fg);font-size:16px;font-weight:800;margin:0 0 12px}
 .odeme-modal .om-kart{background:var(--rp-satir);border:1px solid var(--rp-th-bd);border-radius:12px;padding:14px 16px}
+.om-cari-bilgi{margin-top:5px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.om-cari-bilgi:empty{display:none}
+.om-cari-bilgi .om-cari-kod b{font-weight:800;color:var(--text)}
+.om-cari-bilgi .om-cari-ac{font-size:11px;padding:3px 9px}
+.sil-onay-kutu{max-width:440px;border:3px solid var(--red);box-shadow:0 0 0 5px rgba(220,38,38,.18),0 24px 60px -12px rgba(0,0,0,.5);text-align:center}
+.sil-onay-baslik{font-size:18px;font-weight:800;color:var(--red);margin-bottom:10px}
+.sil-onay-ozet{font-weight:700;padding:10px 12px;background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.35);border-radius:8px;margin-bottom:12px;word-break:break-word}
+.sil-onay-metin{font-size:13.5px;line-height:1.5}.sil-onay-metin span{font-size:12px;color:var(--text3)}
+.sil-onay-kutu .om-aksiyon{justify-content:center;margin-top:16px}
 .odeme-modal .om-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;align-items:start}
 .odeme-modal .om-tam{grid-column:1/-1}
 .odeme-modal .fld{display:flex;flex-direction:column;gap:5px;margin:0;min-width:0}

@@ -1172,7 +1172,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261022b";
+const PROGRAM_SURUM_ = "20261022c";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -4282,7 +4282,12 @@ function getTahsilatListesi() {
 }
 
 // body: { cariId, tarih, tutar, yontem, aciklama, posHesapId (yöntem "Kredi Kartı" ise) }
+// ★ (22 Eki 2026) Ortak standart: Açıklama boş bırakılırsa tüm ödeme ve tahsilat işlemlerinde "<Yöntem> tahsilat/ödeme" yazılır.
+function odemeTahsilatAciklamaStandart_(tur, yontem) {
+  return String(yontem || "Nakit") + " " + tur;
+}
 function saveTahsilat(body) {
+  if (!String(body.aciklama || "").trim()) body.aciklama = odemeTahsilatAciklamaStandart_("tahsilat", body.yontem);
   const cariId = String(body.cariId || "").trim();
   const tutar = parseFloat(body.tutar) || 0;
   if (!cariId) return { ok: false, hata: "Cari seçimi gerekli" };
@@ -4520,6 +4525,7 @@ function getSeriNoGrubu(seriNo) {
 //         hedefId (hedefTipi="Banka" ise bankaHesapId/krediKartiId; hedefTipi="Gider" ise giderAltGrup veya giderUstGrup id'si),
 //         giderUstId (hedefTipi="Gider" ise, hedefId bir alt grupsa üst grubu; hedefId zaten üst grupsa boş bırakılabilir) }
 function saveOdeme(body) {
+  if (!String(body.aciklama || "").trim()) body.aciklama = odemeTahsilatAciklamaStandart_("ödeme", body.yontem);
   const hedefTipi = String(body.hedefTipi || "Cari");
   const tutar = parseFloat(body.tutar) || 0;
   if (tutar <= 0) return { ok: false, hata: "Tutar sıfırdan büyük olmalı" };
