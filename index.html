@@ -186,10 +186,10 @@ body.desen-acik{
 .modtile:hover::before{transform:scaleX(1)}
 .modtile::after{content:"→";position:absolute;right:9px;bottom:6px;font-size:11px;color:var(--text3);opacity:0;transform:translateX(-4px);transition:opacity .18s var(--ease),transform .18s var(--ease)}
 .modtile:hover::after{opacity:1;transform:translateX(0)}
-.modtile .ic{font-size:var(--mod-icfont);width:var(--mod-ic);height:var(--mod-ic);display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--blue-l);margin:0 auto 7px;transition:transform .2s var(--ease)}
+.modtile .ic{font-size:calc(var(--mod-icfont) * var(--ms,1));width:calc(var(--mod-ic) * var(--ms,1));height:calc(var(--mod-ic) * var(--ms,1));display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--blue-l);margin:0 auto 7px;transition:transform .2s var(--ease)}
 .modtile:hover .ic{transform:scale(1.08) rotate(-4deg)}
-.modtile .lbl{font-weight:700;font-size:var(--mod-lblfont)}
-.modtile .desc{color:var(--text3);font-size:var(--mod-descfont);margin-top:2px;line-height:1.3}
+.modtile .lbl{font-weight:700;font-size:calc(var(--mod-lblfont) * var(--ms,1))}
+.modtile .desc{color:var(--text3);font-size:calc(var(--mod-descfont) * var(--ms,1));margin-top:2px;line-height:1.3}
 /* ★ (22 Eki 2026) Modül yerleşimi: sıralı (varsayılan) / serbest-belli yerler (ızgara) / tamamen serbest. Ayarlar > Genel Görünüm. */
 .modgrid.mod-izgara{grid-template-columns:repeat(var(--mod-cols),minmax(0,1fr));grid-auto-rows:var(--mod-rowh)}
 .modgrid.mod-serbest{display:block;position:relative}
@@ -198,6 +198,23 @@ body.desen-acik{
 .modgrid .modtile.mod-tasiniyor{cursor:grabbing;opacity:.92;z-index:60;box-shadow:0 14px 30px -8px rgba(0,0,0,.35);transition:none;transform:none}
 .modgrid .modtile.mod-tasiniyor::before,.modgrid .modtile.mod-tasiniyor::after{display:none}
 .mod-hedef{border:2px dashed var(--blue);border-radius:var(--r);background:rgba(79,70,229,.07);pointer-events:none;z-index:1}
+
+/* ★ (22 Eki 2026) Modül kutusu özelleştirme: yazı boyutu (otomatik/elle), kutu rengi, dışarıdan resim. Kutunun köşesindeki ⚙ düğmesinden. */
+.modgrid.mod-izgara .modtile,.modgrid.mod-serbest .modtile{display:flex;flex-direction:column;align-items:center;justify-content:center}
+.modtile[data-ozel]:not(:hover){background:var(--ozel-bg);border-color:var(--ozel-bg);color:var(--ozel-fg)}
+.modtile[data-ozel]:not(:hover) .lbl,.modtile[data-ozel]:not(:hover) .desc{color:var(--ozel-fg)}
+.modtile[data-ozel]:not(:hover) .desc{opacity:.85}
+.modtile[data-resim],.modtile[data-resim]:hover{background-image:linear-gradient(rgba(0,0,0,.30),rgba(0,0,0,.58)),var(--ozel-img);background-size:cover;background-position:center;color:#fff}
+.modtile[data-resim] .lbl,.modtile[data-resim] .desc,.modtile[data-resim]:hover .lbl,.modtile[data-resim]:hover .desc{color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.7)}
+.modtile .mod-ayar{position:absolute;top:4px;left:5px;width:22px;height:22px;line-height:20px;text-align:center;font-size:13px;border-radius:6px;background:var(--bg3);border:1px solid var(--border);color:var(--text2,var(--text3));opacity:0;cursor:pointer;z-index:4;padding:0}
+.modtile:hover .mod-ayar,.modtile .mod-ayar:focus{opacity:.9}
+.modtile .mod-ayar:hover{opacity:1;background:#fff;color:#111}
+#mod-stil-pop{position:fixed;z-index:2147482500;width:262px;background:var(--bg2,#fff);color:var(--text,#111);border:1px solid var(--border,#d1d5db);border-radius:10px;box-shadow:0 12px 36px rgba(0,0,0,.35);padding:12px 14px;font-size:12.5px}
+#mod-stil-pop .ms-baslik{font-weight:800;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px}
+#mod-stil-pop .ms-satir{margin:9px 0 4px;font-weight:700;color:var(--text3)}
+#mod-stil-pop .ms-ic{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#mod-stil-pop button{border:1px solid var(--border,#d1d5db);background:var(--bg3,#f3f4f6);color:inherit;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px}
+#mod-stil-pop .ms-renk{width:20px;height:20px;padding:0;border-radius:5px;border:1px solid rgba(0,0,0,.25)}
 .modgrid .mod-boyut{display:none}
 .modgrid.mod-izgara .mod-boyut,.modgrid.mod-serbest .mod-boyut{display:block;position:absolute;right:0;bottom:0;width:20px;height:20px;cursor:nwse-resize;touch-action:none;z-index:3;border-radius:0 0 var(--r) 0;background:linear-gradient(135deg,transparent 50%,var(--text3) 50%,var(--text3) 56%,transparent 56%,transparent 68%,var(--text3) 68%,var(--text3) 74%,transparent 74%);opacity:.45}
 .modgrid .modtile:hover .mod-boyut{opacity:1}
@@ -2451,16 +2468,18 @@ function modulYerlesimUygula_(g){
     if(t.hasAttribute("ondragstart")) t.draggable = (mod === "sirali");   // sıralı düzende eski sürükle-sırala; diğerlerinde işaretçiyle taşıma
     t.onpointerdown = null;
     const eb = t.querySelector(":scope > .mod-boyut"); if(eb) eb.remove();
+    t.style.removeProperty("--ms");   // ölçüm varsayılan yazı boyutuyla yapılsın
   });
   const eski = g.querySelector(":scope > .mod-hedef"); if(eski) eski.remove();
   g._yerWidth = g.clientWidth;
-  if(mod === "sirali" || !tiles.length || !g.clientWidth) return;   // gizliyse (genişlik 0) ResizeObserver görününce yeniden dener
+  if(mod === "sirali" || !tiles.length || !g.clientWidth){ modulStilUygula_(g, tiles, 0, 0, mod); return; }   // gizliyse (genişlik 0) ResizeObserver görününce yeniden dener
 
   // Ölçüm: önce mevcut (sıralı) düzende hücre/kutu ölçüleri alınır
   const cs = getComputedStyle(g);
   const gap = parseFloat(cs.columnGap) || 10;
   const cols = Math.max(1, cs.gridTemplateColumns.split(" ").filter(Boolean).length);
   const rowH = Math.max(...tiles.map(t=>t.offsetHeight));
+  const tabanW = Math.min(...tiles.map(t=>t.offsetWidth));
   const gr = g.getBoundingClientRect();
   const ilk = {}; tiles.forEach(t=>{ const r = t.getBoundingClientRect(); ilk[modYerTileId_(t)] = {x: r.left - gr.left, y: r.top - gr.top}; });
 
@@ -2497,7 +2516,114 @@ function modulYerlesimUygula_(g){
     g._serbest = {genislik};
   }
   tiles.forEach(t=>{ const b = document.createElement("span"); b.className = "mod-boyut"; b.title = "Köşeden tutup boyutlandır"; t.appendChild(b); });
+  g._stilTabanW = tabanW; g._stilTabanH = rowH;
+  modulStilUygula_(g, tiles, tabanW, rowH, mod);
   modulSurukleKur_(g, tiles, mod);
+}
+// ── ★ (22 Eki 2026) MODÜL KUTUSU ÖZELLEŞTİRME: yazı boyutu / kutu rengi / resim ─────────────────────────
+// Kutunun sol üstündeki ⚙ düğmesinden (üzerine gelince görünür). Yazı boyutu varsayılan OTOMATİK: kutu büyütüldükçe
+// yazı ve simge de kutuyla orantılı büyür (elle yüzde de verilebilir). Renk ve resim kutuya özel; resim kutunun arka
+// planı olur (kutu büyüdükçe boş alanı doldurur). Ayarlar bu tarayıcıda (localStorage) tutulur.
+function modStilAnahtar_(g){ return "fincanlar_modul_stil_" + (modYerKapsam_(g) === "ana" ? "ana" : "alt_" + modYerAnahtar_(g)); }
+function modStilAl_(g){ try{ const k = JSON.parse(localStorage.getItem(modStilAnahtar_(g)) || "null"); return (k && typeof k === "object") ? k : {}; }catch(e){ return {}; } }
+function modStilKaydet_(g, k){ try{ localStorage.setItem(modStilAnahtar_(g), JSON.stringify(k)); return true; }catch(e){ return false; } }
+function modRenkYazi_(hex){ // koyu zeminde beyaz, açık zeminde koyu yazı
+  const m = /^#([0-9a-f]{6})$/i.exec(hex || ""); if(!m) return "#111";
+  const n = parseInt(m[1], 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) < 150 ? "#fff" : "#111";
+}
+function modulStilUygula_(g, tiles, tabanW, tabanH, mod){
+  const st = modStilAl_(g);
+  (tiles || []).forEach(t=>{
+    const id = modYerTileId_(t), k = st[id] || {};
+    let olcek = 1;
+    if(+k.fs > 0) olcek = Math.max(0.5, Math.min(4, k.fs / 100));
+    else if(mod !== "sirali" && tabanW > 0 && tabanH > 0) olcek = Math.max(1, Math.min(3.2, Math.min(t.offsetWidth / tabanW, t.offsetHeight / tabanH)));
+    if(olcek !== 1) t.style.setProperty("--ms", String(Math.round(olcek * 100) / 100)); else t.style.removeProperty("--ms");
+    if(k.renk){ t.setAttribute("data-ozel", "1"); t.style.setProperty("--ozel-bg", k.renk); t.style.setProperty("--ozel-fg", modRenkYazi_(k.renk)); }
+    else { t.removeAttribute("data-ozel"); t.style.removeProperty("--ozel-bg"); t.style.removeProperty("--ozel-fg"); }
+    if(k.img){ t.setAttribute("data-resim", "1"); t.style.setProperty("--ozel-img", 'url("' + k.img + '")'); }
+    else { t.removeAttribute("data-resim"); t.style.removeProperty("--ozel-img"); }
+    if(!t.querySelector(":scope > .mod-ayar")){
+      const b = document.createElement("button"); b.type = "button"; b.className = "mod-ayar"; b.textContent = "⚙"; b.title = "Bu kutunun yazı boyutu / rengi / resmi";
+      ["pointerdown", "mousedown", "dragstart"].forEach(ev=> b.addEventListener(ev, e=>{ e.stopPropagation(); if(ev === "dragstart") e.preventDefault(); }));
+      b.draggable = false;
+      b.addEventListener("click", e=>{ e.stopPropagation(); e.preventDefault(); g._sonTasima = Date.now(); modulStilPaneliAc_(g, t, b); });
+      t.appendChild(b);
+    }
+  });
+}
+function modulStilPaneliKapat_(){ const p = document.getElementById("mod-stil-pop"); if(p) p.remove(); document.removeEventListener("mousedown", modulStilDisTik_, true); document.removeEventListener("keydown", modulStilEsc_, true); }
+function modulStilDisTik_(e){ const p = document.getElementById("mod-stil-pop"); if(p && !p.contains(e.target) && !(e.target.classList && e.target.classList.contains("mod-ayar"))) modulStilPaneliKapat_(); }
+function modulStilEsc_(e){ if(e.key === "Escape"){ e.stopPropagation(); modulStilPaneliKapat_(); } }
+function modulResimKucult_(dosya, bitti){
+  const fr = new FileReader();
+  fr.onerror = ()=> bitti(null);
+  fr.onload = ()=>{
+    const im = new Image();
+    im.onerror = ()=> bitti(null);
+    im.onload = ()=>{
+      const MAX = 520, o = Math.min(1, MAX / Math.max(im.width, im.height));
+      const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(im.width * o)); c.height = Math.max(1, Math.round(im.height * o));
+      c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+      bitti(c.toDataURL("image/jpeg", 0.82));
+    };
+    im.src = fr.result;
+  };
+  fr.readAsDataURL(dosya);
+}
+function modulStilPaneliAc_(g, t, ayarBtn){
+  modulStilPaneliKapat_();
+  const id = modYerTileId_(t), lbl = (t.querySelector(".lbl") || {}).textContent || "Kutu";
+  const al = ()=> (modStilAl_(g)[id] || {});
+  const yaz = (yeni, tamYenile)=>{
+    const st = modStilAl_(g); const k = Object.assign({}, st[id] || {}, yeni);
+    Object.keys(k).forEach(a=>{ if(k[a] === undefined || k[a] === null || k[a] === "") delete k[a]; });
+    if(Object.keys(k).length) st[id] = k; else delete st[id];
+    if(!modStilKaydet_(g, st)){ alert("Kaydedilemedi: tarayıcı depolaması dolu olabilir (büyük resim?)."); return; }
+    if(tamYenile) modulYerlesimUygula_(g); else modulStilUygula_(g, [t], g._stilTabanW || 0, g._stilTabanH || 0, modulYerlesimEtkin_(g));
+  };
+  const p = document.createElement("div"); p.id = "mod-stil-pop";
+  const k0 = al();
+  const renkler = ["#dbeafe", "#dcfce7", "#fef9c3", "#fee2e2", "#f3e8ff", "#ffedd5", "#1e3a8a", "#166534", "#7c2d12", "#374151"];
+  p.innerHTML =
+    '<div class="ms-baslik"><span>⚙ ' + String(lbl).replace(/[<>&]/g, "") + '</span><button type="button" data-a="kapat">✕</button></div>' +
+    '<div class="ms-satir">Yazı boyutu</div><div class="ms-ic"><label><input type="checkbox" data-a="oto"> Otomatik (kutuya uydur)</label></div>' +
+    '<div class="ms-ic"><input type="range" data-a="fs" min="60" max="400" step="5" style="flex:1"><b data-a="fsv" style="min-width:42px;text-align:right"></b></div>' +
+    '<div class="ms-satir">Kutu rengi</div><div class="ms-ic" data-a="renkler">' +
+      renkler.map(c=>'<button type="button" class="ms-renk" data-c="' + c + '" style="background:' + c + '" title="' + c + '"></button>').join("") +
+      '<input type="color" data-a="renk" style="width:30px;height:24px;padding:0;border:0;background:none" title="Başka renk"><button type="button" data-a="renksiz">Renksiz</button></div>' +
+    '<div class="ms-satir">Resim (arka plan)</div><div class="ms-ic"><button type="button" data-a="resimSec">📁 Resim seç…</button><button type="button" data-a="resimSil">Kaldır</button><input type="file" accept="image/*" data-a="dosya" style="display:none"></div>' +
+    '<div class="ms-ic" style="margin-top:12px;justify-content:space-between"><button type="button" data-a="sifirla">↺ Bu kutuyu sıfırla</button></div>';
+  document.body.appendChild(p);
+  const q = a => p.querySelector('[data-a="' + a + '"]');
+  const fsGuncelle = ()=>{
+    const k = al(), oto = !(+k.fs > 0);
+    q("oto").checked = oto; q("fs").disabled = oto;
+    const gor = oto ? Math.round((parseFloat(t.style.getPropertyValue("--ms")) || 1) * 100) : +k.fs;
+    q("fs").value = gor; q("fsv").textContent = gor + "%";
+  };
+  q("renk").value = /^#[0-9a-f]{6}$/i.test(k0.renk || "") ? k0.renk : "#dbeafe";
+  fsGuncelle();
+  q("kapat").onclick = modulStilPaneliKapat_;
+  q("oto").onchange = ()=>{ if(q("oto").checked) yaz({fs: null}, true); else yaz({fs: Math.round((parseFloat(t.style.getPropertyValue("--ms")) || 1) * 100)}, false); setTimeout(fsGuncelle, 0); };
+  q("fs").oninput = ()=>{ yaz({fs: +q("fs").value}, false); q("fsv").textContent = q("fs").value + "%"; };
+  p.querySelectorAll("button[data-c]").forEach(b=> b.onclick = ()=>{ yaz({renk: b.dataset.c}, false); q("renk").value = b.dataset.c; });
+  q("renk").oninput = ()=> yaz({renk: q("renk").value}, false);
+  q("renksiz").onclick = ()=> yaz({renk: null}, false);
+  q("resimSec").onclick = ()=> q("dosya").click();
+  q("dosya").onchange = ()=>{
+    const f = q("dosya").files && q("dosya").files[0]; if(!f) return;
+    modulResimKucult_(f, url=>{ if(!url){ alert("Resim okunamadı."); return; } yaz({img: url}, false); });
+  };
+  q("resimSil").onclick = ()=> yaz({img: null}, false);
+  q("sifirla").onclick = ()=>{ yaz({fs: null, renk: null, img: null}, true); modulStilPaneliKapat_(); };
+  // konum: ⚙ düğmesinin yanı, ekrana sığdır
+  const r = ayarBtn.getBoundingClientRect(), pw = p.offsetWidth, ph = p.offsetHeight;
+  p.style.left = Math.max(8, Math.min(window.innerWidth - pw - 8, r.left)) + "px";
+  p.style.top = Math.max(8, Math.min(window.innerHeight - ph - 8, r.bottom + 6)) + "px";
+  document.addEventListener("mousedown", modulStilDisTik_, true);
+  document.addEventListener("keydown", modulStilEsc_, true);
 }
 function modulSurukleKur_(g, tiles, mod){
   if(!g._tiklamaEngeli){ g._tiklamaEngeli = true; g.addEventListener("click", e=>{ if(g._sonTasima && Date.now() - g._sonTasima < 350){ e.stopPropagation(); e.preventDefault(); } }, true); }
@@ -4324,7 +4450,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261022d";
+const FRONT_SURUM = "20261022e";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
