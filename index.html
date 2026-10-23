@@ -79,6 +79,10 @@ body.desen-acik{
 
 /* ── ÜST ÇUBUK ── */
 .topbar{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);box-shadow:var(--shadow-sm);flex-shrink:0;position:relative;z-index:2}
+/* ★ (23 Eki 2026) Üst bar zemini: BULUT = mavi, YEREL SUNUCU = kahverengi; logo aynı, beyaz zeminli kapsülde */
+body.zemin-bulut .topbar{background:#bfdbfe;border-bottom:2px solid #3b82f6}
+body.zemin-yerel .topbar{background:#d6b48a;border-bottom:2px solid #8b5a2b}
+body.zemin-bulut .topbar .brand,body.zemin-yerel .topbar .brand{background:#fff;padding:3px 10px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .topbar-saat{margin-left:auto;font-size:13px;font-weight:800;color:var(--blue);white-space:nowrap;padding-left:10px;letter-spacing:.2px}
 
 /* ── SEKME ŞERİDİ: her modül tarayıcı sekmesi/yeni pencere yerine burada, uygulamanın
@@ -4426,6 +4430,7 @@ function baglantiBulutMu_(){ return /(^|\.)github\.io$/i.test(location.hostname)
 function baglantiRozetCiz_(){
   const r = document.getElementById("baglanti-rozet"); if(!r) return;
   const bulut = baglantiBulutMu_();
+  try{ document.body.classList.toggle("zemin-bulut", bulut); document.body.classList.toggle("zemin-yerel", !bulut); }catch(_){}
   if(bulut){
     r.textContent = "☁ BULUT";
     r.style.background = "#dbeafe"; r.style.color = "#1d4ed8"; r.style.borderColor = "#3b82f6";
@@ -4450,7 +4455,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261023c";
+const FRONT_SURUM = "20261023d";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
