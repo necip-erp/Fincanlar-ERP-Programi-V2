@@ -14,7 +14,7 @@ const crypto = require('crypto');
 const vm = require('vm');
 
 const SAHIP = 'necip-erp', DEPO = 'Fincanlar-ERP-Programi-V2', DAL = 'main';
-const ONYUZ_DOSYALARI = new Set(['index.html', 'manifest.json', 'fincanlar-logo.png', 'icon-192.png', 'icon-512.png', 'icon-192-maskable.png', 'icon-512-maskable.png']);
+const ONYUZ_DOSYALARI = new Set(['index.html', 'manifest.json', 'fincanlar-logo.png', 'icon-192.png', 'icon-512.png', 'icon-192-maskable.png', 'icon-512-maskable.png', 'manifest-bulut.json', 'manifest-yerel.json', 'icon-bulut-192.png', 'icon-bulut-512.png', 'icon-bulut-192-maskable.png', 'icon-bulut-512-maskable.png', 'icon-yerel-192.png', 'icon-yerel-512.png', 'icon-yerel-192-maskable.png', 'icon-yerel-512-maskable.png']);
 const YEDEK_SAKLA = 8;
 
 function damga() {
@@ -109,7 +109,7 @@ function baslat(o) {
     const s = buf.toString('utf8');
     if (/\.(js|gs)$/.test(yol)) { try { new vm.Script(s, { filename: yol }); } catch (e) { throw new Error(yol + ' dosyasında sözdizimi hatası: ' + e.message); } }
     if (yol === 'index.html' && (buf.length < 500000 || !/const CARI_API = "https:\/\/script\.google\.com/.test(s))) throw new Error('index.html beklenen biçimde değil');
-    if (yol === 'manifest.json') JSON.parse(s);
+    if (/^manifest(-[a-z]+)?\.json$/.test(yol)) JSON.parse(s);
   }
 
   async function uygula() {

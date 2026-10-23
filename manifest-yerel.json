@@ -1,0 +1,37 @@
+{
+  "name": "Fincanlar ERP — Yerel Sunucu",
+  "short_name": "Fincanlar Yerel",
+  "description": "Fincanlar yapı malzemeleri ERP sistemi — stok, cari, satış, alış, finans",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f3dfbd",
+  "theme_color": "#c98a3d",
+  "icons": [
+    {
+      "src": "icon-yerel-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-yerel-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-yerel-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-yerel-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

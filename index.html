@@ -4,10 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Fincanlar ERP</title>
-<link rel="icon" type="image/png" href="./icon-192.png">
-<link rel="apple-touch-icon" href="./icon-192.png">
-<link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#4338ca">
+<link rel="icon" id="lnk-icon" type="image/png" href="./icon-192.png">
+<link rel="apple-touch-icon" id="lnk-touch" href="./icon-192.png">
+<link rel="manifest" id="lnk-manifest" href="./manifest.json">
+<meta name="theme-color" id="meta-tema" content="#4338ca">
+<script>
+/* ★ (23 Eki 2026) Masaüstü/uygulama simgesi: BULUT = mavi zemin, YEREL SUNUCU = sıcak bej zemin (logo aynı) */
+(function(){
+  try{
+    var b = /(^|\.)github\.io$/i.test(location.hostname), a = b ? "bulut" : "yerel";
+    document.getElementById("lnk-icon").href = "./icon-" + a + "-192.png";
+    document.getElementById("lnk-touch").href = "./icon-" + a + "-192.png";
+    document.getElementById("lnk-manifest").href = "./manifest-" + a + ".json";
+    document.getElementById("meta-tema").content = b ? "#2563eb" : "#c98a3d";
+  }catch(_){}
+})();
+</script>
 <style>
 :root{
   /* ── Nötrler: hafif soğuk gri tonu (klasik "SaaS beyazı" değil).
@@ -81,7 +93,7 @@ body.desen-acik{
 .topbar{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);box-shadow:var(--shadow-sm);flex-shrink:0;position:relative;z-index:2}
 /* ★ (23 Eki 2026) Üst bar zemini: BULUT = mavi, YEREL SUNUCU = kahverengi; logo aynı, beyaz zeminli kapsülde */
 body.zemin-bulut .topbar{background:#bfdbfe;border-bottom:2px solid #3b82f6}
-body.zemin-yerel .topbar{background:#d6b48a;border-bottom:2px solid #8b5a2b}
+body.zemin-yerel .topbar{background:#f3dfbd;border-bottom:2px solid #c98a3d}
 body.zemin-bulut .topbar .brand,body.zemin-yerel .topbar .brand{background:#fff;padding:3px 10px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .topbar-saat{margin-left:auto;font-size:13px;font-weight:800;color:var(--blue);white-space:nowrap;padding-left:10px;letter-spacing:.2px}
 
@@ -4455,7 +4467,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261023d";
+const FRONT_SURUM = "20261023e";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
