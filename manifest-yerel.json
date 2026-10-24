@@ -6,8 +6,8 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#f3dfbd",
-  "theme_color": "#c98a3d",
+  "background_color": "#e4dcfb",
+  "theme_color": "#8b5cf6",
   "icons": [
     {
       "src": "icon-yerel-192.png",

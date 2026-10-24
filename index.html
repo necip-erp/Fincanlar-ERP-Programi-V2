@@ -16,7 +16,7 @@
     document.getElementById("lnk-icon").href = "./icon-" + a + "-192.png";
     document.getElementById("lnk-touch").href = "./icon-" + a + "-192.png";
     document.getElementById("lnk-manifest").href = "./manifest-" + a + ".json";
-    document.getElementById("meta-tema").content = b ? "#2563eb" : "#c98a3d";
+    document.getElementById("meta-tema").content = b ? "#2563eb" : "#8b5cf6";
   }catch(_){}
 })();
 </script>
@@ -93,7 +93,7 @@ body.desen-acik{
 .topbar{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);box-shadow:var(--shadow-sm);flex-shrink:0;position:relative;z-index:2}
 /* ★ (23 Eki 2026) Üst bar zemini: BULUT = mavi, YEREL SUNUCU = kahverengi; logo aynı, beyaz zeminli kapsülde */
 body.zemin-bulut .topbar{background:#bfdbfe;border-bottom:2px solid #3b82f6}
-body.zemin-yerel .topbar{background:#f3dfbd;border-bottom:2px solid #c98a3d}
+body.zemin-yerel .topbar{background:var(--yz-bar,#e4dcfb);border-bottom:2px solid var(--yz-cizgi,#8b5cf6)}   /* 24 Eki: Ayarlar > Genel Görünüm > Yerel Sunucu Rengi */
 body.zemin-bulut .topbar .brand,body.zemin-yerel .topbar .brand{background:#fff;padding:3px 10px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .topbar-saat{margin-left:auto;font-size:13px;font-weight:800;color:var(--blue);white-space:nowrap;padding-left:10px;letter-spacing:.2px}
 
@@ -1881,6 +1881,310 @@ setInterval(topbarSaatGuncelle, 10000);
       </div>
     </div>
   </div>
+  <!-- ═════ ★ (24 Eki 2026) HESAPLAMA MODÜLÜ: Hesap Makinesi, Vade Hesaplama, Seramik/Parke Hesaplama (eski stok panelinden) ═════ -->
+  <div class="modview" id="mod-hesaplama">
+    <div id="hesaplama-secim" class="finans-panel">
+      <div class="rapor-baslik" style="margin-top:0">Hesaplama — Hangisini açmak istersin?</div>
+      <div class="modgrid" id="hesaplama-secim-grid" style="margin-top:14px"></div>
+    </div>
+
+    <!-- HESAP MAKİNESİ -->
+    <div id="hz-makine-view" class="finans-panel hz-sayfa" style="display:none">
+      <button type="button" class="hz-geri" onclick="hesaplamaAnaSecimeDon()">← Hesaplama seçimine dön</button>
+      <div class="rapor-baslik" style="margin-top:0">🧮 Hesap Makinesi</div>
+      <div class="hz-mk">
+        <div class="hz-mk-kutu">
+          <input id="hz-mk-ifade" class="hz-mk-ifade" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="İşlemi yazın veya tuşlara basın" oninput="hzMkGirdi()" onkeydown="hzMkTusAl(event)">
+          <div id="hz-mk-sonuc" class="hz-mk-sonuc" title="Tıklayınca sonucu kopyalar" onclick="hzMkKopyala()">0</div>
+          <div class="hz-tus-grid">
+            <button type="button" class="hz-tus sil" onclick="hzMkTemizle()">C</button>
+            <button type="button" class="hz-tus sil" onclick="hzMkGeriSil()">⌫</button>
+            <button type="button" class="hz-tus op" onclick="hzMkEkle('%')">%</button>
+            <button type="button" class="hz-tus op" onclick="hzMkEkle('÷')">÷</button>
+            <button type="button" class="hz-tus" onclick="hzMkEkle('7')">7</button>
+            <button type="button" class="hz-tus" onclick="hzMkEkle('8')">8</button>
+            <button type="button" class="hz-tus" onclick="hzMkEkle('9')">9</button>
+            <button type="button" class="hz-tus op" onclick="hzMkEkle('×')">×</button>
+            <button type="button" class="hz-tus" onclick="hzMkEkle('4')">4</button>
+            <button type="button" class="hz-tus" onclick="hzMkEkle('5')">5</button>
+            <button type="button" class="hz-tus" onclick="hzMkEkle('6')">6</button>
+            <button type="button" class="hz-tus op" onclick="hzMkEkle('−')">−</button>
+            <button type="button" class="hz-tus" onclick="hzMkEkle('1')">1</button>
+            <button type="button" class="hz-tus" onclick="hzMkEkle('2')">2</button>
+            <button type="button" class="hz-tus" onclick="hzMkEkle('3')">3</button>
+            <button type="button" class="hz-tus op" onclick="hzMkEkle('+')">+</button>
+            <button type="button" class="hz-tus op" onclick="hzMkEkle('(')">(</button>
+            <button type="button" class="hz-tus op" onclick="hzMkEkle(')')">)</button>
+            <button type="button" class="hz-tus" onclick="hzMkEkle('0')">0</button>
+            <button type="button" class="hz-tus" onclick="hzMkEkle(',')">,</button>
+            <button type="button" class="hz-tus esit" onclick="hzMkHesapla(true)">=</button>
+          </div>
+          <p class="hz-not" style="margin-top:8px">Klavyeden de yazabilirsiniz (Enter = hesapla, Esc = temizle). <b>200 + 10%</b> yazarsanız 220, <b>200 × 10%</b> yazarsanız 20 çıkar.</p>
+        </div>
+        <div class="hz-mk-yan">
+          <div class="hz-kart">
+            <h3>KDV Hesabı</h3>
+            <p class="hz-not">Tutarı yazın, oranı seçin. Sonuca tıklayınca kopyalanır.</p>
+            <div class="hz-satir">
+              <div class="fld"><label>Tutar</label><input id="hz-kdv-tutar" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" oninput="hzKdvHesapla()"></div>
+              <div class="fld" style="max-width:110px"><label>KDV oranı</label>
+                <select id="hz-kdv-oran" onchange="hzKdvOranDegisti()"><option value="1">%1</option><option value="10">%10</option><option value="20" selected>%20</option><option value="ozel">Özel…</option></select>
+              </div>
+              <div class="fld" id="hz-kdv-ozel-kap" style="max-width:80px;display:none"><label>Oran %</label><input id="hz-kdv-ozel" type="text" inputmode="decimal" placeholder="8" oninput="hzKdvHesapla()"></div>
+            </div>
+            <div class="hz-satir" style="margin-bottom:4px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer"><input type="radio" name="hz-kdv-mod" value="haric" checked onchange="hzKdvHesapla()" style="width:auto"> Girilen tutar KDV <b>hariç</b></label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer"><input type="radio" name="hz-kdv-mod" value="dahil" onchange="hzKdvHesapla()" style="width:auto"> Girilen tutar KDV <b>dahil</b></label>
+            </div>
+            <div class="hz-kdv-cikti">
+              <div onclick="hzKopyalaDeger_('hz-kdv-haric')"><div class="k">KDV hariç</div><div class="v" id="hz-kdv-haric">—</div></div>
+              <div onclick="hzKopyalaDeger_('hz-kdv-tutari')"><div class="k">KDV tutarı</div><div class="v" id="hz-kdv-tutari">—</div></div>
+              <div onclick="hzKopyalaDeger_('hz-kdv-dahil')"><div class="k">KDV dahil</div><div class="v" id="hz-kdv-dahil">—</div></div>
+            </div>
+          </div>
+          <div class="hz-kart">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <h3 style="margin:0">Geçmiş</h3>
+              <button type="button" class="hz-mini-btn" onclick="hzMkGecmisTemizle()">🗑 Temizle</button>
+            </div>
+            <div class="hz-gecmis" id="hz-mk-gecmis"><div style="padding:12px;color:var(--text3);font-size:12px">Henüz işlem yok.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VADE HESAPLAMA -->
+    <div id="hz-vade-view" class="finans-panel hz-sayfa" style="display:none">
+      <button type="button" class="hz-geri" onclick="hesaplamaAnaSecimeDon()">← Hesaplama seçimine dön</button>
+      <div class="rapor-baslik" style="margin-top:0">📅 Vade Hesaplama</div>
+      <div class="hz-grid">
+
+        <div class="hz-kart">
+          <h3>Vade Tarihi</h3>
+          <p class="hz-not">Başlangıç tarihine gün/ay ekleyerek vade tarihini bulur.</p>
+          <div class="hz-satir">
+            <div class="fld"><label>Başlangıç tarihi</label><input id="hz-vt-bas" type="date" onchange="hzVadeTarihiHesapla()"></div>
+            <div class="fld" style="max-width:90px"><label>Gün</label><input id="hz-vt-gun" type="number" min="0" step="1" placeholder="0" oninput="hzVadeTarihiHesapla()"></div>
+            <div class="fld" style="max-width:90px"><label>Ay</label><input id="hz-vt-ay" type="number" min="0" step="1" placeholder="0" oninput="hzVadeTarihiHesapla()"></div>
+          </div>
+          <div class="hz-satir" style="margin-bottom:6px;gap:6px">
+            <button type="button" class="hz-mini-btn" onclick="hzVadeHizli(30)">+30 gün</button>
+            <button type="button" class="hz-mini-btn" onclick="hzVadeHizli(45)">+45</button>
+            <button type="button" class="hz-mini-btn" onclick="hzVadeHizli(60)">+60</button>
+            <button type="button" class="hz-mini-btn" onclick="hzVadeHizli(90)">+90</button>
+            <button type="button" class="hz-mini-btn" onclick="hzVadeHizli(120)">+120</button>
+            <button type="button" class="hz-mini-btn" onclick="hzVadeHizli(180)">+180</button>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;margin-bottom:8px"><input id="hz-vt-hs" type="checkbox" onchange="hzVadeTarihiHesapla()" style="width:auto"> Hafta sonuna denk gelirse sonraki iş gününe kaydır</label>
+          <div class="hz-sonuc-kutu"><div class="b" id="hz-vt-sonuc">—</div><div class="a" id="hz-vt-alt"></div></div>
+        </div>
+
+        <div class="hz-kart">
+          <h3>İki Tarih Arası Gün</h3>
+          <p class="hz-not">İki tarih arasında kaç gün olduğunu gösterir.</p>
+          <div class="hz-satir">
+            <div class="fld"><label>Birinci tarih</label><input id="hz-gf-1" type="date" onchange="hzGunFarkiHesapla()"></div>
+            <div class="fld"><label>İkinci tarih</label><input id="hz-gf-2" type="date" onchange="hzGunFarkiHesapla()"></div>
+          </div>
+          <div class="hz-sonuc-kutu"><div class="b" id="hz-gf-sonuc">—</div><div class="a" id="hz-gf-alt"></div></div>
+        </div>
+
+        <div class="hz-kart">
+          <h3>Vade Farkı</h3>
+          <p class="hz-not">Basit hesap: tutar × aylık oran × gün ÷ 30. Oran % olarak yazılır.</p>
+          <div class="hz-satir">
+            <div class="fld"><label>Tutar</label><input id="hz-vf-tutar" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" oninput="hzVadeFarkiHesapla()"></div>
+            <div class="fld" style="max-width:90px"><label>Vade (gün)</label><input id="hz-vf-gun" type="text" inputmode="numeric" autocomplete="off" placeholder="0" oninput="hzVadeFarkiHesapla()"></div>
+            <div class="fld" style="max-width:110px"><label>Aylık oran %</label><input id="hz-vf-oran" type="text" inputmode="decimal" autocomplete="off" placeholder="0" oninput="hzVadeFarkiHesapla()"></div>
+          </div>
+          <div class="hz-sonuc-kutu"><div class="b" id="hz-vf-sonuc">—</div><div class="a" id="hz-vf-alt"></div></div>
+          <div style="border-top:1px dashed var(--border);margin:12px 0 8px"></div>
+          <p class="hz-not" style="margin-bottom:6px"><b>Ters hesap:</b> peşin ve vadeli fiyatı yazın, aylık oranı bulsun.</p>
+          <div class="hz-satir">
+            <div class="fld"><label>Peşin fiyat</label><input id="hz-vf-pesin" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" oninput="hzVadeOraniHesapla()"></div>
+            <div class="fld"><label>Vadeli fiyat</label><input id="hz-vf-vadeli" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" oninput="hzVadeOraniHesapla()"></div>
+            <div class="fld" style="max-width:90px"><label>Vade (gün)</label><input id="hz-vf-gun2" type="text" inputmode="numeric" autocomplete="off" placeholder="0" oninput="hzVadeOraniHesapla()"></div>
+          </div>
+          <div class="hz-sonuc-kutu"><div class="b" id="hz-vf-oran-sonuc">—</div><div class="a" id="hz-vf-oran-alt"></div></div>
+        </div>
+
+        <div class="hz-kart genis">
+          <h3>Ortalama Vade</h3>
+          <p class="hz-not">Her satıra tutar ve vade tarihini (ya da hesap tarihinden itibaren gün sayısını) yazın; tutar ağırlıklı ortalama vadeyi bulur. Excel'den "tutar ⇥ tarih" satırlarını doğrudan tabloya yapıştırabilirsiniz.</p>
+          <div class="hz-satir" style="align-items:flex-end">
+            <div class="fld" style="max-width:190px"><label>Hesap tarihi (başlangıç)</label><input id="hz-ov-bas" type="date" onchange="hzOvBasDegisti()"></div>
+            <button type="button" class="hz-mini-btn" onclick="hzOvSatirEkle(1)">+ Satır</button>
+            <button type="button" class="hz-mini-btn" onclick="hzOvSatirEkle(5)">+ 5 satır</button>
+            <button type="button" class="hz-mini-btn" onclick="hzOvTemizle()">🗑 Temizle</button>
+          </div>
+          <div style="overflow-x:auto" onpaste="hzOvYapistir(event)">
+            <table class="hz-ov-tablo">
+              <thead><tr><th></th><th style="width:34%">Tutar</th><th style="width:34%">Vade tarihi</th><th style="width:22%">Gün</th><th></th></tr></thead>
+              <tbody id="hz-ov-govde"></tbody>
+            </table>
+          </div>
+          <div class="hz-sonuc-kutu" style="margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+            <div><div class="a" style="margin:0">Toplam tutar</div><div class="b" id="hz-ov-toplam">—</div></div>
+            <div><div class="a" style="margin:0">Ortalama vade (gün)</div><div class="b" id="hz-ov-gun">—</div></div>
+            <div><div class="a" style="margin:0">Ortalama vade tarihi</div><div class="b" id="hz-ov-tarih">—</div><div class="a" id="hz-ov-gunadi"></div></div>
+            <div><div class="a" style="margin:0">Dolu satır</div><div class="b" id="hz-ov-adet">—</div></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- SERAMİK / PARKE HESAPLAMA (eski stok panelinden taşındı) -->
+    <div id="hz-malzeme-view" class="finans-panel hz-sayfa" style="display:none">
+      <button type="button" class="hz-geri" onclick="hesaplamaAnaSecimeDon()">← Hesaplama seçimine dön</button>
+      <div class="panel" style="max-width:1100px">
+        <h2 style="margin-bottom:10px">🧱 Seramik / Parke Hesaplama</h2>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:10px">
+          <button class="tab-btn hz-subtab" id="hz-tab-seramik" onclick="hesapSubTab('seramik')">🧱 Seramik Hesaplama</button>
+          <button class="tab-btn hz-subtab" id="hz-tab-parke" onclick="hesapSubTab('parke')">🪵 Parke Hesaplama</button>
+          <button class="tab-btn hz-subtab" id="hz-tab-fiyat" onclick="hesapSubTab('fiyat')">💲 Parke Fiyat Listesi</button>
+        </div>
+
+        <!-- SERAMİK HESAPLAMA -->
+        <div id="hz-seramik-body">
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+            <div style="flex:1;min-width:220px">
+              <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">MÜŞTERİ ADI</label>
+              <input id="hzs-musteri" placeholder="Müşteri ismi" onchange="hesapSave()" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text);font-size:13px;box-sizing:border-box">
+            </div>
+            <button class="mbtn pri" onclick="hesapMekanEkle()">+ Mekan Ekle</button>
+          </div>
+
+          <!-- Mekanlar: sağa doğru sütun sütun eklenir -->
+          <div id="hzs-mekanlar" style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;margin-bottom:16px"></div>
+
+          <div id="hzs-sonuc"></div>
+
+          <!-- Yan Malzeme Tanımları: sayfanın en altında, açılır/kapanır, kolon mantığında -->
+          <div class="step" style="margin-top:16px">
+            <div class="step-hd" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="hesapYanPanelToggle()">
+              <span>🧴 Yan Malzeme Tanımları <span style="font-weight:400;color:var(--text3);font-size:11px">(bir kez tanımlayın — mekan sütunlarında tik/adet olarak seçilir, sonraki hesaplamalarda da kullanılabilir)</span></span>
+              <span style="display:flex;align-items:center;gap:8px">
+                <button class="mbtn" onclick="event.stopPropagation();hesapYanEkle()" style="font-size:11px;padding:4px 10px">+ Malzeme Ekle</button>
+                <span id="hzs-yanpanel-ok">▼</span>
+              </span>
+            </div>
+            <div class="step-bd" id="hzs-yanpanel-body" style="display:flex;gap:10px;overflow-x:auto;padding-bottom:6px"></div>
+          </div>
+
+          <div class="mbtns" style="margin-top:16px;justify-content:space-between">
+            <button class="mbtn" onclick="hesapTumTemizle()" style="color:var(--red,#dc2626);border-color:var(--red,#dc2626)">🧹 Tüm Ekranı Temizle</button>
+            <div style="display:flex;gap:8px">
+              <button class="mbtn" onclick="if(confirm('Tüm seramik hesaplamasını sıfırlamak istediğinize emin misiniz?'))hesapSeramikSifirla()">🗑️ Sıfırla</button>
+              <button class="mbtn" onclick="hzYazdir()">🖨️ Yazdır</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PARKE HESAPLAMA -->
+        <div id="hz-parke-body" style="display:none">
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+
+            <div style="flex:1;min-width:220px">
+              <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">MÜŞTERİ ADI</label>
+              <input id="hzp-musteri" placeholder="Müşteri ismi" onchange="hesapSave()" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text);font-size:13px;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">FİRE PAYI %</label>
+              <input id="hzp-fire" type="number" value="5" min="0" max="50" oninput="hesapParkeFireCanli(this.value)" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text);font-size:13px;box-sizing:border-box">
+            </div>
+            <div style="display:flex;gap:4px;background:var(--bg3);padding:4px;border-radius:var(--r)">
+              <button class="mbtn" id="hzp-mod-oda" onclick="hesapParkeMod('oda')">Oda Oda</button>
+              <button class="mbtn" id="hzp-mod-toplu" onclick="hesapParkeMod('toplu')">Toplu m²</button>
+            </div>
+          </div>
+
+          <div id="hzp-oda-body">
+            <div id="hzp-odalar"></div>
+            <button class="mbtn" onclick="hesapOdaEkle()">+ Oda Ekle</button>
+          </div>
+          <div id="hzp-toplu-body" style="display:none">
+            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">TOPLAM M²</label>
+            <input id="hzp-toplum2" type="number" step="0.01" placeholder="Örn. 85.5" oninput="hesapParkeTopluM2Canli(this.value)" style="width:200px;padding:8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text);font-size:13px;box-sizing:border-box">
+          </div>
+
+          <div id="hzp-toplam-badge" style="margin-top:10px;font-size:13px;color:var(--text2);background:var(--bg3);padding:8px 10px;border-radius:var(--r);display:inline-block"></div>
+
+          <div class="step" style="margin-top:16px">
+            <div class="step-hd" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+              <span>📦 Malzeme Ekle <span style="font-weight:400;color:var(--text3);font-size:11px">(fiyatlar AGT/Çamsan listesinden — Kredi Kartı Taksitli Çekim varsayılan, aşağıdaki listede değiştirebilirsiniz)</span></span>
+              <span id="hzp-fiyat-tarih-gosterge" style="font-size:11px;font-weight:600;color:var(--orange,#ea580c)"></span>
+            </div>
+            <div class="step-bd" style="display:flex;flex-direction:column;gap:7px">
+              <div style="display:flex;gap:8px;align-items:center">
+                <label style="width:100px;flex:none;font-size:11px;color:var(--text3)">Parke</label>
+                <select id="hzp-sel-parke" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px"></select>
+                <button class="mbtn" onclick="hesapParkeUrunEkle(this)" style="flex:none">+ Ekle</button>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <label style="width:100px;flex:none;font-size:11px;color:var(--text3)">Süpürgelik</label>
+                <select id="hzp-sel-supurgelik" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px"></select>
+                <button class="mbtn" onclick="hesapParkeYardimciEkleGrup('hzp-sel-supurgelik',this)" style="flex:none">+ Ekle</button>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <label style="width:100px;flex:none;font-size:11px;color:var(--text3)">Alt Döşeme</label>
+                <select id="hzp-sel-altdoseme" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px"></select>
+                <button class="mbtn" onclick="hesapParkeYardimciEkleGrup('hzp-sel-altdoseme',this)" style="flex:none">+ Ekle</button>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <label style="width:100px;flex:none;font-size:11px;color:var(--text3)">Profil</label>
+                <select id="hzp-sel-profil" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px"></select>
+                <button class="mbtn" onclick="hesapParkeYardimciEkleGrup('hzp-sel-profil',this)" style="flex:none">+ Ekle</button>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <label style="width:100px;flex:none;font-size:11px;color:var(--text3)">Silikon</label>
+                <select id="hzp-sel-silikon" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px"></select>
+                <button class="mbtn" onclick="hesapParkeYardimciEkleGrup('hzp-sel-silikon',this)" style="flex:none">+ Ekle</button>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <label style="width:100px;flex:none;font-size:11px;color:var(--text3)">İşçilik</label>
+                <select id="hzp-sel-iscilik" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px"></select>
+                <button class="mbtn" onclick="hesapParkeYardimciEkleGrup('hzp-sel-iscilik',this)" style="flex:none">+ Ekle</button>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <label style="width:100px;flex:none;font-size:11px;color:var(--text3)">Özel İşçilik</label>
+                <input id="hzp-iscilik-ad" placeholder="Listede yoksa özel isim yazın" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px;box-sizing:border-box">
+                <input id="hzp-iscilik-fiyat" type="number" step="0.01" placeholder="₺/m²" style="width:80px;flex:none;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px;box-sizing:border-box">
+                <button class="mbtn" onclick="hesapParkeIscilikEkle(this)" style="flex:none">+ Ekle</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="hzp-sonuc" style="margin-top:18px"></div>
+
+          <div class="mbtns" style="margin-top:16px;justify-content:space-between">
+            <button class="mbtn" onclick="hesapTumTemizle()" style="color:var(--red,#dc2626);border-color:var(--red,#dc2626)">🧹 Tüm Ekranı Temizle</button>
+            <div style="display:flex;gap:8px">
+              <button class="mbtn" onclick="if(confirm('Tüm parke hesaplamasını sıfırlamak istediğinize emin misiniz?'))hesapParkeSifirla()">🗑️ Sıfırla</button>
+              <button class="mbtn" onclick="hzYazdir()">🖨️ Yazdır</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PARKE FİYAT LİSTESİ -->
+        <div id="hz-fiyat-body" style="display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+            <div style="font-size:12px;color:var(--text3)">
+              Buradaki fiyatları güncelledikçe, Parke Hesaplama'da yeni eklenen ürün/malzemelerin başlangıç fiyatı bu listeden gelir.<br>
+              (Zaten eklenmiş kalemlerin fiyatı Malzeme Listesi'nde ayrıca değiştirilebilir, buradaki değişiklik onları etkilemez.)
+            </div>
+            <div style="flex:none;text-align:right">
+              <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:2px">Liste Tarihi</label>
+              <input id="hzp-fiyat-tarih" value="" oninput="hesapParkeFiyatTarihSet(this.value)"
+                style="width:120px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--orange,#ea580c);font-weight:700;font-size:12px;text-align:center">
+            </div>
+          </div>
+          <div id="hzp-fiyatlistesi"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modview" id="mod-silinenler">
     <div class="finans-panel">
       <div class="rapor-baslik" style="margin-top:0">Silinenler</div>
@@ -2117,6 +2421,11 @@ setInterval(topbarSaatGuncelle, 10000);
         <input id="ayarlar-arkaplan-deseni" type="checkbox" onchange="arkaplanDeseniToggle()" style="width:auto">
         Arka fonda ince nokta deseni göster
       </label>
+      <div class="fld" style="margin-top:14px;max-width:560px">
+        <label>Yerel Sunucu Rengi (üst çubuk — bulut her zaman mavi kalır)</label>
+        <div id="yerel-zemin-secenekler"></div>
+        <span style="color:var(--text3);font-size:12px;display:block;margin-top:6px">Yalnız yerel sunucuda görünür; bu bilgisayarda saklanır, hemen uygulanır.</span>
+      </div>
       <div class="fld" style="margin-top:14px;max-width:320px">
         <label>Modül Kartı Boyutu</label>
         <div style="display:flex;gap:6px">
@@ -2358,6 +2667,7 @@ const MODULLER = [
   {id:"satis",    ic:"📤", lbl:"Satış",     desc:"Satış işlemleri",         renk:"green"},
   {id:"finans",   ic:"📊", lbl:"Finans",    desc:"Genel finans durumu",     renk:"blue"},
   {id:"rapor",    ic:"📈", lbl:"Rapor",     desc:"Raporlar",                renk:"blue"},
+  {id:"hesaplama", ic:"🧮", lbl:"Hesaplama", desc:"Hesap makinesi, vade, seramik/parke", renk:"blue"},
   {id:"silinenler", ic:"🗑️", lbl:"Silinenler", desc:"Silinen kayıtlar, geri al", renk:"neutral"},
   {id:"kayitdefteri", ic:"📒", lbl:"Kayıt Defteri", desc:"Numaralı işlem defteri, veri kaybı kontrolü", renk:"neutral", admin:true},
   {id:"yedekleme", ic:"💾", lbl:"Yedekleme", desc:"Yedek durumu, flash indirme, e-posta, geri yükleme", renk:"green", admin:true},
@@ -2870,11 +3180,16 @@ const ALT_MODUL_TANIM = {
     {alt:"karSiparis", ic:"📈", lbl:"Sipariş Karlılık", desc:"Sipariş bazlı karlılık: FIFO, son giriş, manuel maliyet"},
     {alt:"karUrun",    ic:"📊", lbl:"Ürün Bazlı Karlılık", desc:"Ürün ürün: miktar, net satış, maliyet, kâr (fatura / sipariş)"},
   ],
+  hesaplama: [
+    {alt:"makine",   ic:"🧮", lbl:"Hesap Makinesi",  desc:"Dört işlem, yüzde, KDV hesabı, geçmiş"},
+    {alt:"vade",     ic:"📅", lbl:"Vade Hesaplama",  desc:"Vade tarihi, gün farkı, vade farkı, ortalama vade"},
+    {alt:"malzeme",  ic:"🧱", lbl:"Seramik / Parke Hesaplama", desc:"Mekan mekan m², kutu, fire ve yan malzeme (eski stok panelinden)"},
+  ],
 };
-const ALT_MODUL_FN = { stok:"stokAltModulAc", alis:"alisAltModulAc", satis:"satisAltModulAc", ceksenet:"cekSenetAltModulAc" };
-const ALT_MODUL_GRID = { stok:"stok-secim-grid", alis:"alis-secim-grid", satis:"satis-secim-grid", ceksenet:"ceksenet-secim-grid" };
+const ALT_MODUL_FN = { stok:"stokAltModulAc", alis:"alisAltModulAc", satis:"satisAltModulAc", ceksenet:"cekSenetAltModulAc", hesaplama:"hesaplamaAltModulAc" };
+const ALT_MODUL_GRID = { stok:"stok-secim-grid", alis:"alis-secim-grid", satis:"satis-secim-grid", ceksenet:"ceksenet-secim-grid", hesaplama:"hesaplama-secim-grid" };
 // Alt modül kartları, ait oldukları ana modülün rengini taşır (bkz. MODULLER).
-const ALT_MODUL_RENK = { stok:"blue", alis:"red", satis:"green", ceksenet:"yellow" };
+const ALT_MODUL_RENK = { stok:"blue", alis:"red", satis:"green", ceksenet:"yellow", hesaplama:"blue" };
 let _altSurukleneAnahtar = null, _altSurukleneAlt = null;
 function altModulSirasiniAl(anahtar){
   const ogeler = ALT_MODUL_TANIM[anahtar];
@@ -4469,7 +4784,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261024g";
+const FRONT_SURUM = "20261024h";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -24378,7 +24693,7 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
     koyu:   {ad:"Koyu", fon:"#151b28", kart:"#1f2738", yazi:"#e8ecf4", yazi2:"#9aa6bd", vurgu:"#60a5fa", kenar:"#2f3a52", stil:"yumusak", palet:"koyu"}
   };
   const ALANLAR = { fon:"--ah-fon", kart:"--ah-kart", yazi:"--ah-yazi", yazi2:"--ah-yazi2", vurgu:"--ah-vurgu", kenar:"--ah-kenar" };
-  const MOD_IDLER = ["stok","cari","tahsilat","odeme","cvirman","ceksenet","alis","satis","finans","rapor","silinenler","kayitdefteri","yedekleme","ayarlar"];
+  const MOD_IDLER = ["stok","cari","tahsilat","odeme","cvirman","ceksenet","alis","satis","finans","rapor","hesaplama","silinenler","kayitdefteri","yedekleme","ayarlar"];
   let ah = Object.assign({tema:"klasik"}, TEMA.klasik);
   try{ const k = JSON.parse(localStorage.getItem("fincanlar_ana_renk")||"null"); if(k && typeof k === "object") ah = Object.assign(ah, k); }catch(_){}
   function ahUygula(kaydet){
@@ -25488,6 +25803,78 @@ try{ localStorage.removeItem("fincanlarSayfaZoom"); }catch(e){}
 #pk-bar .pk-chip .pk-ad{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #pk-bar .pk-chip .pk-x{border:0;background:none;cursor:pointer;font-size:13px;font-weight:700;color:var(--text3,#888);padding:0 4px;border-radius:5px}
 #pk-bar .pk-chip .pk-x:hover{background:var(--red,#d93025);color:#fff}
+/* ═════ ★ (24 Eki 2026) HESAPLAMA MODÜLÜ ═════ */
+#mod-hesaplama .hz-sayfa{height:100%;overflow-y:auto}
+#mod-hesaplama .hz-geri{display:inline-flex;align-items:center;gap:4px;background:none;border:none;color:var(--blue);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 10px}
+#mod-hesaplama .hz-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;align-items:start;margin-top:12px}
+#mod-hesaplama .hz-kart{background:var(--bg2);border:1px solid var(--border);border-top:3px solid var(--teal);border-radius:var(--r-lg);padding:14px 16px;box-shadow:var(--shadow-sm)}
+#mod-hesaplama .hz-kart.genis{grid-column:1/-1}
+#mod-hesaplama .hz-kart h3{font-size:13.5px;font-weight:800;margin:0 0 4px}
+#mod-hesaplama .hz-not{font-size:11.5px;color:var(--text3);margin:0 0 10px;line-height:1.45}
+#mod-hesaplama .hz-satir{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px}
+#mod-hesaplama .hz-satir .fld{flex:1;min-width:120px}
+#mod-hesaplama .fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+#mod-hesaplama .fld input,#mod-hesaplama .fld select{width:100%;box-sizing:border-box;min-width:0}
+#mod-hesaplama .hz-sonuc-kutu{background:var(--teal-l);border-radius:9px;padding:10px 12px;margin-top:4px}
+#mod-hesaplama .hz-sonuc-kutu .b{font-size:20px;font-weight:800;color:var(--teal)}
+#mod-hesaplama .hz-sonuc-kutu .a{font-size:12px;color:var(--text2);margin-top:2px}
+#mod-hesaplama .hz-mini-btn{padding:4px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg3);font-size:11.5px;font-weight:700;cursor:pointer;color:var(--text2)}
+#mod-hesaplama .hz-mini-btn:hover{background:#fff7c2;border-color:#facc15;color:#422006}
+/* Hesap makinesi */
+#mod-hesaplama .hz-mk{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;margin-top:12px}
+#mod-hesaplama .hz-mk-kutu{width:340px;max-width:100%}
+#mod-hesaplama .hz-mk-ifade{width:100%;box-sizing:border-box;font-size:16px;text-align:right;padding:10px 12px;border:1px solid var(--border);border-radius:9px 9px 0 0;background:var(--bg2);outline:none;font-variant-numeric:tabular-nums}
+#mod-hesaplama .hz-mk-ifade:focus{border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-l)}
+#mod-hesaplama .hz-mk-sonuc{font-size:30px;font-weight:800;text-align:right;min-height:46px;line-height:46px;padding:0 12px;border:1px solid var(--border);border-top:none;border-radius:0 0 9px 9px;background:var(--bg3);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums;cursor:pointer}
+#mod-hesaplama .hz-mk-sonuc.hata{font-size:14px;color:var(--red);font-weight:600}
+#mod-hesaplama .hz-tus-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+#mod-hesaplama .hz-tus{padding:13px 0;font-size:17px;font-weight:700;border-radius:9px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;color:var(--text)}
+#mod-hesaplama .hz-tus:hover{background:#fff7c2;border-color:#facc15;color:#422006}
+#mod-hesaplama .hz-tus:active{transform:scale(.96)}
+#mod-hesaplama .hz-tus.op{background:var(--teal-l);color:var(--teal);border-color:transparent}
+#mod-hesaplama .hz-tus.sil{background:var(--red-l);color:var(--red);border-color:transparent}
+#mod-hesaplama .hz-tus.esit{grid-column:span 4;background:var(--teal);color:#fff;border-color:var(--teal)}
+#mod-hesaplama .hz-tus.esit:hover{background:#0b5f58;color:#fff}
+#mod-hesaplama .hz-mk-yan{flex:1;min-width:260px;display:flex;flex-direction:column;gap:14px}
+#mod-hesaplama .hz-gecmis{max-height:210px;overflow-y:auto;border:1px solid var(--border);border-radius:9px;background:var(--bg2)}
+#mod-hesaplama .hz-gecmis-satir{display:flex;justify-content:space-between;gap:10px;padding:7px 10px;font-size:12.5px;border-bottom:1px solid var(--border);cursor:pointer}
+#mod-hesaplama .hz-gecmis-satir:last-child{border-bottom:none}
+#mod-hesaplama .hz-gecmis-satir:hover{background:#fff7c2}
+#mod-hesaplama .hz-gecmis-satir b{font-variant-numeric:tabular-nums}
+#mod-hesaplama .hz-kdv-cikti{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+#mod-hesaplama .hz-kdv-cikti div{background:var(--bg3);border-radius:8px;padding:7px 8px;cursor:pointer}
+#mod-hesaplama .hz-kdv-cikti .k{font-size:10px;color:var(--text3);text-transform:uppercase}
+#mod-hesaplama .hz-kdv-cikti .v{font-weight:800;font-size:14px;font-variant-numeric:tabular-nums}
+/* Ortalama vade tablosu */
+#mod-hesaplama .hz-ov-tablo{width:100%;border-collapse:collapse;font-size:13px}
+#mod-hesaplama .hz-ov-tablo th{font-size:10.5px;text-transform:uppercase;color:var(--text3);text-align:left;padding:4px 6px;font-weight:700}
+#mod-hesaplama .hz-ov-tablo td{padding:3px 4px}
+#mod-hesaplama .hz-ov-tablo input{width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);font-size:13px;font-family:inherit}
+#mod-hesaplama .hz-ov-tablo input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-l)}
+#mod-hesaplama .hz-ov-tablo td.no{width:28px;color:var(--text3);font-size:11px;text-align:center}
+#mod-hesaplama .hz-ov-tablo td.sil{width:30px;text-align:center}
+#mod-hesaplama .hz-ov-tablo tr:hover td{background:#fffbe0}
+/* Seramik / Parke (stok panelinden taşındı) */
+#hz-malzeme-view .panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+#hz-malzeme-view .panel h2{font-size:14px;font-weight:800;margin:0}
+#hz-malzeme-view .mbtn{padding:6px 14px;border-radius:var(--r);border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--bg3);color:var(--text)}
+#hz-malzeme-view .mbtn:hover{background:#fff7c2;border-color:#facc15;color:#422006}
+#hz-malzeme-view .mbtn.pri{background:var(--blue);color:#fff;border-color:var(--blue)}
+#hz-malzeme-view .mbtn.pri:hover{filter:brightness(1.12);color:#fff}
+#hz-malzeme-view .mbtn.ekle-basarili{background:#16a34a!important;color:#fff!important;border-color:#16a34a!important;transition:background .15s,color .15s}
+#hz-malzeme-view .mbtns{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap}
+#hz-malzeme-view .tab-btn{padding:6px 12px;border:1px solid var(--border);border-radius:var(--r);background:transparent;cursor:pointer;font-size:12px;color:var(--text2);white-space:nowrap}
+#hz-malzeme-view .tab-btn:hover{background:#fff7c2;border-color:#facc15;color:#422006}
+#hz-malzeme-view .tab-btn.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+#hz-malzeme-view .step{border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:8px}
+#hz-malzeme-view .step-hd{padding:9px 12px;background:var(--bg3);font-weight:600;font-size:12px}
+#hz-malzeme-view .step-bd{padding:10px 12px;font-size:12px;line-height:1.8;color:var(--text2)}
+
+/* Yerel sunucu üst çubuk rengi seçici (Ayarlar > Genel Görünüm) */
+#yerel-zemin-secenekler{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#yerel-zemin-secenekler .yz-renk,#yerel-zemin-secenekler .yz-ozel{height:34px;min-width:74px;padding:0 12px;border-radius:9px;border:2px solid var(--border);cursor:pointer;font-size:12px;font-weight:700;color:#222;display:inline-flex;align-items:center;gap:6px;background:var(--bg3)}
+#yerel-zemin-secenekler .yz-renk.secili{outline:3px solid var(--blue);outline-offset:1px}
+#yerel-zemin-secenekler .yz-ozel input{width:26px;height:22px;padding:0;border:none;background:none;cursor:pointer}
 </style>
 <script>
 (function(){
@@ -25739,6 +26126,1951 @@ function profilKaydetGonder(){
     if(hata) hata.textContent = "Sunucuya ulaşılamadı, tekrar deneyin.";
   });
 }
+// ═════ ★ (24 Eki 2026) HESAPLAMA MODÜLÜ ═════
+// 1) Hesap Makinesi   2) Vade Hesaplama   3) Seramik / Parke Hesaplama (eski stok panelinden taşındı)
+// Seramik/Parke verileri bu bilgisayarın tarayıcısında saklanır (localStorage "fincanlar_erp_hesap_v1"); stok listesi ERP'nin stok kartlarından gelir.
+const hzEl = id => document.getElementById(id);
+const HZ_S = {
+  hesap: null, _hesapSubTab: null,
+  _seramikFiyatGizli: undefined, _parkeFiyatGizli: undefined, _hsKarCache: null, _hpKarCache: null,
+  fiyatlar: {},                                  // ERP'de birim fiyat stoktan otomatik dolmaz (eski panelde de öyleydi)
+  get stoklar(){ return hzStoklar_(); }
+};
+let _hzStokOnb = {ref:null, n:-1, liste:[]};
+// ERP stok kartlarını eski panelin beklediği biçime çevirir (STOK_KODU / STOK_ADI); pasif kartlar gelmez. Liste değişmedikçe yeniden üretilmez.
+function hzStoklar_(){
+  const k = (typeof _stokTanimListe !== "undefined" && _stokTanimListe) ? _stokTanimListe : [];
+  if(_hzStokOnb.ref !== k || _hzStokOnb.n !== k.length){
+    _hzStokOnb = {ref:k, n:k.length, liste:k.filter(s=>!s.pasif).map(s=>({STOK_KODU:s.stokKodu, STOK_ADI:s.stokAdi}))};
+  }
+  return _hzStokOnb.liste;
+}
+function hzDisliMi(){ return false; }
+
+// HESAPLAMA MODÜLÜ (Seramik + Parke)
+// Veriler bu cihazda (localStorage) saklanır — henüz sunucuya senkronize edilmiyor.
+// ════════════════════════════════════════════════
+const HESAP_LS_KEY = "fincanlar_erp_hesap_v1";
+
+function hesapVarsayilan(){
+  return {
+    seramik: { musteri:"", fire:10, yanMalzemeler:[], mekanlar:[], urunAyar:{}, yanAyar:{}, yanPanelAcik:true, kutuM2Kayitlari:{}, karlilik:{mod:"yuzde",deger:0,anlasilanTutar:null} },
+    parke:   { musteri:"", fire:5, mod:"oda", odalar:[], topluM2:"", kalemler:[], yardimcilar:[], karlilik:{mod:"yuzde",deger:0,anlasilanTutar:null} },
+  };
+}
+
+function hesapInit(){
+  if(!HZ_S.hesap){
+    try{
+      const raw = localStorage.getItem(HESAP_LS_KEY);
+      HZ_S.hesap = raw ? Object.assign(hesapVarsayilan(), JSON.parse(raw)) : hesapVarsayilan();
+    }catch(e){ HZ_S.hesap = hesapVarsayilan(); }
+  }
+  const sk = HZ_S.hesap.seramik;
+  if(!sk.yanMalzemeler) sk.yanMalzemeler = [];
+  if(!sk.urunAyar) sk.urunAyar = {};
+  if(!sk.yanAyar) sk.yanAyar = {};
+  if(!sk.kutuM2Kayitlari) sk.kutuM2Kayitlari = {};
+  if(!sk.karlilik) sk.karlilik = {mod:"yuzde",deger:0,anlasilanTutar:null};
+  if(sk.yanPanelAcik===undefined) sk.yanPanelAcik = true;
+  sk.mekanlar.forEach(m=>{ if(!m.yanAdet) m.yanAdet = {}; if(m.fire==null || m.fire==="") m.fire = (sk.fire!=null && sk.fire!=="") ? sk.fire : 10; });
+  if(HZ_S._seramikFiyatGizli===undefined){
+    try{ HZ_S._seramikFiyatGizli = localStorage.getItem("fincanlar_erp_hz_seramikFiyatGizli")==="1"; }catch(e){ HZ_S._seramikFiyatGizli = false; }
+  }
+  const pk = HZ_S.hesap.parke;
+  if(!pk.kalemler) pk.kalemler = [];
+  if(!pk.yardimcilar) pk.yardimcilar = [];
+  if(!pk.karlilik) pk.karlilik = {mod:"yuzde",deger:0,anlasilanTutar:null};
+  // Eski kayıtlarda "grup" alanı olmayan yardımcı malzemeler için isimden tahmin ederek doldur
+  // (süpürgelik otomatik hesabının çalışabilmesi için gerekli).
+  pk.yardimcilar.forEach(y=>{ if(!y.grup) y.grup = hesapParkeYardimciGrup(y.ad); });
+  if(HZ_S._parkeFiyatGizli===undefined){
+    try{ HZ_S._parkeFiyatGizli = localStorage.getItem("fincanlar_erp_hz_parkeFiyatGizli")==="1"; }catch(e){ HZ_S._parkeFiyatGizli = false; }
+  }
+  parkeFiyatListesiHazirla();
+  if(!HZ_S._hesapSubTab) HZ_S._hesapSubTab = "seramik";
+  hesapSubTab(HZ_S._hesapSubTab);
+}
+
+// Tüm Hesaplama sayfasını (Seramik + Parke, yan malzeme tanımları dahil) tamamen sıfırlar.
+function hesapTumTemizle(){
+  if(!confirm("Hem Seramik hem Parke hesaplamasındaki TÜM veriler (mekanlar, yan malzeme tanımları, kutu m² kayıtları, parke listesi) kalıcı olarak silinecek. Emin misiniz?")) return;
+  HZ_S.hesap = hesapVarsayilan();
+  try{ localStorage.removeItem(HESAP_LS_KEY); }catch(e){}
+  hesapSave();
+  hesapSubTab(HZ_S._hesapSubTab||"seramik");
+}
+
+function hesapSave(){
+  const sk = HZ_S.hesap.seramik, pk = HZ_S.hesap.parke;
+  if(hzEl("hzs-musteri")) sk.musteri = hzEl("hzs-musteri").value;
+  if(hzEl("hzp-musteri")) pk.musteri = hzEl("hzp-musteri").value;
+  if(hzEl("hzp-fire")) pk.fire = parseFloat(hzEl("hzp-fire").value) || 0;
+  if(hzEl("hzp-toplum2")) pk.topluM2 = hzEl("hzp-toplum2").value;
+  try{ localStorage.setItem(HESAP_LS_KEY, JSON.stringify(HZ_S.hesap)); }catch(e){}
+}
+
+function hesapSubTab(which){
+  HZ_S._hesapSubTab = which;
+  hzEl("hz-seramik-body").style.display = which==="seramik" ? "block" : "none";
+  hzEl("hz-parke-body").style.display = which==="parke" ? "block" : "none";
+  hzEl("hz-fiyat-body").style.display = which==="fiyat" ? "block" : "none";
+  hzEl("hz-tab-seramik").classList.toggle("active", which==="seramik");
+  hzEl("hz-tab-parke").classList.toggle("active", which==="parke");
+  hzEl("hz-tab-fiyat").classList.toggle("active", which==="fiyat");
+  if(which==="seramik"){
+    hzEl("hzs-musteri").value = HZ_S.hesap.seramik.musteri||"";
+    hesapYanPanelRender();
+    hesapMekanRenderAll();
+    hesapSonuclarRender();
+  } else if(which==="fiyat"){
+    hesapParkeFiyatListesiRender();
+  } else {
+    hzEl("hzp-musteri").value = HZ_S.hesap.parke.musteri||"";
+    hzEl("hzp-fire").value = HZ_S.hesap.parke.fire;
+    hzEl("hzp-toplum2").value = HZ_S.hesap.parke.topluM2||"";
+    hesapParkeMod(HZ_S.hesap.parke.mod||"oda");
+    hesapOdaRenderAll();
+    hesapParkeKatalogSelectDoldur();
+    hesapParkeSonuclarRender();
+  }
+}
+
+function hesapSeramikSifirla(){
+  // Not: yan malzeme tanımları VE kutu m² kayıtları kalıcı bir kütüphane olduğu için
+  // sıfırlamada silinmez, sadece mekanlar / müşteri / ayarlar / kârlılık sıfırlanır.
+  const eskiYan = HZ_S.hesap.seramik.yanMalzemeler;
+  const eskiKutuM2 = HZ_S.hesap.seramik.kutuM2Kayitlari;
+  HZ_S.hesap.seramik = hesapVarsayilan().seramik;
+  HZ_S.hesap.seramik.yanMalzemeler = eskiYan;
+  HZ_S.hesap.seramik.kutuM2Kayitlari = eskiKutuM2;
+  hesapSave(); hesapSubTab("seramik");
+}
+function hesapParkeSifirla(){ HZ_S.hesap.parke = hesapVarsayilan().parke; hesapSave(); hesapSubTab("parke"); }
+
+// ── Ürün (kutu m²) yardımcıları ──
+function hesapKutuM2Parse(stokAdi){
+  if(!stokAdi) return null;
+  let m = stokAdi.match(/\(?\s*([\d]+[.,][\d]+)\s*m²\s*[-–]\s*[\d]+[.,][\d]+\s*m²\s*\)?/i);
+  if(m) return parseFloat(m[1].replace(",", "."));
+  m = stokAdi.match(/([\d]+[.,][\d]+)\s*m²/i);
+  if(m) return parseFloat(m[1].replace(",", "."));
+  return null;
+}
+
+// m² bazlı bir yan malzemenin (yapıştırıcı, derz dolgu gibi) bir paketinin kaç m²'ye yettiğini
+// parantez içinde döndürür — mekan sütunlarındaki tik etiketinin yanında gösterilir.
+function hesapYanKapasiteEtiket(y){
+  if(y.tip!=="m2") return "";
+  const sarfiyat = parseFloat(y.sarfiyat)||0;
+  const paket = parseFloat(y.paket)||0;
+  if(sarfiyat<=0 || paket<=0) return "";
+  const kapasiteM2 = paket/sarfiyat;
+  return ` <span style="color:var(--text3)">(~${kapasiteM2.toLocaleString("tr-TR",{maximumFractionDigits:1})} m²/paket)</span>`;
+}
+
+// Bir ürünün kutu m²'sini önce kalıcı "kayıtlar" kütüphanesinden, yoksa ürün adından okumaya çalışır.
+// Kalıcı kayıt bir kere tanımlandığında Sıfırla ile bile silinmez (yan malzeme tanımları gibi).
+function hesapKutuM2Efektif(kod, urun){
+  const kayit = HZ_S.hesap.seramik.kutuM2Kayitlari[kod];
+  if(kayit!=null) return kayit;
+  return urun ? hesapKutuM2Parse(urun.STOK_ADI) : null;
+}
+function hesapKutuM2TanimlaVeKaydet(kod, val){
+  const v = parseFloat(val);
+  if(!v || v<=0){ alert("Geçerli bir kutu m² girin."); return; }
+  HZ_S.hesap.seramik.kutuM2Kayitlari[kod] = v;
+  hesapSave();
+  hesapMekanRenderAll();
+  hesapSonuclarRender();
+}
+
+function hesapProdSearchHTML(instId, currentKod, placeholder){
+  const urun = currentKod ? (HZ_S.stoklar||[]).find(s=>s.STOK_KODU===currentKod) : null;
+  const kutuM2 = urun ? hesapKutuM2Efektif(currentKod, urun) : null;
+  const uyariGerekli = urun && kutuM2==null;
+  return `<div style="position:relative">
+    <input type="text" id="${instId}-inp" value="${urun?String(urun.STOK_ADI).replace(/"/g,"&quot;"):""}" placeholder="${placeholder||"Ürün ara…"}"
+      oninput="hesapUrunAra('${instId}')" onfocus="hesapUrunAra('${instId}')" autocomplete="off"
+      style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:11px;box-sizing:border-box">
+    <input type="hidden" id="${instId}-kod" value="${currentKod||""}">
+    <div id="${instId}-hzdd" style="display:none;position:fixed;z-index:500;background:var(--bg2);border:1px solid var(--border);border-radius:8px;max-height:280px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25)"></div>
+    ${kutuM2!=null ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">Kutu m²: <strong>${kutuM2.toLocaleString("tr-TR")}</strong></div>` : ""}
+    ${uyariGerekli ? `
+    <div style="margin-top:5px;padding:6px;border:1px solid #f59e0b;background:#fef3c7;border-radius:6px">
+      <div style="font-size:9px;color:#92400e;margin-bottom:4px;font-weight:600">⚠️ Kutu m² bulunamadı — lütfen tanımlayın:</div>
+      <div style="display:flex;gap:4px">
+        <input type="number" step="0.0001" id="${instId}-kutum2-uyari" placeholder="Kutu m²"
+          style="flex:1;min-width:0;padding:4px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:11px;box-sizing:border-box">
+        <button class="mbtn" style="font-size:10px;padding:3px 8px;flex:none" onclick="hesapKutuM2TanimlaVeKaydet('${currentKod}', document.getElementById('${instId}-kutum2-uyari').value)">Kaydet</button>
+      </div>
+    </div>` : ""}
+  </div>`;
+}
+
+// NOT: Bu dropdown, mekan sütunlarının içinde bulunduğu #hzs-mekanlar konteyneri yatayda
+// kaydırılabilir (overflow-x:auto) olduğu için, eskiden position:absolute ile açılan liste
+// o konteynerin sınırları içinde kırpılıyor / yanlış yerde görünüyordu. Bunun yerine
+// position:fixed kullanıp konumu inputun ekrandaki gerçek konumuna göre (getBoundingClientRect)
+// JS ile hesaplıyoruz — böylece dropdown her zaman doğru yerde ve tam boyutunda açılır,
+// ayrıca dar sütuna sıkışmadan (arama kutusu genişliğinden daha geniş) rahatça okunabilir.
+function hesapUrunAra(instId){
+  const inp = document.getElementById(instId+"-inp");
+  const dd = document.getElementById(instId+"-hzdd");
+  if(!inp || !dd) return;
+  const q = (inp.value||"").trim().toLocaleUpperCase("tr");
+  if(!q){ dd.style.display="none"; dd.innerHTML=""; return; }
+  const list = (HZ_S.stoklar||[]).filter(s=>{
+    if (hzDisliMi(s.STOK_KODU)) return false;
+    const ad = String(s.STOK_ADI||"").toLocaleUpperCase("tr");
+    const kod = String(s.STOK_KODU||"");
+    return ad.includes(q) || kod.includes(q);
+  }).slice(0,10);
+  dd.innerHTML = list.length
+    ? list.map(s=>`<div onclick="hesapUrunSec('${instId}','${s.STOK_KODU}')"
+        style="padding:9px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border);white-space:normal"
+        onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">${s.STOK_ADI}</div>`).join("")
+    : `<div style="padding:10px;font-size:12px;color:var(--text3)">Sonuç yok</div>`;
+  // Genişliği inputtan biraz daha geniş, sabit ve okunaklı bir liste gibi ayarla (min 320px).
+  const rect = inp.getBoundingClientRect();
+  const genislik = Math.max(rect.width, 320);
+  let left = rect.left;
+  if(left + genislik > window.innerWidth - 10) left = Math.max(10, window.innerWidth - genislik - 10);
+  dd.style.left = left + "px";
+  dd.style.top = (rect.bottom + 4) + "px";
+  dd.style.width = genislik + "px";
+  dd.style.display = "block";
+}
+
+// Konteyner yatay kaydırıldığında (fixed konumlu) açık dropdown'lar geride/yanlış yerde
+// kalmasın diye kaydırma anında hepsini kapatıyoruz — kullanıcı gerekirse tekrar odaklanıp açar.
+document.addEventListener("scroll", e=>{
+  document.querySelectorAll('[id$="-hzdd"]').forEach(dd=>{ dd.style.display="none"; });
+}, true);
+
+function hesapUrunSec(instId, kod){
+  const s = (HZ_S.stoklar||[]).find(x=>x.STOK_KODU===kod);
+  document.getElementById(instId+"-inp").value = s ? s.STOK_ADI : "";
+  document.getElementById(instId+"-kod").value = kod;
+  document.getElementById(instId+"-hzdd").style.display = "none";
+  if(instId.indexOf("hzs-urun-")===0){
+    const mid = instId.replace("hzs-urun-","");
+    const mk = HZ_S.hesap.seramik.mekanlar.find(m=>m.id===mid);
+    if(mk) mk.urunKodu = kod;
+  } else if(instId.indexOf("hzs-urunduvar-")===0){
+    const mid = instId.replace("hzs-urunduvar-","");
+    const mk = HZ_S.hesap.seramik.mekanlar.find(m=>m.id===mid);
+    if(mk) mk.duvarUrunKodu = kod;
+  } else if(instId==="hzp-urun"){
+    HZ_S.hesap.parke.urunKodu = kod;
+  }
+  hesapSave();
+  hesapSubTab(HZ_S._hesapSubTab);
+}
+
+document.addEventListener("click", e=>{
+  document.querySelectorAll('[id$="-hzdd"]').forEach(dd=>{
+    if(dd.style.display==="block" && dd.parentElement && !dd.parentElement.contains(e.target)) dd.style.display="none";
+  });
+});
+
+// ── SERAMİK: MEKAN YÖNETİMİ (sütun sütun) ──
+function hesapMekanEkle(){
+  hesapSave();
+  HZ_S.hesap.seramik.mekanlar.push({
+    id: "m"+Date.now()+Math.floor(Math.random()*1000),
+    ad: "Mekan " + (HZ_S.hesap.seramik.mekanlar.length+1),
+    tip: "dikdortgen", // "dikdortgen" | "duzensiz" | "zemin" | "net"
+    fire: 10, // bu mekana özel fire payı % (mekan mekan ayarlanır)
+    en:"", boy:"", yukseklik:"", netm2:"",
+    duvarlar: [""],
+    bosluklarAktif:false,
+    bosluklar: [],
+    tabanDahil: false, // düzensiz mekanlarda zemin de hesaba katılsın mı
+    tabanM2: "",        // düzensiz mekanlarda zemin alanı elle girilir (şekil düzensiz olduğu için)
+    duvarAyniUrun: true,
+    urunKodu: null,
+    duvarUrunKodu: null,
+    yanSecili: [],
+    yanAdet: {},
+  });
+  hesapSave();
+  hesapMekanRenderAll();
+  hesapSonuclarRender();
+}
+
+function hesapMekanSil(id){
+  HZ_S.hesap.seramik.mekanlar = HZ_S.hesap.seramik.mekanlar.filter(m=>m.id!==id);
+  hesapSave(); hesapMekanRenderAll(); hesapSonuclarRender();
+}
+
+// Bir mekanın "taban + duvar ayrı ürün" mantığına girip girmediğini belirler:
+// Dikdörtgen'de taban her zaman vardır; Düzensiz'de sadece "zemin de hesaba dahil et" işaretliyse.
+function hesapMekanTabanliMi(mekan){
+  if(mekan.tip==="dikdortgen") return true;
+  if(mekan.tip==="duzensiz") return !!mekan.tabanDahil;
+  return false;
+}
+
+function hesapMekanAlan(mekan){
+  let taban=0, duvar=0, bosluk=0;
+  if(mekan.tip==="net"){
+    taban = parseFloat(mekan.netm2)||0;
+  } else if(mekan.tip==="zemin"){
+    taban = (parseFloat(mekan.en)||0) * (parseFloat(mekan.boy)||0);
+  } else if(mekan.tip==="dikdortgen"){
+    taban = (parseFloat(mekan.en)||0) * (parseFloat(mekan.boy)||0);
+    const cevre = 2 * ((parseFloat(mekan.en)||0) + (parseFloat(mekan.boy)||0));
+    duvar = cevre * (parseFloat(mekan.yukseklik)||0);
+  } else if(mekan.tip==="duzensiz"){
+    const cevre = (mekan.duvarlar||[]).reduce((t,d)=>t+(parseFloat(d)||0), 0);
+    duvar = cevre * (parseFloat(mekan.yukseklik)||0);
+    if(mekan.tabanDahil) taban = parseFloat(mekan.tabanM2)||0;
+  }
+  if(mekan.bosluklarAktif){
+    bosluk = (mekan.bosluklar||[]).reduce((t,b)=>
+      t + (parseFloat(b.g)||0) * (parseFloat(b.h)||0) * (parseInt(b.adet)||1), 0);
+    duvar = Math.max(0, duvar - bosluk);
+  }
+  return { taban, duvar, bosluk, toplam: taban+duvar };
+}
+
+// Bir mekanın ölçüsü/alanı değiştiğinde, o mekana bağlı ürün(ler)in "Kaç Kutu" / "Seramik m²"
+// alanlarındaki ELLE girilmiş değerleri temizler — böylece "ölçü → kutu hesabı" bağlantısı
+// her zaman aktif kalır ve yeni ölçüye göre otomatik yeniden hesaplanır. Kutu m² ve Birim Fiyat
+// (ürünün kendi özellikleri, ölçüden bağımsız) elle girilmişse korunur, silinmez.
+function hesapUrunAyarOlcuTemizle(m){
+  const ayarlar = HZ_S.hesap.seramik.urunAyar;
+  [m.urunKodu, m.duvarUrunKodu].forEach(kod=>{
+    if(kod && ayarlar[kod]){
+      delete ayarlar[kod].m2;
+      delete ayarlar[kod].kutuSayi;
+    }
+  });
+}
+
+// Ölçü kutularına yazarken (oninput) SADECE o mekanın m² rozetini ve alt sonuç panelini
+// güncelleyen hafif fonksiyon — tüm sütunu yeniden çizmediği için input'tan odak kaybolmuyor,
+// anında (başka bir tetikleme beklemeden) hesap güncelleniyor.
+function hesapMekanCanli(id, alan, val){
+  const m = HZ_S.hesap.seramik.mekanlar.find(x=>x.id===id);
+  if(!m) return;
+  m[alan]=val;
+  hesapUrunAyarOlcuTemizle(m);
+  const a = hesapMekanAlan(m);
+  const badge = document.getElementById("hzs-toplam-"+id);
+  if(badge){
+    badge.innerHTML = `<strong>${a.toplam.toLocaleString("tr-TR",{maximumFractionDigits:2})} m²</strong>
+      ${a.taban>0 && a.duvar>0 ? `<div style="font-size:9px;color:var(--text3)">taban ${a.taban.toLocaleString("tr-TR",{maximumFractionDigits:2})} + duvar ${a.duvar.toLocaleString("tr-TR",{maximumFractionDigits:2})}</div>` : ""}`;
+  }
+  hesapSave();
+  hesapSonuclarRender();
+}
+function hesapDuvarCanli(id, idx, val){
+  const m = HZ_S.hesap.seramik.mekanlar.find(x=>x.id===id);
+  if(!m) return;
+  m.duvarlar[idx]=val;
+  hesapMekanCanli(id, "duvarlar", m.duvarlar);
+}
+function hesapBoslukCanli(id, idx, alan, val){
+  const m = HZ_S.hesap.seramik.mekanlar.find(x=>x.id===id);
+  if(!m) return;
+  m.bosluklar[idx][alan]=val;
+  hesapMekanCanli(id, "bosluklar", m.bosluklar);
+}
+function hesapMekanYanAdetCanli(mid, yid, val){
+  const m = HZ_S.hesap.seramik.mekanlar.find(x=>x.id===mid);
+  if(!m) return;
+  m.yanAdet = m.yanAdet||{};
+  m.yanAdet[yid] = parseFloat(val)||0;
+  hesapSave(); hesapSonuclarRender();
+}
+
+function hesapMekanRenderAll(){
+  const box = hzEl("hzs-mekanlar");
+  const mekanlar = HZ_S.hesap.seramik.mekanlar;
+  if(mekanlar.length===0){
+    box.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:12px;padding:24px;border:1px dashed var(--border);border-radius:var(--r);width:100%">Henüz mekan eklenmedi. "+ Mekan Ekle" ile başlayın.</div>`;
+    return;
+  }
+  const yanMalzemeler = HZ_S.hesap.seramik.yanMalzemeler || [];
+  box.innerHTML = mekanlar.map(m=>{
+    const a = hesapMekanAlan(m);
+    const duvarVar = m.tip==="dikdortgen" || m.tip==="duzensiz";
+    return `
+    <div style="flex:0 0 200px;width:200px;border:1px solid var(--border);border-radius:var(--r);padding:10px;background:var(--bg2)">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <label style="font-size:10px;color:var(--text3);flex:none">Fire %</label>
+        <input type="number" step="1" min="0" max="50" value="${m.fire!=null?m.fire:10}" onchange="hesapMekanAlanGuncelle('${m.id}','fire',parseFloat(this.value)||0)"
+          style="width:56px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:11px;text-align:right">
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <input value="${(m.ad||"").replace(/"/g,"&quot;")}" onchange="hesapMekanAlanGuncelle('${m.id}','ad',this.value)"
+          style="flex:1;min-width:0;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px;font-weight:600">
+        <button onclick="hesapMekanSil('${m.id}')" title="Mekanı sil" style="background:none;border:none;color:var(--red,#dc2626);cursor:pointer;font-size:14px;flex:none">✕</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer">
+          <input type="radio" name="tip-${m.id}" ${m.tip==="dikdortgen"?"checked":""} onchange="hesapMekanAlanGuncelle('${m.id}','tip','dikdortgen')"> Dikdörtgen
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer">
+          <input type="radio" name="tip-${m.id}" ${m.tip==="duzensiz"?"checked":""} onchange="hesapMekanAlanGuncelle('${m.id}','tip','duzensiz')"> Düzensiz Duvar
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer">
+          <input type="radio" name="tip-${m.id}" ${m.tip==="zemin"?"checked":""} onchange="hesapMekanAlanGuncelle('${m.id}','tip','zemin')"> Sadece Zemin
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer">
+          <input type="radio" name="tip-${m.id}" ${m.tip==="net"?"checked":""} onchange="hesapMekanAlanGuncelle('${m.id}','tip','net')"> Net Ölçü (m²)
+        </label>
+      </div>
+
+      ${m.tip==="dikdortgen" ? `
+      <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px">
+        <input type="number" step="0.01" placeholder="En (m)" value="${m.en}" oninput="hesapMekanCanli('${m.id}','en',this.value)" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:11px;box-sizing:border-box">
+        <input type="number" step="0.01" placeholder="Boy (m)" value="${m.boy}" oninput="hesapMekanCanli('${m.id}','boy',this.value)" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:11px;box-sizing:border-box">
+        <input type="number" step="0.01" placeholder="Yükseklik (m)" value="${m.yukseklik}" oninput="hesapMekanCanli('${m.id}','yukseklik',this.value)" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:11px;box-sizing:border-box">
+      </div>` : ""}
+
+      ${m.tip==="duzensiz" ? `
+      <div style="margin-bottom:8px">
+        <div style="font-size:9px;color:var(--text3);margin-bottom:3px">DUVAR GENİŞLİKLERİ (m)</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${(m.duvarlar||[]).map((d,i)=>`<input type="number" step="0.01" value="${d}" placeholder="Duvar ${i+1}"
+            oninput="hesapDuvarCanli('${m.id}',${i},this.value)" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:11px;box-sizing:border-box">`).join("")}
+        </div>
+        ${(m.duvarlar||[]).length<8 ? `<button class="mbtn" onclick="hesapDuvarEkle('${m.id}')" style="font-size:10px;padding:3px 8px;margin-top:4px;width:100%">+ Duvar</button>` : ""}
+        <input type="number" step="0.01" placeholder="Yükseklik (m)" value="${m.yukseklik}" oninput="hesapMekanCanli('${m.id}','yukseklik',this.value)" style="width:100%;margin-top:6px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:11px;box-sizing:border-box">
+        <label style="display:flex;align-items:center;gap:5px;font-size:10px;cursor:pointer;margin-top:8px">
+          <input type="checkbox" ${m.tabanDahil?"checked":""} onchange="hesapMekanAlanGuncelle('${m.id}','tabanDahil',this.checked)"> Bu mekanın zeminini de hesapla
+        </label>
+        ${m.tabanDahil ? `
+        <input type="number" step="0.01" placeholder="Zemin m² (elle girin)" value="${m.tabanM2}" oninput="hesapMekanCanli('${m.id}','tabanM2',this.value)"
+          style="width:100%;margin-top:5px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:11px;box-sizing:border-box">
+        <div style="font-size:9px;color:var(--text3);margin-top:3px">Düzensiz şekilli zeminlerde m² elle girilir.</div>` : ""}
+      </div>` : ""}
+
+      ${m.tip==="zemin" ? `
+      <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px">
+        <input type="number" step="0.01" placeholder="En (m)" value="${m.en}" oninput="hesapMekanCanli('${m.id}','en',this.value)" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:11px;box-sizing:border-box">
+        <input type="number" step="0.01" placeholder="Boy (m)" value="${m.boy}" oninput="hesapMekanCanli('${m.id}','boy',this.value)" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:11px;box-sizing:border-box">
+      </div>` : ""}
+
+      ${m.tip==="net" ? `
+      <div style="margin-bottom:8px">
+        <input type="number" step="0.01" placeholder="Toplam m²" value="${m.netm2}" oninput="hesapMekanCanli('${m.id}','netm2',this.value)" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:11px;box-sizing:border-box">
+      </div>` : ""}
+
+      ${duvarVar ? `
+      <label style="display:flex;align-items:center;gap:5px;font-size:10px;cursor:pointer;margin-bottom:6px">
+        <input type="checkbox" ${m.bosluklarAktif?"checked":""} onchange="hesapMekanAlanGuncelle('${m.id}','bosluklarAktif',this.checked)"> Boşluk düş (kapı/pencere)
+      </label>
+      ${m.bosluklarAktif ? `
+      <div id="hzs-bosluk-${m.id}" style="margin-bottom:6px">
+        ${(m.bosluklar||[]).map((b,i)=>`
+          <div style="display:flex;gap:3px;align-items:center;margin-bottom:3px">
+            <input type="number" step="0.01" value="${b.g}" placeholder="G" oninput="hesapBoslukCanli('${m.id}',${i},'g',this.value)" style="width:38px;padding:4px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:10px">
+            <input type="number" step="0.01" value="${b.h}" placeholder="Y" oninput="hesapBoslukCanli('${m.id}',${i},'h',this.value)" style="width:38px;padding:4px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:10px">
+            <input type="number" value="${b.adet||1}" placeholder="Ad" oninput="hesapBoslukCanli('${m.id}',${i},'adet',this.value)" style="width:32px;padding:4px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:10px">
+            <button onclick="hesapBosluk_Sil('${m.id}',${i})" style="background:none;border:none;color:var(--red,#dc2626);cursor:pointer;font-size:11px">✕</button>
+          </div>`).join("")}
+        <button class="mbtn" onclick="hesapBosluk_Ekle('${m.id}')" style="font-size:10px;padding:3px 8px;width:100%">+ Boşluk</button>
+      </div>` : ""}
+
+      ${hesapMekanTabanliMi(m) ? `
+      <label style="display:flex;align-items:center;gap:5px;font-size:10px;cursor:pointer;margin-bottom:6px">
+        <input type="checkbox" ${m.duvarAyniUrun?"checked":""} onchange="hesapMekanAlanGuncelle('${m.id}','duvarAyniUrun',this.checked)"> Duvar zeminle aynı ürün olsun
+      </label>` : ""}
+      ` : ""}
+
+      <div id="hzs-toplam-${m.id}" style="font-size:11px;color:var(--text2);margin-bottom:8px;background:var(--bg3);padding:6px 7px;border-radius:6px;text-align:center">
+        <strong>${a.toplam.toLocaleString("tr-TR",{maximumFractionDigits:2})} m²</strong>
+        ${a.taban>0 && a.duvar>0 ? `<div style="font-size:9px;color:var(--text3)">taban ${a.taban.toLocaleString("tr-TR",{maximumFractionDigits:2})} + duvar ${a.duvar.toLocaleString("tr-TR",{maximumFractionDigits:2})}</div>` : ""}
+      </div>
+
+      <div style="font-size:9px;color:var(--text3);margin-bottom:3px">${m.tip==="zemin"?"ZEMİN ÜRÜNÜ":(m.tip==="net"?"ÜRÜN":(hesapMekanTabanliMi(m)?"TABAN ÜRÜNÜ":"DUVAR ÜRÜNÜ"))}</div>
+      ${hesapProdSearchHTML("hzs-urun-"+m.id, m.urunKodu, "Ürün ara…")}
+
+      ${(hesapMekanTabanliMi(m) && !m.duvarAyniUrun) ? `
+      <div style="font-size:9px;color:var(--text3);margin:8px 0 3px">DUVAR ÜRÜNÜ</div>
+      ${hesapProdSearchHTML("hzs-urunduvar-"+m.id, m.duvarUrunKodu, "Ürün ara…")}` : ""}
+
+      ${yanMalzemeler.length>0 ? `
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+        <div style="font-size:9px;color:var(--text3);margin-bottom:4px">YAN MALZEMELER</div>
+        ${yanMalzemeler.map(y=> y.tip==="adet" ? `
+          <div style="display:flex;align-items:center;gap:5px;font-size:10px;margin-bottom:3px">
+            <span style="flex:1">${y.ad}</span>
+            <input type="number" min="0" step="1" placeholder="adet" value="${(m.yanAdet&&m.yanAdet[y.id])||''}"
+              oninput="hesapMekanYanAdetCanli('${m.id}','${y.id}',this.value)"
+              style="width:44px;padding:3px 4px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:10px;text-align:right">
+          </div>` : `
+          <label style="display:flex;align-items:center;gap:5px;font-size:10px;cursor:pointer;margin-bottom:3px">
+            <input type="checkbox" ${(m.yanSecili||[]).includes(y.id)?"checked":""} onchange="hesapMekanYanToggle('${m.id}','${y.id}',this.checked)"> ${y.ad}${hesapYanKapasiteEtiket(y)}
+          </label>`).join("")}
+      </div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+function hesapMekanAlanGuncelle(id, alan, val){
+  const m = HZ_S.hesap.seramik.mekanlar.find(x=>x.id===id);
+  if(!m) return;
+  m[alan]=val;
+  if(alan==="tip" || alan==="bosluklarAktif" || alan==="duvarAyniUrun" || alan==="tabanDahil"){
+    hesapUrunAyarOlcuTemizle(m);
+  }
+  hesapSave();
+  if(alan==="tip" || alan==="bosluklarAktif" || alan==="duvarAyniUrun" || alan==="tabanDahil"){ hesapMekanRenderAll(); }
+  hesapSonuclarRender();
+}
+function hesapDuvarEkle(id){
+  const m = HZ_S.hesap.seramik.mekanlar.find(x=>x.id===id);
+  if(!m || (m.duvarlar||[]).length>=8) return;
+  m.duvarlar.push(""); hesapSave(); hesapMekanRenderAll(); hesapSonuclarRender();
+}
+function hesapBosluk_Ekle(id){
+  const m = HZ_S.hesap.seramik.mekanlar.find(x=>x.id===id);
+  if(!m) return;
+  (m.bosluklar=m.bosluklar||[]).push({g:"",h:"",adet:1});
+  hesapSave(); hesapMekanRenderAll(); hesapSonuclarRender();
+}
+function hesapBosluk_Sil(id, idx){
+  const m = HZ_S.hesap.seramik.mekanlar.find(x=>x.id===id);
+  if(!m) return;
+  m.bosluklar.splice(idx,1);
+  hesapUrunAyarOlcuTemizle(m);
+  hesapSave(); hesapMekanRenderAll(); hesapSonuclarRender();
+}
+
+// ── SERAMİK: YAN MALZEME TANIMLARI (sayfanın altında, açılır/kapanır, kolon mantığında) ──
+// Kalıcı bir kütüphane: bir kez tanımlanır, "Sıfırla" ile bile silinmez, sonraki hesaplamalarda
+// da mekan sütunlarının altında tik/adet seçeneği olarak çıkmaya devam eder.
+function hesapYanPanelToggle(){
+  HZ_S.hesap.seramik.yanPanelAcik = !HZ_S.hesap.seramik.yanPanelAcik;
+  hesapSave();
+  hesapYanPanelRender();
+}
+function hesapYanEkle(){
+  HZ_S.hesap.seramik.yanMalzemeler.push({
+    id:"y"+Date.now()+Math.floor(Math.random()*1000),
+    ad:"Yeni Malzeme", tip:"m2", sarfiyat:0, birim:"kg", paket:1, fiyat:0
+  });
+  HZ_S.hesap.seramik.yanPanelAcik = true;
+  hesapSave(); hesapYanPanelRender(); hesapMekanRenderAll(); hesapSonuclarRender();
+}
+function hesapYanSil(id){
+  HZ_S.hesap.seramik.yanMalzemeler = HZ_S.hesap.seramik.yanMalzemeler.filter(y=>y.id!==id);
+  HZ_S.hesap.seramik.mekanlar.forEach(m=>{
+    m.yanSecili = (m.yanSecili||[]).filter(x=>x!==id);
+    if(m.yanAdet) delete m.yanAdet[id];
+  });
+  delete HZ_S.hesap.seramik.yanAyar[id];
+  hesapSave(); hesapYanPanelRender(); hesapMekanRenderAll(); hesapSonuclarRender();
+}
+function hesapYanSiraDegistir(id, yon){
+  const list = HZ_S.hesap.seramik.yanMalzemeler;
+  const idx = list.findIndex(y=>y.id===id);
+  const yeniIdx = idx + yon;
+  if(idx===-1 || yeniIdx<0 || yeniIdx>=list.length) return;
+  const [item] = list.splice(idx,1);
+  list.splice(yeniIdx,0,item);
+  hesapSave(); hesapYanPanelRender(); hesapMekanRenderAll();
+}
+function hesapYanGuncelle(id, alan, val){
+  const y = HZ_S.hesap.seramik.yanMalzemeler.find(x=>x.id===id);
+  if(!y) return;
+  y[alan] = (alan==="ad"||alan==="birim"||alan==="tip") ? val : (parseFloat(val)||0);
+  hesapSave();
+  if(alan==="tip") { hesapYanPanelRender(); hesapMekanRenderAll(); }
+  else if(alan==="fiyat") { hesapYanPanelRender(); } // sonuç tablosundan düzenlenmişse alt panel de güncellensin
+  hesapSonuclarRender();
+}
+function hesapMekanYanToggle(mid, yid, checked){
+  const m = HZ_S.hesap.seramik.mekanlar.find(x=>x.id===mid);
+  if(!m) return;
+  m.yanSecili = m.yanSecili||[];
+  if(checked){ if(!m.yanSecili.includes(yid)) m.yanSecili.push(yid); }
+  else { m.yanSecili = m.yanSecili.filter(x=>x!==yid); }
+  hesapSave(); hesapSonuclarRender();
+}
+function hesapYanPanelRender(){
+  const ok = hzEl("hzs-yanpanel-ok"), body = hzEl("hzs-yanpanel-body");
+  if(!ok || !body) return;
+  const acik = HZ_S.hesap.seramik.yanPanelAcik;
+  ok.textContent = acik ? "▼" : "▶";
+  body.style.display = acik ? "flex" : "none";
+  const list = HZ_S.hesap.seramik.yanMalzemeler || [];
+  if(list.length===0){
+    body.innerHTML = `<div style="font-size:11px;color:var(--text3);padding:8px">Henüz malzeme tanımlanmadı — "+ Malzeme Ekle" ile başlayın.</div>`;
+    return;
+  }
+  body.innerHTML = list.map((y,idx)=>`
+    <div style="flex:0 0 190px;width:190px;border:1px solid var(--border);border-radius:var(--r);padding:9px;background:var(--bg2)">
+      <div style="display:flex;align-items:center;gap:4px;margin-bottom:7px">
+        <button onclick="hesapYanSiraDegistir('${y.id}',-1)" title="Sola taşı" ${idx===0?"disabled":""} style="background:none;border:none;color:${idx===0?"var(--text3)":"var(--text2)"};cursor:${idx===0?"default":"pointer"};font-size:13px;flex:none;padding:0 2px">‹</button>
+        <input value="${(y.ad||"").replace(/"/g,"&quot;")}" onchange="hesapYanGuncelle('${y.id}','ad',this.value)"
+          style="flex:1;min-width:0;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:11px;font-weight:600">
+        <button onclick="hesapYanSiraDegistir('${y.id}',1)" title="Sağa taşı" ${idx===list.length-1?"disabled":""} style="background:none;border:none;color:${idx===list.length-1?"var(--text3)":"var(--text2)"};cursor:${idx===list.length-1?"default":"pointer"};font-size:13px;flex:none;padding:0 2px">›</button>
+        <button onclick="hesapYanSil('${y.id}')" title="Sil" style="background:none;border:none;color:var(--red,#dc2626);cursor:pointer;font-size:13px;flex:none">✕</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:7px">
+        <label style="display:flex;align-items:center;gap:5px;font-size:10px;cursor:pointer">
+          <input type="radio" name="yantip-${y.id}" ${y.tip==="m2"?"checked":""} onchange="hesapYanGuncelle('${y.id}','tip','m2')"> m² Bazlı (sarfiyat)
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:10px;cursor:pointer">
+          <input type="radio" name="yantip-${y.id}" ${y.tip==="adet"?"checked":""} onchange="hesapYanGuncelle('${y.id}','tip','adet')"> Adet Bazlı (m² bağımsız)
+        </label>
+      </div>
+      ${y.tip==="m2" ? `
+      <div style="font-size:9px;color:var(--text3);margin-bottom:2px">SARFİYAT (m² başına) / BİRİM</div>
+      <div style="display:flex;gap:4px;margin-bottom:7px">
+        <input type="number" step="0.01" value="${y.sarfiyat}" onchange="hesapYanGuncelle('${y.id}','sarfiyat',this.value)"
+          style="width:100%;padding:4px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:10px">
+        <select onchange="hesapYanGuncelle('${y.id}','birim',this.value)" style="padding:4px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:10px">
+          <option value="kg" ${y.birim==="kg"?"selected":""}>kg</option>
+          <option value="adet" ${y.birim==="adet"?"selected":""}>adet</option>
+        </select>
+      </div>` : `
+      <div style="font-size:9px;color:var(--text3);margin-bottom:7px">Mekan sütunlarında doğrudan "kaç adet" olarak girilir — m²'ye bağlı değildir.</div>`}
+      <div style="font-size:9px;color:var(--text3);margin-bottom:2px">PAKET MİKTARI / FİYAT ₺</div>
+      <div style="display:flex;gap:4px">
+        <input type="number" step="0.01" value="${y.paket}" onchange="hesapYanGuncelle('${y.id}','paket',this.value)"
+          style="width:100%;padding:4px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:10px">
+        <input type="number" step="0.01" value="${y.fiyat||0}" onchange="hesapYanGuncelle('${y.id}','fiyat',this.value)"
+          style="width:100%;padding:4px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:10px">
+      </div>
+    </div>`).join("");
+}
+
+// ── SERAMİK: SONUÇ / MALZEME LİSTESİ (tamamen düzenlenebilir — tutar hariç) ──
+function hesapUrunFiyat(kod){
+  const f = HZ_S.fiyatlar && HZ_S.fiyatlar[kod];
+  if(!f) return null;
+  return f.netFiyat>0 ? f.netFiyat : f.birimFiyat;
+}
+
+// Bir ana ürün satırının (Seramik m², Kutu m², Kaç Kutu, Birim Fiyat) etkin değerlerini üretir.
+// Kullanıcı bir alanı elle değiştirdiyse (urunAyar) o değer; değiştirmediyse mekanlardan/üründen
+// hesaplanan varsayılan değer kullanılır.
+function hesapUrunEtkin(kod, m2Ham, fire){
+  const sk = HZ_S.hesap.seramik;
+  const ayar = sk.urunAyar[kod] || {};
+  const urun = (HZ_S.stoklar||[]).find(s=>s.STOK_KODU===kod);
+  const m2Ihtiyac = Math.round(m2Ham*fire*100)/100; // gerçek ihtiyaç (fire dahil), kutuya yuvarlanmamış
+  const kutuM2 = hesapKutuM2Efektif(kod, urun); // önce kalıcı kayıt, yoksa üründen otomatik okuma
+  const kutuSayiDefault = kutuM2 ? Math.ceil(m2Ihtiyac/kutuM2) : null;
+  const kutuSayi = ayar.kutuSayi!=null ? ayar.kutuSayi : kutuSayiDefault;
+  // Seramik m²: KUTU M² × KAÇ KUTU olarak aktarılır (gerçekte satın alınacak/kesilecek toplam m² —
+  // kutu bazında yuvarlandığı için ham ihtiyaçtan biraz fazla olabilir). Kullanıcı isterse yine de
+  // bu alanı elle değiştirebilir (ayar.m2).
+  const m2Default = (kutuM2!=null && kutuSayi!=null) ? Math.round(kutuM2*kutuSayi*100)/100 : m2Ihtiyac;
+  const m2 = ayar.m2!=null ? ayar.m2 : m2Default;
+  // Birim Fiyat artık stoktan OTOMATİK dolmuyor — kullanıcı elle girene kadar boş kalır.
+  const fiyat = ayar.fiyat!=null ? ayar.fiyat : null;
+  const tutar = (kutuSayi!=null && kutuM2!=null && fiyat!=null) ? kutuSayi*kutuM2*fiyat : null;
+  return { kod, ad: urun?urun.STOK_ADI:kod, m2, kutuM2, kutuSayi, fiyat, tutar };
+}
+function hesapUrunAyarSet(kod, alan, val){
+  const sk = HZ_S.hesap.seramik;
+  if(alan==="kutuM2"){
+    // Kutu m² kalıcı bir ürün özelliğidir — kütüphaneye yazılır, "Sıfırla" ile bile silinmez.
+    if(val===""){ delete sk.kutuM2Kayitlari[kod]; }
+    else { sk.kutuM2Kayitlari[kod] = parseFloat(val)||0; }
+    hesapSave(); hesapMekanRenderAll(); hesapSonuclarRender();
+    return;
+  }
+  if(!sk.urunAyar[kod]) sk.urunAyar[kod] = {};
+  sk.urunAyar[kod][alan] = val===""?null:(parseFloat(val)||0);
+  hesapSave(); hesapSonuclarRender();
+}
+
+function hesapYanEtkin(y, miktarHam){
+  const sk = HZ_S.hesap.seramik;
+  const ayar = sk.yanAyar[y.id] || {};
+  const miktarDefault = Math.round(miktarHam*100)/100;
+  const miktar = ayar.miktar!=null ? ayar.miktar : miktarDefault;
+  const paketSayiDefault = y.paket>0 ? Math.ceil(miktar/y.paket) : Math.ceil(miktar);
+  const paketSayi = ayar.paketSayi!=null ? ayar.paketSayi : paketSayiDefault;
+  const fiyat = parseFloat(y.fiyat)||0;
+  const tutar = fiyat>0 ? paketSayi*fiyat : null;
+  return { ...y, miktar, paketSayi, fiyat, tutar };
+}
+function hesapYanAyarSet(yid, alan, val){
+  const sk = HZ_S.hesap.seramik;
+  if(!sk.yanAyar[yid]) sk.yanAyar[yid] = {};
+  sk.yanAyar[yid][alan] = val===""?null:(parseFloat(val)||0);
+  hesapSave(); hesapSonuclarRender();
+}
+
+function hesapSeramikFiyatToggle(){
+  HZ_S._seramikFiyatGizli = !HZ_S._seramikFiyatGizli;
+  try{ localStorage.setItem("fincanlar_erp_hz_seramikFiyatGizli", HZ_S._seramikFiyatGizli?"1":"0"); }catch(e){}
+  hesapSonuclarRender();
+}
+function hesapSonuclarRender(){
+  const box = hzEl("hzs-sonuc");
+  if(!box) return;
+  const sk = HZ_S.hesap.seramik;
+  const fiyatGizli = !!HZ_S._seramikFiyatGizli;
+
+  // Fire artık MEKAN BAZLI (her mekanın kendi Fire % kutusu var, isim kutusunun üstünde).
+  // "Toplam Alan" bölümünde her mekan ayrı satırda, en sağda toplam (fireli VE firesiz) gösterilir.
+  const mekanAlanListesi = []; // {ad, ham, fireli}
+  let toplamGenelHam=0, toplamGenelFireli=0;
+  const urunM2Ham = {}, urunM2Fireli = {}, urunMekanlar = {};
+  const yanM2Ham = {}, yanM2Fireli = {}, yanMekanlar = {};
+  const yanAdetHam = {};
+
+  const mekanEkle = (map, kod, mekanAdi) => {
+    if(!kod) return;
+    if(!map[kod]) map[kod] = new Set();
+    if(mekanAdi) map[kod].add(mekanAdi);
+  };
+
+  sk.mekanlar.forEach(m=>{
+    const a = hesapMekanAlan(m);
+    const mFire = 1 + ((parseFloat(m.fire)||0)/100);
+    const mekanAdi = m.ad || "Mekan";
+    toplamGenelHam += a.toplam;
+    toplamGenelFireli += a.toplam*mFire;
+    mekanAlanListesi.push({ ad: mekanAdi, ham: a.toplam, fireli: a.toplam*mFire });
+
+    const ekleUrun = (kod, deger) => {
+      if(!kod || deger<=0) return;
+      urunM2Ham[kod] = (urunM2Ham[kod]||0) + deger;
+      urunM2Fireli[kod] = (urunM2Fireli[kod]||0) + deger*mFire;
+      mekanEkle(urunMekanlar, kod, mekanAdi);
+    };
+    if(m.tip==="zemin" || m.tip==="net"){
+      ekleUrun(m.urunKodu, a.toplam);
+    } else if(hesapMekanTabanliMi(m)){ // dikdörtgen (her zaman) veya düzensiz+zemin dahil
+      if(m.duvarAyniUrun){
+        ekleUrun(m.urunKodu, a.toplam);
+      } else {
+        ekleUrun(m.urunKodu, a.taban);
+        ekleUrun(m.duvarUrunKodu, a.duvar);
+      }
+    } else if(m.tip==="duzensiz"){ // zemin dahil değil — sadece duvar, tek ürün
+      ekleUrun(m.urunKodu, a.toplam);
+    }
+    (m.yanSecili||[]).forEach(yid=>{
+      yanM2Ham[yid] = (yanM2Ham[yid]||0) + a.toplam;
+      yanM2Fireli[yid] = (yanM2Fireli[yid]||0) + a.toplam*mFire;
+      mekanEkle(yanMekanlar, yid, mekanAdi);
+    });
+    Object.entries(m.yanAdet||{}).forEach(([yid,adet])=>{
+      if(adet>0){
+        yanAdetHam[yid] = (yanAdetHam[yid]||0) + (parseFloat(adet)||0);
+        mekanEkle(yanMekanlar, yid, mekanAdi);
+      }
+    });
+  });
+
+  // Ürün/malzeme adının yanına, hangi mekan(lar)da kullanıldığı parantez içinde eklenir.
+  // Bu isim Teklife Aktar'da da aynen taşınır ve orada normal "Ad" kutusu gibi düzenlenebilir.
+  const mekanEtiketiEkle = (ad, mekanSet) => {
+    if(!mekanSet || mekanSet.size===0) return ad;
+    return `${ad} (${Array.from(mekanSet).join(", ")})`;
+  };
+
+  const urunSatirlari = Object.entries(urunM2Fireli).map(([kod,m2Fireli])=>{
+    const r = hesapUrunEtkin(kod, m2Fireli, 1);
+    return { ...r, adGosterim: mekanEtiketiEkle(r.ad, urunMekanlar[kod]) };
+  });
+
+  const yanSatirlari = (sk.yanMalzemeler||[]).map(y=>{
+    let r;
+    if(y.tip==="adet"){
+      const adetHam = yanAdetHam[y.id]||0;
+      if(adetHam<=0 && (sk.yanAyar[y.id]||{}).miktar==null) return null;
+      r = hesapYanEtkin(y, adetHam);
+    } else {
+      const m2Fireli = yanM2Fireli[y.id]||0;
+      if(m2Fireli<=0 && (sk.yanAyar[y.id]||{}).miktar==null) return null;
+      const miktarHam = m2Fireli * (parseFloat(y.sarfiyat)||0);
+      r = hesapYanEtkin(y, miktarHam);
+    }
+    return { ...r, adGosterim: mekanEtiketiEkle(r.ad, yanMekanlar[y.id]) };
+  }).filter(Boolean);
+
+  const toplamTutar = urunSatirlari.reduce((t,r)=>t+(r.tutar||0),0) + yanSatirlari.reduce((t,r)=>t+(r.tutar||0),0);
+
+  box.innerHTML = `
+    <div class="step">
+      <div class="step-hd">📐 Toplam Alan</div>
+      <div class="step-bd">
+        ${mekanAlanListesi.length===0 ? `<div style="color:var(--text3);font-size:12px">Henüz mekan eklenmedi.</div>` : `
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="text-align:left;color:var(--text3);border-bottom:1px solid var(--border)">
+            <th style="padding:5px 4px">Mekan</th><th style="padding:5px 4px;text-align:right">Firesiz m²</th><th style="padding:5px 4px;text-align:right">Fireli m²</th>
+          </tr></thead>
+          <tbody>
+          ${mekanAlanListesi.map(x=>`<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:5px 4px">${x.ad}</td>
+            <td style="padding:5px 4px;text-align:right">${x.ham.toLocaleString("tr-TR",{maximumFractionDigits:2})}</td>
+            <td style="padding:5px 4px;text-align:right;font-weight:600">${x.fireli.toLocaleString("tr-TR",{maximumFractionDigits:2})}</td>
+          </tr>`).join("")}
+          <tr>
+            <td style="padding:6px 4px;font-weight:700">TOPLAM</td>
+            <td style="padding:6px 4px;text-align:right;font-weight:700">${toplamGenelHam.toLocaleString("tr-TR",{maximumFractionDigits:2})} m²</td>
+            <td style="padding:6px 4px;text-align:right;font-weight:700;color:var(--blue)">${toplamGenelFireli.toLocaleString("tr-TR",{maximumFractionDigits:2})} m²</td>
+          </tr>
+          </tbody>
+        </table>`}
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-hd" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+        <span>🧱 Malzeme Listesi ${sk.musteri?("— "+sk.musteri):""} <span style="font-weight:400;color:var(--text3);font-size:11px">(Tutar hariç tüm sayılar elle değiştirilebilir)</span></span>
+        <button class="mbtn" onclick="hesapSeramikFiyatToggle()" style="font-size:11px;padding:4px 10px">${fiyatGizli?"👁️ Fiyatları Göster":"🙈 Fiyatları Gizle"}</button>
+      </div>
+      <div class="step-bd">
+        ${urunSatirlari.length===0 ? `<div style="color:var(--text3);font-size:12px;margin-bottom:8px">Mekanlara ürün seçilince kutu hesabı burada görünecek.</div>` : `
+        <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
+          <thead><tr style="text-align:left;color:var(--text3);border-bottom:1px solid var(--border)">
+            <th style="padding:6px 4px">Ürün</th><th style="padding:6px 4px;text-align:right">Seramik m²</th>
+            <th style="padding:6px 4px;text-align:right">Kutu m²</th><th style="padding:6px 4px;text-align:right">Kaç Kutu</th>
+            ${fiyatGizli ? "" : `<th style="padding:6px 4px;text-align:right">Birim Fiyat ₺/m²</th><th style="padding:6px 4px;text-align:right">Tutar</th>`}</tr></thead>
+          <tbody>
+          ${urunSatirlari.map(r=>`<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 4px">${r.adGosterim}</td>
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="0.01" value="${r.m2}" onchange="hesapUrunAyarSet('${r.kod}','m2',this.value)"
+                style="width:64px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right">
+            </td>
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="0.01" value="${r.kutuM2!=null?r.kutuM2:''}" placeholder="—" onchange="hesapUrunAyarSet('${r.kod}','kutuM2',this.value)"
+                style="width:56px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right">
+            </td>
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" value="${r.kutuSayi!=null?r.kutuSayi:''}" placeholder="—" onchange="hesapUrunAyarSet('${r.kod}','kutuSayi',this.value)"
+                style="width:56px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right;font-weight:600">
+            </td>
+            ${fiyatGizli ? "" : `
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="0.01" value="${r.fiyat!=null?r.fiyat:''}" placeholder="—" onchange="hesapUrunAyarSet('${r.kod}','fiyat',this.value)"
+                style="width:64px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right">
+            </td>
+            <td style="padding:6px 4px;text-align:right;font-weight:600">${r.tutar!=null?r.tutar.toLocaleString("tr-TR",{style:"currency",currency:"TRY"}):"—"}</td>`}
+          </tr>`).join("")}
+          </tbody>
+        </table>`}
+        ${yanSatirlari.length>0 ? `
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="text-align:left;color:var(--text3);border-bottom:1px solid var(--border)">
+            <th style="padding:6px 4px">Yan Malzeme</th><th style="padding:6px 4px;text-align:right">Gerekli Miktar</th>
+            <th style="padding:6px 4px;text-align:right">Paket Adedi</th>
+            ${fiyatGizli ? "" : `<th style="padding:6px 4px;text-align:right">Birim Fiyat ₺</th><th style="padding:6px 4px;text-align:right">Tutar</th>`}</tr></thead>
+          <tbody>
+          ${yanSatirlari.map(y=>`<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 4px">${y.adGosterim}${y.tip==="adet"?` <span style="color:var(--text3);font-size:10px">(adet bazlı)</span>`:hesapYanKapasiteEtiket(y)}</td>
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="0.01" value="${y.miktar}" onchange="hesapYanAyarSet('${y.id}','miktar',this.value)"
+                style="width:64px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right"> ${y.tip==="m2"?y.birim:""}
+            </td>
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" value="${y.paketSayi!=null?y.paketSayi:''}" placeholder="—" onchange="hesapYanAyarSet('${y.id}','paketSayi',this.value)"
+                style="width:56px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right;font-weight:600">
+            </td>
+            ${fiyatGizli ? "" : `
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="0.01" value="${y.fiyat}" onchange="hesapYanGuncelle('${y.id}','fiyat',this.value)"
+                style="width:64px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right">
+            </td>
+            <td style="padding:6px 4px;text-align:right">${y.tutar!=null?y.tutar.toLocaleString("tr-TR",{style:"currency",currency:"TRY"}):"—"}</td>`}
+          </tr>`).join("")}
+          </tbody>
+        </table>` : ""}
+        ${(!fiyatGizli && toplamTutar>0) ? `<div style="margin-top:10px;text-align:right;font-size:14px;font-weight:700">Tahmini Toplam Tutar (Maliyet): ${toplamTutar.toLocaleString("tr-TR",{style:"currency",currency:"TRY"})}</div>` : ""}
+      </div>
+    </div>
+
+    ${fiyatGizli ? "" : (HZ_S._hsKarCache = {toplamTutar, toplamM2: toplamGenelHam}) && hesapKarlilikHTML("hzs", sk.karlilik, toplamTutar, toplamGenelHam)}`;
+}
+
+// Kâr tutarını seçilen moda göre hesaplar: yüzde (maliyetin %'si), m² başına sabit tutar,
+// veya doğrudan girilen toplam kâr tutarı.
+function hesapKarHesapla(toplamTutar, toplamM2, kar){
+  const deger = parseFloat(kar.deger)||0;
+  let karTutari = 0;
+  if(kar.mod==="yuzde") karTutari = toplamTutar * (deger/100);
+  else if(kar.mod==="m2") karTutari = deger * toplamM2;
+  else if(kar.mod==="toplam") karTutari = deger;
+  return { karTutari, yeniToplam: toplamTutar + karTutari };
+}
+
+// Kârlılık paneli — hem Seramik hem Parke için ortak render fonksiyonu.
+// prefix: "hzs" (seramik) veya "hzp" (parke) — id çakışmasın diye.
+// Kârlılık panelinin tüm türetilmiş değerlerini (mod'a göre kâr tutarı VE varsa "Anlaşılan Tutar"
+// ile ezilmiş satış toplamı/kâr) tek yerden hesaplar. "Anlaşılan Tutar" girildiyse Satış Toplamı
+// bu tutar olur, Kâr da buna göre yeniden türetilir (Maliyet + Kâr = Satış Toplamı eşitliği korunur).
+function hesapKarEfektifHesapla(toplamTutar, toplamM2, kar){
+  const { karTutari, yeniToplam } = hesapKarHesapla(toplamTutar, toplamM2, kar);
+  const anlasilan = (kar.anlasilanTutar!=null && kar.anlasilanTutar>0) ? kar.anlasilanTutar : null;
+  const efektifSatis = anlasilan!=null ? anlasilan : yeniToplam;
+  const efektifKarTutari = efektifSatis - toplamTutar;
+  const efektifKarYuzde = toplamTutar>0 ? (efektifKarTutari/toplamTutar*100) : 0;
+  return { karTutari, yeniToplam, anlasilan, efektifSatis, efektifKarTutari, efektifKarYuzde };
+}
+function hesapKarlilikHTML(prefix, kar, toplamTutar, toplamM2){
+  const { efektifSatis, efektifKarTutari, efektifKarYuzde } = hesapKarEfektifHesapla(toplamTutar, toplamM2, kar);
+  const modFn = prefix==="hzs" ? "hesapSeramikKarModSet" : "hesapParkeKarModSet";
+  const degerFn = prefix==="hzs" ? "hesapSeramikKarDegerSet" : "hesapParkeKarDegerSet";
+  const anlasilanFn = prefix==="hzs" ? "hesapSeramikAnlasilanSet" : "hesapParkeAnlasilanSet";
+  return `
+    <div class="step" style="margin-top:12px">
+      <div class="step-hd">💰 Kârlılık</div>
+      <div class="step-bd">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <button class="mbtn ${kar.mod==="yuzde"?"pri":""}" onclick="${modFn}('yuzde')" style="font-size:11px;padding:5px 10px">%</button>
+          <button class="mbtn ${kar.mod==="m2"?"pri":""}" onclick="${modFn}('m2')" style="font-size:11px;padding:5px 10px">M² Başına Kâr ₺</button>
+          <button class="mbtn ${kar.mod==="toplam"?"pri":""}" onclick="${modFn}('toplam')" style="font-size:11px;padding:5px 10px">Toplam Kâr ₺</button>
+          <input type="number" step="0.01" value="${kar.deger||0}" oninput="${degerFn}(this.value)"
+            style="width:110px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px">
+        </div>
+        ${toplamTutar>0 ? `
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center">
+          <div style="background:var(--bg3);padding:8px;border-radius:6px"><div style="font-size:10px;color:var(--text3)">Maliyet</div><div id="${prefix}-kar-maliyet" style="font-weight:700">${toplamTutar.toLocaleString("tr-TR",{style:"currency",currency:"TRY"})}</div></div>
+          <div style="background:var(--bg3);padding:8px;border-radius:6px"><div style="font-size:10px;color:var(--text3)">Kâr</div><div id="${prefix}-kar-tutar" style="font-weight:700;color:var(--blue)">${efektifKarTutari.toLocaleString("tr-TR",{style:"currency",currency:"TRY"})}</div></div>
+          <div style="background:var(--bg3);padding:8px;border-radius:6px"><div style="font-size:10px;color:var(--text3)">Satış Toplamı</div><div id="${prefix}-kar-yenitoplam" style="font-weight:700;color:#059669">${efektifSatis.toLocaleString("tr-TR",{style:"currency",currency:"TRY"})}</div></div>
+          <div></div>
+          <div style="background:var(--bg3);padding:8px;border-radius:6px"><div style="font-size:10px;color:var(--text3)">Kâr %</div><div id="${prefix}-kar-yuzde" style="font-weight:700;color:var(--blue)">${efektifKarYuzde.toLocaleString("tr-TR",{maximumFractionDigits:1})}%</div></div>
+          <div style="background:var(--bg3);padding:8px;border-radius:6px">
+            <div style="font-size:10px;color:var(--text3)">Anlaşılan Tutar</div>
+            <input id="${prefix}-kar-anlasilan" type="number" step="0.01" placeholder="—" value="${kar.anlasilanTutar!=null?kar.anlasilanTutar:''}" oninput="${anlasilanFn}(this.value)"
+              style="width:100%;margin-top:2px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:center;font-weight:700;box-sizing:border-box">
+          </div>
+        </div>` : `<div style="color:var(--text3);font-size:12px">Maliyet hesaplanınca kâr da burada görünecek.</div>`}
+      </div>
+    </div>`;
+}
+// Kâr "değer" veya "Anlaşılan Tutar" kutusuna yazarken (oninput) tüm sonuç panelini yeniden
+// çizmek yerine SADECE ilgili sonuç hücrelerini günceller — böylece input odağı/sayfa kaydırma
+// konumu kaybolmaz (tam innerHTML değişimi, o an focus'ta olan inputu yok edip sayfayı yukarı kaydırıyordu).
+function hesapKarCanliGuncelle(prefix){
+  const cache = prefix==="hzs" ? HZ_S._hsKarCache : HZ_S._hpKarCache;
+  if(!cache) return;
+  const kar = prefix==="hzs" ? HZ_S.hesap.seramik.karlilik : HZ_S.hesap.parke.karlilik;
+  const { efektifSatis, efektifKarTutari, efektifKarYuzde } = hesapKarEfektifHesapla(cache.toplamTutar, cache.toplamM2, kar);
+  const elKar = document.getElementById(prefix+"-kar-tutar");
+  const elToplam = document.getElementById(prefix+"-kar-yenitoplam");
+  const elYuzde = document.getElementById(prefix+"-kar-yuzde");
+  if(elKar) elKar.textContent = efektifKarTutari.toLocaleString("tr-TR",{style:"currency",currency:"TRY"});
+  if(elToplam) elToplam.textContent = efektifSatis.toLocaleString("tr-TR",{style:"currency",currency:"TRY"});
+  if(elYuzde) elYuzde.textContent = efektifKarYuzde.toLocaleString("tr-TR",{maximumFractionDigits:1})+"%";
+}
+function hesapSeramikKarModSet(mod){ HZ_S.hesap.seramik.karlilik.mod=mod; hesapSave(); hesapSonuclarRender(); }
+function hesapSeramikKarDegerSet(val){ HZ_S.hesap.seramik.karlilik.deger=parseFloat(val)||0; hesapSave(); hesapKarCanliGuncelle("hzs"); }
+function hesapSeramikAnlasilanSet(val){ HZ_S.hesap.seramik.karlilik.anlasilanTutar=val===""?null:(parseFloat(val)||0); hesapSave(); hesapKarCanliGuncelle("hzs"); }
+function hesapParkeKarModSet(mod){ HZ_S.hesap.parke.karlilik.mod=mod; hesapSave(); hesapParkeSonuclarRender(); }
+function hesapParkeKarDegerSet(val){ HZ_S.hesap.parke.karlilik.deger=parseFloat(val)||0; hesapSave(); hesapKarCanliGuncelle("hzp"); }
+function hesapParkeAnlasilanSet(val){ HZ_S.hesap.parke.karlilik.anlasilanTutar=val===""?null:(parseFloat(val)||0); hesapSave(); hesapKarCanliGuncelle("hzp"); }
+
+// ── PARKE FİYAT KATALOĞU (AGT / Çamsan ZEN — 26.06.2026 fiyat listesi) ──
+// Sabit bir referans katalog: stok/envanter listesinden değil, buradaki fiyat listesinden seçilir.
+// Fiyatlar TL ve M² BAŞINADIR (kutu/paket başına değil). Varsayılan fiyat: Kredi Kartı Taksitli Çekim.
+const PARKE_KATALOG_VARSAYILAN = [
+  {grup:"AGT Serisi", model:"AGT Bella", kalinlik:"8 mm - 31. Sınıf", paketM2:2.292, fiyatlar:{nakit:296, tek:303, taksitli:328, cek90:337}},
+  {grup:"AGT Serisi", model:"AGT Natura Select", kalinlik:"8 mm - 32. Sınıf", paketM2:1.8336, fiyatlar:{nakit:312, tek:323, taksitli:347, cek90:358}},
+  {grup:"AGT Serisi", model:"AGT Natura Line", kalinlik:"8 mm - 32. Sınıf", paketM2:1.8336, fiyatlar:{nakit:335, tek:347, taksitli:371, cek90:382}},
+  {grup:"AGT Serisi", model:"AGT Effect", kalinlik:"8 mm - 32. Sınıf", paketM2:1.8336, fiyatlar:{nakit:371, tek:385, taksitli:413, cek90:426}},
+  {grup:"AGT Serisi", model:"AGT Armonia Large", kalinlik:"8 mm - 32. Sınıf", paketM2:2.3763, fiyatlar:{nakit:371, tek:385, taksitli:413, cek90:426}},
+  {grup:"AGT Serisi", model:"AGT Armonia Slim", kalinlik:"8 mm - 32. Sınıf", paketM2:2.1942, fiyatlar:{nakit:407, tek:422, taksitli:453, cek90:467}},
+  {grup:"AGT Serisi", model:"AGT Pruva XL Yeni", kalinlik:"8 mm - 32. Sınıf", paketM2:2.354, fiyatlar:{nakit:399, tek:409, taksitli:439, cek90:454}},
+  {grup:"AGT Serisi", model:"AGT Marco Polo", kalinlik:"8 mm - 32. Sınıf", paketM2:1.8336, fiyatlar:{nakit:371, tek:385, taksitli:413, cek90:426}},
+  {grup:"AGT Serisi", model:"AGT Yoga", kalinlik:"8 mm - 32. Sınıf", paketM2:1.8336, fiyatlar:{nakit:371, tek:385, taksitli:413, cek90:426}},
+  {grup:"AGT Serisi", model:"AGT Foresta XL Yeni", kalinlik:"8 mm - 32. Sınıf", paketM2:2.354, fiyatlar:{nakit:407, tek:422, taksitli:453, cek90:467}},
+  {grup:"AGT Serisi", model:"AGT Concept Neo", kalinlik:"10 mm - 32. Sınıf", paketM2:1.477, fiyatlar:{nakit:429, tek:443, taksitli:475, cek90:491}},
+  {grup:"AGT Serisi", model:"AGT Pera", kalinlik:"10 mm - 32. Sınıf", paketM2:1.5923, fiyatlar:{nakit:460, tek:475, taksitli:512, cek90:526}},
+  {grup:"AGT Serisi", model:"AGT Mood", kalinlik:"10 mm - 32. Sınıf", paketM2:1.9418, fiyatlar:{nakit:600, tek:620, taksitli:668, cek90:687}},
+  {grup:"AGT Serisi", model:"AGT Effect Premium", kalinlik:"12 mm - 33. Sınıf", paketM2:1.3551, fiyatlar:{nakit:507, tek:522, taksitli:563, cek90:580}},
+  {grup:"Çamsan ZEN Serisi", model:"Çamsan ZEN Serisi", kalinlik:"8 mm - 32. Sınıf", paketM2:1.8528, fiyatlar:{nakit:371, tek:385, taksitli:413, cek90:426}},
+];
+
+// Yardımcı malzemeler — tek fiyatlı (ödeme şekline göre değişmez)
+const PARKE_YARDIMCI_KATALOG_VARSAYILAN = [
+  {ad:"AkSüper Süpürgelik 4cm", fiyat:25, grup:"Süpürgelik"},
+  {ad:"AkSüper Süpürgelik 6cm", fiyat:28, grup:"Süpürgelik"},
+  {ad:"AkSüper Süpürgelik 8cm", fiyat:40, grup:"Süpürgelik"},
+  {ad:"AGT Süpürgelik 6cm", fiyat:29, grup:"Süpürgelik"},
+  {ad:"AGT Süpürgelik 8cm", fiyat:50, grup:"Süpürgelik"},
+  {ad:"Şilte 2mm", fiyat:6, grup:"Alt Döşeme"},
+  {ad:"Kapron 5mm", fiyat:25, grup:"Alt Döşeme"},
+  {ad:"Delikli Şilte 1,5mm", fiyat:10, grup:"Alt Döşeme"},
+  {ad:"Delikli Şilte 2mm", fiyat:18, grup:"Alt Döşeme"},
+  {ad:"Delikli Şilte 3mm", fiyat:23, grup:"Alt Döşeme"},
+  {ad:"Delikli Karton 3mm", fiyat:30, grup:"Alt Döşeme"},
+  {ad:"Folyolu Şilte 3mm", fiyat:27, grup:"Alt Döşeme"},
+  {ad:"Folyolu Şilte 5mm", fiyat:35, grup:"Alt Döşeme"},
+  {ad:"Delikli Folyolu Şilte 3mm", fiyat:31, grup:"Alt Döşeme"},
+  {ad:"Delikli Folyolu Şilte 5mm", fiyat:40, grup:"Alt Döşeme"},
+  {ad:"Kapron 3mm", fiyat:22, grup:"Alt Döşeme"},
+  {ad:"Kapron 1cm", fiyat:62, grup:"Alt Döşeme"},
+  {ad:"Mantar 2mm", fiyat:245, grup:"Alt Döşeme"},
+  {ad:"Düz Profil", fiyat:175, grup:"Profil"},
+  {ad:"Kot Farkı Profil", fiyat:200, grup:"Profil"},
+  {ad:"L Profil (2,5x2,5)", fiyat:200, grup:"Profil"},
+  {ad:"L Profil (3,5x3,5)", fiyat:250, grup:"Profil"},
+  {ad:"U Profil", fiyat:175, grup:"Profil"},
+  {ad:"Z Profil", fiyat:225, grup:"Profil"},
+  {ad:"Merdiven Profili", fiyat:275, grup:"Profil"},
+  {ad:"Silikon", fiyat:95, grup:"Silikon"},
+  {ad:"Mastik", fiyat:60, grup:"Silikon"},
+  {ad:"Parke İşçiliği 4-6 Cm Süpürgelik", fiyat:80, grup:"İşçilik"},
+  {ad:"Parke İşçiliği 8 Cm Süpürgelik", fiyat:90, grup:"İşçilik"},
+];
+
+// Parke fiyat listesi KALICI ve DÜZENLENEBİLİR: yukarıdaki *_VARSAYILAN dizileri sadece ilk kurulum
+// için şablon. Gerçek veriler HZ_S.parkeFiyatListesi içinde tutulur (kullanıcı "Parke Fiyat Listesi"
+// panelinden fiyat değiştirdikçe buraya yazılır ve localStorage'a kaydedilir).
+function parkeFiyatListesiHazirla(){
+  // HZ_S.hesap içinde saklanır ki localStorage'a (HESAP_LS_KEY) kaydedilsin/yüklensin.
+  if(!HZ_S.hesap) return { urunler: PARKE_KATALOG_VARSAYILAN, yardimcilar: PARKE_YARDIMCI_KATALOG_VARSAYILAN };
+  if(!HZ_S.hesap.parkeFiyatListesi){
+    HZ_S.hesap.parkeFiyatListesi = {
+      urunler: JSON.parse(JSON.stringify(PARKE_KATALOG_VARSAYILAN)),
+      yardimcilar: JSON.parse(JSON.stringify(PARKE_YARDIMCI_KATALOG_VARSAYILAN)),
+      tarih: new Date().toLocaleDateString("tr-TR"),
+    };
+  }
+  if(HZ_S.hesap.parkeFiyatListesi.tarih==null) HZ_S.hesap.parkeFiyatListesi.tarih = new Date().toLocaleDateString("tr-TR");
+  return HZ_S.hesap.parkeFiyatListesi;
+}
+function parkeUrunler(){ return parkeFiyatListesiHazirla().urunler; }
+function parkeYardimcilarKatalog(){ return parkeFiyatListesiHazirla().yardimcilar; }
+
+// ── PARKE FİYAT LİSTESİ paneli — katalogdaki tüm fiyatları kısım kısım (gruplara göre) gösterir
+// ve düzenlemeye izin verir. Buradan yapılan değişiklik, o an ekranda olan Malzeme Listesi
+// kalemlerini DEĞİL, bundan sonra "+ Ekle" ile eklenecek yeni kalemlerin başlangıç fiyatını etkiler.
+function hesapParkeFiyatUrunGuncelle(idx, alan, val){
+  const urunler = parkeUrunler();
+  const u = urunler[idx];
+  if(!u) return;
+  if(alan==="model" || alan==="kalinlik"){ u[alan] = val; }
+  else if(alan==="paketM2"){ u.paketM2 = parseFloat(val)||0; }
+  else { u.fiyatlar[alan] = val===""?null:(parseFloat(val)||0); }
+  hesapSave();
+  hesapParkeKatalogSelectDoldur();
+}
+function hesapParkeFiyatYardimciGuncelle(idx, val){
+  const y = parkeYardimcilarKatalog()[idx];
+  if(!y) return;
+  y.fiyat = val===""?null:(parseFloat(val)||0);
+  hesapSave();
+  hesapParkeKatalogSelectDoldur();
+}
+function hesapParkeFiyatListesiVarsayilanaSifirla(){
+  if(!confirm("Parke fiyat listesi, üründe/yardımcı malzemede yaptığınız TÜM değişikliklerle birlikte varsayılan (ilk kurulum) fiyatlarına sıfırlanacak. Emin misiniz?")) return;
+  HZ_S.hesap.parkeFiyatListesi = {
+    urunler: JSON.parse(JSON.stringify(PARKE_KATALOG_VARSAYILAN)),
+    yardimcilar: JSON.parse(JSON.stringify(PARKE_YARDIMCI_KATALOG_VARSAYILAN)),
+  };
+  hesapSave();
+  hesapParkeKatalogSelectDoldur();
+  hesapParkeFiyatListesiRender();
+}
+function hesapParkeFiyatListesiRender(){
+  const box = hzEl("hzp-fiyatlistesi");
+  if(!box) return;
+  hesapParkeFiyatTarihGosterGuncelle();
+  const urunler = parkeUrunler(), yardimcilarK = parkeYardimcilarKatalog();
+
+  const urunGruplari = {};
+  urunler.forEach((u,i)=>{ (urunGruplari[u.grup]=urunGruplari[u.grup]||[]).push(i); });
+  const yardimciGruplari = {};
+  yardimcilarK.forEach((y,i)=>{ (yardimciGruplari[y.grup]=yardimciGruplari[y.grup]||[]).push(i); });
+
+  const urunTablolari = Object.entries(urunGruplari).map(([grup,idxs])=>`
+    <div class="step" style="margin-bottom:12px">
+      <div class="step-hd">🪵 ${grup}</div>
+      <div class="step-bd" style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap">
+          <thead><tr style="text-align:left;color:var(--text3);border-bottom:1px solid var(--border)">
+            <th style="padding:6px 4px">Model</th><th style="padding:6px 4px">Kalınlık/Sınıf</th>
+            <th style="padding:6px 4px;text-align:right">Paket m²</th>
+            <th style="padding:6px 4px;text-align:right">Nakit ₺</th><th style="padding:6px 4px;text-align:right">Tek Çekim ₺</th>
+            <th style="padding:6px 4px;text-align:right">Taksitli ₺</th><th style="padding:6px 4px;text-align:right">Çek(90 gün) ₺</th>
+          </tr></thead>
+          <tbody>
+          ${idxs.map(i=>{ const u=urunler[i]; return `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 4px">
+              <input value="${(u.model||"").replace(/"/g,"&quot;")}" onchange="hesapParkeFiyatUrunGuncelle(${i},'model',this.value)"
+                style="width:100%;min-width:160px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px">
+            </td>
+            <td style="padding:6px 4px">
+              <input value="${(u.kalinlik||"").replace(/"/g,"&quot;")}" onchange="hesapParkeFiyatUrunGuncelle(${i},'kalinlik',this.value)"
+                style="width:100%;min-width:130px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px">
+            </td>
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="0.0001" value="${u.paketM2}" onchange="hesapParkeFiyatUrunGuncelle(${i},'paketM2',this.value)"
+                style="width:70px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right">
+            </td>
+            ${["nakit","tek","taksitli","cek90"].map(alan=>`
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="0.01" value="${u.fiyatlar[alan]!=null?u.fiyatlar[alan]:''}" onchange="hesapParkeFiyatUrunGuncelle(${i},'${alan}',this.value)"
+                style="width:76px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right">
+            </td>`).join("")}
+          </tr>`; }).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>`).join("");
+
+  const yardimciTablolari = Object.entries(yardimciGruplari).map(([grup,idxs])=>`
+    <div class="step" style="margin-bottom:12px">
+      <div class="step-hd">🧴 ${grup}</div>
+      <div class="step-bd">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="text-align:left;color:var(--text3);border-bottom:1px solid var(--border)">
+            <th style="padding:6px 4px">Malzeme</th><th style="padding:6px 4px;text-align:right">Fiyat ₺</th>
+          </tr></thead>
+          <tbody>
+          ${idxs.map(i=>{ const y=yardimcilarK[i]; return `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 4px">${(y.ad||"").replace(/</g,"&lt;")}</td>
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="0.01" value="${y.fiyat!=null?y.fiyat:''}" onchange="hesapParkeFiyatYardimciGuncelle(${i},this.value)"
+                style="width:90px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right">
+            </td>
+          </tr>`; }).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>`).join("");
+
+  box.innerHTML = `
+    ${urunTablolari}
+    ${yardimciTablolari}
+    <div style="text-align:right">
+      <button class="mbtn" onclick="hesapParkeFiyatListesiVarsayilanaSifirla()" style="color:var(--red,#dc2626);border-color:var(--red,#dc2626)">🗑️ Varsayılan Fiyatlara Sıfırla</button>
+    </div>`;
+}
+
+// ── PARKE HESAPLAMA ──
+function hesapParkeMod(mod){
+  HZ_S.hesap.parke.mod = mod;
+  hesapSave();
+  hzEl("hzp-mod-oda").classList.toggle("pri", mod==="oda");
+  hzEl("hzp-mod-toplu").classList.toggle("pri", mod==="toplu");
+  hzEl("hzp-oda-body").style.display = mod==="oda" ? "block" : "none";
+  hzEl("hzp-toplu-body").style.display = mod==="toplu" ? "block" : "none";
+  hesapParkeSonuclarRender();
+}
+
+function hesapOdaEkle(){
+  hesapSave();
+  HZ_S.hesap.parke.odalar.push({ id:"o"+Date.now()+Math.floor(Math.random()*1000), ad:"Oda "+(HZ_S.hesap.parke.odalar.length+1), en:"", boy:"" });
+  hesapSave(); hesapOdaRenderAll(); hesapParkeSonuclarRender();
+}
+function hesapOdaSil(id){
+  HZ_S.hesap.parke.odalar = HZ_S.hesap.parke.odalar.filter(o=>o.id!==id);
+  hesapParkeOlcuDegistiTemizle();
+  hesapSave(); hesapOdaRenderAll(); hesapParkeSonuclarRender();
+}
+// Bir oda ölçüsü veya toplu m² değiştiğinde, parke ürünlerinin "Kaç Kutu"su ve süpürgelik
+// "Adet"i elle girilmişse bile bu bağlantıyı canlı tutmak için sıfırlanır (otomatik yeniden hesaplanır).
+function hesapParkeOlcuDegistiTemizle(){
+  (HZ_S.hesap.parke.kalemler||[]).forEach(k=>{ k.kutuSayi = null; });
+  (HZ_S.hesap.parke.yardimcilar||[]).forEach(y=>{
+    if(y.grup==="Süpürgelik") y.metreOverride = null;
+    if(y.grup==="Süpürgelik" || y.grup==="Alt Döşeme") y.adet = null;
+  });
+}
+// Oda en/boy yazarken (oninput) anında toplam m²'yi ve alt sonuç panelini günceller —
+// tüm oda listesini yeniden çizmediği için input odağı kaybolmaz.
+function hesapOdaCanli(id, alan, val){
+  const o = HZ_S.hesap.parke.odalar.find(x=>x.id===id);
+  if(!o) return;
+  o[alan]=val;
+  hesapParkeOlcuDegistiTemizle();
+  const etiket = document.getElementById("hzp-oda-m2-"+id);
+  if(etiket) etiket.textContent = "= " + ((parseFloat(o.en)||0)*(parseFloat(o.boy)||0)).toLocaleString("tr-TR",{maximumFractionDigits:2}) + " m²";
+  hesapSave();
+  hesapParkeSonuclarRender();
+}
+// Toplu m² kutusuna yazarken de aynı şekilde anlık günceller.
+function hesapParkeTopluM2Canli(val){
+  HZ_S.hesap.parke.topluM2 = val;
+  hesapParkeOlcuDegistiTemizle();
+  hesapSave();
+  hesapParkeSonuclarRender();
+}
+function hesapParkeFireCanli(val){
+  HZ_S.hesap.parke.fire = parseFloat(val)||0;
+  hesapParkeOlcuDegistiTemizle();
+  hesapSave();
+  hesapParkeSonuclarRender();
+}
+
+function hesapOdaRenderAll(){
+  const box = hzEl("hzp-odalar");
+  const odalar = HZ_S.hesap.parke.odalar;
+  if(odalar.length===0){
+    box.innerHTML = `<div style="text-align:center;color:var(--text3);font-size:12px;padding:16px;border:1px dashed var(--border);border-radius:var(--r);margin-bottom:10px">Henüz oda eklenmedi.</div>`;
+    return;
+  }
+  box.innerHTML = odalar.map(o=>`
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <input value="${(o.ad||"").replace(/"/g,"&quot;")}" onchange="hesapOdaGuncelle('${o.id}','ad',this.value)" style="width:140px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12px">
+      <input type="number" step="0.01" placeholder="En (m)" value="${o.en}" oninput="hesapOdaCanli('${o.id}','en',this.value)" style="width:90px;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)">
+      <span style="color:var(--text3)">×</span>
+      <input type="number" step="0.01" placeholder="Boy (m)" value="${o.boy}" oninput="hesapOdaCanli('${o.id}','boy',this.value)" style="width:90px;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text)">
+      <span id="hzp-oda-m2-${o.id}" style="font-size:12px;color:var(--text3)">= ${((parseFloat(o.en)||0)*(parseFloat(o.boy)||0)).toLocaleString("tr-TR",{maximumFractionDigits:2})} m²</span>
+      <button onclick="hesapOdaSil('${o.id}')" style="background:none;border:none;color:var(--red,#dc2626);cursor:pointer;margin-left:auto">✕</button>
+    </div>`).join("");
+}
+function hesapOdaGuncelle(id, alan, val){
+  const o = HZ_S.hesap.parke.odalar.find(x=>x.id===id);
+  if(!o) return;
+  o[alan]=val; hesapParkeOlcuDegistiTemizle(); hesapSave(); hesapParkeSonuclarRender();
+}
+
+function hesapParkeToplamM2(){
+  const pk = HZ_S.hesap.parke;
+  const fire = 1 + ((parseFloat(pk.fire)||0)/100);
+  const toplamM2 = pk.mod==="toplu"
+    ? (parseFloat(pk.topluM2)||0)
+    : pk.odalar.reduce((t,o)=>t+(parseFloat(o.en)||0)*(parseFloat(o.boy)||0), 0);
+  return { toplamM2, toplamM2Fire: toplamM2*fire };
+}
+
+// Süpürgelik hesabı için gereken metretülü belirler: oda oda girildiyse tüm odaların
+// çevresi (2×(en+boy)) toplanır; toplu m² girildiyse doğrudan o ölçü baz alınır.
+function hesapParkeSupurgelikMetretul(){
+  const pk = HZ_S.hesap.parke;
+  if(pk.mod==="toplu") return parseFloat(pk.topluM2)||0;
+  return (pk.odalar||[]).reduce((t,o)=> t + 2*((parseFloat(o.en)||0)+(parseFloat(o.boy)||0)), 0);
+}
+
+// Yardımcı malzeme adına bakarak hangi bölüme ait olduğunu belirler (isim yeniden düzenlense
+// bile çalışır) — eski kayıtlarda "grup" alanı yoksa bunun üzerinden tamamlanır.
+function hesapParkeYardimciGrup(ad){
+  const u = String(ad||"").toLocaleUpperCase("tr");
+  if(u.indexOf("İŞÇİLİK")>-1 || u.indexOf("ISCILIK")>-1) return "İşçilik";
+  if(u.indexOf("SÜPÜRGELİK")>-1 || u.indexOf("SUPURGELIK")>-1) return "Süpürgelik";
+  if(u.indexOf("ŞİLTE")>-1 || u.indexOf("SILTE")>-1 || u.indexOf("KAPRON")>-1 || u.indexOf("MANTAR")>-1 || u.indexOf("KARTON")>-1) return "Alt Döşeme";
+  if(u.indexOf("PROFİL")>-1 || u.indexOf("PROFIL")>-1) return "Profil";
+  if(u.indexOf("SİLİKON")>-1 || u.indexOf("SILIKON")>-1 || u.indexOf("MASTİK")>-1 || u.indexOf("MASTIK")>-1) return "Silikon";
+  return "Diğer";
+}
+
+// ── Katalogdan ürün / yardımcı malzeme seçici (native <select> — arama kutusu yerine,
+// kısa ve sabit bir liste olduğu için daha sağlam ve hızlı) ──
+function hesapParkeKatalogSelectDoldur(){
+  const urunler = parkeUrunler(), yardimcilarK = parkeYardimcilarKatalog();
+  const sel = hzEl("hzp-sel-parke");
+  if(sel){
+    const gruplar = {};
+    urunler.forEach((u,i)=>{ (gruplar[u.grup]=gruplar[u.grup]||[]).push(i); });
+    sel.innerHTML = Object.entries(gruplar).map(([grup,idxs])=>
+      `<optgroup label="${grup}">${idxs.map(i=>`<option value="${i}">${urunler[i].model} (${urunler[i].kalinlik}) — ${urunler[i].paketM2.toLocaleString("tr-TR")} m²/kutu</option>`).join("")}</optgroup>`
+    ).join("");
+  }
+  const kategoriSelectId = {"Süpürgelik":"hzp-sel-supurgelik","Alt Döşeme":"hzp-sel-altdoseme","Profil":"hzp-sel-profil","Silikon":"hzp-sel-silikon","İşçilik":"hzp-sel-iscilik"};
+  Object.entries(kategoriSelectId).forEach(([grupAdi, selId])=>{
+    const s = hzEl(selId);
+    if(!s) return;
+    s.innerHTML = yardimcilarK
+      .map((y,i)=>({...y,i}))
+      .filter(y=>y.grup===grupAdi)
+      .map(y=>`<option value="${y.i}">${y.ad} — ${y.fiyat.toLocaleString("tr-TR")} ₺</option>`).join("");
+  });
+}
+
+function hesapParkeUrunEkle(btn){
+  const idx = parseInt(hzEl("hzp-sel-parke").value);
+  const katalog = parkeUrunler()[idx];
+  if(!katalog) return;
+  HZ_S.hesap.parke.kalemler.push({
+    id:"pk"+Date.now()+Math.floor(Math.random()*1000),
+    model: katalog.model,
+    paketM2: katalog.paketM2,
+    kutuSayi: null, // null = ölçüye göre otomatik hesapla (canlı); elle girilirse sabitlenir
+    fiyat: katalog.fiyatlar.taksitli,
+  });
+  hesapSave(); hesapParkeSonuclarRender();
+  hesapEkleBasariGoster(btn);
+}
+// selId: hangi kategori select'inden ekleneceği (hzp-sel-supurgelik, hzp-sel-altdoseme, hzp-sel-profil, hzp-sel-silikon, hzp-sel-iscilik)
+function hesapParkeYardimciEkleGrup(selId, btn){
+  const sel = hzEl(selId);
+  if(!sel || sel.value==="") { alert("Lütfen önce bir malzeme seçin."); return; }
+  const idx = parseInt(sel.value);
+  const katalog = parkeYardimcilarKatalog()[idx];
+  if(!katalog) return;
+  HZ_S.hesap.parke.yardimcilar.push({
+    id:"py"+Date.now()+Math.floor(Math.random()*1000),
+    ad: katalog.ad,
+    // Süpürgelik/Alt Döşeme/İşçilik: miktar otomatik hesaplanır (null), diğerlerinde varsayılan 1 adet elle girilir.
+    adet: (katalog.grup==="Süpürgelik" || katalog.grup==="Alt Döşeme" || katalog.grup==="İşçilik") ? null : 1,
+    metreOverride: null, // sadece Süpürgelik için kullanılır (elle girilen metretül)
+    fiyat: katalog.fiyat,
+    grup: katalog.grup,
+  });
+  hesapSave(); hesapParkeSonuclarRender();
+  hesapEkleBasariGoster(btn);
+}
+// Özel (kataloğa kayıtlı olmayan) işçilik kalemleri serbest metin + fiyat girilerek eklenir.
+function hesapParkeIscilikEkle(btn){
+  const ad = (hzEl("hzp-iscilik-ad").value||"").trim();
+  const fiyat = parseFloat(hzEl("hzp-iscilik-fiyat").value)||0;
+  if(!ad){ alert("İşçilik adı girin."); return; }
+  HZ_S.hesap.parke.yardimcilar.push({
+    id:"pi"+Date.now()+Math.floor(Math.random()*1000),
+    ad, adet:null, fiyat, grup:"İşçilik", // adet:null = toplam giden parke m² otomatik kullanılır
+  });
+  hzEl("hzp-iscilik-ad").value=""; hzEl("hzp-iscilik-fiyat").value="";
+  hesapSave(); hesapParkeSonuclarRender();
+  hesapEkleBasariGoster(btn);
+}
+// "+ Ekle" butonuna tıklanınca kısa süreliğine yeşile döner (başarılı ekleme geri bildirimi).
+function hesapParkeFiyatTarihSet(val){
+  parkeFiyatListesiHazirla().tarih = val;
+  hesapSave();
+  hesapParkeFiyatTarihGosterGuncelle();
+}
+// "Liste Tarihi" hem Parke Fiyat Listesi panelinde hem Malzeme Ekle başlığında (farklı renkle) gösterilir.
+function hesapParkeFiyatTarihGosterGuncelle(){
+  const tarih = parkeFiyatListesiHazirla().tarih || "";
+  const girisEl = hzEl("hzp-fiyat-tarih");
+  if(girisEl && document.activeElement!==girisEl) girisEl.value = tarih;
+  const gostergeEl = hzEl("hzp-fiyat-tarih-gosterge");
+  if(gostergeEl) gostergeEl.textContent = tarih ? ("📅 Fiyat Listesi: "+tarih) : "";
+}
+function hesapEkleBasariGoster(btn){
+  if(!btn) return;
+  btn.classList.add("ekle-basarili");
+  setTimeout(()=>btn.classList.remove("ekle-basarili"), 900);
+}
+function hesapParkeKalemSil(id){
+  HZ_S.hesap.parke.kalemler = HZ_S.hesap.parke.kalemler.filter(k=>k.id!==id);
+  hesapSave(); hesapParkeSonuclarRender();
+}
+function hesapParkeYardimciSil(id){
+  HZ_S.hesap.parke.yardimcilar = HZ_S.hesap.parke.yardimcilar.filter(y=>y.id!==id);
+  hesapSave(); hesapParkeSonuclarRender();
+}
+function hesapParkeKalemGuncelle(id, alan, val){
+  const k = HZ_S.hesap.parke.kalemler.find(x=>x.id===id);
+  if(!k) return;
+  k[alan] = (alan==="model") ? val : (val===""?null:(parseFloat(val)||0));
+  hesapSave(); hesapParkeSonuclarRender();
+}
+function hesapParkeYardimciGuncelle(id, alan, val){
+  const y = HZ_S.hesap.parke.yardimcilar.find(x=>x.id===id);
+  if(!y) return;
+  y[alan] = (alan==="ad") ? val : (val===""?null:(parseFloat(val)||0));
+  hesapSave(); hesapParkeSonuclarRender();
+}
+// Malzeme Listesi'ndeki "Miktar" hücresi: Süpürgelik için METRE (metreOverride), diğerleri için ADET olarak yorumlanır.
+// Süpürgelik metre fiyatıyla satıldığı için tutar = metre × fiyat olması gerekiyor; adet × fiyat DEĞİL.
+function hesapParkeYardimciMiktarGuncelle(id, val){
+  const y = HZ_S.hesap.parke.yardimcilar.find(x=>x.id===id);
+  if(!y) return;
+  const num = val===""?null:(parseFloat(val)||0);
+  if(y.grup==="Süpürgelik") y.metreOverride = num;
+  else y.adet = num;
+  hesapSave(); hesapParkeSonuclarRender();
+}
+
+function hesapParkeSonuclarRender(){
+  const box = hzEl("hzp-sonuc");
+  if(!box) return;
+  hesapParkeFiyatTarihGosterGuncelle();
+  const pk = HZ_S.hesap.parke;
+  const { toplamM2, toplamM2Fire } = hesapParkeToplamM2();
+  const fiyatGizli = !!HZ_S._parkeFiyatGizli;
+
+  const badge = hzEl("hzp-toplam-badge");
+  if(badge){
+    badge.innerHTML = `Toplam <strong>${toplamM2.toLocaleString("tr-TR",{maximumFractionDigits:2})} m²</strong> · Fire ile <strong style="color:var(--blue)">${toplamM2Fire.toLocaleString("tr-TR",{maximumFractionDigits:2})} m²</strong>`;
+  }
+
+  // Parke ürünleri: Kaç Kutu elle girilmediyse (null) güncel m²'ye göre CANLI hesaplanır —
+  // ölçüyü her değiştirdiğinizde otomatik güncellenir. Parke m² = Kaç Kutu × Paket m² (seramikteki
+  // "Seramik m²" ile aynı mantık).
+  // Model isminin yanına "(N kutu)" bilgisi eklenir — hem burada (bilgiNotu) hem Teklife
+  // Aktar'da ürün adının içinde görünür.
+  const kalemSatirlari = (pk.kalemler||[]).map(k=>{
+    const kutuSayi = (k.kutuSayi!=null) ? k.kutuSayi : (k.paketM2>0 ? Math.ceil(toplamM2Fire/k.paketM2) : 0);
+    const parkeM2 = (k.paketM2>0) ? Math.round(kutuSayi*k.paketM2*100)/100 : 0;
+    // Fiyat listesindeki fiyatlar m² fiyatıdır — tutar = parke m² × fiyat (kutu sayısı × fiyat DEĞİL).
+    const tutar = (parkeM2!=null && k.fiyat!=null) ? parkeM2*k.fiyat : null;
+    const bilgiNotu = `${parkeM2.toLocaleString("tr-TR",{maximumFractionDigits:2})} m² (${kutuSayi} kutu)`;
+    return { ...k, kutuSayiEfektif: kutuSayi, parkeM2, tutar, bilgiNotu };
+  });
+  const toplamParkeM2 = kalemSatirlari.reduce((t,k)=>t+(k.parkeM2||0),0);
+
+  // Süpürgelik: METRE fiyatıyla satılır — bu yüzden Malzeme Listesi'nde ADET değil, METRE olarak
+  // gösterilir ve tutar = metre × fiyat olarak hesaplanır. Elle girilmediyse (metreOverride==null)
+  // metretül/2,8 formülüyle kaç parça gerektiği bulunur ve o parça sayısının karşılığı metre canlı hesaplanır.
+  // Alt Döşeme: Adet elle girilmediyse (null) toplam m² (fire dahil) yukarı yuvarlanarak canlı hesaplanır.
+  // İşçilik: her zaman toplam giden parke m² kadar hesaplanır (fiyatlar m² başınadır).
+  const supurgelikBoy = 2.8;
+  const supurgelikMetretul = hesapParkeSupurgelikMetretul();
+  const yardimciSatirlari = (pk.yardimcilar||[]).map(y=>{
+    let miktarEfektif, kullanilacakMt = null, bilgiNotu = null, birimEtiket = "Adet";
+    if(y.grup==="Süpürgelik"){
+      birimEtiket = "Mt";
+      const parcaSayisi = supurgelikBoy>0 ? Math.ceil(supurgelikMetretul/supurgelikBoy) : 0;
+      const otoMetre = Math.round(parcaSayisi*supurgelikBoy*100)/100;
+      miktarEfektif = (y.metreOverride!=null) ? y.metreOverride : otoMetre;
+      kullanilacakMt = miktarEfektif;
+      const boySayisi = supurgelikBoy>0 ? Math.ceil(miktarEfektif/supurgelikBoy) : parcaSayisi;
+      bilgiNotu = `${supurgelikMetretul.toLocaleString("tr-TR",{maximumFractionDigits:2})} mt gerekli → ${miktarEfektif.toLocaleString("tr-TR",{maximumFractionDigits:2})} mt kullanılacak (${boySayisi} boy)`;
+    } else if(y.grup==="Alt Döşeme"){
+      miktarEfektif = (y.adet!=null) ? y.adet : Math.ceil(toplamM2Fire);
+      bilgiNotu = `${toplamM2Fire.toLocaleString("tr-TR",{maximumFractionDigits:2})} m² için`;
+    } else if(y.grup==="İşçilik"){
+      birimEtiket = "m²";
+      miktarEfektif = (y.adet!=null) ? y.adet : toplamParkeM2;
+      bilgiNotu = `Toplam giden parke: ${toplamParkeM2.toLocaleString("tr-TR",{maximumFractionDigits:2})} m²`;
+    } else {
+      miktarEfektif = (y.adet!=null) ? y.adet : 1;
+    }
+    const tutar = (miktarEfektif!=null && y.fiyat!=null) ? miktarEfektif*y.fiyat : null;
+    const stepMiktar = (y.grup==="Süpürgelik") ? supurgelikBoy : 1;
+    return { ...y, miktarEfektif, kullanilacakMt, bilgiNotu, tutar, birimEtiket, stepMiktar };
+  });
+
+  const toplamTutar = kalemSatirlari.reduce((t,r)=>t+(r.tutar||0),0) + yardimciSatirlari.reduce((t,r)=>t+(r.tutar||0),0);
+
+  const fiyatKolonlari = fiyatGizli ? "" : `
+            <th style="padding:6px 4px;text-align:right">Birim Fiyat ₺/m²</th>
+            <th style="padding:6px 4px;text-align:right">Tutar</th>`;
+
+  box.innerHTML = `
+    <div class="step">
+      <div class="step-hd" style="display:flex;align-items:center;gap:8px">
+        <span style="flex:1">📦 Parke Malzeme Listesi ${pk.musteri?("— "+pk.musteri):""} <span style="font-weight:400;color:var(--text3);font-size:11px">(Tutar hariç tüm sayılar elle değiştirilebilir)</span></span>
+        <button class="mbtn" onclick="hesapParkeFiyatToggle()" style="font-size:11px;padding:4px 10px">${fiyatGizli?"👁️ Fiyatları Göster":"🙈 Fiyatları Gizle"}</button>
+      </div>
+      <div class="step-bd">
+        ${kalemSatirlari.length===0 ? `<div style="color:var(--text3);font-size:12px;margin-bottom:8px">Yukarıdan bir parke ürünü ekleyin.</div>` : `
+        <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
+          <thead><tr style="text-align:left;color:var(--text3);border-bottom:1px solid var(--border)">
+            <th style="padding:6px 4px">Model</th><th style="padding:6px 4px;text-align:right">Parke m²</th>
+            <th style="padding:6px 4px;text-align:right">Paket m²</th><th style="padding:6px 4px;text-align:right">Kaç Kutu</th>
+            ${fiyatKolonlari}<th></th></tr></thead>
+          <tbody>
+          ${kalemSatirlari.map(k=>`<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 4px">
+              <input value="${(k.model||"").replace(/"/g,"&quot;")}" onchange="hesapParkeKalemGuncelle('${k.id}','model',this.value)"
+                style="width:100%;min-width:140px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px">
+              ${k.bilgiNotu ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">${k.bilgiNotu}</div>` : ""}
+            </td>
+            <td style="padding:6px 4px;text-align:right;font-weight:600">${k.parkeM2.toLocaleString("tr-TR",{maximumFractionDigits:2})}</td>
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="0.0001" value="${k.paketM2}" onchange="hesapParkeKalemGuncelle('${k.id}','paketM2',this.value)"
+                style="width:64px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right">
+            </td>
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="1" value="${k.kutuSayiEfektif}" onchange="hesapParkeKalemGuncelle('${k.id}','kutuSayi',this.value)"
+                style="width:56px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right;font-weight:600">
+            </td>
+            ${fiyatGizli ? "" : `
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="0.01" value="${k.fiyat}" onchange="hesapParkeKalemGuncelle('${k.id}','fiyat',this.value)"
+                style="width:70px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right">
+            </td>
+            <td style="padding:6px 4px;text-align:right;font-weight:600">${k.tutar!=null?k.tutar.toLocaleString("tr-TR",{style:"currency",currency:"TRY"}):"—"}</td>`}
+            <td style="padding:6px 4px"><button onclick="hesapParkeKalemSil('${k.id}')" style="background:none;border:none;color:var(--red,#dc2626);cursor:pointer">✕</button></td>
+          </tr>`).join("")}
+          </tbody>
+        </table>`}
+        ${yardimciSatirlari.length===0 ? "" : `
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="text-align:left;color:var(--text3);border-bottom:1px solid var(--border)">
+            <th style="padding:6px 4px">Malzeme</th><th style="padding:6px 4px;text-align:right">Miktar</th>
+            ${fiyatGizli ? "" : `<th style="padding:6px 4px;text-align:right">Birim Fiyat ₺</th><th style="padding:6px 4px;text-align:right">Tutar</th>`}<th></th></tr></thead>
+          <tbody>
+          ${yardimciSatirlari.map(y=>`<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 4px">
+              <input value="${(y.ad||"").replace(/"/g,"&quot;")}" onchange="hesapParkeYardimciGuncelle('${y.id}','ad',this.value)"
+                style="width:100%;min-width:140px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px">
+              ${y.bilgiNotu ? `<div style="font-size:9px;color:var(--text3);margin-top:2px">${y.bilgiNotu}</div>` : ""}
+            </td>
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="${y.stepMiktar}" value="${y.miktarEfektif}" onchange="hesapParkeYardimciMiktarGuncelle('${y.id}',this.value)"
+                style="width:56px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right;font-weight:600">
+              <span style="font-size:10px;color:var(--text3)">${y.birimEtiket}</span>
+            </td>
+            ${fiyatGizli ? "" : `
+            <td style="padding:6px 4px;text-align:right">
+              <input type="number" step="0.01" value="${y.fiyat}" onchange="hesapParkeYardimciGuncelle('${y.id}','fiyat',this.value)"
+                style="width:70px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg2);color:var(--text);font-size:12px;text-align:right">
+            </td>
+            <td style="padding:6px 4px;text-align:right">${y.tutar!=null?y.tutar.toLocaleString("tr-TR",{style:"currency",currency:"TRY"}):"—"}</td>`}
+            <td style="padding:6px 4px"><button onclick="hesapParkeYardimciSil('${y.id}')" style="background:none;border:none;color:var(--red,#dc2626);cursor:pointer">✕</button></td>
+          </tr>`).join("")}
+          </tbody>
+        </table>`}
+        ${(!fiyatGizli && toplamTutar>0) ? `<div style="margin-top:10px;text-align:right;font-size:14px;font-weight:700">Tahmini Toplam Tutar (Maliyet): ${toplamTutar.toLocaleString("tr-TR",{style:"currency",currency:"TRY"})}</div>` : ""}
+      </div>
+    </div>
+
+    ${fiyatGizli ? "" : (HZ_S._hpKarCache = {toplamTutar, toplamM2}) && hesapKarlilikHTML("hzp", pk.karlilik, toplamTutar, toplamM2)}`;
+}
+
+function hesapParkeFiyatToggle(){
+  HZ_S._parkeFiyatGizli = !HZ_S._parkeFiyatGizli;
+  try{ localStorage.setItem("fincanlar_erp_hz_parkeFiyatGizli", HZ_S._parkeFiyatGizli?"1":"0"); }catch(e){}
+  hesapParkeSonuclarRender();
+}
+
+
+// ── HESAPLAMA → TEKLİFE AKTAR ──
+
+
+// ── Seramik/Parke: ERP'ye uyarlama yamaları ──
+// Ürün arama: kelime sırasından bağımsız (ERP standardı) — "60x120 lola" yazınca "LOLA BEYAZ 60x120 …" da bulunur.
+function hesapUrunAra(instId){
+  const inp = document.getElementById(instId+"-inp");
+  const dd = document.getElementById(instId+"-hzdd");
+  if(!inp || !dd) return;
+  const q = (inp.value||"").trim().toLocaleUpperCase("tr");
+  if(!q){ dd.style.display="none"; dd.innerHTML=""; return; }
+  const kelimeler = q.split(/\s+/).filter(Boolean);
+  const list = (HZ_S.stoklar||[]).filter(s=>{
+    const bilgi = (String(s.STOK_ADI||"") + " " + String(s.STOK_KODU||"")).toLocaleUpperCase("tr");
+    return kelimeler.every(k=>bilgi.includes(k));
+  }).slice(0,10);
+  dd.innerHTML = list.length
+    ? list.map(s=>`<div onclick="hesapUrunSec('${instId}','${String(s.STOK_KODU).replace(/'/g,"\\'")}')"
+        style="padding:9px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border);white-space:normal"
+        onmouseover="this.style.background='#fff7c2'" onmouseout="this.style.background=''"><span style="color:var(--text3);font-size:10.5px">${htmlKacis(s.STOK_KODU)}</span><br>${htmlKacis(s.STOK_ADI)}</div>`).join("")
+    : `<div style="padding:10px;font-size:12px;color:var(--text3)">${(HZ_S.stoklar||[]).length ? "Sonuç yok" : "Stok listesi yükleniyor…"}</div>`;
+  const rect = inp.getBoundingClientRect();
+  const genislik = Math.max(rect.width, 340);
+  let left = rect.left;
+  if(left + genislik > window.innerWidth - 10) left = Math.max(10, window.innerWidth - genislik - 10);
+  dd.style.left = left + "px";
+  dd.style.top = (rect.bottom + 4) + "px";
+  dd.style.width = genislik + "px";
+  dd.style.display = "block";
+}
+
+// Yazdır: ekrandaki Seramik/Parke/Fiyat Listesi bölümünü (alan değerleriyle) ayrı pencerede yazdırır.
+function hzYazdir(){
+  const gizli = HZ_S._hesapSubTab;
+  const kokId = gizli === "parke" ? "hz-parke-body" : (gizli === "fiyat" ? "hz-fiyat-body" : "hz-seramik-body");
+  const kok = hzEl(kokId); if(!kok) return;
+  const k = kok.cloneNode(true);
+  const orj = kok.querySelectorAll("input,select,textarea"), kl = k.querySelectorAll("input,select,textarea");
+  kl.forEach((e,i)=>{
+    const o = orj[i]; if(!o) return;
+    if(e.type === "hidden"){ e.remove(); return; }
+    let t = "";
+    if(e.type === "checkbox" || e.type === "radio") t = o.checked ? "☑" : "☐";
+    else if(e.tagName === "SELECT") t = (o.options[o.selectedIndex] || {}).text || "";
+    else t = o.value;
+    const sp = document.createElement("span"); sp.textContent = t; sp.style.fontWeight = "600";
+    e.replaceWith(sp);
+  });
+  k.querySelectorAll("button,[id$='-hzdd']").forEach(e=>e.remove());
+  const baslik = gizli === "parke" ? "Parke Hesaplama" : (gizli === "fiyat" ? "Parke Fiyat Listesi" : "Seramik Hesaplama");
+  const sk = HZ_S.hesap && (gizli === "parke" ? HZ_S.hesap.parke : HZ_S.hesap.seramik);
+  const musteri = (sk && sk.musteri) ? " — " + htmlKacis(sk.musteri) : "";
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${baslik}</title><style>
+    :root{--bg:#fff;--bg2:#fff;--bg3:#f1f3f7;--border:#cfd4dd;--text:#161a22;--text2:#444c5a;--text3:#6b7482;--blue:#4338ca;--red:#dc2626;--r:6px}
+    body{font-family:Segoe UI,Arial,sans-serif;font-size:12px;color:#161a22;padding:12px}
+    h2{font-size:15px;margin:0 0 10px}
+    *{overflow:visible!important;max-height:none!important}
+    [style*="overflow-x"]{flex-wrap:wrap!important}
+    table{border-collapse:collapse} td,th{border-bottom:1px solid #e3e6ec}
+    @page{size:A4;margin:12mm}
+  </style></head><body><h2>${baslik}${musteri} <span style="font-weight:400;color:#6b7482;font-size:11px">· ${new Date().toLocaleDateString("tr-TR")}</span></h2>${k.innerHTML}</body></html>`;
+  const w = window.open("", "_blank");
+  if(!w){ alert("Yazdırma penceresi açılamadı; tarayıcının açılır pencere engelini kapatın."); return; }
+  w.document.write(html); w.document.close(); w.focus();
+  setTimeout(()=>{ try{ w.print(); }catch(_){} }, 350);
+}
+
+// ── Genel yardımcılar ──
+function hzSayi_(v){
+  let s = String(v == null ? "" : v).trim().replace(/\s+/g, "");
+  if(!s) return NaN;
+  const virgul = s.indexOf(","), nokta = s.indexOf(".");
+  if(virgul >= 0 && nokta >= 0) s = s.replace(/\./g, "").replace(",", ".");          // 1.234,56
+  else if(virgul >= 0) s = s.replace(",", ".");                                       // 12,5
+  else if((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, "");                // 1.234.567
+  const n = Number(s);
+  return isFinite(n) ? n : NaN;
+}
+function hzPara_(n, ondalik){ const o = ondalik == null ? 2 : ondalik; return isFinite(n) ? n.toLocaleString("tr-TR", {minimumFractionDigits:o, maximumFractionDigits:o}) : "—"; }
+function hzSayiMetin_(n){ return String(parseFloat(n.toFixed(8))).replace(".", ","); }
+function hzKopyala_(metin){
+  const bitti = ()=>{ try{ if(typeof toastGoster === "function") toastGoster("Kopyalandı: " + metin); }catch(_){} };
+  const yedek = ()=>{
+    try{
+      const t = document.createElement("textarea"); t.value = metin; t.style.cssText = "position:fixed;left:-999px;top:0";
+      document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); bitti();
+    }catch(_){}
+  };
+  try{
+    if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(metin).then(bitti, yedek);
+    else yedek();   // yerel sunucu http:// adresinde pano API'si kapalıdır
+  }catch(_){ yedek(); }
+}
+function hzKopyalaDeger_(id){ const e = hzEl(id); if(e && e.textContent && e.textContent !== "—") hzKopyala_(e.textContent.replace(/\s*gün$/, "")); }
+
+// ── 1) HESAP MAKİNESİ ──
+const HZ_MK_GECMIS_ANAHTAR = "fincanlar_hz_mk_gecmis";
+let _hzMk = {sonuclandi:false, son:null, gecmis:[]};
+function hzMkDegerlendir_(metin){
+  const src = String(metin).replace(/[×xX*]/g, "*").replace(/÷/g, "/").replace(/[−–]/g, "-").replace(/\s+/g, "");
+  const tok = []; const re = /(\d+(?:[.,]\d+)*|[.,]\d+)|([+\-*\/()%])/g; let m, son = 0;
+  while((m = re.exec(src))){
+    if(m.index !== son) throw new Error("Geçersiz karakter");
+    son = re.lastIndex;
+    tok.push(m[1] !== undefined ? {n: hzSayi_(m[1])} : {o: m[2]});
+  }
+  if(son !== src.length) throw new Error("Geçersiz karakter");
+  let i = 0;
+  const bak = ()=>tok[i];
+  function ifade(){
+    let sol = terim();
+    while(bak() && (bak().o === "+" || bak().o === "-")){
+      const op = tok[i++].o, sag = terim();
+      const sv = sag.yuzde ? sol.v * sag.v : sag.v;      // 200 + 10% → 220
+      sol = {v: op === "+" ? sol.v + sv : sol.v - sv};
+    }
+    return sol;
+  }
+  function terim(){
+    let sol = carpan();
+    while(bak() && (bak().o === "*" || bak().o === "/")){
+      const op = tok[i++].o, sag = carpan();
+      if(op === "/"){ if(sag.v === 0) throw new Error("Sıfıra bölünemez"); sol = {v: sol.v / sag.v}; }
+      else sol = {v: sol.v * sag.v};
+    }
+    return sol;
+  }
+  function carpan(){
+    const t = tok[i++];
+    if(!t) throw new Error("İfade eksik");
+    let r;
+    if(t.o === "-"){ r = carpan(); return {v: -r.v, yuzde: r.yuzde}; }
+    if(t.o === "+") return carpan();
+    if(t.o === "("){ r = ifade(); if(!bak() || bak().o !== ")") throw new Error("Parantez kapanmadı"); i++; r = {v: r.v}; }
+    else if(t.n !== undefined){ if(isNaN(t.n)) throw new Error("Geçersiz sayı"); r = {v: t.n}; }
+    else throw new Error("Beklenmeyen işaret");
+    while(bak() && bak().o === "%"){ i++; r = {v: r.v / 100, yuzde: true}; }
+    return r;
+  }
+  const s = ifade();
+  if(i < tok.length) throw new Error("İfade tamamlanamadı");
+  return Math.round(s.v * 1e10) / 1e10;
+}
+function hzMkHesapla(kaydet){
+  const el = hzEl("hz-mk-ifade"), sonucEl = hzEl("hz-mk-sonuc"); if(!el || !sonucEl) return;
+  const metin = el.value.trim();
+  sonucEl.classList.remove("hata");
+  if(!metin){ sonucEl.textContent = "0"; _hzMk.son = null; return; }
+  try{
+    const n = hzMkDegerlendir_(metin);
+    _hzMk.son = n;
+    sonucEl.textContent = n.toLocaleString("tr-TR", {maximumFractionDigits:8});
+    if(kaydet){
+      _hzMk.gecmis.unshift({e: metin, s: n}); _hzMk.gecmis = _hzMk.gecmis.slice(0, 30);
+      try{ localStorage.setItem(HZ_MK_GECMIS_ANAHTAR, JSON.stringify(_hzMk.gecmis)); }catch(_){}
+      el.value = hzSayiMetin_(n); _hzMk.sonuclandi = true;
+      hzMkGecmisCiz_();
+    }
+  }catch(err){
+    _hzMk.son = null;
+    if(kaydet){ sonucEl.textContent = err.message; sonucEl.classList.add("hata"); }
+    else sonucEl.textContent = "…";
+  }
+}
+function hzMkGirdi(){
+  const el = hzEl("hz-mk-ifade");
+  const temiz = el.value.replace(/[^0-9+\-*\/().,%×÷xX−\s]/g, "");
+  if(temiz !== el.value){ const p = el.selectionStart; el.value = temiz; try{ el.setSelectionRange(p - 1, p - 1); }catch(_){} }
+  hzMkHesapla(false);
+}
+function hzMkTusAl(e){
+  const el = hzEl("hz-mk-ifade");
+  if(e.key === "Enter" || e.key === "="){ e.preventDefault(); hzMkHesapla(true); return; }
+  if(e.key === "Escape"){ e.preventDefault(); hzMkTemizle(); return; }
+  if(_hzMk.sonuclandi && e.key.length === 1 && !e.ctrlKey && !e.metaKey){
+    if(/[0-9(,.]/.test(e.key)) el.value = "";     // sonuçtan sonra rakam yazılırsa yeni işlem başlar; işaret yazılırsa sonuçla devam eder
+    _hzMk.sonuclandi = false;
+  }
+}
+function hzMkEkle(t){
+  const el = hzEl("hz-mk-ifade");
+  if(_hzMk.sonuclandi && /[0-9,(]/.test(t)) el.value = "";
+  _hzMk.sonuclandi = false;
+  const a = el.selectionStart != null ? el.selectionStart : el.value.length, b = el.selectionEnd != null ? el.selectionEnd : a;
+  el.value = el.value.slice(0, a) + t + el.value.slice(b);
+  const p = a + t.length; el.focus(); try{ el.setSelectionRange(p, p); }catch(_){}
+  hzMkHesapla(false);
+}
+function hzMkGeriSil(){
+  const el = hzEl("hz-mk-ifade"); _hzMk.sonuclandi = false;
+  let a = el.selectionStart != null ? el.selectionStart : el.value.length; const b = el.selectionEnd != null ? el.selectionEnd : a;
+  if(a === b){ if(a === 0) return; el.value = el.value.slice(0, a - 1) + el.value.slice(b); a--; }
+  else el.value = el.value.slice(0, a) + el.value.slice(b);
+  el.focus(); try{ el.setSelectionRange(a, a); }catch(_){}
+  hzMkHesapla(false);
+}
+function hzMkTemizle(){ const el = hzEl("hz-mk-ifade"); el.value = ""; _hzMk.sonuclandi = false; el.focus(); hzMkHesapla(false); }
+function hzMkKopyala(){ if(_hzMk.son != null) hzKopyala_(hzSayiMetin_(_hzMk.son)); }
+function hzMkGecmisCiz_(){
+  const k = hzEl("hz-mk-gecmis"); if(!k) return;
+  k.innerHTML = _hzMk.gecmis.length
+    ? _hzMk.gecmis.map((g,i)=>`<div class="hz-gecmis-satir" onclick="hzMkGecmisKullan(${i})" title="Tıklayınca ifadeye alınır"><span>${htmlKacis(g.e)}</span><b>= ${g.s.toLocaleString("tr-TR",{maximumFractionDigits:8})}</b></div>`).join("")
+    : '<div style="padding:12px;color:var(--text3);font-size:12px">Henüz işlem yok.</div>';
+}
+function hzMkGecmisKullan(i){ const g = _hzMk.gecmis[i]; if(!g) return; const el = hzEl("hz-mk-ifade"); el.value = hzSayiMetin_(g.s); _hzMk.sonuclandi = true; el.focus(); hzMkHesapla(false); }
+function hzMkGecmisTemizle(){ _hzMk.gecmis = []; try{ localStorage.removeItem(HZ_MK_GECMIS_ANAHTAR); }catch(_){} hzMkGecmisCiz_(); }
+function hzMkAcildi_(){
+  if(!_hzMk._yuklendi){
+    _hzMk._yuklendi = true;
+    try{ const g = JSON.parse(localStorage.getItem(HZ_MK_GECMIS_ANAHTAR) || "[]"); if(Array.isArray(g)) _hzMk.gecmis = g.filter(x=>x && typeof x.e === "string" && isFinite(x.s)).slice(0, 30); }catch(_){}
+  }
+  hzMkGecmisCiz_(); hzKdvHesapla();
+  setTimeout(()=>{ const el = hzEl("hz-mk-ifade"); if(el) el.focus(); }, 30);
+}
+// KDV
+function hzKdvOranDegisti(){ hzEl("hz-kdv-ozel-kap").style.display = hzEl("hz-kdv-oran").value === "ozel" ? "" : "none"; hzKdvHesapla(); }
+function hzKdvHesapla(){
+  const t = hzSayi_(hzEl("hz-kdv-tutar").value);
+  const secili = hzEl("hz-kdv-oran").value;
+  const oran = secili === "ozel" ? hzSayi_(hzEl("hz-kdv-ozel").value) : parseFloat(secili);
+  const dahilMi = (document.querySelector('input[name="hz-kdv-mod"]:checked') || {}).value === "dahil";
+  if(isNaN(t) || isNaN(oran)){ ["haric","tutari","dahil"].forEach(k=>{ hzEl("hz-kdv-"+k).textContent = "—"; }); return; }
+  const kat = 1 + oran / 100;
+  const haric = dahilMi ? t / kat : t, dahil = dahilMi ? t : t * kat;
+  hzEl("hz-kdv-haric").textContent = hzPara_(haric);
+  hzEl("hz-kdv-tutari").textContent = hzPara_(dahil - haric);
+  hzEl("hz-kdv-dahil").textContent = hzPara_(dahil);
+}
+
+// ── 2) VADE HESAPLAMA ──
+const HZ_GUN_ADLARI = ["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
+function hzBugun_(){ const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0); }
+function hzIsoParse_(s){ const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || "")); return m ? new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0) : null; }
+function hzIsoYaz_(d){ return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+function hzTarihYaz_(d){ return String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0") + "." + d.getFullYear(); }
+function hzGunAdi_(d){ return HZ_GUN_ADLARI[d.getDay()]; }
+function hzGunFark_(a, b){ return Math.round((b - a) / 86400000); }
+function hzAyEkle_(d, n){
+  const r = new Date(d.getFullYear(), d.getMonth() + n, 1, 12, 0, 0);
+  r.setDate(Math.min(d.getDate(), new Date(r.getFullYear(), r.getMonth() + 1, 0).getDate()));
+  return r;
+}
+function hzVadeTarihiHesapla(){
+  const bas = hzIsoParse_(hzEl("hz-vt-bas").value);
+  const gun = parseInt(hzEl("hz-vt-gun").value, 10) || 0, ay = parseInt(hzEl("hz-vt-ay").value, 10) || 0;
+  const sonuc = hzEl("hz-vt-sonuc"), alt = hzEl("hz-vt-alt");
+  if(!bas){ sonuc.textContent = "—"; alt.textContent = "Başlangıç tarihi seçin."; return; }
+  const d = hzAyEkle_(bas, ay); d.setDate(d.getDate() + gun);
+  let not = "";
+  if(hzEl("hz-vt-hs").checked){
+    const g = d.getDay();
+    if(g === 6){ d.setDate(d.getDate() + 2); not = " · cumartesi pazartesiye kaydırıldı"; }
+    else if(g === 0){ d.setDate(d.getDate() + 1); not = " · pazar pazartesiye kaydırıldı"; }
+  }
+  sonuc.textContent = hzTarihYaz_(d) + " " + hzGunAdi_(d);
+  const fark = hzGunFark_(bas, d), bugun = hzGunFark_(hzBugun_(), d);
+  alt.textContent = "Başlangıçtan " + fark + " gün sonra · " + (bugun > 0 ? "bugünden " + bugun + " gün sonra" : bugun < 0 ? "bugünden " + (-bugun) + " gün önce" : "bugün") + not;
+}
+function hzVadeHizli(n){ hzEl("hz-vt-gun").value = n; hzEl("hz-vt-ay").value = ""; hzVadeTarihiHesapla(); }
+function hzGunFarkiHesapla(){
+  const a = hzIsoParse_(hzEl("hz-gf-1").value), b = hzIsoParse_(hzEl("hz-gf-2").value);
+  const s = hzEl("hz-gf-sonuc"), alt = hzEl("hz-gf-alt");
+  if(!a || !b){ s.textContent = "—"; alt.textContent = "İki tarihi de seçin."; return; }
+  const f = hzGunFark_(a, b), m = Math.abs(f);
+  s.textContent = m + " gün";
+  alt.textContent = "≈ " + (m / 7).toLocaleString("tr-TR", {maximumFractionDigits:1}) + " hafta · ≈ " + (m / 30.4375).toLocaleString("tr-TR", {maximumFractionDigits:1}) + " ay · ikinci tarih birinciden " + (f > 0 ? "sonra" : f < 0 ? "önce" : "aynı gün");
+}
+function hzVadeFarkiHesapla(){
+  const t = hzSayi_(hzEl("hz-vf-tutar").value), g = hzSayi_(hzEl("hz-vf-gun").value), o = hzSayi_(hzEl("hz-vf-oran").value);
+  const s = hzEl("hz-vf-sonuc"), alt = hzEl("hz-vf-alt");
+  if(isNaN(t) || isNaN(g) || isNaN(o)){ s.textContent = "—"; alt.textContent = "Tutar, gün ve oranı yazın."; return; }
+  const fark = t * (o / 100) * (g / 30);
+  s.textContent = "Vade farkı: " + hzPara_(fark);
+  alt.textContent = "Vadeli toplam: " + hzPara_(t + fark);
+}
+function hzVadeOraniHesapla(){
+  const p = hzSayi_(hzEl("hz-vf-pesin").value), v = hzSayi_(hzEl("hz-vf-vadeli").value), g = hzSayi_(hzEl("hz-vf-gun2").value);
+  const s = hzEl("hz-vf-oran-sonuc"), alt = hzEl("hz-vf-oran-alt");
+  if(isNaN(p) || isNaN(v) || isNaN(g) || p <= 0 || g <= 0){ s.textContent = "—"; alt.textContent = "Peşin fiyat, vadeli fiyat ve gün yazın."; return; }
+  const toplamYuzde = (v - p) / p * 100, aylik = toplamYuzde / (g / 30);
+  s.textContent = "Aylık %" + aylik.toLocaleString("tr-TR", {maximumFractionDigits:2});
+  alt.textContent = "Toplam fark %" + toplamYuzde.toLocaleString("tr-TR", {maximumFractionDigits:2}) + " (" + hzPara_(v - p) + ") · yıllık basit ≈ %" + (aylik * 12).toLocaleString("tr-TR", {maximumFractionDigits:1});
+}
+// Ortalama vade
+let _hzOv = {satirlar: []};
+function hzOvBos_(){ return {tutar:"", tarih:"", gun:""}; }
+function hzOvTemel_(){ return hzIsoParse_(hzEl("hz-ov-bas").value) || hzBugun_(); }
+function hzOvCiz_(){
+  hzEl("hz-ov-govde").innerHTML = _hzOv.satirlar.map((s,i)=>`<tr>
+    <td class="no">${i+1}</td>
+    <td><input id="hz-ov-t-${i}" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${htmlKacis(s.tutar)}" oninput="hzOvDegisti(${i},'tutar',this.value)"></td>
+    <td><input id="hz-ov-d-${i}" type="date" value="${s.tarih}" onchange="hzOvDegisti(${i},'tarih',this.value)"></td>
+    <td><input id="hz-ov-g-${i}" type="text" inputmode="numeric" autocomplete="off" placeholder="0" value="${htmlKacis(s.gun)}" oninput="hzOvDegisti(${i},'gun',this.value)"></td>
+    <td class="sil"><button type="button" class="hz-mini-btn" title="Satırı sil" onclick="hzOvSatirSil(${i})">✕</button></td></tr>`).join("");
+  hzOvToplamHesapla_();
+}
+function hzOvDegisti(i, alan, v){
+  const s = _hzOv.satirlar[i]; if(!s) return;
+  const temel = hzOvTemel_();
+  if(alan === "tutar") s.tutar = v;
+  else if(alan === "tarih"){
+    s.tarih = v; const d = hzIsoParse_(v); s.gun = d ? String(hzGunFark_(temel, d)) : "";
+    const g = hzEl("hz-ov-g-" + i); if(g) g.value = s.gun;
+  } else if(alan === "gun"){
+    s.gun = v; const n = parseInt(v, 10);
+    if(!isNaN(n)){ const d = new Date(temel); d.setDate(d.getDate() + n); s.tarih = hzIsoYaz_(d); } else s.tarih = "";
+    const dd = hzEl("hz-ov-d-" + i); if(dd) dd.value = s.tarih;
+  }
+  hzOvToplamHesapla_();
+}
+function hzOvBasDegisti(){
+  const temel = hzOvTemel_();
+  _hzOv.satirlar.forEach((s,i)=>{
+    const d = hzIsoParse_(s.tarih);
+    if(d){ s.gun = String(hzGunFark_(temel, d)); const g = hzEl("hz-ov-g-" + i); if(g) g.value = s.gun; }
+    else if(s.gun !== ""){
+      const n = parseInt(s.gun, 10);
+      if(!isNaN(n)){ const x = new Date(temel); x.setDate(x.getDate() + n); s.tarih = hzIsoYaz_(x); const dd = hzEl("hz-ov-d-" + i); if(dd) dd.value = s.tarih; }
+    }
+  });
+  hzOvToplamHesapla_();
+}
+function hzOvToplamHesapla_(){
+  const temel = hzOvTemel_(); let toplam = 0, agirlik = 0, adet = 0;
+  _hzOv.satirlar.forEach(s=>{
+    const t = hzSayi_(s.tutar); let g = parseFloat(s.gun); const d = hzIsoParse_(s.tarih);
+    if(d) g = hzGunFark_(temel, d);
+    if(isNaN(t) || isNaN(g)) return;
+    toplam += t; agirlik += t * g; adet++;
+  });
+  const T = hzEl("hz-ov-toplam"), G = hzEl("hz-ov-gun"), D = hzEl("hz-ov-tarih"), A = hzEl("hz-ov-gunadi"), N = hzEl("hz-ov-adet");
+  N.textContent = adet ? String(adet) : "—";
+  if(!adet){ T.textContent = G.textContent = D.textContent = "—"; A.textContent = ""; return; }
+  T.textContent = hzPara_(toplam);
+  if(toplam === 0){ G.textContent = D.textContent = "—"; A.textContent = "Toplam tutar sıfır"; return; }
+  const ort = agirlik / toplam, tam = Math.round(ort);
+  const tarih = new Date(temel); tarih.setDate(tarih.getDate() + tam);
+  G.textContent = ort.toLocaleString("tr-TR", {maximumFractionDigits:1}) + " gün";
+  D.textContent = hzTarihYaz_(tarih); A.textContent = hzGunAdi_(tarih);
+}
+function hzOvSatirEkle(n){ for(let i = 0; i < n; i++) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_(); }
+function hzOvSatirSil(i){ _hzOv.satirlar.splice(i, 1); if(!_hzOv.satirlar.length) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_(); }
+function hzOvTemizle(){
+  if(_hzOv.satirlar.some(s=>s.tutar !== "" || s.tarih !== "" || s.gun !== "") && !confirm("Tablodaki tüm satırlar silinsin mi?")) return;
+  _hzOv.satirlar = []; for(let i = 0; i < 5; i++) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_();
+}
+function hzOvSatirCoz_(l){
+  const m = /(\d{4}-\d{2}-\d{2})|(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})/.exec(l);
+  let tarih = "", kalan = l;
+  if(m){
+    let iso = "";
+    if(m[1]) iso = m[1];
+    else { let y = +m[4]; if(y < 100) y += 2000; if(+m[3] >= 1 && +m[3] <= 12 && +m[2] >= 1 && +m[2] <= 31) iso = y + "-" + String(+m[3]).padStart(2, "0") + "-" + String(+m[2]).padStart(2, "0"); }
+    if(iso && hzIsoParse_(iso)){ tarih = iso; kalan = l.replace(m[0], " "); }
+  }
+  const sayilar = (kalan.match(/-?\d[\d.,]*/g) || []).map(x=>x.replace(/[.,]+$/, ""));
+  const tutar = sayilar[0] || "";
+  let gun = "";
+  if(!tarih && sayilar[1] && /^\d{1,4}$/.test(sayilar[1])) gun = sayilar[1];
+  if(!tutar && !tarih) return null;
+  return {tutar, tarih, gun};
+}
+function hzOvYapistir(e){
+  const metin = (e.clipboardData || window.clipboardData).getData("text"); if(!metin) return;
+  const satirlar = metin.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  if(satirlar.length < 2 && !/\t/.test(metin)) return;          // tek hücreye normal yapıştırma
+  e.preventDefault();
+  const yeni = satirlar.map(hzOvSatirCoz_).filter(Boolean);
+  if(!yeni.length) return;
+  const dolu = _hzOv.satirlar.filter(s=>s.tutar !== "" || s.tarih !== "" || s.gun !== "");
+  _hzOv.satirlar = dolu.concat(yeni);
+  while(_hzOv.satirlar.length < 5) _hzOv.satirlar.push(hzOvBos_());
+  hzOvCiz_(); hzOvBasDegisti();
+  try{ if(typeof toastGoster === "function") toastGoster(yeni.length + " satır yapıştırıldı"); }catch(_){}
+}
+function hzVadeAcildi_(){
+  const bugun = hzIsoYaz_(hzBugun_());
+  ["hz-vt-bas","hz-gf-1","hz-ov-bas"].forEach(id=>{ const e = hzEl(id); if(e && !e.value) e.value = bugun; });
+  if(!_hzOv.satirlar.length){ for(let i = 0; i < 5; i++) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_(); }
+  hzVadeTarihiHesapla(); hzGunFarkiHesapla(); hzVadeFarkiHesapla(); hzVadeOraniHesapla();
+}
+
+// ── 3) SERAMİK / PARKE ──
+function hzStokYukle_(){
+  try{ if(typeof hsStokOnbellektenYukle_ === "function") hsStokOnbellektenYukle_(); }catch(_){}
+  if(!(typeof _stokTanimListe !== "undefined" && _stokTanimListe && _stokTanimListe.length) && typeof stokListesiIste_ === "function"){
+    stokListesiIste_().then(()=>{
+      const v = hzEl("hz-malzeme-view");
+      if(v && v.style.display !== "none" && !(document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))) hesapSubTab(HZ_S._hesapSubTab || "seramik");
+    }).catch(()=>{});
+  }
+}
+function hzMalzemeAcildi_(){ hzStokYukle_(); hesapInit(); }
+
+// ── Gezinme ──
+function hzSayfalariGizle_(){ ["hz-makine-view","hz-vade-view","hz-malzeme-view"].forEach(id=>{ const e = hzEl(id); if(e) e.style.display = "none"; }); }
+function hesaplamaAnaSecimeDon(){ hzSayfalariGizle_(); hzEl("hesaplama-secim").style.display = "block"; }
+function hesaplamaAltModulAc(alt){
+  hzSayfalariGizle_();
+  const id = {makine:"hz-makine-view", vade:"hz-vade-view", malzeme:"hz-malzeme-view"}[alt];
+  const e = id && hzEl(id);
+  if(!e){ hesaplamaAnaSecimeDon(); return; }
+  hzEl("hesaplama-secim").style.display = "none";
+  e.style.display = "block"; e.scrollTop = 0;
+  if(alt === "makine") hzMkAcildi_(); else if(alt === "vade") hzVadeAcildi_(); else hzMalzemeAcildi_();
+}
+
+// ── Yerel sunucu üst çubuk rengi (Ayarlar > Genel Görünüm) ──
+const YEREL_ZEMIN_RENKLER = [
+  {id:"leylak",  ad:"Leylak",  bar:"#e4dcfb", cizgi:"#8b5cf6"},
+  {id:"nane",    ad:"Nane",    bar:"#c9f1dc", cizgi:"#34a56a"},
+  {id:"turkuaz", ad:"Turkuaz", bar:"#c8eef0", cizgi:"#2aa3ad"},
+  {id:"gul",     ad:"Gül",     bar:"#fbd9e3", cizgi:"#e0668a"},
+  {id:"seftali", ad:"Şeftali", bar:"#fde0cc", cizgi:"#ea8a4f"},
+  {id:"gri",     ad:"Gri",     bar:"#e3e6ec", cizgi:"#7b8497"},
+];
+const YEREL_ZEMIN_ANAHTAR = "fincanlar_yerel_zemin";
+function yerelZeminAl_(){
+  try{ const z = JSON.parse(localStorage.getItem(YEREL_ZEMIN_ANAHTAR) || "null"); if(z && /^#[0-9a-f]{6}$/i.test(z.bar || "") && /^#[0-9a-f]{6}$/i.test(z.cizgi || "")) return z; }catch(_){}
+  const v = YEREL_ZEMIN_RENKLER[0]; return {id: v.id, bar: v.bar, cizgi: v.cizgi};
+}
+function yerelZeminUygula_(){
+  const z = yerelZeminAl_(), st = document.documentElement.style;
+  st.setProperty("--yz-bar", z.bar); st.setProperty("--yz-cizgi", z.cizgi);
+  try{ if(!baglantiBulutMu_()){ const m = hzEl("meta-tema"); if(m) m.content = z.cizgi; } }catch(_){}
+}
+function hzKoyulastir_(hex, kat){
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const h = x=>Math.max(0, Math.min(255, Math.round(x * kat))).toString(16).padStart(2, "0");
+  return "#" + h(r) + h(g) + h(b);
+}
+function yerelZeminSec(id){
+  const r = YEREL_ZEMIN_RENKLER.find(x=>x.id === id); if(!r) return;
+  try{ localStorage.setItem(YEREL_ZEMIN_ANAHTAR, JSON.stringify({id: r.id, bar: r.bar, cizgi: r.cizgi})); }catch(_){}
+  yerelZeminUygula_(); yerelZeminPanelCiz_();
+}
+function yerelZeminOzel(hex){
+  if(!/^#[0-9a-f]{6}$/i.test(hex || "")) return;
+  try{ localStorage.setItem(YEREL_ZEMIN_ANAHTAR, JSON.stringify({id: "ozel", bar: hex, cizgi: hzKoyulastir_(hex, 0.6)})); }catch(_){}
+  yerelZeminUygula_();
+  document.querySelectorAll("#yerel-zemin-secenekler .yz-renk").forEach(b=>b.classList.remove("secili"));
+}
+function yerelZeminPanelCiz_(){
+  const k = hzEl("yerel-zemin-secenekler"); if(!k) return;
+  const z = yerelZeminAl_();
+  k.innerHTML = YEREL_ZEMIN_RENKLER.map(r=>`<button type="button" class="yz-renk${z.id === r.id ? " secili" : ""}" title="${r.ad}" onclick="yerelZeminSec('${r.id}')" style="background:${r.bar};border-color:${r.cizgi}"><span>${r.ad}</span></button>`).join("")
+    + `<label class="yz-ozel" title="Kendi renginizi seçin"><span>Özel</span><input type="color" value="${z.bar}" oninput="yerelZeminOzel(this.value)"></label>`;
+}
+yerelZeminUygula_();
+yerelZeminPanelCiz_();
+
 // Sayfa açıkken oturum zaten varsa üst çubuktaki resim de çizilsin
 try{ uygulamaKullanicisiUyGoster_(); }catch(e){}
 </script>
