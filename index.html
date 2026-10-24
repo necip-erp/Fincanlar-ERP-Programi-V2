@@ -1959,6 +1959,37 @@ setInterval(topbarSaatGuncelle, 10000);
       <div class="rapor-baslik" style="margin-top:0">📅 Vade Hesaplama</div>
       <div class="hz-grid">
 
+        <div class="hz-kart genis">
+          <h3>Ortalama Vade — Tahsilat / Ödeme Evrakları</h3>
+          <p class="hz-not">Tahsilatta aldığınız ya da ödemede vereceğiniz çek/senetlerin tutarını ve vadesini (ya da hesap tarihinden itibaren gün sayısını) yazın; tutar ağırlıklı ortalama vadeyi bulur. Excel'den "tutar ⇥ tarih" satırlarını doğrudan tabloya yapıştırabilirsiniz.</p>
+          <div class="hz-satir" style="align-items:flex-end">
+            <div class="fld" style="max-width:230px"><label>İşlem</label>
+              <div style="display:flex;gap:6px">
+                <button type="button" class="belge-tab active" id="hz-ov-mod-tahsilat" style="flex:1;padding:8px 10px" onclick="hzOvModSec('tahsilat')">💰 Tahsilat</button>
+                <button type="button" class="belge-tab" id="hz-ov-mod-odeme" style="flex:1;padding:8px 10px" onclick="hzOvModSec('odeme')">💳 Ödeme</button>
+              </div>
+            </div>
+            <div class="fld" style="max-width:150px"><label>İşlem tarihi (başlangıç)</label><input id="hz-ov-bas" type="date" onchange="hzOvBasDegisti()"></div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;padding-bottom:9px" title="Bir satıra vade tarihi seçince altındaki satırlar otomatik +1 ay ilerler; ay sonu seçilirse hepsi ay sonuna düşer"><input id="hz-ov-aylik" type="checkbox" checked style="width:auto"> Aylık seçim (sonraki satırlar +1 ay; ay sonuysa ay sonu)</label>
+            <button type="button" class="hz-mini-btn" onclick="hzOvSatirEkle(1)">+ Satır</button>
+            <button type="button" class="hz-mini-btn" onclick="hzOvSatirEkle(5)">+ 5 satır</button>
+            <button type="button" class="hz-mini-btn" onclick="hzOvTemizle()">🗑 Temizle</button>
+          </div>
+          <div style="overflow-x:auto" onpaste="hzOvYapistir(event)">
+            <table class="hz-ov-tablo">
+              <colgroup><col class="c-no"><col class="c-ev"><col class="c-ac"><col class="c-tu"><col class="c-ta"><col class="c-gu"><col class="c-si"></colgroup>
+              <thead><tr><th></th><th>Evrak</th><th>Evrak no / açıklama</th><th>Tutar</th><th>Vade tarihi</th><th>Gün</th><th></th></tr></thead>
+              <tbody id="hz-ov-govde"></tbody>
+            </table>
+          </div>
+          <div class="hz-sonuc-kutu" style="margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+            <div><div class="a" style="margin:0">Toplam tutar</div><div class="b" id="hz-ov-toplam">—</div><div class="a" id="hz-ov-turler"></div></div>
+            <div><div class="a" style="margin:0" id="hz-ov-gun-et">Ortalama vade (gün)</div><div class="b" id="hz-ov-gun">—</div></div>
+            <div><div class="a" style="margin:0">Ortalama vade tarihi</div><div class="b" id="hz-ov-tarih">—</div><div class="a" id="hz-ov-gunadi"></div></div>
+            <div><div class="a" style="margin:0">Dolu satır</div><div class="b" id="hz-ov-adet">—</div><div class="a" id="hz-ov-aralik"></div></div>
+          </div>
+        </div>
+
         <div class="hz-kart">
           <h3>Vade Tarihi</h3>
           <p class="hz-not">Başlangıç tarihine gün/ay ekleyerek vade tarihini bulur.</p>
@@ -2008,34 +2039,7 @@ setInterval(topbarSaatGuncelle, 10000);
           <div class="hz-sonuc-kutu"><div class="b" id="hz-vf-oran-sonuc">—</div><div class="a" id="hz-vf-oran-alt"></div></div>
         </div>
 
-        <div class="hz-kart genis">
-          <h3>Ortalama Vade — Tahsilat / Ödeme Evrakları</h3>
-          <p class="hz-not">Tahsilatta aldığınız ya da ödemede vereceğiniz çek/senetlerin tutarını ve vadesini (ya da hesap tarihinden itibaren gün sayısını) yazın; tutar ağırlıklı ortalama vadeyi bulur. Excel'den "tutar ⇥ tarih" satırlarını doğrudan tabloya yapıştırabilirsiniz.</p>
-          <div class="hz-satir" style="align-items:flex-end">
-            <div class="fld" style="max-width:230px"><label>İşlem</label>
-              <div style="display:flex;gap:6px">
-                <button type="button" class="belge-tab active" id="hz-ov-mod-tahsilat" style="flex:1;padding:8px 10px" onclick="hzOvModSec('tahsilat')">💰 Tahsilat</button>
-                <button type="button" class="belge-tab" id="hz-ov-mod-odeme" style="flex:1;padding:8px 10px" onclick="hzOvModSec('odeme')">💳 Ödeme</button>
-              </div>
-            </div>
-            <div class="fld" style="max-width:190px"><label>İşlem tarihi (başlangıç)</label><input id="hz-ov-bas" type="date" onchange="hzOvBasDegisti()"></div>
-            <button type="button" class="hz-mini-btn" onclick="hzOvSatirEkle(1)">+ Satır</button>
-            <button type="button" class="hz-mini-btn" onclick="hzOvSatirEkle(5)">+ 5 satır</button>
-            <button type="button" class="hz-mini-btn" onclick="hzOvTemizle()">🗑 Temizle</button>
-          </div>
-          <div style="overflow-x:auto" onpaste="hzOvYapistir(event)">
-            <table class="hz-ov-tablo">
-              <thead><tr><th></th><th style="width:12%">Evrak</th><th style="width:18%">Evrak no / açıklama</th><th style="width:20%">Tutar</th><th style="width:22%">Vade tarihi</th><th style="width:12%">Gün</th><th></th></tr></thead>
-              <tbody id="hz-ov-govde"></tbody>
-            </table>
-          </div>
-          <div class="hz-sonuc-kutu" style="margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
-            <div><div class="a" style="margin:0">Toplam tutar</div><div class="b" id="hz-ov-toplam">—</div><div class="a" id="hz-ov-turler"></div></div>
-            <div><div class="a" style="margin:0" id="hz-ov-gun-et">Ortalama vade (gün)</div><div class="b" id="hz-ov-gun">—</div></div>
-            <div><div class="a" style="margin:0">Ortalama vade tarihi</div><div class="b" id="hz-ov-tarih">—</div><div class="a" id="hz-ov-gunadi"></div></div>
-            <div><div class="a" style="margin:0">Dolu satır</div><div class="b" id="hz-ov-adet">—</div><div class="a" id="hz-ov-aralik"></div></div>
-          </div>
-        </div>
+        
 
       </div>
     </div>
@@ -4790,7 +4794,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261024i";
+const FRONT_SURUM = "20261025a";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -25852,10 +25856,12 @@ try{ localStorage.removeItem("fincanlarSayfaZoom"); }catch(e){}
 #mod-hesaplama .hz-kdv-cikti .k{font-size:10px;color:var(--text3);text-transform:uppercase}
 #mod-hesaplama .hz-kdv-cikti .v{font-weight:800;font-size:14px;font-variant-numeric:tabular-nums}
 /* Ortalama vade tablosu */
-#mod-hesaplama .hz-ov-tablo{width:100%;border-collapse:collapse;font-size:13px}
+#mod-hesaplama .hz-ov-tablo{width:auto;table-layout:fixed;border-collapse:collapse;font-size:13px}
+#mod-hesaplama .hz-ov-tablo col.c-no{width:26px}#mod-hesaplama .hz-ov-tablo col.c-ev{width:78px}#mod-hesaplama .hz-ov-tablo col.c-ac{width:150px}#mod-hesaplama .hz-ov-tablo col.c-tu{width:118px}#mod-hesaplama .hz-ov-tablo col.c-ta{width:132px}#mod-hesaplama .hz-ov-tablo col.c-gu{width:56px}#mod-hesaplama .hz-ov-tablo col.c-si{width:30px}
+#mod-hesaplama .hz-ov-tablo input[name=tu]{text-align:right}
 #mod-hesaplama .hz-ov-tablo th{font-size:10.5px;text-transform:uppercase;color:var(--text3);text-align:left;padding:4px 6px;font-weight:700}
 #mod-hesaplama .hz-ov-tablo td{padding:3px 4px}
-#mod-hesaplama .hz-ov-tablo input{width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);font-size:13px;font-family:inherit}
+#mod-hesaplama .hz-ov-tablo input{width:100%;box-sizing:border-box;padding:6px 6px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);font-size:13px;font-family:inherit}
 #mod-hesaplama .hz-ov-tablo input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-l)}
 #mod-hesaplama .hz-ov-tablo td.no{width:28px;color:var(--text3);font-size:11px;text-align:center}
 #mod-hesaplama .hz-ov-tablo td.sil{width:30px;text-align:center}
@@ -27697,6 +27703,7 @@ function hzYazdir(){
 function hzSayi_(v){
   let s = String(v == null ? "" : v).trim().replace(/\s+/g, "");
   if(!s) return NaN;
+  if(s.indexOf(",") < 0 && /^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");   // 1.250 / 1.250.000 → binlik ayracı
   const virgul = s.indexOf(","), nokta = s.indexOf(".");
   if(virgul >= 0 && nokta >= 0) s = s.replace(/\./g, "").replace(",", ".");          // 1.234,56
   else if(virgul >= 0) s = s.replace(",", ".");                                       // 12,5
@@ -27912,18 +27919,36 @@ function hzVadeOraniHesapla(){
 // Ortalama vade
 let _hzOv = {satirlar: []};
 let _hzOvMod = "tahsilat";
-function hzOvBos_(){ return {tur:"Çek", no:"", tutar:"", tarih:"", gun:""}; }
+function hzOvBos_(){ return {tur:"Çek", no:"", tutar:"", tarih:"", gun:"", oto:false}; }
+let _hzOvAnkraj = -1;
 function hzOvTemel_(){ return hzIsoParse_(hzEl("hz-ov-bas").value) || hzBugun_(); }
 function hzOvCiz_(){
   hzEl("hz-ov-govde").innerHTML = _hzOv.satirlar.map((s,i)=>`<tr>
     <td class="no">${i+1}</td>
     <td><select id="hz-ov-e-${i}" onchange="hzOvDegisti(${i},'tur',this.value)" style="width:100%;box-sizing:border-box;padding:7px 4px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);font-size:13px"><option${s.tur==="Çek"?" selected":""}>Çek</option><option${s.tur==="Senet"?" selected":""}>Senet</option></select></td>
     <td><input id="hz-ov-n-${i}" type="text" autocomplete="off" placeholder="No / açıklama" value="${htmlKacis(s.no||"")}" oninput="hzOvDegisti(${i},'no',this.value)"></td>
-    <td><input id="hz-ov-t-${i}" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${htmlKacis(s.tutar)}" oninput="hzOvDegisti(${i},'tutar',this.value)"></td>
+    <td><input id="hz-ov-t-${i}" name="tu" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${htmlKacis(s.tutar)}" oninput="hzOvTutarGirdi(${i},this)"></td>
     <td><input id="hz-ov-d-${i}" type="date" value="${s.tarih}" onchange="hzOvDegisti(${i},'tarih',this.value)"></td>
     <td><input id="hz-ov-g-${i}" type="text" inputmode="numeric" autocomplete="off" placeholder="0" value="${htmlKacis(s.gun)}" oninput="hzOvDegisti(${i},'gun',this.value)"></td>
     <td class="sil"><button type="button" class="hz-mini-btn" title="Satırı sil" onclick="hzOvSatirSil(${i})">✕</button></td></tr>`).join("");
   hzOvToplamHesapla_();
+}
+// Tutar kutusunda yazarken binlik nokta (50000 → 50.000), ondalık virgülle
+function hzOvTutarBicim_(v){
+  let t = String(v).replace(/[^\d,]/g, "");
+  const k = t.indexOf(",");
+  let tam = k >= 0 ? t.slice(0, k) : t, ond = k >= 0 ? t.slice(k + 1).replace(/,/g, "").slice(0, 2) : null;
+  tam = tam.replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return ond === null ? tam : tam + "," + ond;
+}
+function hzOvTutarSayi_(v){ const n = parseFloat(String(v == null ? "" : v).replace(/\./g, "").replace(",", ".")); return isFinite(n) ? n : NaN; }
+function hzOvTutarGirdi(i, el){
+  const imlec = el.selectionStart, once = el.value.slice(0, imlec).replace(/[^\d,]/g, "").length;
+  const yeni = hzOvTutarBicim_(el.value);
+  el.value = yeni;
+  let n = 0, p = 0; while(p < yeni.length && n < once){ if(/[\d,]/.test(yeni[p])) n++; p++; }
+  try{ el.setSelectionRange(p, p); }catch(_){}
+  hzOvDegisti(i, "tutar", yeni);
 }
 function hzOvDegisti(i, alan, v){
   const s = _hzOv.satirlar[i]; if(!s) return;
@@ -27932,14 +27957,28 @@ function hzOvDegisti(i, alan, v){
   else if(alan === "tur") s.tur = v;
   else if(alan === "no") s.no = v;
   else if(alan === "tarih"){
-    s.tarih = v; const d = hzIsoParse_(v); s.gun = d ? String(hzGunFark_(temel, d)) : "";
+    s.tarih = v; s.oto = false; const d = hzIsoParse_(v); s.gun = d ? String(hzGunFark_(temel, d)) : "";
     const g = hzEl("hz-ov-g-" + i); if(g) g.value = s.gun;
+    if(d){ _hzOvAnkraj = i; if(hzEl("hz-ov-aylik") && hzEl("hz-ov-aylik").checked){ hzOvAylikDoldur_(i); return; } }
   } else if(alan === "gun"){
-    s.gun = v; const n = parseInt(v, 10);
+    s.gun = v; s.oto = false; const n = parseInt(v, 10);
     if(!isNaN(n)){ const d = new Date(temel); d.setDate(d.getDate() + n); s.tarih = hzIsoYaz_(d); } else s.tarih = "";
     const dd = hzEl("hz-ov-d-" + i); if(dd) dd.value = s.tarih;
   }
   hzOvToplamHesapla_();
+}
+// Aylık seçim: i. satırın tarihinden sonraki satırlar +1 ay ilerler (elle girilmiş satırlara dokunmaz); seçilen tarih ay sonuysa hepsi ay sonuna düşer
+function hzOvAylikDoldur_(i){
+  const a = _hzOv.satirlar[i], bas = a && hzIsoParse_(a.tarih); if(!bas) return;
+  const temel = hzOvTemel_();
+  const aySonu = bas.getDate() === new Date(bas.getFullYear(), bas.getMonth() + 1, 0).getDate();
+  for(let j = i + 1; j < _hzOv.satirlar.length; j++){
+    const s = _hzOv.satirlar[j], adim = j - i;
+    if(s.tarih && !s.oto) continue;
+    const x = aySonu ? new Date(bas.getFullYear(), bas.getMonth() + adim + 1, 0, 12, 0, 0) : hzAyEkle_(bas, adim);
+    s.tarih = hzIsoYaz_(x); s.gun = String(hzGunFark_(temel, x)); s.oto = true;
+  }
+  hzOvCiz_();
 }
 function hzOvBasDegisti(){
   const temel = hzOvTemel_();
@@ -27956,7 +27995,7 @@ function hzOvBasDegisti(){
 function hzOvToplamHesapla_(){
   const temel = hzOvTemel_(); let toplam = 0, agirlik = 0, adet = 0, enErken = null, enGec = null; const tur = {"Çek":0, "Senet":0}, turAdet = {"Çek":0, "Senet":0};
   _hzOv.satirlar.forEach(s=>{
-    const t = hzSayi_(s.tutar); let g = parseFloat(s.gun); const d = hzIsoParse_(s.tarih);
+    const t = hzOvTutarSayi_(s.tutar); let g = parseFloat(s.gun); const d = hzIsoParse_(s.tarih);
     if(d) g = hzGunFark_(temel, d);
     if(isNaN(t) || isNaN(g)) return;
     toplam += t; agirlik += t * g; adet++;
@@ -27982,11 +28021,15 @@ function hzOvModSec(m){
   hzEl("hz-ov-mod-odeme").classList.toggle("active", _hzOvMod === "odeme");
   hzOvToplamHesapla_();
 }
-function hzOvSatirEkle(n){ for(let i = 0; i < n; i++) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_(); }
-function hzOvSatirSil(i){ _hzOv.satirlar.splice(i, 1); if(!_hzOv.satirlar.length) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_(); }
+function hzOvSatirEkle(n){
+  for(let i = 0; i < n; i++) _hzOv.satirlar.push(hzOvBos_());
+  if(_hzOvAnkraj >= 0 && _hzOv.satirlar[_hzOvAnkraj] && hzEl("hz-ov-aylik") && hzEl("hz-ov-aylik").checked){ hzOvAylikDoldur_(_hzOvAnkraj); return; }
+  hzOvCiz_();
+}
+function hzOvSatirSil(i){ _hzOv.satirlar.splice(i, 1); _hzOvAnkraj = -1; if(!_hzOv.satirlar.length) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_(); }
 function hzOvTemizle(){
   if(_hzOv.satirlar.some(s=>s.tutar !== "" || s.tarih !== "" || s.gun !== "" || s.no !== "") && !confirm("Tablodaki tüm satırlar silinsin mi?")) return;
-  _hzOv.satirlar = []; for(let i = 0; i < 5; i++) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_();
+  _hzOv.satirlar = []; _hzOvAnkraj = -1; for(let i = 0; i < 5; i++) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_();
 }
 function hzOvSatirCoz_(l){
   const m = /(\d{4}-\d{2}-\d{2})|(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})/.exec(l);
@@ -28002,7 +28045,8 @@ function hzOvSatirCoz_(l){
   let gun = "";
   if(!tarih && sayilar[1] && /^\d{1,4}$/.test(sayilar[1])) gun = sayilar[1];
   if(!tutar && !tarih) return null;
-  return {tur: /senet/i.test(l) ? "Senet" : "Çek", no: "", tutar, tarih, gun};
+  const tn = hzSayi_(tutar);
+  return {tur: /senet/i.test(l) ? "Senet" : "Çek", no: "", tutar: isNaN(tn) ? "" : hzOvTutarBicim_(String(tn).replace(".", ",")), tarih, gun};
 }
 function hzOvYapistir(e){
   const metin = (e.clipboardData || window.clipboardData).getData("text"); if(!metin) return;
