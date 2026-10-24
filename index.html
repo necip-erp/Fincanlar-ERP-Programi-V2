@@ -4469,7 +4469,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261024e";
+const FRONT_SURUM = "20261024f";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -21413,6 +21413,7 @@ function markaListesiYukle(){
     _markaListe = res.markalar;
     _markaYuklendi = true;
     markaListesiCiz();
+    try{ stokTanimMarkaOtoDoldur_(); }catch(e){}
     try{ if(_stokTanimSonGosterilenListe && _stokTanimSonGosterilenListe.length && document.getElementById("stok-tanim-view").style.display!=="none") stokTanimListesiCiz(_stokTanimSonGosterilenListe); }catch(e){}
   }).catch(err=>{ if(el) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
 }
@@ -22113,12 +22114,6 @@ function stokTanimListesiYukle(){
     onbellekYaz("stokTanimListesi", res.kalemler);
     _stokTanimGuncelAramaTerimiIleCiz();
     bfmOnerileriGuncelle();
-    // Markası boş olup stok kodunun ilk 2 hanesinden marka bulunan kartları (backend markaOtomatik işaretler) kalıcı yaz:
-    // oturum başına bir kez, sessizce; elle seçilmiş markalara dokunulmaz. Salt okunur bulutta hata verirse yok sayılır.
-    if(!window._markaOtoKalici && res.kalemler.some(k=>k.markaOtomatik)){
-      window._markaOtoKalici = true;
-      cariApi("stokTanimMarkaKoduIsleToplu", {}).then(r=>{ if(r && r.ok && r.guncellenen>0) stokTanimListesiYukle(); }).catch(()=>{});
-    }
   }).catch(err=>{
     if(!onbellek) document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
@@ -22194,7 +22189,26 @@ function stokTanimMarkaFiltreSec(deger){
   stokTanimAramaFiltrele((document.getElementById("stoktanim-ara")||{}).value || "");
 }
 
+// ★ Markası boş kartlarda marka, stok kodunun ilk 2 hanesiyle Marka Tanımlama'daki koddan bulunur (ekran tarafında da yapılır,
+// sunucu eski sürümde kalsa bile çalışsın). Elle seçilmiş marka (markaId dolu) asla değişmez. Bulunanlar oturumda bir kez kalıcı yazılır.
+function stokTanimMarkaOtoDoldur_(){
+  if(!_markaYuklendi || !_markaListe.length) return;
+  const harita = {};
+  _markaListe.forEach(m=>{ const kd = String(m.kod||"").trim().toUpperCase(); if(kd) harita[kd] = m.id; });
+  let bulunan = 0;
+  (_stokTanimListe||[]).forEach(k=>{
+    if(k.markaId) return;
+    const id = harita[String(k.stokKodu||"").trim().toUpperCase().slice(0,2)];
+    if(id){ k.markaId = id; k.markaOtomatik = true; }
+    if(k.markaOtomatik) bulunan++;
+  });
+  if(bulunan && !window._markaOtoKalici){
+    window._markaOtoKalici = true;
+    cariApi("stokTanimMarkaKoduIsleToplu", {}).then(r=>{ if(r && r.ok && r.guncellenen>0) stokTanimListesiYukle(); }).catch(()=>{});
+  }
+}
 function stokTanimListesiCiz(liste){
+  stokTanimMarkaOtoDoldur_();
   const el = document.getElementById("stoktanim-items");
   const sayiEl = document.getElementById("stoktanim-sayi"); if(sayiEl) sayiEl.textContent = "(" + liste.length.toLocaleString("tr-TR") + " kayıt)";
   if(!_markaYuklendi && !_stokTanimMarkaIstendi){ _stokTanimMarkaIstendi = true; markaListesiYukle(); }
