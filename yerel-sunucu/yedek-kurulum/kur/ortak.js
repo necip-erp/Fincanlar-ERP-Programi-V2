@@ -39,6 +39,7 @@ function coz(buf, parola) {
 
 // ───── Yedek dosyaları ─────
 const FLASH_AD = /^veri-(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})\.json$/;
+const FLASH_AD_YENI = /^veri-(\d{2})\.(\d{2})\.(\d{4})_(\d{2})\.(\d{2})\.json$/;   // 24 Eki 2026: veri-GG.AA.YYYY_SS.DD.json
 const BULUT_AD = /^yerel-veri-(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})\.json\.gz(?:\.(\d{3}))?$/;
 const damgaT = (m) => Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);   // iki biçim de İstanbul saatiyle yazılır; kendi aralarında kıyaslanır
 const damgaYaz = (t) => new Date(t).toISOString().replace('T', ' ').slice(0, 19);
@@ -50,7 +51,8 @@ function yedekleriTara(klasorler) {
   const bak = (kl) => {
     let liste; try { liste = fs.readdirSync(kl); } catch (e) { return; }
     for (const f of liste) {
-      let m = FLASH_AD.exec(f);
+      let m = FLASH_AD.exec(f), yeniAd = null;
+      if (!m) { yeniAd = FLASH_AD_YENI.exec(f); if (yeniAd) m = [yeniAd[0], yeniAd[3], yeniAd[2], yeniAd[1], yeniAd[4], yeniAd[5], '00']; }   // yıl, ay, gün, saat, dk, sn sırasına çevrilir
       if (m) {
         const yol = path.join(kl, f); let st; try { st = fs.statSync(yol); } catch (e) { continue; }
         adaylar.set('f|' + yol, { tur: 'flash', ad: f, t: damgaT(m), yollar: [yol], boyut: st.size, eksik: false });
@@ -151,7 +153,7 @@ function kodKopyala(kaynak, hedef, haric) {
 // Dosya adı damgası: yedek motoruyla aynı biçim ve aynı saat dilimi (İstanbul), böylece yedekler birbiriyle doğru kıyaslanır
 const damgaSimdi = () => {
   const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date()).reduce((a, x) => (a[x.type] = x.value, a), {});
-  return `${p.year}-${p.month}-${p.day}_${p.hour}-${p.minute}-${p.second}`;
+  return `${p.day}.${p.month}.${p.year}_${p.hour}.${p.minute}`;   // 24 Eki 2026: gün.ay.yıl_saat.dakika (":" dosya adında olamaz)
 };
 const mb = (b) => (b / 1048576).toFixed(1) + ' MB';
 

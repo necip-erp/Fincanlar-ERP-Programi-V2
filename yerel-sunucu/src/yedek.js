@@ -30,7 +30,16 @@ const VARSAYILAN = {
 function istanbul(d) {
   const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
     .formatToParts(d).reduce((o, x) => (o[x.type] = x.value, o), {});
-  return { tarih: `${p.year}-${p.month}-${p.day}`, saat: `${p.hour}:${p.minute}`, damga: `${p.year}-${p.month}-${p.day}_${p.hour}-${p.minute}-${p.second}` };
+  // ad: flash dosya adı için "gün.ay.yıl_saat.dakika" (Windows dosya adında ":" olamaz, saat/dakika nokta ile ayrılır)
+  return { tarih: `${p.year}-${p.month}-${p.day}`, saat: `${p.hour}:${p.minute}`, damga: `${p.year}-${p.month}-${p.day}_${p.hour}-${p.minute}-${p.second}`, ad: `${p.day}.${p.month}.${p.year}_${p.hour}.${p.minute}` };
+}
+// Flash yedek dosya adından zaman (eski "veri-YYYY-MM-DD_SS-DD-SN.json" ve yeni "veri-GG.AA.YYYY_SS.DD.json" biçimleri birlikte sıralanır)
+function flashAdT(f) {
+  let m = /^veri-(\d{2})\.(\d{2})\.(\d{4})_(\d{2})\.(\d{2})\.json$/.exec(f);
+  if (m) return Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]);
+  m = /^veri-(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})\.json$/.exec(f);
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  return 0;
 }
 const saatGecerli = (s) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
@@ -215,13 +224,13 @@ function baslat(o) {
         try {
           const kl = path.join(s.kok, 'FincanlarERP-Yedek');
           fs.mkdirSync(kl, { recursive: true });
-          const ad = `veri-${z.damga}.json`, hedef = path.join(kl, ad), gecici = hedef + '.tmp';
+          const ad = `veri-${z.ad}.json`, hedef = path.join(kl, ad), gecici = hedef + '.tmp';
           await fs.promises.writeFile(gecici, ham);
           const geri = await fs.promises.readFile(gecici);
           if (sha(geri) !== ozet) { await fs.promises.unlink(gecici).catch(() => {}); throw new Error('Kopya doğrulanamadı (flash arızalı olabilir)'); }
           await fs.promises.rename(gecici, hedef);
           if (ayar.flash.kodDa) kodKopyala(kl);
-          const eskiler = fs.readdirSync(kl).filter((f) => /^veri-.*\.json$/.test(f)).sort();
+          const eskiler = fs.readdirSync(kl).filter((f) => /^veri-.*\.json$/.test(f)).sort((a, b) => (flashAdT(a) - flashAdT(b)) || (a < b ? -1 : a > b ? 1 : 0));
           while (eskiler.length > ayar.flash.sakla) await fs.promises.unlink(path.join(kl, eskiler.shift())).catch(() => {});
           durum.flash.sonYol = hedef; durum.flash.sonSurucu = s.kok; yapilan++;
         } catch (e) { hata = (e.code === 'ENOSPC' ? 'Flash\'ta yer yok' : e.message); log('flash yedeği hatası:', hata); }
