@@ -4469,10 +4469,10 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261024d";
+const FRONT_SURUM = "20261024e";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
-const SUNUCU_EN_AZ = "20261024c";
+const SUNUCU_EN_AZ = "20261024e";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -22113,6 +22113,12 @@ function stokTanimListesiYukle(){
     onbellekYaz("stokTanimListesi", res.kalemler);
     _stokTanimGuncelAramaTerimiIleCiz();
     bfmOnerileriGuncelle();
+    // Markası boş olup stok kodunun ilk 2 hanesinden marka bulunan kartları (backend markaOtomatik işaretler) kalıcı yaz:
+    // oturum başına bir kez, sessizce; elle seçilmiş markalara dokunulmaz. Salt okunur bulutta hata verirse yok sayılır.
+    if(!window._markaOtoKalici && res.kalemler.some(k=>k.markaOtomatik)){
+      window._markaOtoKalici = true;
+      cariApi("stokTanimMarkaKoduIsleToplu", {}).then(r=>{ if(r && r.ok && r.guncellenen>0) stokTanimListesiYukle(); }).catch(()=>{});
+    }
   }).catch(err=>{
     if(!onbellek) document.getElementById("stoktanim-items").innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>';
   });
@@ -22148,7 +22154,11 @@ function stokTanimMarkaAdi_(k){
   return m ? (m.kod+" "+m.ad) : (k.markaKodu||"");
 }
 function stokTanimSutunHucre_(kol, k){
-  if(kol==="marka") return k.markaKodu ? `<span class="tip-badge">${htmlKacis(k.markaKodu)}</span>` : "—";
+  if(kol==="marka"){
+    const m = k.markaId ? (_markaListe||[]).find(x=>x.id===k.markaId) : null;   // elle seçilmiş ya da koddan otomatik gelen marka
+    const kod = m ? m.kod : k.markaKodu;
+    return kod ? `<span class="tip-badge"${m ? ` title="${htmlKacis(m.ad)}"` : ""}>${htmlKacis(kod)}</span>` : "—";
+  }
   if(kol==="kod") return htmlKacis(k.stokKodu||"—");
   if(kol==="ad") return olcuBasaAlGoster(k.stokAdi, k.markaKodu);
   if(kol==="birim") return htmlKacis(k.birim1||"—");
@@ -22393,7 +22403,7 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
         <div class="fld" style="flex:1;min-width:200px;margin-bottom:0"><label>Stok Kodu</label>
           <div style="display:flex;gap:4px">
-            <input id="st-stokkodu" type="text" value="${k?k.stokKodu:_stokTanimSonKod}" placeholder="İsteğe bağlı (ilk 2 hane marka kodu)" ${k?'readonly title="Var olan bir stok kartının kodu, bağlı tüm hareketleri de taşımak için sadece \'Değiştir\' ile güncellenebilir"':'oninput="_stokTanimSonKod=this.value"'}>
+            <input id="st-stokkodu" type="text" value="${k?k.stokKodu:_stokTanimSonKod}" placeholder="İsteğe bağlı (ilk 2 hane marka kodu)" ${k?'readonly title="Var olan bir stok kartının kodu, bağlı tüm hareketleri de taşımak için sadece \'Değiştir\' ile güncellenebilir"':'oninput="_stokTanimSonKod=this.value; stokMarkaKoddanSec_(this.value)"'}>
             ${k ? `<button type="button" class="btn" style="padding:6px 10px;white-space:nowrap" onclick="stokKoduDegistirSureci('${k.id}')">✏️ Değiştir</button>` : `<button type="button" class="btn" style="padding:6px 10px;white-space:nowrap" onclick="stokKoduOnerUygula()" title="Marka + Ürün Grubu + Alt Ürün Grubu seçiminden 12 haneli kod önerir">🔧 Öner</button>`}
           </div>
         </div>
@@ -22442,7 +22452,7 @@ function stokTanimModalAc(editId, onKaydedildi, faturaKoduIpucu){
         </div>
       </div>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-        <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Marka</label><div class="st-tanimli-satir"><select id="st-marka">${secenekHtml(_markaListe, k?k.markaId:'')}</select>${stokTanimlaBtn_('marka')}</div></div>
+        <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Marka</label><div class="st-tanimli-satir"><select id="st-marka" onchange="this.dataset.manuel='1'">${secenekHtml(_markaListe, k?k.markaId:'')}</select>${stokTanimlaBtn_('marka')}</div></div>
         <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Ürün Grubu</label><div class="st-tanimli-satir"><select id="st-urungrubu">${secenekHtml(_tanimListeCache.urunGrubu, k?k.urunGrubuId:'')}</select>${stokTanimlaBtn_('urunGrubu')}</div></div>
         <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Alt Ürün Grubu</label><div class="st-tanimli-satir"><select id="st-alturungrubu">${secenekHtml(_tanimListeCache.altUrunGrubu, k?k.altUrunGrubuId:'')}</select>${stokTanimlaBtn_('altUrunGrubu')}</div></div>
         <div class="fld" style="flex:1;min-width:170px;margin-bottom:0"><label>Ebat</label><div class="st-tanimli-satir"><select id="st-ebat">${secenekHtml(_tanimListeCache.ebat, k?k.ebatId:'')}</select>${stokTanimlaBtn_('ebat')}</div></div>
@@ -22496,6 +22506,14 @@ function stokGorselKaldir(){
   const kb = document.getElementById("st-gorsel-kaldir"); if(kb) kb.style.display = "none";
 }
 
+// ★ (24 Eki 2026) Yeni stok kartında kod yazılırken ilk 2 hane Marka Tanımlama'daki bir kodla eşleşirse marka otomatik seçilir;
+// kullanıcı markayı elle değiştirdiyse (dataset.manuel) bir daha ezilmez.
+function stokMarkaKoddanSec_(kod){
+  const sel = document.getElementById("st-marka");
+  if(!sel || sel.dataset.manuel==="1") return;
+  const m = (_markaListe||[]).find(x=>x.kod && x.kod === String(kod||"").trim().toUpperCase().slice(0,2));
+  if(m) sel.value = m.id;
+}
 function stokKoduOnerUygula(){
   const markaId = document.getElementById("st-marka").value;
   const urunGrubuId = document.getElementById("st-urungrubu").value;

@@ -1172,7 +1172,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261024c";
+const PROGRAM_SURUM_ = "20261024e";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -8152,10 +8152,18 @@ function getStokTanimListesi() {
   const data = sheet.getDataRange().getValues();
   const guncelMiktarHaritasi = stokGuncelMiktarHaritasi();
   const renkMiktarHaritasi = stokRenkMiktarHaritasi();
+  // ★ (24 Eki 2026) Stok kodunun ilk 2 hanesi = marka kodu: Marka alanı boş kartlarda Marka Tanımlama'daki kodla
+  // eşleşen marka otomatik kabul edilir (markaOtomatik:true). Elle seçilen marka (markaId dolu) her zaman önceliklidir.
+  const markaKodHaritasi = {};
+  (getMarkaListesi().markalar || []).forEach(m => { if (m.kod) markaKodHaritasi[m.kod] = m.id; });
   const sonuc = [];
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
     const nesne = stokTanimSatiriNesneYap(data[i]);
+    if (!nesne.markaId) {
+      const otoMarka = markaKodHaritasi[String(nesne.stokKodu || "").trim().toUpperCase().slice(0, 2)];
+      if (otoMarka) { nesne.markaId = otoMarka; nesne.markaOtomatik = true; }
+    }
     nesne.guncelStok = guncelMiktarHaritasi[nesne.id] || 0;
     // Renkli kartlarda renk bazlı miktar (anahtar: renkAnahtar_ biçimi); toplamdan farkı "renk belirtilmemiş" stoktur.
     if (nesne.renkListeId) nesne.renkMiktar = renkMiktarHaritasi[nesne.id] || {};
