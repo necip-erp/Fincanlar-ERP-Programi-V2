@@ -4469,7 +4469,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261024f";
+const FRONT_SURUM = "20261024g";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -21746,6 +21746,7 @@ function stokAltModulAc(hangisi){
 function stokTanimAltAc(hangisi){
   if(hangisi === "tanim"){
     stokPaneliGoster("stok-tanim-view");
+    if(_stokTanimMarkaFiltre){ _stokTanimMarkaFiltre = ""; if(_stokTanimYuklendi) stokTanimAramaFiltrele((document.getElementById("stoktanim-ara")||{}).value || ""); }   // eski marka filtresi açılışta temizlenir
     if(!_stokTanimYuklendi) stokTanimListesiYukle();
   } else if(hangisi === "birim"){
     stokPaneliGoster("stok-birim-view");
@@ -22212,7 +22213,6 @@ function stokTanimListesiCiz(liste){
   const el = document.getElementById("stoktanim-items");
   const sayiEl = document.getElementById("stoktanim-sayi"); if(sayiEl) sayiEl.textContent = "(" + liste.length.toLocaleString("tr-TR") + " kayıt)";
   if(!_markaYuklendi && !_stokTanimMarkaIstendi){ _stokTanimMarkaIstendi = true; markaListesiYukle(); }
-  if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı ürün tanımı yok. "+" ile ekleyin ya da Excel\'den içe aktarın.</div>'; return; }
   _stokTanimSonGosterilenListe = liste;
   let sirali = liste;
   if(_stokTanimSirala.kol){
@@ -22241,6 +22241,9 @@ function stokTanimListesiCiz(liste){
         </tr>
       </thead>
       <tbody>
+        ${liste.length===0 ? `<tr><td colspan="${sira.length}" style="text-align:center;color:var(--text3);padding:24px">${
+            _stokTanimMarkaFiltre ? 'Bu markada stok kartı yok. Başlıktaki Marka kutusundan "Marka (hepsi)"ni seçerek tüm listeye dönebilirsiniz.'
+                                  : 'Kayıtlı ürün tanımı yok. "+" ile ekleyin ya da Excel\'den içe aktarın.'}</td></tr>` : ""}
         ${gosterilecek.map(k=>`
           <tr class="hk-row" onclick="stokTanimModalAc('${k.id}')" title="Düzenlemek için tıklayın">
             ${sira.map(c=>`<td>${stokTanimSutunHucre_(c,k)}</td>`).join("")}
