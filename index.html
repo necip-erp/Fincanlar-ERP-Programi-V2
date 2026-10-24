@@ -257,6 +257,7 @@ body.zemin-bulut .topbar .brand,body.zemin-yerel .topbar .brand{background:#fff;
 .cari-add-btn:active{transform:translateY(0) scale(.94)}
 .cari-items{flex:1;overflow:auto}
 .stoktanim-tbl{white-space:nowrap}
+.stoktanim-marka-sec{max-width:150px;font-size:12px;padding:2px 4px}
 .stoktanim-tbl td:nth-child(2){white-space:normal}
 .cari-item{padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;flex-direction:column;gap:2px;border-left:3px solid transparent;transition:background var(--t),border-color var(--t)}
 .cari-item:hover{background:var(--bg3)}
@@ -1088,6 +1089,7 @@ setInterval(topbarSaatGuncelle, 10000);
     <div id="stok-tanim-view" style="display:none;height:100%" class="cari-list-panel-wrap">
       <div class="cari-list-panel">
         <button class="cari-back-btn" style="display:inline-flex;padding:10px 14px 0" onclick="stokAltModulAc('tanimlar')">← Geri</button>
+        <div class="rapor-baslik" style="margin:6px 14px 0">📇 Stok Tanımları <span id="stoktanim-sayi" style="font-size:12px;font-weight:600;color:var(--text3)"></span></div>
         <div class="cari-list-head">
           <input id="stoktanim-ara" placeholder="Ürün ara..." oninput="stokTanimAramaFiltrele(this.value)">
           <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap" title="Pasif stok kartlarını listele"><input type="checkbox" id="stoktanim-pasif-goster" onchange="stokTanimAramaFiltrele(document.getElementById('stoktanim-ara').value)"> ⏸ Pasifler</label>
@@ -4467,10 +4469,10 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261024b";
+const FRONT_SURUM = "20261024c";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
-const SUNUCU_EN_AZ = "20261024b";
+const SUNUCU_EN_AZ = "20261024c";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -21411,6 +21413,7 @@ function markaListesiYukle(){
     _markaListe = res.markalar;
     _markaYuklendi = true;
     markaListesiCiz();
+    try{ if(_stokTanimSonGosterilenListe && _stokTanimSonGosterilenListe.length && document.getElementById("stok-tanim-view").style.display!=="none") stokTanimListesiCiz(_stokTanimSonGosterilenListe); }catch(e){}
   }).catch(err=>{ if(el) el.innerHTML = '<div class="cari-empty">Bağlantı hatası: '+err.message+'</div>'; });
 }
 function markaListesiCiz(){
@@ -22118,41 +22121,111 @@ function stokTanimListesiYukle(){
 let _stokTanimRenderLimit = 80;
 let _stokTanimSonGosterilenListe = [];
 
+// ★ (24 Eki 2026) Sütunlar: başlığa tıklayınca önce büyükten küçüğe, tekrar tıklayınca küçükten büyüğe sıralanır;
+// başlık sürüklenerek yer değiştirir (sıra tarayıcıda saklanır). Marka sütunu her satırda marka seçimi yapar.
+const STOK_TANIM_SUTUNLARI = {
+  marka:  { baslik:"Marka",      deger:k=>stokTanimMarkaAdi_(k) },
+  kod:    { baslik:"Stok Kodu",  deger:k=>k.stokKodu||"" },
+  ad:     { baslik:"Stok Adı",   deger:k=>k.stokAdi||"" },
+  birim:  { baslik:"Birimi",     deger:k=>k.birim1||"" },
+  ambalaj:{ baslik:"2. Birim Miktarı / Birimi", deger:k=>k.ambalajMiktari||0 },
+  alis:   { baslik:"Alış Fiyatı", deger:k=>k.alisFiyati||0 },
+  satis:  { baslik:"Satış Fiyatı", deger:k=>k.satisFiyati||0 },
+  stok:   { baslik:"Güncel Stok", deger:k=>k.guncelStok||0 },
+};
+const STOK_TANIM_SUTUN_VARSAYILAN = ["marka","kod","ad","birim","ambalaj","alis","satis","stok"];
+let _stokTanimSirala = { kol:"", yon:0 };   // yon: -1 büyükten küçüğe, 1 küçükten büyüğe
+
+function stokTanimSutunSirasi_(){
+  let sira = [];
+  try{ sira = JSON.parse(localStorage.getItem("stokTanimSutunSirasi")||"[]"); }catch(e){}
+  const gecerli = (Array.isArray(sira)?sira:[]).filter(x=>STOK_TANIM_SUTUNLARI[x]);
+  STOK_TANIM_SUTUN_VARSAYILAN.forEach(x=>{ if(!gecerli.includes(x)) gecerli.push(x); });
+  return gecerli;
+}
+function stokTanimMarkaAdi_(k){
+  const m = k.markaId ? (_markaListe||[]).find(x=>x.id===k.markaId) : null;
+  return m ? (m.kod+" "+m.ad) : (k.markaKodu||"");
+}
+function stokTanimSutunHucre_(kol, k){
+  if(kol==="marka"){
+    if(!_markaYuklendi) return k.markaKodu ? `<span class="tip-badge">${htmlKacis(k.markaKodu)}</span>` : "—";
+    return `<select class="stoktanim-marka-sec" onclick="event.stopPropagation()" onchange="stokTanimMarkaSec('${k.id}', this)" title="Marka seç">
+      <option value="">— seçilmedi —</option>
+      ${_markaListe.map(m=>`<option value="${m.id}"${m.id===k.markaId?" selected":""}>${htmlKacis(m.kod+" · "+m.ad)}</option>`).join("")}
+    </select>`;
+  }
+  if(kol==="kod") return htmlKacis(k.stokKodu||"—");
+  if(kol==="ad") return olcuBasaAlGoster(k.stokAdi, k.markaKodu);
+  if(kol==="birim") return htmlKacis(k.birim1||"—");
+  if(kol==="ambalaj"){
+    if(!k.ambalajMiktari) return "—";
+    const miktarStr = (Math.round(k.ambalajMiktari*100)/100).toString().replace(".",",");
+    const birimKisim = miktarStr + (k.birim1||"");
+    return k.ambalajBirimi ? `1 ${htmlKacis(k.ambalajBirimi)} / ${birimKisim}` : birimKisim;
+  }
+  if(kol==="alis") return fiyatFormat(k.alisFiyati);
+  if(kol==="satis") return fiyatFormat(k.satisFiyati);
+  if(kol==="stok") return k.minStok>0 && k.guncelStok<=k.minStok ? `<span class="hk-borc">${miktarFormat(k.guncelStok)} ⚠️</span>` : miktarFormat(k.guncelStok||0);
+  return "";
+}
+function stokTanimSiralaTikla(kol){
+  if(_stokTanimSirala.kol===kol) _stokTanimSirala.yon = -_stokTanimSirala.yon;
+  else _stokTanimSirala = { kol:kol, yon:-1 };   // ilk tık: büyükten küçüğe
+  stokTanimListesiCiz(_stokTanimSonGosterilenListe);
+}
+let _stokTanimSurukle = "";
+function stokTanimSutunTasi(hedef){
+  if(!_stokTanimSurukle || _stokTanimSurukle===hedef) return;
+  const sira = stokTanimSutunSirasi_();
+  sira.splice(sira.indexOf(_stokTanimSurukle),1);
+  sira.splice(sira.indexOf(hedef),0,_stokTanimSurukle);
+  try{ localStorage.setItem("stokTanimSutunSirasi", JSON.stringify(sira)); }catch(e){}
+  _stokTanimSurukle = "";
+  stokTanimListesiCiz(_stokTanimSonGosterilenListe);
+}
+function stokTanimMarkaSec(id, sel){
+  const k = (_stokTanimListe||[]).find(x=>x.id===id);
+  if(!k) return;
+  const eski = k.markaId||"", yeni = sel.value;
+  sel.disabled = true;
+  cariApi("stokMarkaKaydet", {id:id, markaId:yeni}).then(res=>{
+    sel.disabled = false;
+    if(!res || !res.ok){ sel.value = eski; alert("Marka kaydedilemedi: "+((res&&(res.hata||res.error))||"bilinmiyor")); return; }
+    k.markaId = yeni;
+    try{ onbellekYaz("stokTanimListesi", _stokTanimListe); }catch(e){}
+  }).catch(err=>{ sel.disabled = false; sel.value = eski; alert("Bağlantı hatası: "+err.message); });
+}
+
 function stokTanimListesiCiz(liste){
   const el = document.getElementById("stoktanim-items");
+  const sayiEl = document.getElementById("stoktanim-sayi"); if(sayiEl) sayiEl.textContent = "(" + liste.length.toLocaleString("tr-TR") + " kayıt)";
+  if(!_markaYuklendi && !_stokTanimMarkaIstendi){ _stokTanimMarkaIstendi = true; markaListesiYukle(); }
   if(liste.length === 0){ el.innerHTML = '<div class="cari-empty">Kayıtlı ürün tanımı yok. "+" ile ekleyin ya da Excel\'den içe aktarın.</div>'; return; }
   _stokTanimSonGosterilenListe = liste;
-  const gosterilecek = liste.slice(0, _stokTanimRenderLimit);
+  let sirali = liste;
+  if(_stokTanimSirala.kol){
+    const d = STOK_TANIM_SUTUNLARI[_stokTanimSirala.kol].deger, y = _stokTanimSirala.yon;
+    sirali = liste.slice().sort((a,b)=>{
+      const x = d(a), z = d(b);
+      const c = (typeof x==="number" && typeof z==="number") ? x - z : String(x).localeCompare(String(z), "tr", {numeric:true});
+      return c * y;   // yon -1 (ilk tık) büyükten küçüğe
+    });
+  }
+  const sira = stokTanimSutunSirasi_();
+  const gosterilecek = sirali.slice(0, _stokTanimRenderLimit);
   el.innerHTML = `
     <table class="hareket-tbl stoktanim-tbl">
       <thead>
         <tr>
-          <th>Marka</th>
-          <th>Stok Kodu</th>
-          <th>Stok Adı</th>
-          <th>Birimi</th>
-          <th>2. Birim Miktarı / Birimi</th>
-          <th>Alış Fiyatı</th>
-          <th>Satış Fiyatı</th>
-          <th>Güncel Stok</th>
+          ${sira.map(c=>`<th draggable="true" style="cursor:pointer;user-select:none" title="Sıralamak için tıklayın, yerini değiştirmek için sürükleyin"
+            onclick="stokTanimSiralaTikla('${c}')" ondragstart="_stokTanimSurukle='${c}'" ondragover="event.preventDefault()" ondrop="stokTanimSutunTasi('${c}')">${STOK_TANIM_SUTUNLARI[c].baslik}${_stokTanimSirala.kol===c ? (_stokTanimSirala.yon<0?" ▼":" ▲") : ""}</th>`).join("")}
         </tr>
       </thead>
       <tbody>
         ${gosterilecek.map(k=>`
           <tr class="hk-row" onclick="stokTanimModalAc('${k.id}')" title="Düzenlemek için tıklayın">
-            <td>${k.markaKodu ? `<span class="tip-badge">${k.markaKodu}</span>` : "—"}</td>
-            <td>${k.stokKodu||"—"}</td>
-            <td>${olcuBasaAlGoster(k.stokAdi, k.markaKodu)}</td>
-            <td>${k.birim1||"—"}</td>
-            <td>${(()=>{
-              if(!k.ambalajMiktari) return "—";
-              const miktarStr = (Math.round(k.ambalajMiktari*100)/100).toString().replace(".",",");
-              const birimKisim = miktarStr + (k.birim1||"");
-              return k.ambalajBirimi ? `1 ${k.ambalajBirimi} / ${birimKisim}` : birimKisim;
-            })()}</td>
-            <td>${fiyatFormat(k.alisFiyati)}</td>
-            <td>${fiyatFormat(k.satisFiyati)}</td>
-            <td>${k.minStok>0 && k.guncelStok<=k.minStok ? `<span class="hk-borc">${miktarFormat(k.guncelStok)} ⚠️</span>` : miktarFormat(k.guncelStok||0)}</td>
+            ${sira.map(c=>`<td>${stokTanimSutunHucre_(c,k)}</td>`).join("")}
           </tr>`).join("")}
       </tbody>
     </table>
@@ -22160,6 +22233,7 @@ function stokTanimListesiCiz(liste){
       ? `<div class="liste-daha-fazla" onclick="stokTanimDahaFazlaGoster()">+ ${liste.length - _stokTanimRenderLimit} kayıt daha göster</div>`
       : ""}`;
 }
+let _stokTanimMarkaIstendi = false;
 
 function stokTanimDahaFazlaGoster(){
   _stokTanimRenderLimit += 80;

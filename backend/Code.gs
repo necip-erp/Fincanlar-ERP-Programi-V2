@@ -1172,7 +1172,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261024b";
+const PROGRAM_SURUM_ = "20261024c";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -1309,6 +1309,7 @@ function handleRequest(e) {
       case "setCariEfaturaKapat": result = setCariEfaturaKapat(body); break;
       case "getSatisYazdirVerisi": result = getSatisYazdirVerisi(body); break;
       case "setStokPasif":   result = setStokPasif(body); break;
+      case "stokMarkaKaydet": result = stokMarkaKaydet(body); break;
       case "cariHareketEkle": result = cariHareketEkle(body); break;
       case "cariHareketSil":  result = cariHareketSil(body); break;
       case "getSatisListesi": result = getSatisListesi(); break;
@@ -7927,6 +7928,24 @@ function getStokPanelSnapshot() {
 }
 
 // ★ (13 Eki 2026) Stok kartını pasife alır / tekrar aktif eder (silinmez, hareketleri korunur). body: { id, pasif }
+// ★ (24 Eki 2026) Stok Tanımları listesinde Marka sütunundan marka seçimi: yalnızca MARKA_ID (12. sütun) değişir.
+function stokMarkaKaydet(body) {
+  const id = String((body && body.id) || "").trim();
+  const markaId = String((body && body.markaId) || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const ss = acikSS_();
+  const sheet = getOrCreateSheet(ss, SHEETS.stokTanimlari, STOK_TANIM_BASLIKLAR);
+  const ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+  for (let i = 1; i < ids.length; i++) {
+    if (String(ids[i][0]) === id) {
+      sheet.getRange(i + 1, 12).setValue(markaId);
+      cacheTemizle(["stokTanimListesi"]);
+      return { ok: true };
+    }
+  }
+  return { ok: false, hata: "Stok kartı bulunamadı" };
+}
+
 function setStokPasif(body) {
   const id = String((body && body.id) || "").trim();
   if (!id) return { ok: false, hata: "id gerekli" };
