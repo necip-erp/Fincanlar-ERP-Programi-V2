@@ -4467,7 +4467,10 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261023e";
+const FRONT_SURUM = "20261024a";
+// ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
+// Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
+const SUNUCU_EN_AZ = "20261022c";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -4489,10 +4492,12 @@ function bulutDurumCiz_(){
   const d = _bulutDurum; if(!d) return;
   const r = document.getElementById("surum-rozet");
   if(r){
-    const uyumlu = !d.surum || d.surum === FRONT_SURUM;
+    // ★ (24 Eki 2026) Sayfa-only sürümlerde arka plan numarası değişmediği için birebir eşitlik yanlış alarm veriyordu;
+    // artık yalnız sunucu, sayfanın istediği en az sürümden ESKİYSE uyarılır.
+    const uyumlu = !d.surum || String(d.surum) >= SUNUCU_EN_AZ;
     r.textContent = uyumlu ? "v" + FRONT_SURUM : "⚠ v" + FRONT_SURUM + " ≠ sunucu v" + d.surum;
     r.style.color = uyumlu ? "#64748b" : "#b91c1c";
-    r.title = uyumlu ? "Ekran ve sunucu programı aynı sürümde" : "Ekran (index.html) ile sunucu programı farklı sürümde! Yerel sunucuda Ayarlar > Program Güncelleme (GitHub) ile güncelleyin; sayfayı Ctrl+F5 ile yenileyin.";
+    r.title = uyumlu ? "Ekran v" + FRONT_SURUM + " · sunucu (arka plan) programı v" + (d.surum || "?") + " — uyumlu" : "Sunucu (arka plan) programı bu ekran için eski (v" + d.surum + ", en az v" + SUNUCU_EN_AZ + " gerekli)! Yerel sunucuda Ayarlar > Program Güncelleme (GitHub) ile güncelleyin, sunucuyu yeniden başlatın; sayfayı Ctrl+F5 ile yenileyin.";
   }
   const b = bulutBantGetir_();
   if(d.bulutKilitli){
