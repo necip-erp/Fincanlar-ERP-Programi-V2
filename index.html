@@ -2009,25 +2009,31 @@ setInterval(topbarSaatGuncelle, 10000);
         </div>
 
         <div class="hz-kart genis">
-          <h3>Ortalama Vade</h3>
-          <p class="hz-not">Her satıra tutar ve vade tarihini (ya da hesap tarihinden itibaren gün sayısını) yazın; tutar ağırlıklı ortalama vadeyi bulur. Excel'den "tutar ⇥ tarih" satırlarını doğrudan tabloya yapıştırabilirsiniz.</p>
+          <h3>Ortalama Vade — Tahsilat / Ödeme Evrakları</h3>
+          <p class="hz-not">Tahsilatta aldığınız ya da ödemede vereceğiniz çek/senetlerin tutarını ve vadesini (ya da hesap tarihinden itibaren gün sayısını) yazın; tutar ağırlıklı ortalama vadeyi bulur. Excel'den "tutar ⇥ tarih" satırlarını doğrudan tabloya yapıştırabilirsiniz.</p>
           <div class="hz-satir" style="align-items:flex-end">
-            <div class="fld" style="max-width:190px"><label>Hesap tarihi (başlangıç)</label><input id="hz-ov-bas" type="date" onchange="hzOvBasDegisti()"></div>
+            <div class="fld" style="max-width:230px"><label>İşlem</label>
+              <div style="display:flex;gap:6px">
+                <button type="button" class="belge-tab active" id="hz-ov-mod-tahsilat" style="flex:1;padding:8px 10px" onclick="hzOvModSec('tahsilat')">💰 Tahsilat</button>
+                <button type="button" class="belge-tab" id="hz-ov-mod-odeme" style="flex:1;padding:8px 10px" onclick="hzOvModSec('odeme')">💳 Ödeme</button>
+              </div>
+            </div>
+            <div class="fld" style="max-width:190px"><label>İşlem tarihi (başlangıç)</label><input id="hz-ov-bas" type="date" onchange="hzOvBasDegisti()"></div>
             <button type="button" class="hz-mini-btn" onclick="hzOvSatirEkle(1)">+ Satır</button>
             <button type="button" class="hz-mini-btn" onclick="hzOvSatirEkle(5)">+ 5 satır</button>
             <button type="button" class="hz-mini-btn" onclick="hzOvTemizle()">🗑 Temizle</button>
           </div>
           <div style="overflow-x:auto" onpaste="hzOvYapistir(event)">
             <table class="hz-ov-tablo">
-              <thead><tr><th></th><th style="width:34%">Tutar</th><th style="width:34%">Vade tarihi</th><th style="width:22%">Gün</th><th></th></tr></thead>
+              <thead><tr><th></th><th style="width:12%">Evrak</th><th style="width:18%">Evrak no / açıklama</th><th style="width:20%">Tutar</th><th style="width:22%">Vade tarihi</th><th style="width:12%">Gün</th><th></th></tr></thead>
               <tbody id="hz-ov-govde"></tbody>
             </table>
           </div>
           <div class="hz-sonuc-kutu" style="margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
-            <div><div class="a" style="margin:0">Toplam tutar</div><div class="b" id="hz-ov-toplam">—</div></div>
-            <div><div class="a" style="margin:0">Ortalama vade (gün)</div><div class="b" id="hz-ov-gun">—</div></div>
+            <div><div class="a" style="margin:0">Toplam tutar</div><div class="b" id="hz-ov-toplam">—</div><div class="a" id="hz-ov-turler"></div></div>
+            <div><div class="a" style="margin:0" id="hz-ov-gun-et">Ortalama vade (gün)</div><div class="b" id="hz-ov-gun">—</div></div>
             <div><div class="a" style="margin:0">Ortalama vade tarihi</div><div class="b" id="hz-ov-tarih">—</div><div class="a" id="hz-ov-gunadi"></div></div>
-            <div><div class="a" style="margin:0">Dolu satır</div><div class="b" id="hz-ov-adet">—</div></div>
+            <div><div class="a" style="margin:0">Dolu satır</div><div class="b" id="hz-ov-adet">—</div><div class="a" id="hz-ov-aralik"></div></div>
           </div>
         </div>
 
@@ -4784,7 +4790,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261024h";
+const FRONT_SURUM = "20261024i";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -27905,11 +27911,14 @@ function hzVadeOraniHesapla(){
 }
 // Ortalama vade
 let _hzOv = {satirlar: []};
-function hzOvBos_(){ return {tutar:"", tarih:"", gun:""}; }
+let _hzOvMod = "tahsilat";
+function hzOvBos_(){ return {tur:"Çek", no:"", tutar:"", tarih:"", gun:""}; }
 function hzOvTemel_(){ return hzIsoParse_(hzEl("hz-ov-bas").value) || hzBugun_(); }
 function hzOvCiz_(){
   hzEl("hz-ov-govde").innerHTML = _hzOv.satirlar.map((s,i)=>`<tr>
     <td class="no">${i+1}</td>
+    <td><select id="hz-ov-e-${i}" onchange="hzOvDegisti(${i},'tur',this.value)" style="width:100%;box-sizing:border-box;padding:7px 4px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);font-size:13px"><option${s.tur==="Çek"?" selected":""}>Çek</option><option${s.tur==="Senet"?" selected":""}>Senet</option></select></td>
+    <td><input id="hz-ov-n-${i}" type="text" autocomplete="off" placeholder="No / açıklama" value="${htmlKacis(s.no||"")}" oninput="hzOvDegisti(${i},'no',this.value)"></td>
     <td><input id="hz-ov-t-${i}" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${htmlKacis(s.tutar)}" oninput="hzOvDegisti(${i},'tutar',this.value)"></td>
     <td><input id="hz-ov-d-${i}" type="date" value="${s.tarih}" onchange="hzOvDegisti(${i},'tarih',this.value)"></td>
     <td><input id="hz-ov-g-${i}" type="text" inputmode="numeric" autocomplete="off" placeholder="0" value="${htmlKacis(s.gun)}" oninput="hzOvDegisti(${i},'gun',this.value)"></td>
@@ -27920,6 +27929,8 @@ function hzOvDegisti(i, alan, v){
   const s = _hzOv.satirlar[i]; if(!s) return;
   const temel = hzOvTemel_();
   if(alan === "tutar") s.tutar = v;
+  else if(alan === "tur") s.tur = v;
+  else if(alan === "no") s.no = v;
   else if(alan === "tarih"){
     s.tarih = v; const d = hzIsoParse_(v); s.gun = d ? String(hzGunFark_(temel, d)) : "";
     const g = hzEl("hz-ov-g-" + i); if(g) g.value = s.gun;
@@ -27943,27 +27954,38 @@ function hzOvBasDegisti(){
   hzOvToplamHesapla_();
 }
 function hzOvToplamHesapla_(){
-  const temel = hzOvTemel_(); let toplam = 0, agirlik = 0, adet = 0;
+  const temel = hzOvTemel_(); let toplam = 0, agirlik = 0, adet = 0, enErken = null, enGec = null; const tur = {"Çek":0, "Senet":0}, turAdet = {"Çek":0, "Senet":0};
   _hzOv.satirlar.forEach(s=>{
     const t = hzSayi_(s.tutar); let g = parseFloat(s.gun); const d = hzIsoParse_(s.tarih);
     if(d) g = hzGunFark_(temel, d);
     if(isNaN(t) || isNaN(g)) return;
     toplam += t; agirlik += t * g; adet++;
+    const k = s.tur === "Senet" ? "Senet" : "Çek"; tur[k] += t; turAdet[k]++;
+    if(enErken === null || g < enErken) enErken = g; if(enGec === null || g > enGec) enGec = g;
   });
-  const T = hzEl("hz-ov-toplam"), G = hzEl("hz-ov-gun"), D = hzEl("hz-ov-tarih"), A = hzEl("hz-ov-gunadi"), N = hzEl("hz-ov-adet");
+  const T = hzEl("hz-ov-toplam"), G = hzEl("hz-ov-gun"), D = hzEl("hz-ov-tarih"), A = hzEl("hz-ov-gunadi"), N = hzEl("hz-ov-adet"), TU = hzEl("hz-ov-turler"), AR = hzEl("hz-ov-aralik");
+  hzEl("hz-ov-gun-et").textContent = (_hzOvMod === "odeme" ? "Ortalama ödeme vadesi" : "Ortalama tahsilat vadesi") + " (gün)";
   N.textContent = adet ? String(adet) : "—";
-  if(!adet){ T.textContent = G.textContent = D.textContent = "—"; A.textContent = ""; return; }
+  if(!adet){ T.textContent = G.textContent = D.textContent = "—"; A.textContent = TU.textContent = AR.textContent = ""; return; }
   T.textContent = hzPara_(toplam);
+  TU.textContent = [turAdet["Çek"] ? "Çek (" + turAdet["Çek"] + "): " + hzPara_(tur["Çek"]) : "", turAdet["Senet"] ? "Senet (" + turAdet["Senet"] + "): " + hzPara_(tur["Senet"]) : ""].filter(Boolean).join(" · ");
+  AR.textContent = "Vade aralığı: " + enErken + " – " + enGec + " gün";
   if(toplam === 0){ G.textContent = D.textContent = "—"; A.textContent = "Toplam tutar sıfır"; return; }
   const ort = agirlik / toplam, tam = Math.round(ort);
   const tarih = new Date(temel); tarih.setDate(tarih.getDate() + tam);
   G.textContent = ort.toLocaleString("tr-TR", {maximumFractionDigits:1}) + " gün";
   D.textContent = hzTarihYaz_(tarih); A.textContent = hzGunAdi_(tarih);
 }
+function hzOvModSec(m){
+  _hzOvMod = m === "odeme" ? "odeme" : "tahsilat";
+  hzEl("hz-ov-mod-tahsilat").classList.toggle("active", _hzOvMod === "tahsilat");
+  hzEl("hz-ov-mod-odeme").classList.toggle("active", _hzOvMod === "odeme");
+  hzOvToplamHesapla_();
+}
 function hzOvSatirEkle(n){ for(let i = 0; i < n; i++) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_(); }
 function hzOvSatirSil(i){ _hzOv.satirlar.splice(i, 1); if(!_hzOv.satirlar.length) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_(); }
 function hzOvTemizle(){
-  if(_hzOv.satirlar.some(s=>s.tutar !== "" || s.tarih !== "" || s.gun !== "") && !confirm("Tablodaki tüm satırlar silinsin mi?")) return;
+  if(_hzOv.satirlar.some(s=>s.tutar !== "" || s.tarih !== "" || s.gun !== "" || s.no !== "") && !confirm("Tablodaki tüm satırlar silinsin mi?")) return;
   _hzOv.satirlar = []; for(let i = 0; i < 5; i++) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_();
 }
 function hzOvSatirCoz_(l){
@@ -27980,7 +28002,7 @@ function hzOvSatirCoz_(l){
   let gun = "";
   if(!tarih && sayilar[1] && /^\d{1,4}$/.test(sayilar[1])) gun = sayilar[1];
   if(!tutar && !tarih) return null;
-  return {tutar, tarih, gun};
+  return {tur: /senet/i.test(l) ? "Senet" : "Çek", no: "", tutar, tarih, gun};
 }
 function hzOvYapistir(e){
   const metin = (e.clipboardData || window.clipboardData).getData("text"); if(!metin) return;
@@ -27989,7 +28011,7 @@ function hzOvYapistir(e){
   e.preventDefault();
   const yeni = satirlar.map(hzOvSatirCoz_).filter(Boolean);
   if(!yeni.length) return;
-  const dolu = _hzOv.satirlar.filter(s=>s.tutar !== "" || s.tarih !== "" || s.gun !== "");
+  const dolu = _hzOv.satirlar.filter(s=>s.tutar !== "" || s.tarih !== "" || s.gun !== "" || s.no !== "");
   _hzOv.satirlar = dolu.concat(yeni);
   while(_hzOv.satirlar.length < 5) _hzOv.satirlar.push(hzOvBos_());
   hzOvCiz_(); hzOvBasDegisti();
