@@ -1172,7 +1172,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261022c";
+const PROGRAM_SURUM_ = "20261024b";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -8697,12 +8697,25 @@ function saveStokTanimTopluce(body) {
 
   const kayitTarihi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   const yeniSatirlar = [];
-  let guncellenen = 0, eklenen = 0, atlanan = 0;
+  let guncellenen = 0, eklenen = 0, atlanan = 0, atlananMevcut = 0;
+  // ★ (24 Eki 2026) mevcutlaraDokunma: stok kodu zaten açık bir kartta varsa o karta ASLA dokunulmaz
+  // (üzerine yazılmaz), satır atlanır. Excel'den ilk yükleme ("aynı kodlar kalsın") için.
+  const mevcutlaraDokunma = body.mevcutlaraDokunma === true || body.mevcutlaraDokunma === "true";
+  const markaOnbellek = {};
 
   kayitlar.forEach((k, idx) => {
     const stokAdi = String(k.stokAdi || "").trim();
     if (!stokAdi) { atlanan++; return; }
     const stokKodu = String(k.stokKodu || "").trim();
+    if (stokKodu && kodSatirMap[stokKodu] === -1) { atlanan++; return; } // aynı dosyada tekrar eden kod
+    if (mevcutlaraDokunma && stokKodu && kodSatirMap[stokKodu]) { atlananMevcut++; return; }
+    // Marka elle verilmediyse stok kodunun ilk 2 hanesinden otomatik (saveStokTanim ile aynı kural)
+    let markaId = String(k.markaId || "").trim();
+    if (!markaId && stokKodu) {
+      const mk = stokKodu.slice(0, 2).toUpperCase();
+      if (!(mk in markaOnbellek)) markaOnbellek[mk] = markaKoduIleEslesenMarkaId_(stokKodu);
+      markaId = markaOnbellek[mk];
+    }
     const satir = [
       "sk_" + Date.now() + "_" + idx,
       stokKodu,
@@ -8715,18 +8728,20 @@ function saveStokTanimTopluce(body) {
       parseFloat(k.satisFiyati) || 0,
       parseFloat(k.satisIskontosu) || 0,
       kayitTarihi,
-      String(k.markaId || ""),
+      markaId,
       String(k.urunGrubuId || ""),
       String(k.altUrunGrubuId || ""),
       String(k.ebatId || ""),
       String(k.renkId || ""),
+      0, "", 20, 20, // MIN_STOK, BARKOD, KDV_ALIS, KDV_SATIS (sütun sayısı STOK_TANIM_BASLIKLAR ile aynı olmalı)
     ];
 
-    if (stokKodu && kodSatirMap[stokKodu]) {
+    if (stokKodu && kodSatirMap[stokKodu] > 0) {
       // Mevcut kaydı güncelle — ID'yi koru
       const satirNo = kodSatirMap[stokKodu];
       satir[0] = String(data[satirNo - 1][0]);
-      sheet.getRange(satirNo, 1, 1, satir.length).setValues([satir]);
+      const guncSatir = satir.slice(0, 16); // güncellemede MIN_STOK/BARKOD/KDV gibi sonraki sütunlara dokunma
+      sheet.getRange(satirNo, 1, 1, guncSatir.length).setValues([guncSatir]);
       guncellenen++;
     } else {
       yeniSatirlar.push(satir);
@@ -8740,7 +8755,7 @@ function saveStokTanimTopluce(body) {
   }
 
   cacheTemizle(["stokTanimListesi"]);
-  return { ok: true, eklenen: eklenen, guncellenen: guncellenen, atlanan: atlanan };
+  return { ok: true, eklenen: eklenen, guncellenen: guncellenen, atlanan: atlanan, atlananMevcut: atlananMevcut };
 }
 
 // ════════════════════════════════════════════════

@@ -4467,10 +4467,10 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261024a";
+const FRONT_SURUM = "20261024b";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
-const SUNUCU_EN_AZ = "20261022c";
+const SUNUCU_EN_AZ = "20261024b";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -22633,9 +22633,13 @@ function stokTanimIceAktarModalAc(){
       <p style="color:var(--text3);font-size:12px;margin:0 0 10px">
         Sütunlar şu sırada olmalı: <b>A</b> Stok Kodu, <b>B</b> Stok Adı, <b>C</b> 1.Birim,
         <b>D</b> Ambalaj Miktarı, <b>E</b> Ambalaj Birimi, <b>F</b> Alış Fiyatı, <b>G</b> Alış İskontosu,
-        <b>H</b> Satış Fiyatı, <b>I</b> Satış İskontosu. Aynı Stok Kodu'na sahip satırlar güncellenir, yeni kodlar eklenir.
-        Başlık satırı varsa otomatik atlanır.
+        <b>H</b> Satış Fiyatı, <b>I</b> Satış İskontosu. Başlık satırı varsa otomatik atlanır; başlıkta
+        <b>Stok Kodu</b> ve <b>Stok Adı</b> yazıyorsa sütunlar başlığa göre bulunur (başka sütunlar, örn. "St", yok sayılır).
       </p>
+      <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin:0 0 10px;cursor:pointer">
+        <input type="checkbox" id="st-ice-aktar-mevcut-dokunma" checked>
+        <span>Aynı stok koduna sahip kartlara <b>dokunma</b> (atla) — işaretli değilse aynı kodlu kartlar güncellenir</span>
+      </label>
       <div class="fld"><label>Excel Dosyası Yükle (.xlsx / .xls / .csv)</label>
         <input id="st-ice-aktar-dosya" type="file" accept=".xlsx,.xls,.csv" onchange="stokTanimExcelDosyaSecildi(event)">
       </div>
@@ -22665,7 +22669,9 @@ function stokTanimExcelDosyaSecildi(evt){
       const veri = new Uint8Array(e.target.result);
       const wb = XLSX.read(veri, {type:"array"});
       const ilkSayfa = wb.Sheets[wb.SheetNames[0]];
-      const tsv = XLSX.utils.sheet_to_csv(ilkSayfa, {FS:"\t"});
+      // sheet_to_csv yerine satır dizisi: ad içindeki " işareti bozulmasın; kodlar metin olarak kalsın
+      const satirlar = XLSX.utils.sheet_to_json(ilkSayfa, {header:1, raw:false, defval:""});
+      const tsv = satirlar.map(r=>r.map(h=>String(h).replace(/[\t\r\n]+/g," ")).join("\t")).join("\n");
       document.getElementById("st-ice-aktar-veri").value = tsv;
       stokTanimIceAktarOnizle();
     }catch(err){
@@ -22679,21 +22685,31 @@ function stokTanimExcelDosyaSecildi(evt){
 function stokTanimYapistirilaniAyristir(metin){
   const satirlar = metin.split(/\r\n|\n|\r/).map(s=>s.trim()).filter(s=>s.length>0);
   const kayitlar = [];
+  // Başlık satırında "Stok Kodu" ve "Stok Adı" varsa sütunları başlığa göre bul (örn. St | Stok Kodu | Stok Adı)
+  const norm = t=>String(t||"").replace(/[İIıi]/g,"i").toLocaleLowerCase("tr").trim();
+  let kodCol = 0, adCol = 1;
+  for(let i=0;i<Math.min(satirlar.length,5);i++){
+    const b = satirlar[i].split("\t").map(norm);
+    const k = b.findIndex(x=>x.startsWith("stok kod")), a = b.findIndex(x=>x.startsWith("stok ad"));
+    if(k>=0 && a>=0){ kodCol = k; adCol = a; break; }
+  }
+  const basliktanBulundu = (kodCol!==0 || adCol!==1);
   satirlar.forEach(satir=>{
     const h = satir.split("\t");
-    const stokAdi = (h[1]||"").trim();
+    const stokAdi = (h[adCol]||"").trim();
     if(!stokAdi) return; // Stok Adı boşsa (muhtemelen başlık satırı ya da boş satır) atla
-    if(stokAdi.replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes("stok ad")) return; // başlık satırını algıla ve atla
+    if(norm(stokAdi).includes("stok ad")) return; // başlık satırını algıla ve atla
     kayitlar.push({
-      stokKodu: (h[0]||"").trim(),
+      stokKodu: (h[kodCol]||"").trim(),
       stokAdi: stokAdi,
-      birim1: (h[2]||"adet").trim(),
-      ambalajMiktari: parseFloat((h[3]||"0").replace(",",".")) || 0,
-      ambalajBirimi: (h[4]||"").trim(),
-      alisFiyati: parseFloat((h[5]||"0").replace(",",".")) || 0,
-      alisIskontosu: parseFloat((h[6]||"0").replace(",",".")) || 0,
-      satisFiyati: parseFloat((h[7]||"0").replace(",",".")) || 0,
-      satisIskontosu: parseFloat((h[8]||"0").replace(",",".")) || 0,
+      // başlıktan bulunan düzende (yalnız kod+ad) diğer sütunlar okunmaz; klasik A-I düzeninde okunur
+      birim1: basliktanBulundu ? "adet" : (h[2]||"adet").trim(),
+      ambalajMiktari: basliktanBulundu ? 0 : parseFloat((h[3]||"0").replace(",",".")) || 0,
+      ambalajBirimi: basliktanBulundu ? "" : (h[4]||"").trim(),
+      alisFiyati: basliktanBulundu ? 0 : parseFloat((h[5]||"0").replace(",",".")) || 0,
+      alisIskontosu: basliktanBulundu ? 0 : parseFloat((h[6]||"0").replace(",",".")) || 0,
+      satisFiyati: basliktanBulundu ? 0 : parseFloat((h[7]||"0").replace(",",".")) || 0,
+      satisIskontosu: basliktanBulundu ? 0 : parseFloat((h[8]||"0").replace(",",".")) || 0,
     });
   });
   return kayitlar;
@@ -22711,9 +22727,12 @@ function stokTanimIceAktarYap(){
   const kayitlar = stokTanimYapistirilaniAyristir(metin);
   if(kayitlar.length === 0){ alert("İçe aktarılacak geçerli satır bulunamadı. Stok Adı sütununun (B) dolu olduğundan emin olun."); return; }
   if(!confirm(kayitlar.length + " satır içe aktarılacak. Devam edilsin mi?")) return;
-  cariApi("saveStokTanimTopluce", {kayitlar}).then(res=>{
+  const mevcutlaraDokunma = !!(document.getElementById("st-ice-aktar-mevcut-dokunma")||{}).checked;
+  cariApi("saveStokTanimTopluce", {kayitlar, mevcutlaraDokunma}).then(res=>{
     if(!res.ok){ alert("Hata: "+(res.hata||"bilinmiyor")); return; }
-    alert("Tamamlandı — " + res.eklenen + " yeni kayıt eklendi, " + res.guncellenen + " kayıt güncellendi.");
+    alert("Tamamlandı — " + res.eklenen + " yeni stok kartı eklendi, " + res.guncellenen + " kart güncellendi" +
+      (res.atlananMevcut ? ", " + res.atlananMevcut + " satır zaten var olduğu için atlandı (dokunulmadı)" : "") +
+      (res.atlanan ? ", " + res.atlanan + " satır boş/tekrar nedeniyle atlandı" : "") + ". Stok miktarı girilmedi.");
     document.getElementById("stoktanim-ice-aktar-overlay").remove();
     stokTanimListesiYukle();
   }).catch(err=>alert("Bağlantı hatası: "+err.message));
