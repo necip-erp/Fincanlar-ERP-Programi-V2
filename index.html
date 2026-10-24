@@ -4469,7 +4469,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261024c";
+const FRONT_SURUM = "20261024d";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024c";
@@ -22148,13 +22148,7 @@ function stokTanimMarkaAdi_(k){
   return m ? (m.kod+" "+m.ad) : (k.markaKodu||"");
 }
 function stokTanimSutunHucre_(kol, k){
-  if(kol==="marka"){
-    if(!_markaYuklendi) return k.markaKodu ? `<span class="tip-badge">${htmlKacis(k.markaKodu)}</span>` : "—";
-    return `<select class="stoktanim-marka-sec" onclick="event.stopPropagation()" onchange="stokTanimMarkaSec('${k.id}', this)" title="Marka seç">
-      <option value="">— seçilmedi —</option>
-      ${_markaListe.map(m=>`<option value="${m.id}"${m.id===k.markaId?" selected":""}>${htmlKacis(m.kod+" · "+m.ad)}</option>`).join("")}
-    </select>`;
-  }
+  if(kol==="marka") return k.markaKodu ? `<span class="tip-badge">${htmlKacis(k.markaKodu)}</span>` : "—";
   if(kol==="kod") return htmlKacis(k.stokKodu||"—");
   if(kol==="ad") return olcuBasaAlGoster(k.stokAdi, k.markaKodu);
   if(kol==="birim") return htmlKacis(k.birim1||"—");
@@ -22184,17 +22178,10 @@ function stokTanimSutunTasi(hedef){
   _stokTanimSurukle = "";
   stokTanimListesiCiz(_stokTanimSonGosterilenListe);
 }
-function stokTanimMarkaSec(id, sel){
-  const k = (_stokTanimListe||[]).find(x=>x.id===id);
-  if(!k) return;
-  const eski = k.markaId||"", yeni = sel.value;
-  sel.disabled = true;
-  cariApi("stokMarkaKaydet", {id:id, markaId:yeni}).then(res=>{
-    sel.disabled = false;
-    if(!res || !res.ok){ sel.value = eski; alert("Marka kaydedilemedi: "+((res&&(res.hata||res.error))||"bilinmiyor")); return; }
-    k.markaId = yeni;
-    try{ onbellekYaz("stokTanimListesi", _stokTanimListe); }catch(e){}
-  }).catch(err=>{ sel.disabled = false; sel.value = eski; alert("Bağlantı hatası: "+err.message); });
+let _stokTanimMarkaFiltre = "";   // "" = tüm markalar, "__bos" = markası seçilmemiş, diğeri marka id
+function stokTanimMarkaFiltreSec(deger){
+  _stokTanimMarkaFiltre = deger;
+  stokTanimAramaFiltrele((document.getElementById("stoktanim-ara")||{}).value || "");
 }
 
 function stokTanimListesiCiz(liste){
@@ -22218,7 +22205,14 @@ function stokTanimListesiCiz(liste){
     <table class="hareket-tbl stoktanim-tbl">
       <thead>
         <tr>
-          ${sira.map(c=>`<th draggable="true" style="cursor:pointer;user-select:none" title="Sıralamak için tıklayın, yerini değiştirmek için sürükleyin"
+          ${sira.map(c=>c==="marka"
+            ? `<th draggable="true" style="user-select:none" ondragstart="_stokTanimSurukle='marka'" ondragover="event.preventDefault()" ondrop="stokTanimSutunTasi('marka')">
+                <select class="stoktanim-marka-sec" onclick="event.stopPropagation()" onchange="stokTanimMarkaFiltreSec(this.value)" title="Markaya göre filtrele">
+                  <option value=""${_stokTanimMarkaFiltre===""?" selected":""}>Marka (hepsi)</option>
+                  ${_markaListe.map(m=>`<option value="${m.id}"${_stokTanimMarkaFiltre===m.id?" selected":""}>${htmlKacis(m.kod+" · "+m.ad)}</option>`).join("")}
+                  <option value="__bos"${_stokTanimMarkaFiltre==="__bos"?" selected":""}>— markası seçilmemiş —</option>
+                </select></th>`
+            : `<th draggable="true" style="cursor:pointer;user-select:none" title="Sıralamak için tıklayın, yerini değiştirmek için sürükleyin"
             onclick="stokTanimSiralaTikla('${c}')" ondragstart="_stokTanimSurukle='${c}'" ondragover="event.preventDefault()" ondrop="stokTanimSutunTasi('${c}')">${STOK_TANIM_SUTUNLARI[c].baslik}${_stokTanimSirala.kol===c ? (_stokTanimSirala.yon<0?" ▼":" ▲") : ""}</th>`).join("")}
         </tr>
       </thead>
@@ -22244,7 +22238,11 @@ function stokTanimAramaFiltrele(deger){
   _stokTanimRenderLimit = 80;
   const d = deger.trim().replace(/[İIıi]/g,"i").toLocaleLowerCase('tr');
   const pg = !!(document.getElementById("stoktanim-pasif-goster")||{}).checked;
-  const taban = _stokTanimListe.filter(k=> pg ? !!k.pasif : !k.pasif);   // ★ pasifler yalnız "Pasifleri göster" ile listelenir
+  let taban = _stokTanimListe.filter(k=> pg ? !!k.pasif : !k.pasif);
+  if(_stokTanimMarkaFiltre){   // başlıktaki marka filtresi (markaId boşsa stok kodunun ilk 2 hanesiyle eşleşen marka sayılır)
+    const etkin = k=> k.markaId || ((_markaListe||[]).find(m=>m.kod===k.markaKodu)||{}).id || "";
+    taban = taban.filter(k=> _stokTanimMarkaFiltre==="__bos" ? !etkin(k) : etkin(k)===_stokTanimMarkaFiltre);
+  }   // ★ pasifler yalnız "Pasifleri göster" ile listelenir
   const filtreli = !d ? taban : taban.filter(k =>
     stokEslesirMi(k, d));
   stokTanimListesiCiz(filtreli);
