@@ -4794,7 +4794,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261025a";
+const FRONT_SURUM = "20261026a";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -13880,6 +13880,7 @@ function alisBekleyenListesiCiz(){
         <span style="font-size:14px;font-weight:700">Fatura No: ${f.faturaNo}</span>
         <span style="font-size:14px;font-weight:700">${tarihGoster(f.tarih)}</span>
         <span style="font-size:12px;color:var(--text3)">Toplam ${f.kalemSayisi} Kalem</span>
+        ${bfmListeYuzdeYuzSatirSayisi_(f) ? `<span style="font-size:11.5px;font-weight:700;color:#b45309;background:#fff7e0;padding:2px 9px;border-radius:20px" title="Bu faturada %100 iskontolu satır var (palet vb.). Onay ekranında kırmızı/sarı işaretlenir.">⚠ ${bfmListeYuzdeYuzSatirSayisi_(f)} satır %100 iskontolu</span>` : ``}
         <span style="font-size:11.5px;font-weight:700;color:${durumRenk};background:${islendi?(f.durum==='Onaylandı'?'var(--green-l)':'#fde8e8'):'var(--bg3)'};padding:2px 9px;border-radius:20px">${islendi ? (f.durum==='Onaylandı'?'✓ İşlendi':'✖ Reddedildi') : 'Bekliyor'}</span>
         ${!f.eslesenCariId ? `<span style="font-size:11.5px;font-weight:700;color:#b91c1c;background:#fee2e2;padding:2px 9px;border-radius:20px" title="Bu faturanın önekine bağlı bir cari tanımlı değil">Cari: Tanımlı olmayan cari${f.onek ? ` · önek ${f.onek}` : ' · önek yok'}</span>` : ``}
         ${f.eslesenCariAd ? `<span style="font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-l,#eef2ff);padding:2px 9px;border-radius:20px">Cari: ${f.eslesenCariAd}${f.eslesmeKaynagi==='onek' && f.onek ? ` · önek ${f.onek}` : ''}</span>` : ``}
@@ -13891,7 +13892,7 @@ function alisBekleyenListesiCiz(){
       </div>
       <div id="bfk-kalemler-${fi}" style="display:none;margin-top:8px;overflow:auto">
         <table class="hk-tablo"><thead><tr><th>Stok Kodu</th><th>Ürün</th><th>Miktar</th><th>Birim Fiyat</th><th>İsk.</th><th>Net Fiyat</th><th>KDV</th></tr></thead>
-        <tbody>${f.kalemler.map(k=>`<tr><td>${k.stokKodu||'—'}${k.stokVarMi===false?' <span class=\"hk-borc\">yeni</span>':''}${k.otomatikEslesme?' <span class=\"hk-alacak\" title=\"Tedarikçi ürün kodundan otomatik eşleşti\">oto</span>':''}</td><td>${k.urunAdi}${renkRozet_(k)}</td><td>${k.miktar>0?k.miktar:'—'}</td><td>${paraFormat(k.birimFiyat)}</td><td>%${k.iskonto}</td><td>${paraFormat(k.netFiyat)}</td><td>%${k.kdvOrani}</td></tr>`).join("")}</tbody></table>
+        <tbody>${f.kalemler.map(k=>`<tr${bfmYuzdeYuzIskontoMu_(k.iskonto,k.iskonto2)?' style="background:#fff7e0"':''}><td>${k.stokKodu||'—'}${k.stokVarMi===false?' <span class=\"hk-borc\">yeni</span>':''}${k.otomatikEslesme?' <span class=\"hk-alacak\" title=\"Tedarikçi ürün kodundan otomatik eşleşti\">oto</span>':''}</td><td>${k.urunAdi}${renkRozet_(k)}${bfmYuzdeYuzIskontoMu_(k.iskonto,k.iskonto2)?' <span style="color:#b45309;font-size:10.5px;font-weight:700">⚠ %100 iskonto</span>':''}</td><td>${k.miktar>0?k.miktar:'—'}</td><td>${paraFormat(k.birimFiyat)}</td><td>%${k.iskonto}</td><td>${paraFormat(k.netFiyat)}</td><td>%${k.kdvOrani}</td></tr>`).join("")}</tbody></table>
       </div>
       <div class="btnrow" style="margin-top:8px">
         ${f.faturaNo ? `<button type="button" class="btn" onclick="faturaGorsalAc('${f.faturaNo}')">📄 Faturayı Gör</button>` : ""}
@@ -14299,10 +14300,12 @@ function alisBekleyenOnayModalAc(faturaNo){
 
       <div style="display:flex;justify-content:${yanda?'flex-start':'flex-end'};align-items:flex-end;gap:16px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
         <div class="fld" style="max-width:170px;margin-bottom:0"><label>Tutar İskontosu (fatura altı, ops.)</label><input id="bfm-tutar-iskontosu" type="number" min="0" step="0.01" value="0" oninput="bfmGenelToplamGuncelle()"></div>
+        <div class="fld" style="max-width:200px;margin-bottom:0"><label title="Faturanın altındaki ödenecek/genel toplam tutarı (KDV dahil). Yazarsan ekrandaki toplamla karşılaştırılır; tutmuyorsa %100 iskontolu satırlar kırmızı olur.">Faturadaki Genel Toplam (kontrol)</label><input id="bfm-dip-yekun" type="number" min="0" step="0.01" placeholder="faturadan yaz" oninput="bfmGenelToplamGuncelle()"></div>
         <div style="text-align:${yanda?'left':'right'}">
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase">Fatura Tutarı (KDV Dahil)</div>
           <div style="font-size:20px;font-weight:700" id="bfm-genel-toplam">${paraFormat(f.genelToplam)}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px">Gerçek fatura tutarıyla uyuşmuyorsa satırlardaki Miktar/Birim Fiyat/İsk.1/İsk.2'yi düzelt — toplam anlık güncellenir.</div>
+          <div id="bfm-dip-fark" style="font-size:12.5px;font-weight:700;margin-top:4px"></div>
         </div>
       </div>
 
@@ -14365,10 +14368,10 @@ function bfmKalemSatiriHTML(k, i){
         <input type="checkbox" id="bfm-yenistokac-${i}" style="width:auto" onchange="bfmYeniStokAc(${i})"> yeni stok aç
       </label>`;
   return `
-        <tr>
+        <tr id="bfm-satir-${i}">
           <td>${k.birlesikMi ? `<span title="Birleştirildi" style="font-size:11px;color:var(--amber)">🔗</span>` : `<input id="bfm-grup-${i}" type="text" inputmode="numeric" placeholder="-" value="${k.grup||''}" style="width:40px;text-align:center">`}</td>
           <td>${stokKoduHucre}</td>
-          <td>${k.birlesikMi ? `<input id="bfm-ad-${i}" type="text" value="${(k.urunAdi||'').replace(/"/g,'&quot;')}" style="width:160px">` : k.urunAdi}</td>
+          <td>${k.birlesikMi ? `<input id="bfm-ad-${i}" type="text" value="${(k.urunAdi||'').replace(/"/g,'&quot;')}" style="width:160px">` : k.urunAdi}<div id="bfm-yuz-rozet-${i}" style="font-size:10.5px;font-weight:700;margin-top:2px"></div></td>
           <td><input id="bfm-miktar-${i}" type="number" min="0" step="0.01" value="${k.miktar>0?k.miktar:''}" placeholder="0" style="width:80px" oninput="bfmSatirGuncelle(${i})"></td>
           <td><select id="bfm-birim-${i}">${bfmBirimSecenekleriHTML(k.stokKodu, k.urunAdi, k.birim)}</select></td>
           <td><div style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input id="bfm-fiyat-${i}" type="number" min="0" step="0.01" value="${k.birimFiyat||k.netFiyat}" style="width:100px" oninput="bfmSatirGuncelle(${i})"><span id="bfm-aktarilan-${i}"></span></div></td>
@@ -14916,6 +14919,54 @@ function bfmSatirGorseliYenile(i){
   const hucre = document.getElementById(`bfm-tutar-${i}`);
   if(hucre) hucre.innerHTML = paraFormat(tutarKdvDahil) + (nakliyePayi>0 ? ` <span style="font-size:9px;color:var(--amber)" title="Nakliye/palet payı dahil: ${paraFormat(nakliyePayi)}/birim">+N</span>` : "");
 }
+// ★ (26 Eki 2026) %100 iskontoyla gelen satır (palet vb.) kontrolü + fatura dip yekünü karşılaştırması.
+// Hem eski hem yeni bekleyen faturalar için ekran açılırken hesaplanır (veriye yazılmaz).
+function bfmYuzdeYuzIskontoMu_(isk1, isk2){
+  const a = Number(isk1) || 0, b = Number(isk2) || 0;
+  return (a > 0 || b > 0) && ((1 - a/100) * (1 - b/100)) < 0.001;
+}
+function bfmListeYuzdeYuzSatirSayisi_(f){
+  return ((f && f.kalemler) || []).filter(k => bfmYuzdeYuzIskontoMu_(k.iskonto, k.iskonto2)).length;
+}
+function bfmDipKontrolGuncelle_(toplam){
+  window._bfmSonToplam = toplam;
+  const girdi = document.getElementById("bfm-dip-yekun");
+  const msg = document.getElementById("bfm-dip-fark");
+  const dip = girdi ? (parseFloat(String(girdi.value).replace(",", ".")) || 0) : 0;
+  let uyumsuz = false, fark = 0;
+  if(dip > 0){
+    fark = Math.round((toplam - dip) * 100) / 100;
+    uyumsuz = Math.abs(fark) > Math.max(1, dip * 0.001); // satır yuvarlamaları için 1 TL / binde 1 tolerans
+  }
+  window._bfmDipUyumsuz = uyumsuz;
+  window._bfmDipDeger = dip;
+  window._bfmDipFark = fark;
+  if(msg){
+    if(!(dip > 0)) msg.innerHTML = "";
+    else if(uyumsuz) msg.innerHTML = `<span style="color:var(--red)">⚠ Ekrandaki toplam faturadan ${paraFormat(Math.abs(fark))} ${fark>0?'FAZLA':'EKSİK'} — tutmuyor</span>`;
+    else msg.innerHTML = `<span style="color:var(--green)">✓ Fatura toplamıyla uyuşuyor</span>`;
+  }
+  bfmYuzSatirVurguGuncelle_();
+}
+function bfmYuzSatirVurguGuncelle_(){
+  const f = window._bfmAktifFatura;
+  if(!f) return;
+  const uyumsuz = !!window._bfmDipUyumsuz;
+  f.kalemler.forEach((k, i) => {
+    const tr = document.getElementById(`bfm-satir-${i}`);
+    const rozet = document.getElementById(`bfm-yuz-rozet-${i}`);
+    const i1 = parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0;
+    const i2 = parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0;
+    const yuz = bfmYuzdeYuzIskontoMu_(i1, i2);
+    if(tr) tr.style.background = yuz ? (uyumsuz ? "#fdecea" : "#fff7e0") : "";
+    if(rozet) rozet.innerHTML = yuz
+      ? (uyumsuz
+          ? `<span style="color:var(--red)" title="Bu satır %100 iskontolu ve fatura toplamı tutmuyor. Faturaya bakıp satırı silin ya da Miktar'ı boş bırakın.">⚠ %100 iskontolu · fatura toplamı tutmuyor</span>`
+          : `<span style="color:#b45309" title="%100 iskontolu satır (palet vb.) Alış'a stok girişi olarak eklenir. İstemiyorsan satırı sil ya da Miktar'ı boş bırak.">⚠ %100 iskontolu (palet?) — kontrol et</span>`)
+      : "";
+  });
+}
+
 function bfmGenelToplamGuncelle(){
   const f = window._bfmAktifFatura;
   if(!f) return;
@@ -14934,6 +14985,7 @@ function bfmGenelToplamGuncelle(){
   toplam = Math.max(0, toplam - (tutarIskontosuEl ? (parseFloat(tutarIskontosuEl.value)||0) : 0));
   const el = document.getElementById("bfm-genel-toplam");
   if(el) el.textContent = paraFormat(toplam);
+  bfmDipKontrolGuncelle_(toplam);
 }
 
 function bfmCariBul_(id){ return id ? ((_cariListe||[]).find(c=>c.id===id) || cariAktifler().find(c=>c.id===id) || null) : null; }
@@ -15033,6 +15085,22 @@ function alisBekleyenOnayla(faturaNo){
     });
   }
   if(kalemler.length === 0){ alert("En az bir kaleme miktar girmelisiniz"); return; }
+  // ★ (26 Eki 2026) %100 iskontolu satır (palet vb.) Alış'a stok girişi olarak eklenecekse onay iste; fatura dip yekünü tutmuyorsa da uyar.
+  const yuzSatirlar = [];
+  for(let i=0; i<f.kalemler.length; i++){
+    const m = parseFloat(document.getElementById(`bfm-miktar-${i}`).value) || 0;
+    if(m <= 0) continue;
+    const i1 = parseFloat(document.getElementById(`bfm-isk1-${i}`).value) || 0;
+    const i2 = parseFloat(document.getElementById(`bfm-isk2-${i}`).value) || 0;
+    if(bfmYuzdeYuzIskontoMu_(i1, i2)) yuzSatirlar.push("• " + (f.kalemler[i].urunAdi || "") + " — " + m + " " + document.getElementById(`bfm-birim-${i}`).value);
+  }
+  if(window._bfmDipUyumsuz){
+    if(!confirm("⚠️ Ekrandaki fatura tutarı (" + paraFormat(window._bfmSonToplam) + ") faturadaki genel toplamla (" + paraFormat(window._bfmDipDeger) + ") tutmuyor.\nFark: " + paraFormat(Math.abs(window._bfmDipFark)) + (window._bfmDipFark>0?" fazla":" eksik") +
+      (yuzSatirlar.length ? "\n\n%100 iskontolu satır(lar) (kırmızı işaretli):\n" + yuzSatirlar.join("\n") : "") +
+      "\n\nYine de onaylamak istiyor musun? (İptal'e basıp satırı silebilir ya da Miktar'ı boş bırakabilirsin.)")) return;
+  } else if(yuzSatirlar.length){
+    if(!confirm("⚠️ %100 iskontolu satır(lar) Alış'a eklenecek:\n\n" + yuzSatirlar.join("\n") + "\n\nPalet gibi bedelsiz kalemleri genelde Alış'a eklemek istemezsin. Yine de eklensin mi?\n(İptal'e basıp satırı silebilir ya da Miktar'ı boş bırakabilirsin.)")) return;
+  }
   if(supheliUyarilar.length > 0){
     const devamEt = confirm(
       "⚠️ Şüpheli KDV oranı tespit edildi (bu alana muhtemelen bir tutar yazılmış):\n\n" +
