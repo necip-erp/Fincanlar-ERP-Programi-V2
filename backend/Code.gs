@@ -1172,7 +1172,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261024e";
+const PROGRAM_SURUM_ = "20261026a";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -3744,7 +3744,8 @@ function updateAlis(body) {
     kalemGenelToplam += (parseFloat(k.miktar) || 0) * (parseFloat(k.birimFiyat) || 0) * (1 + kdvOrani / 100);
   });
   const tutarIskontosu = Math.max(0, parseFloat(body.tutarIskontosu) || 0);
-  const toplamTutar = Math.max(0, kalemGenelToplam - tutarIskontosu);
+  // ★ (26 Eki 2026) Alış toplamı kuruşa yuvarlanır (cari hareketine 20.737,044 gibi kuruş altı tutar yazılmasın).
+  const toplamTutar = Math.max(0, Math.round((kalemGenelToplam - tutarIskontosu) * 100) / 100);
 
   const tarih = String(body.tarih || Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy-MM-dd"));
   const kayitTarihi = String(data[satirIdx - 1][7] || "");

@@ -4794,7 +4794,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261026b";
+const FRONT_SURUM = "20261026c";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -14896,7 +14896,7 @@ function bfmSatirGorseliYenile(i){
   const isk1 = parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0;
   const isk2 = parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0;
   const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100) + nakliyePayi;
-  const tutarKdvHaric = miktar * netBirimFiyat;
+  const tutarKdvHaric = bfmSatirNetKdvHaric_(miktar, fiyat, isk1, isk2, nakliyePayi);
   const tutarKdvDahil = tutarKdvHaric * (1 + kdvOrani/100);
   // ★ (21 Eyl 2026) Nakliye/palet payı bölünmüş kalemlerde fatura fiyatının yanında "/ aktarılacak fiyat" gösterilir:
   // Alış'a yazılacak birim fiyat = iskontolar sonrası fatura fiyatı + nakliye payı (bkz. alisBekleyenOnayla).
@@ -14922,6 +14922,14 @@ function bfmSatirGorseliYenile(i){
 }
 // ★ (26 Eki 2026) %100 iskontoyla gelen satır (palet vb.) kontrolü + fatura dip yekünü karşılaştırması.
 // Hem eski hem yeni bekleyen faturalar için ekran açılırken hesaplanır (veriye yazılmaz).
+// ★ (26 Eki 2026) Tutarlar e-faturadaki gibi kuruşa yuvarlanır: satır brüt = miktar×liste fiyatı (2 hane), iskonto sonrası satır net (2 hane),
+// KDV oran grubunun ara toplamı üzerinden (2 hane). Eskiden yuvarlama yapılmadığı için fatura toplamından 1 kuruş sapabiliyordu (20.737,05 / 20.737,04).
+function bfmR2_(x){ return Math.round((Number(x) || 0) * 100) / 100; }
+function bfmSatirNetKdvHaric_(miktar, fiyat, isk1, isk2, nakliyePayi){
+  const brut = bfmR2_((miktar || 0) * (fiyat || 0));
+  const net = bfmR2_(brut * (1 - (isk1 || 0) / 100) * (1 - (isk2 || 0) / 100));
+  return net + bfmR2_((miktar || 0) * (nakliyePayi || 0));
+}
 function bfmYuzdeYuzIskontoMu_(isk1, isk2){
   const a = Number(isk1) || 0, b = Number(isk2) || 0;
   return (a > 0 || b > 0) && ((1 - a/100) * (1 - b/100)) < 0.001;
@@ -15012,6 +15020,7 @@ function bfmGenelToplamGuncelle(){
   const f = window._bfmAktifFatura;
   if(!f) return;
   let toplam = 0;
+  const kdvGruplari = {}; // KDV oranı → ara toplam (e-fatura gibi KDV, oran grubunun toplamı üzerinden hesaplanır)
   f.kalemler.forEach((k,i)=>{
     const kdvOrani = parseFloat((document.getElementById(`bfm-kdv-${i}`)||{}).value) || 0;
     const nakliyePayi = k.nakliyePayi || 0;
@@ -15019,8 +15028,11 @@ function bfmGenelToplamGuncelle(){
     const fiyat = parseFloat((document.getElementById(`bfm-fiyat-${i}`)||{}).value) || 0;
     const isk1 = parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0;
     const isk2 = parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0;
-    const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100) + nakliyePayi;
-    toplam += miktar * netBirimFiyat * (1 + kdvOrani/100);
+    kdvGruplari[kdvOrani] = (kdvGruplari[kdvOrani] || 0) + bfmSatirNetKdvHaric_(miktar, fiyat, isk1, isk2, nakliyePayi);
+  });
+  Object.keys(kdvGruplari).forEach(oran => {
+    const ara = bfmR2_(kdvGruplari[oran]);
+    toplam += ara + bfmR2_(ara * (parseFloat(oran) || 0) / 100);
   });
   const tutarIskontosuEl = document.getElementById("bfm-tutar-iskontosu");
   toplam = Math.max(0, toplam - (tutarIskontosuEl ? (parseFloat(tutarIskontosuEl.value)||0) : 0));
@@ -15106,7 +15118,8 @@ function alisBekleyenOnayla(faturaNo){
     if(bfmKdvSupheliMi(kdvOrani)){
       supheliUyarilar.push(`"${f.kalemler[i].urunAdi}" (KDV %${kdvOrani})`);
     }
-    const netBirimFiyat = fiyat * (1 - isk1/100) * (1 - isk2/100) + (f.kalemler[i].nakliyePayi || 0);
+    // ★ (26 Eki 2026) Birim fiyat = (kuruşa yuvarlanmış satır net tutarı) / miktar → Alış toplamı e-fatura toplamıyla kuruşu kuruşuna tutar.
+    const netBirimFiyat = bfmSatirNetKdvHaric_(miktar, fiyat, isk1, isk2, f.kalemler[i].nakliyePayi || 0) / miktar;
     // Fatura altı "Brüt Toplam / İskonto" gösterimi için satır düzeyi liste fiyatı ve
     // birleşik indirim %'si de gönderiliyor (BIRIM_FIYAT hesaplarda hâlâ net kalıyor).
     const birlesikIskontoYuzde = 100 * (1 - (1 - isk1/100) * (1 - isk2/100));
