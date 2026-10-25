@@ -4794,7 +4794,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261026a";
+const FRONT_SURUM = "20261026b";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -14294,6 +14294,7 @@ function alisBekleyenOnayModalAc(faturaNo){
       <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
         <button class="btn" onclick="bfmKalemleriGrupla()">🔗 Grupla</button>
         <button class="btn" id="bfm-grup-geri-btn" style="opacity:.5" disabled onclick="bfmGrupGeriAl()" title="Geri alınacak Grupla işlemi yok">↩ Gruplamayı Geri Al</button>
+        <button class="btn" id="bfm-yuz-kaldir-btn" style="font-size:12px;display:none;color:#b45309;border-color:#b45309" onclick="bfmYuzSatirlariKaldir()" title="%100 iskontolu (bedelsiz) satırları, örneğin paletleri, bu faturanın onay ekranından kaldırır. Kaynak veri değişmez.">🧹 %100 iskontolu satırları kaldır</button>
         <button class="btn" style="font-size:12px" onclick="bfmSutunSirasiSifirla()" title="Sütun başlıklarını sürükleyerek değiştirdiysen varsayılan sıraya döner">↺ Sütun Sırası</button>
         ${!yanda && f.faturaNo ? `<button type="button" class="btn" onclick="faturaGorsalAc('${f.faturaNo}')">📄 Faturayı Gör</button>` : ``}
       </div>
@@ -14948,16 +14949,51 @@ function bfmDipKontrolGuncelle_(toplam){
   }
   bfmYuzSatirVurguGuncelle_();
 }
+function bfmYuzSatirlariKaldir(){
+  const f = window._bfmAktifFatura;
+  if(!f) return;
+  const idx = [];
+  f.kalemler.forEach((k,i)=>{
+    const i1 = parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0;
+    const i2 = parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0;
+    if(bfmYuzdeYuzIskontoMu_(i1, i2)) idx.push(i);
+  });
+  if(!idx.length){ alert("Bu faturada %100 iskontolu satır yok."); return; }
+  if(idx.length >= f.kalemler.length){ alert("Faturadaki tüm satırlar %100 iskontolu, hepsi kaldırılamaz. Faturanın tamamını işlemek istemiyorsan \"✖ Reddet\" seçeneğini kullan."); return; }
+  const adlar = idx.map(i => "• " + (f.kalemler[i].urunAdi || "")).join("\n");
+  if(!confirm("%100 iskontolu şu satır(lar) bu onay ekranından kaldırılsın mı?\n\n" + adlar + "\n\n(Kaynak fatura verisi değişmez, yalnızca bu faturanın Alış'a işlenmesinden çıkarılır.)")) return;
+  // Kaldırmadan önce ekrandaki güncel değerler (elle yapılan düzeltmeler) kalemlere geri yazılır.
+  f.kalemler = f.kalemler.map((k,i)=>{
+    const birimEl = document.getElementById(`bfm-birim-${i}`);
+    const yeniStokEl = document.getElementById(`bfm-yenistok-${i}`);
+    return {
+      ...k,
+      miktar: parseFloat((document.getElementById(`bfm-miktar-${i}`)||{}).value) || 0,
+      birimFiyat: parseFloat((document.getElementById(`bfm-fiyat-${i}`)||{}).value) || 0,
+      iskonto: parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0,
+      iskonto2: parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0,
+      kdvOrani: parseFloat((document.getElementById(`bfm-kdv-${i}`)||{}).value) || 0,
+      stokKodu: (document.getElementById(`bfm-stokkodu-${i}`)||{}).value,
+      urunAdi: k.birlesikMi ? ((document.getElementById(`bfm-ad-${i}`)||{}).value || k.urunAdi) : k.urunAdi,
+      birim: birimEl ? birimEl.value : k.birim,
+      yeniStokIsaretli: yeniStokEl ? yeniStokEl.checked : k.yeniStokIsaretli,
+    };
+  });
+  for(let j = idx.length - 1; j >= 0; j--) f.kalemler.splice(idx[j], 1);
+  bfmKalemlerYenidenCiz();
+}
 function bfmYuzSatirVurguGuncelle_(){
   const f = window._bfmAktifFatura;
   if(!f) return;
   const uyumsuz = !!window._bfmDipUyumsuz;
+  let yuzSayisi = 0;
   f.kalemler.forEach((k, i) => {
     const tr = document.getElementById(`bfm-satir-${i}`);
     const rozet = document.getElementById(`bfm-yuz-rozet-${i}`);
     const i1 = parseFloat((document.getElementById(`bfm-isk1-${i}`)||{}).value) || 0;
     const i2 = parseFloat((document.getElementById(`bfm-isk2-${i}`)||{}).value) || 0;
     const yuz = bfmYuzdeYuzIskontoMu_(i1, i2);
+    if(yuz) yuzSayisi++;
     if(tr) tr.style.background = yuz ? (uyumsuz ? "#fdecea" : "#fff7e0") : "";
     if(rozet) rozet.innerHTML = yuz
       ? (uyumsuz
@@ -14965,6 +15001,11 @@ function bfmYuzSatirVurguGuncelle_(){
           : `<span style="color:#b45309" title="%100 iskontolu satır (palet vb.) Alış'a stok girişi olarak eklenir. İstemiyorsan satırı sil ya da Miktar'ı boş bırak.">⚠ %100 iskontolu (palet?) — kontrol et</span>`)
       : "";
   });
+  const kaldirBtn = document.getElementById("bfm-yuz-kaldir-btn");
+  if(kaldirBtn){
+    kaldirBtn.style.display = (yuzSayisi > 0 && yuzSayisi < f.kalemler.length) ? "" : "none";
+    kaldirBtn.textContent = "🧹 %100 iskontolu satırları kaldır (" + yuzSayisi + ")";
+  }
 }
 
 function bfmGenelToplamGuncelle(){
