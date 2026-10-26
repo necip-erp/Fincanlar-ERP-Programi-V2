@@ -4794,7 +4794,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261026c";
+const FRONT_SURUM = "20261026d";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -8768,7 +8768,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
       <div class="sm-liste-alt">
         <button class="btn" onclick="satisKalemEkleUI()">+ Ürün Ekle</button>
         <button class="btn" onclick="hizliSatisToggle()" title="Hızlı Satış listesini aç/kapat (F12)">⚡ Hızlı Satış (F12)</button>
-        <button class="btn" onclick="resimOkuBaslat()" title="Fotoğraf / ekran görüntüsünden bu forma cari ve ürün satırlarını okuyup aktarır">📷 Resimden Oluştur</button>
+        <button class="btn" onclick="resimOkuBaslat()" title="Fotoğraf / ekran görüntüsünden bu forma cari ve ürün satırlarını okuyup aktarır. Panoda resim varken formda Ctrl+V yapmanız yeterli.">📷 Resimden Oluştur <span style="font-size:11px;opacity:.7">(Ctrl+V)</span></button>
         <div id="sm-agirlik-bar" class="sm-agirlik-bar"></div>
       </div>
 
@@ -9209,6 +9209,22 @@ function roYapistir_(e){
   for(let i = 0; i < items.length; i++){ if(items[i].kind === "file" && /^image\//.test(items[i].type)){ const f = items[i].getAsFile(); if(f) dosyalar.push(f); } }
   if(dosyalar.length){ e.preventDefault(); roDosyalarSecildi_(dosyalar); }
 }
+// ★ (26 Eki 2026) Sipariş/Teklif/Fatura formu AÇIKKEN panoda resim varsa doğrudan Ctrl+V: 📷 pencereyi kendisi açar,
+// resmi okur ve onay ekranına getirir (önce düğmeye basmak gerekmez). Metin yapıştırma etkilenmez (yalnız panoda resim varsa devreye girer).
+function roGlobalYapistir_(e){
+  if(document.getElementById("resim-oku-overlay")) return;            // pencere açıksa kendi dinleyicisi çalışır
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  const dosyalar = [];
+  for(let i = 0; i < items.length; i++){ if(items[i].kind === "file" && /^image\//.test(items[i].type)){ const f = items[i].getAsFile(); if(f) dosyalar.push(f); } }
+  if(!dosyalar.length) return;
+  const kal = document.getElementById("sm-kalemler");
+  if(!kal || !kal.offsetParent) return;                               // açık/görünür satış formu yok
+  if(document.getElementById("rehber-ara")) return;                   // F1/F2 rehberi açıksa karışma
+  e.preventDefault();
+  resimOkuBaslat();
+  if(_ro) roDosyalarSecildi_(dosyalar);
+}
+document.addEventListener("paste", roGlobalYapistir_, true);
 function roSecimCiz_(){
   const k = document.getElementById("ro-icerik"); if(!k) return;
   const admin = modulGorunurMu_({ admin: true });
