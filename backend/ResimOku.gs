@@ -176,7 +176,9 @@ function resimOkuGemini_(ayar, b64, mime, ipucu) {
     if (kod === 403) return { ok: false, hata: "Gemini anahtarı bu modele/bölgeye erişemiyor ya da yetkisiz: " + m };
     if (kod === 404) return { ok: false, hata: "Gemini modeli bulunamadı (" + ayar.geminiModel + "). Okuma Ayarı'ndan model adını değiştirin: " + m };
     if (kod === 429) return { ok: false, hata: "Gemini ücretsiz kullanım sınırı doldu (dakikalık/günlük); biraz sonra tekrar deneyin ya da Claude'a geçin." };
-    return { ok: false, hata: "Gemini okuma hatası: " + m };
+    // ★ (26 Eki 2026) Google tarafı yoğunluk/geçici kesinti (503/500/504, "high demand"): çağıran tekrar dener
+    const gecici = kod === 500 || kod === 502 || kod === 503 || kod === 504 || /high demand|overloaded|unavailable|try again later|deadline/i.test(m);
+    return { ok: false, gecici: gecici, hata: "Gemini okuma hatası: " + m };
   }
   const cand = (j.candidates || [])[0];
   if (!cand) return { ok: false, hata: "Gemini yanıt vermedi" + (j.promptFeedback && j.promptFeedback.blockReason ? " (engellendi: " + j.promptFeedback.blockReason + ")" : "") + "." };
@@ -197,5 +199,15 @@ function getResimOku(body) {
   if (["image/jpeg", "image/png", "image/webp", "image/gif"].indexOf(mime) < 0) return { ok: false, hata: "Desteklenmeyen görsel türü: " + mime };
   const motor = (body && (body.motor === "gemini" || body.motor === "claude")) ? body.motor : ayar.motor;
   const ipucu = String((body && body.ipucu) || "").slice(0, 300);
-  return motor === "gemini" ? resimOkuGemini_(ayar, b64, mime, ipucu) : resimOkuClaude_(ayar, b64, mime, ipucu);
+  if (motor !== "gemini") return resimOkuClaude_(ayar, b64, mime, ipucu);
+  // ★ (26 Eki 2026) Gemini "yoğun talep" (503) gibi geçici hatalarda kendiliğinden en çok 3 kez dener (2 sn, 4 sn bekleyerek).
+  // Hâlâ olmazsa hata + claudeYedekVar döner; ekranda "Tekrar dene" / (Claude anahtarı varsa) "Claude ile dene" düğmeleri çıkar.
+  let r = resimOkuGemini_(ayar, b64, mime, ipucu), deneme = 1;
+  while (r && !r.ok && r.gecici && deneme < 3) {
+    Utilities.sleep(deneme * 2000);
+    deneme++;
+    r = resimOkuGemini_(ayar, b64, mime, ipucu);
+  }
+  if (r && !r.ok && r.gecici) { r.claudeYedekVar = !!ayar.claudeAnahtar; r.hata = "Gemini şu an yoğun (Google tarafı geçici, " + deneme + " deneme yapıldı). Biraz sonra tekrar deneyin" + (ayar.claudeAnahtar ? " ya da Claude ile okutun (ücretli)." : "."); }
+  return r;
 }

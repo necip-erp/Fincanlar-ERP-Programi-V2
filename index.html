@@ -4794,7 +4794,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261026e";
+const FRONT_SURUM = "20261026f";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -9310,9 +9310,10 @@ function roAyarKaydet_(sil){
 }
 
 // ── Okuma ──
-async function roDosyalarSecildi_(dosyalar){
+async function roDosyalarSecildi_(dosyalar, motorZorla){
   if(!_ro || _ro.yukleniyor || !dosyalar || !dosyalar.length) return;
-  const motorSec = (document.getElementById("ro-motor-sec-kap") && document.getElementById("ro-motor-sec-kap").style.display !== "none") ? (document.getElementById("ro-motor-sec") || {}).value : "";
+  _ro.sonDosyalar = dosyalar;   // hata olursa "Tekrar dene" için
+  const motorSec = motorZorla || ((document.getElementById("ro-motor-sec-kap") && document.getElementById("ro-motor-sec-kap").style.display !== "none") ? (document.getElementById("ro-motor-sec") || {}).value : "");
   if(_ro.ayar && !motorSec && !_ro.ayar.anahtarVar){ alert("Okuma servisi için API anahtarı tanımlı değil.\n" + (modulGorunurMu_({ admin: true }) ? "⚙ Okuma Ayarı'ndan girin." : "Admin kullanıcıdan girmesini isteyin.")); return; }
   const ipucu = ((document.getElementById("ro-ipucu") || {}).value || "").trim();
   _ro.yukleniyor = true;
@@ -9329,7 +9330,9 @@ async function roDosyalarSecildi_(dosyalar){
       if(r && r.ok && r.motor) tumu.motor = r.motor + " / " + (r.model || "");
       if(!r || !r.ok){
         _ro.yukleniyor = false;
-        if(durum) durum.innerHTML = '<div style="padding:14px;border-radius:10px;background:#fdecec;color:#a11">❌ ' + htmlKacis((r && (r.hata || r.error)) || "Okunamadı") + '</div>';
+        if(durum) durum.innerHTML = '<div style="padding:14px;border-radius:10px;background:#fdecec;color:#a11">❌ ' + htmlKacis((r && (r.hata || r.error)) || "Okunamadı") + '</div>'
+          + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" onclick="roTekrarOku_()">🔁 Tekrar dene</button>'
+          + ((r && r.claudeYedekVar) ? '<button class="btn" onclick="roTekrarOku_(\'claude\')" title="Claude ücretlidir (fotoğraf başına küçük bir ücret)">Claude ile dene</button>' : '') + '</div>';
         return;
       }
       const v = r.veri || {};
@@ -9357,6 +9360,8 @@ async function roDosyalarSecildi_(dosyalar){
   _ro.satirlar = tumu.kalemler.map((k, i) => roSatirKur_(k, i));
   roOnayCiz_();
 }
+
+function roTekrarOku_(motor){ if(_ro && _ro.sonDosyalar) roDosyalarSecildi_(_ro.sonDosyalar, motor || ""); }
 
 // ── Onay ekranı ──
 function roAlanlariOku_(){
