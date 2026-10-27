@@ -2340,6 +2340,16 @@ setInterval(topbarSaatGuncelle, 10000);
     <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
       <button class="btn" onclick="ayarlarBolumleriHepsiniKapat()" title="Tüm bölüm başlıklarını kapat">⬆️ Hepsini Kapat</button>
     </div>
+    <div class="finans-panel" id="aks-panel" style="display:none" data-bolum-anahtar="ayarlar_bolum_akinsoft">
+      <div class="rapor-baslik" style="margin-top:0">📥 Akınsoft 2026 Aktarımı <span style="font-size:11px;color:var(--text3);font-weight:400">(yalnız Admin · yerel sunucuda çalıştırın)</span></div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Akınsoft'tan hazırlanan <b>akinsoft_2026.json</b> dosyasını seçin. Önce <b>Önizle</b> (hiçbir şey yazmaz), sonra eksik cari/stok kartlarını açıp faturaları aktarın. Mevcut kayıtlar silinmez; aynı dosya tekrar yüklenirse aktarılmış faturalar atlanır.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="file" id="aks-dosya" accept=".json" onchange="aksDosyaSecildi_(this)">
+        <button class="btn" id="aks-onizle-btn" onclick="aksOnizle()" disabled>🔍 Önizle</button>
+        <button class="btn btn-primary" id="aks-aktar-btn" onclick="aksAktar()" disabled>🚀 Kartları aç + faturaları aktar</button>
+      </div>
+      <div id="aks-durum" style="margin-top:10px;font-size:13px;line-height:1.6"></div>
+    </div>
     <div class="finans-panel" id="ayarlar-son-islemler-panel" data-bolum-anahtar="ayarlar_bolum_son_islemler">
       <div class="rapor-baslik" style="margin-top:0">Son Yapılan İşlemler</div>
       <p style="color:var(--text3);font-size:13px;margin:0 0 10px">Tüm modüllerdeki en son işlemler (Ana Sayfa'da sadece son 5 görünür). Bir satıra tıklayınca kaydı ayrı sekmede açılır.</p>
@@ -4794,7 +4804,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261026f";
+const FRONT_SURUM = "20261027a";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -21080,6 +21090,7 @@ function krediKartiSilOnay(id){
 let _ayarlarTaslak = null; // kaydedilmeden önceki geçici değişiklikler
 
 function ayarlarYukle(){
+  try{ aksPanelGoster_(); }catch(e){}
   _ayarlarTaslak = Object.assign({}, kisayollariAl());
   hizPaneliCiz();
   { const hc = document.getElementById("hiz-rozet-chk"); if(hc) hc.checked = hizRozetAcikMi_(); }
@@ -21211,6 +21222,56 @@ function ayarlarBolumTasi(panel, yon){
 }
 
 // "Hepsini Kapat" butonu: tüm bölüm başlıklarını kapalı duruma alır ve kalıcı kaydeder.
+
+// ═══ Akınsoft 2026 aktarımı (Admin) ═══
+let _aks = { veri:null, onizleme:null, calisiyor:false };
+function aksPanelGoster_(){ const e=document.getElementById("aks-panel"); if(e) e.style.display = modulGorunurMu_({admin:true}) ? "" : "none"; }
+function aksDurum_(h){ const e=document.getElementById("aks-durum"); if(e) e.innerHTML=h; }
+function aksDosyaSecildi_(inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ _aks.veri=JSON.parse(r.result); _aks.onizleme=null;
+      document.getElementById("aks-onizle-btn").disabled=false; document.getElementById("aks-aktar-btn").disabled=true;
+      aksDurum_("📄 <b>"+(_aks.veri.faturalar||[]).length+"</b> fatura, <b>"+(_aks.veri.cariler||[]).length+"</b> cari, <b>"+(_aks.veri.stoklar||[]).length+"</b> stok okundu. Şimdi <b>Önizle</b>'ye basın."); }
+    catch(e){ _aks.veri=null; aksDurum_("❌ Dosya okunamadı: "+e.message); } };
+  r.readAsText(f);
+}
+function aksOnizle(){
+  if(!_aks.veri||_aks.calisiyor) return;
+  const v=_aks.veri;
+  const govde={ cariler:v.cariler, stoklar:v.stoklar, faturalar:(v.faturalar||[]).map(f=>({tur:f.tur,no:f.no,cariKodu:f.cariKodu,tarih:f.tarih,atla:f.atla})) };
+  aksDurum_("⏳ Önizleniyor...");
+  cariApi("akinsoftOnizle", govde).then(r=>{
+    if(!r||!r.ok){ aksDurum_("❌ "+((r&&r.hata)||"Önizleme başarısız")); return; }
+    _aks.onizleme=r; const s=r.say;
+    aksDurum_("<b>Önizleme (henüz kayıt yapılmadı)</b><br>• Açılacak yeni cari: <b>"+r.yeniCari.length+"</b> (zaten var: "+r.mevcutCari+")<br>• Açılacak yeni stok kartı: <b>"+r.yeniStok.length+"</b> (zaten var: "+r.mevcutStok+")<br>• Satış: <b>"+s.satis.yeni+"</b> yeni / "+s.satis.mevcut+" aktarılmış · Satış İade: <b>"+s.satis_iade.yeni+"</b> / "+s.satis_iade.mevcut+" · Alış: <b>"+s.alis.yeni+"</b> / "+s.alis.mevcut+"<br>• Atlanacak: "+r.atlanan.length+(r.atlanan.length?" ("+r.atlanan.map(x=>x.no+": "+x.neden).join("; ")+")":""));
+    document.getElementById("aks-aktar-btn").disabled=false;
+  }).catch(e=>aksDurum_("❌ "+e.message));
+}
+async function aksAktar(){
+  if(!_aks.veri||!_aks.onizleme||_aks.calisiyor) return;
+  const o=_aks.onizleme, v=_aks.veri;
+  if(!confirm("Akınsoft 2026 kayıtları AKTİF şirkete eklenecek ("+o.yeniCari.length+" cari, "+o.yeniStok.length+" stok kartı, "+(o.say.satis.yeni+o.say.satis_iade.yeni+o.say.alis.yeni)+" fatura). Mevcut kayıtlar silinmez. Devam edilsin mi?")) return;
+  _aks.calisiyor=true; document.getElementById("aks-aktar-btn").disabled=true; document.getElementById("aks-onizle-btn").disabled=true;
+  const rapor={acilanCari:[],acilanStok:[],hata:[],ok:0,mevcut:0,atlandi:[],hatalar:[],farklar:[]};
+  try{
+    // 1) Kartlar — cariler 25'erli, stoklar 100'erli
+    const cariler=o.yeniCari, stoklar=o.yeniStok;
+    for(let i=0;i<cariler.length;i+=25){ aksDurum_("⏳ Cari kartları açılıyor "+Math.min(i+25,cariler.length)+"/"+cariler.length);
+      const r=await cariApi("akinsoftKartAc",{cariler:cariler.slice(i,i+25),stoklar:[]}); rapor.acilanCari.push(...(r.acilanCari||[])); rapor.hata.push(...(r.hata||[])); }
+    for(let i=0;i<stoklar.length;i+=100){ aksDurum_("⏳ Stok kartları açılıyor "+Math.min(i+100,stoklar.length)+"/"+stoklar.length);
+      const r=await cariApi("akinsoftKartAc",{cariler:[],stoklar:stoklar.slice(i,i+100)}); rapor.acilanStok.push(...(r.acilanStok||[])); rapor.hata.push(...(r.hata||[])); }
+    // 2) Faturalar — 10'arlı parti
+    const fat=v.faturalar||[];
+    for(let i=0;i<fat.length;i+=10){ aksDurum_("⏳ Faturalar aktarılıyor "+Math.min(i+10,fat.length)+"/"+fat.length+" · başarılı "+rapor.ok+", hata "+rapor.hatalar.length);
+      const r=await cariApi("akinsoftFaturaAktar",{faturalar:fat.slice(i,i+10)});
+      if(!r||!r.ok){ rapor.hatalar.push({no:"parti "+(i/10+1),mesaj:(r&&r.hata)||"parti hatası"}); continue; }
+      r.sonuc.forEach(x=>{ if(x.durum==="ok"){ rapor.ok++; if(Math.abs(x.fark)>0.05) rapor.farklar.push(x); } else if(x.durum==="mevcut") rapor.mevcut++; else if(x.durum==="atlandi") rapor.atlandi.push(x); else rapor.hatalar.push(x); }); }
+  }catch(e){ rapor.hatalar.push({no:"—",mesaj:e.message}); }
+  _aks.calisiyor=false; document.getElementById("aks-onizle-btn").disabled=false;
+  const liste=(a,f)=>a.length?"<details><summary>"+a.length+" kayıt</summary><div style='max-height:180px;overflow:auto;font-size:12px'>"+a.map(f).join("<br>")+"</div></details>":"yok";
+  aksDurum_("<b>✅ Aktarım bitti</b><br>• Faturalar: <b>"+rapor.ok+"</b> eklendi, "+rapor.mevcut+" zaten vardı, "+rapor.atlandi.length+" atlandı, <b style='color:var(--red,#c00)'>"+rapor.hatalar.length+" hata</b><br>• Açılan cari: "+liste(rapor.acilanCari,x=>x.kod+" — "+x.unvan)+"<br>• Açılan stok kartı: "+liste(rapor.acilanStok,x=>x.kod+" — "+x.ad)+"<br>• Toplam farkı olan faturalar (&gt;0,05 ₺): "+liste(rapor.farklar,x=>x.no+": Akınsoft "+x.akinsoftToplam+" / ERP "+x.erpToplam+" (fark "+x.fark+")")+"<br>• Hatalar: "+liste(rapor.hatalar.concat(rapor.hata.map(m=>({no:"kart",mesaj:m}))),x=>(x.no||"")+": "+x.mesaj));
+}
 function ayarlarBolumleriHepsiniKapat(){
   const kapsayici = document.getElementById("mod-ayarlar");
   kapsayici.querySelectorAll(":scope > .finans-panel").forEach(panel=>{
