@@ -1172,7 +1172,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261027a";
+const PROGRAM_SURUM_ = "20261029a";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -1227,7 +1227,7 @@ function bulutYazmaAyarla(body, oturum) {
 // Bu action'lar oturum/token gerektirmeden çalışır (login ekranı henüz token
 // almadan bunlara ihtiyaç duyar).
 // Veriyi değiştirmeyen işlemler kilit beklemez (istemcideki CARI_API_YAZMA_DEGIL_ ile aynı mantık).
-const YAZMA_DEGIL_ = /^(get|akinsoftOnizle|yerelYedek|yerelNabiz|yerelDisFatura|yerelGuncelle|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|cekSeriNoUret|nakliyeSorunluFaturalar$)/; // giriş/çıkış/parola oturum satırı yazar → kilitli (satır kayması olmasın)
+const YAZMA_DEGIL_ = /^(get|akinsoftOnizle|akinsoftHareketOnizle|yerelYedek|yerelNabiz|yerelDisFatura|yerelGuncelle|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|cekSeriNoUret|nakliyeSorunluFaturalar$)/; // giriş/çıkış/parola oturum satırı yazar → kilitli (satır kayması olmasın)
 const OTURUMSUZ_ACTIONLAR = { girisYap: true, yerelYedekYukle: true, yerelNabiz: true, yerelDisFatura: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
@@ -1235,7 +1235,7 @@ const ADMIN_ACTIONLAR = {
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
   getYedekDurumu: true, yerelYedekAktivite: true, yerelYedekAktiviteOzet: true, yedekAlSimdi: true, yedekTetikleyiciKurWeb: true, saveYedekEpostalari: true, yedekEpostaGonderSimdi: true, // Yedekleme: sadece Admin
   resimOkuAyarKaydet: true, // API anahtarı: yalnız Admin
-  akinsoftOnizle: true, akinsoftKartAc: true, akinsoftFaturaAktar: true, // Akınsoft 2026 aktarımı: yalnız Admin
+  akinsoftOnizle: true, akinsoftKartAc: true, akinsoftFaturaAktar: true, akinsoftHareketOnizle: true, akinsoftHareketAktar: true, // Akınsoft 2026 aktarımı: yalnız Admin
   getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, kayitDefteriHatalariTemizle: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
 };
 
@@ -1409,6 +1409,8 @@ function handleRequest(e) {
       case "akinsoftOnizle": result = akinsoftOnizle(body); break;
       case "akinsoftKartAc": result = akinsoftKartAc(body); break;
       case "akinsoftFaturaAktar": result = akinsoftFaturaAktar(body); break;
+      case "akinsoftHareketOnizle": result = akinsoftHareketOnizle(body); break;
+      case "akinsoftHareketAktar": result = akinsoftHareketAktar(body); break;
       case "getResimOku": result = getResimOku(body); break;
       case "getResimOkuAyar": result = getResimOkuAyar(); break;
       case "resimOkuAyarKaydet": result = resimOkuAyarKaydet(body); break;

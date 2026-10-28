@@ -2349,6 +2349,16 @@ setInterval(topbarSaatGuncelle, 10000);
         <button class="btn btn-primary" id="aks-aktar-btn" onclick="aksAktar()" disabled>🚀 Kartları aç + faturaları aktar</button>
       </div>
       <div id="aks-durum" style="margin-top:10px;font-size:13px;line-height:1.6"></div>
+      <hr style="margin:14px 0;border:0;border-top:1px solid var(--border,#ddd)">
+      <div style="font-weight:600;margin-bottom:6px">💰 Cari hareketler: tahsilat / ödeme / virman / açılış devri</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 10px"><b>akinsoft_hareket_2026.json</b> dosyasını seçin (Nakit, Dekont, POS, Kredi Kartı, cari virman, 31.12.2025 devirleri). Çek/Senet ayrı adımdır. Önce faturaları aktarın.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="file" id="akh-dosya" accept=".json" onchange="akhDosyaSecildi_(this)">
+        <label style="font-size:13px"><input type="checkbox" id="akh-devir" checked> Açılış devirlerini de yaz</label>
+        <button class="btn" id="akh-onizle-btn" onclick="akhOnizle()" disabled>🔍 Önizle</button>
+        <button class="btn btn-primary" id="akh-aktar-btn" onclick="akhAktar()" disabled>🚀 Carileri aç + hareketleri aktar</button>
+      </div>
+      <div id="akh-durum" style="margin-top:10px;font-size:13px;line-height:1.6"></div>
     </div>
     <div class="finans-panel" id="ayarlar-son-islemler-panel" data-bolum-anahtar="ayarlar_bolum_son_islemler">
       <div class="rapor-baslik" style="margin-top:0">Son Yapılan İşlemler</div>
@@ -4804,7 +4814,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261027a";
+const FRONT_SURUM = "20261029a";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -21271,6 +21281,49 @@ async function aksAktar(){
   _aks.calisiyor=false; document.getElementById("aks-onizle-btn").disabled=false;
   const liste=(a,f)=>a.length?"<details><summary>"+a.length+" kayıt</summary><div style='max-height:180px;overflow:auto;font-size:12px'>"+a.map(f).join("<br>")+"</div></details>":"yok";
   aksDurum_("<b>✅ Aktarım bitti</b><br>• Faturalar: <b>"+rapor.ok+"</b> eklendi, "+rapor.mevcut+" zaten vardı, "+rapor.atlandi.length+" atlandı, <b style='color:var(--red,#c00)'>"+rapor.hatalar.length+" hata</b><br>• Açılan cari: "+liste(rapor.acilanCari,x=>x.kod+" — "+x.unvan)+"<br>• Açılan stok kartı: "+liste(rapor.acilanStok,x=>x.kod+" — "+x.ad)+"<br>• Toplam farkı olan faturalar (&gt;0,05 ₺): "+liste(rapor.farklar,x=>x.no+": Akınsoft "+x.akinsoftToplam+" / ERP "+x.erpToplam+" (fark "+x.fark+")")+"<br>• Hatalar: "+liste(rapor.hatalar.concat(rapor.hata.map(m=>({no:"kart",mesaj:m}))),x=>(x.no||"")+": "+x.mesaj));
+}
+
+// ═══ Akınsoft cari hareket aktarımı (Admin) ═══
+let _akh = { veri:null, onizleme:null, calisiyor:false };
+function akhDurum_(h){ const e=document.getElementById("akh-durum"); if(e) e.innerHTML=h; }
+function akhDosyaSecildi_(inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ _akh.veri=JSON.parse(r.result); _akh.onizleme=null;
+      document.getElementById("akh-onizle-btn").disabled=false; document.getElementById("akh-aktar-btn").disabled=true;
+      const v=_akh.veri; akhDurum_("📄 "+(v.hareketler||[]).length+" tahsilat/ödeme, "+(v.virmanlar||[]).length+" virman, "+(v.devir||[]).length+" devir, "+(v.cariler||[]).length+" yeni cari okundu. <b>Önizle</b>'ye basın."); }
+    catch(e){ _akh.veri=null; akhDurum_("❌ Dosya okunamadı: "+e.message); } };
+  r.readAsText(f);
+}
+function akhGovde_(){ const v=_akh.veri, devir=document.getElementById("akh-devir").checked; return { cariler:v.cariler, devir:devir?v.devir:[], hareketler:v.hareketler, virmanlar:v.virmanlar }; }
+function akhOnizle(){
+  if(!_akh.veri||_akh.calisiyor) return;
+  akhDurum_("⏳ Önizleniyor...");
+  cariApi("akinsoftHareketOnizle", akhGovde_()).then(r=>{
+    if(!r||!r.ok){ akhDurum_("❌ "+((r&&r.hata)||"Önizleme başarısız")); return; }
+    _akh.onizleme=r; const s=r.say;
+    akhDurum_("<b>Önizleme (henüz kayıt yapılmadı)</b><br>• Açılacak yeni cari: <b>"+r.yeniCari.length+"</b><br>• Tahsilat: <b>"+s.tahsilat[0]+"</b> yeni / "+s.tahsilat[1]+" aktarılmış · Ödeme: <b>"+s.odeme[0]+"</b> / "+s.odeme[1]+" · Virman: <b>"+s.virman[0]+"</b> / "+s.virman[1]+" · Devir: <b>"+s.devir[0]+"</b> / "+s.devir[1]+"<br>• Banka/POS/Kredi kartı eşleşmesi:<br>"+(r.plan.length?r.plan.map(p=>"&nbsp;&nbsp;"+p.kaynak+" · "+p.akinsoft+" → <b>"+p.erp+"</b> "+(p.yeni?"<span style='color:#c60'>(yeni açılacak)</span>":"(mevcut)")+" · "+p.adet+" kayıt").join("<br>"):"&nbsp;&nbsp;yok")+(r.eksikCari.length?"<br>⚠️ ERP'de olmayan cariler: "+r.eksikCari.join(", "):""));
+    document.getElementById("akh-aktar-btn").disabled=false;
+  }).catch(e=>akhDurum_("❌ "+e.message));
+}
+async function akhAktar(){
+  if(!_akh.veri||!_akh.onizleme||_akh.calisiyor) return;
+  const g=akhGovde_(), s=_akh.onizleme.say;
+  if(!confirm("Akınsoft cari hareketleri AKTİF şirkete eklenecek ("+_akh.onizleme.yeniCari.length+" cari, "+s.tahsilat[0]+" tahsilat, "+s.odeme[0]+" ödeme, "+s.virman[0]+" virman, "+s.devir[0]+" devir). Mevcut kayıtlar silinmez. Devam edilsin mi?")) return;
+  _akh.calisiyor=true; ["akh-aktar-btn","akh-onizle-btn"].forEach(i=>document.getElementById(i).disabled=true);
+  const R={ok:0,mevcut:0,hata:[],acilanCari:[]}, toplam=g.devir.length+g.hareketler.length+g.virmanlar.length; let islenen=0;
+  const topla=r=>{ if(!r||!r.ok){ R.hata.push({kod:"parti",mesaj:(r&&r.hata)||"parti hatası"}); return; } r.sonuc.forEach(x=>{ if(x.durum==="ok") R.ok++; else if(x.durum==="mevcut") R.mevcut++; else R.hata.push(x); }); };
+  try{
+    for(let i=0;i<g.cariler.length;i+=25){ akhDurum_("⏳ Cari kartları açılıyor "+Math.min(i+25,g.cariler.length)+"/"+g.cariler.length);
+      const r=await cariApi("akinsoftKartAc",{cariler:g.cariler.slice(i,i+25),stoklar:[]}); R.acilanCari.push(...(r.acilanCari||[])); (r.hata||[]).forEach(m=>R.hata.push({kod:"kart",mesaj:m})); }
+    const parti=async(alan,n)=>{ const l=g[alan]; for(let i=0;i<l.length;i+=n){ islenen+=Math.min(n,l.length-i);
+      akhDurum_("⏳ Aktarılıyor "+islenen+"/"+toplam+" ("+alan+") · başarılı "+R.ok+", hata "+R.hata.length);
+      topla(await cariApi("akinsoftHareketAktar",{[alan]:l.slice(i,i+n)})); } };
+    await parti("devir",20); await parti("hareketler",10); await parti("virmanlar",10);
+  }catch(e){ R.hata.push({kod:"—",mesaj:e.message}); }
+  _akh.calisiyor=false; document.getElementById("akh-onizle-btn").disabled=false;
+  const liste=(a,f)=>a.length?"<details><summary>"+a.length+" kayıt</summary><div style='max-height:180px;overflow:auto;font-size:12px'>"+a.map(f).join("<br>")+"</div></details>":"yok";
+  akhDurum_("<b>✅ Aktarım bitti</b><br>• Eklenen: <b>"+R.ok+"</b>, zaten vardı: "+R.mevcut+", <b style='color:var(--red,#c00)'>hata: "+R.hata.length+"</b><br>• Açılan cari: "+liste(R.acilanCari,x=>x.kod+" — "+x.unvan)+"<br>• Hatalar: "+liste(R.hata,x=>(x.tur||"")+" "+(x.kod||"")+" "+(x.tutar||"")+": "+x.mesaj));
 }
 function ayarlarBolumleriHepsiniKapat(){
   const kapsayici = document.getElementById("mod-ayarlar");
