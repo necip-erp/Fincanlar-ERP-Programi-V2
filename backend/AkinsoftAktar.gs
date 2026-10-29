@@ -297,3 +297,81 @@ function akinsoftHareketAktar(body) {
   cacheTemizle(["cariListesi_v4", "tahsilatListesi", "odemeListesi", "bankaYapisi"]);
   return { ok: true, sonuc: sonuc };
 }
+
+// ════════════════════════════════════════════════
+// 📥 AKINSOFT 2026 ÇEK / SENET AKTARIMI (29 Eki 2026) — yalnız Admin
+// Alınan çek/senet: saveCekSenet (cari Alacak) → durumuna göre: Tahsil Edildi (Kasa'ya, vade tarihiyle) / Takasta (bankaya tahsile verildi) /
+// Ciro Edildi (karşılığındaki "cirolanması" satırının carisine ciro; cari Borç ERP'nin ciro fonksiyonuyla yazılır) / Portföy (bırakılır).
+// Verilen çek: saveCekSenet (cari Borç) → "Bankadan Ödendi" ise vade tarihiyle ödendi yapılır.
+// Akınsoft çeklerde banka hesabı vermediği için Verilen çek + Takasta için panelde seçilen banka hesabı kullanılır.
+// Eşi 2025'te kalmış ciro satırları (orphan) yalnız cari Borç hareketi olarak yazılır. Etiket: "[AKC:<kaynak satır no>]".
+// ════════════════════════════════════════════════
+function aksCekEtiketleri_(ss) {
+  const set = {};
+  [SHEETS.cekSenetler, SHEETS.cariHareketler].forEach(function (ad) {
+    const sh = ss.getSheetByName(ad);
+    if (!sh || sh.getLastRow() < 2) return;
+    const v = sh.getDataRange().getValues();
+    for (let i = 1; i < v.length; i++) for (let c = 0; c < v[i].length; c++) {
+      const s = v[i][c];
+      if (typeof s !== "string" || s.indexOf("[AKC:") < 0) continue;
+      const m = s.match(/\[AKC:[^\]]+\]/g);
+      if (m) m.forEach(function (x) { set[x] = true; });
+    }
+  });
+  return set;
+}
+
+// body: { cekler:[{id,orphan?,kod,ciroKod?}] }
+function akinsoftCekOnizle(body) {
+  const ss = acikSS_(), cH = aksCariHarita_(ss), et = aksCekEtiketleri_(ss);
+  const say = { alinan: [0, 0], verilen: [0, 0], orphan: [0, 0] }, eksikCari = {};
+  (body.cekler || []).forEach(function (c) {
+    const s = say[c.orphan ? "orphan" : c.yon === "Verilen" ? "verilen" : "alinan"];
+    if (et["[AKC:" + c.id + "]"]) { s[1]++; return; }
+    s[0]++;
+    [c.kod, c.ciroKod].forEach(function (k) { if (k && !cH[aksKodN_(k)]) eksikCari[k] = true; });
+  });
+  return { ok: true, say: say, eksikCari: Object.keys(eksikCari) };
+}
+
+// body: { bankaHesapId, cekler:[{ id, orphan, belge:"Çek|Senet", yon:"Alınan|Verilen", kod, ciroKod, tarih, vade, tutar, evrak, durum, aciklama }] }
+function akinsoftCekAktar(body) {
+  const ss = acikSS_(), cH = aksCariHarita_(ss), et = aksCekEtiketleri_(ss), sonuc = [];
+  const bankaHesapId = String(body.bankaHesapId || "").trim();
+  (body.cekler || []).forEach(function (c) {
+    const ref = { id: c.id, belge: c.belge, yon: c.yon, kod: c.kod, tutar: c.tutar, evrak: c.evrak, etiket: "[AKC:" + c.id + "]" };
+    const hata = function (m) { ref.durum = "hata"; ref.mesaj = m; sonuc.push(ref); };
+    try {
+      if (et[ref.etiket]) { ref.durum = "mevcut"; sonuc.push(ref); return; }
+      const cari = cH[aksKodN_(c.kod)]; if (!cari) return hata("Cari bulunamadı (" + c.kod + ")");
+      const acik = (String(c.aciklama || "").trim() + " " + ref.etiket).trim();
+      if (c.orphan) {   // 2025'ten gelen çekin 2026 cirosu: yalnız cari Borç
+        const r = cariHareketEkle({ cariId: cari.id, tarih: c.tarih, tip: "Borç", tutar: c.tutar, aciklama: "Çek cirosu (2025 çeki) " + c.evrak + " " + ref.etiket });
+        Utilities.sleep(6);
+        if (r && r.ok) { et[ref.etiket] = true; ref.durum = "ok"; sonuc.push(ref); } else hata((r && r.hata) || "Kaydedilemedi");
+        return;
+      }
+      if (c.yon === "Verilen" && !bankaHesapId) return hata("Verilen çek için banka hesabı seçilmemiş");
+      const r = saveCekSenet({ cariId: cari.id, tip: c.yon, belgeTuru: c.belge, tutar: c.tutar, seriNo: c.evrak, duzenlenmeTarihi: c.tarih, vade: c.vade,
+        aciklama: acik, bankaHesapId: c.yon === "Verilen" ? bankaHesapId : "" });
+      Utilities.sleep(6);
+      if (!r || !r.ok) return hata((r && r.hata) || "Kaydedilemedi");
+      et[ref.etiket] = true; ref.cekId = r.id; ref.notlar = [];
+      let r2 = null;
+      if (c.durum === "Tahsil Edildi" && c.yon === "Alınan") r2 = cekSenetIslemYap({ id: r.id, tutar: c.tutar, tarih: c.vade, hedefTipi: "Kasa", aciklama: "Akınsoft tahsil edildi" });
+      else if (c.durum === "Bankadan Ödendi" && c.yon === "Verilen") r2 = cekSenetIslemYap({ id: r.id, tutar: c.tutar, tarih: c.vade, aciklama: "Akınsoft bankadan ödendi" });
+      else if (c.durum === "Takasta" && c.yon === "Alınan") r2 = bankaHesapId ? cekSenetBankayaVer({ id: r.id, bankaHesapId: bankaHesapId, tarih: c.vade, aciklama: "Akınsoft takasta" }) : { ok: false, hata: "banka hesabı seçilmemiş, çek portföyde bırakıldı" };
+      else if (c.durum === "Ciro Edildi" && c.yon === "Alınan") {
+        const ciroCari = c.ciroKod ? cH[aksKodN_(c.ciroKod)] : null;
+        r2 = ciroCari ? cekSenetDurumGuncelle({ id: r.id, durum: "Ciro Edildi", ciroCariId: ciroCari.id, tarih: c.ciroTarih || c.vade, aciklama: "Akınsoft cirosu" }) : { ok: false, hata: "ciro edilen cari bulunamadı, çek portföyde bırakıldı" };
+      }
+      Utilities.sleep(6);
+      ref.durum = "ok";
+      if (r2 && !r2.ok) { ref.durum = "kismi"; ref.mesaj = r2.hata || "Durum işlenemedi"; }
+      sonuc.push(ref);
+    } catch (e) { hata(e.message); }
+  });
+  cacheTemizle(["cariListesi_v4", "cekSenetListesi", "bankaYapisi"]);
+  return { ok: true, sonuc: sonuc };
+}

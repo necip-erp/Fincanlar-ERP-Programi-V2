@@ -2359,6 +2359,17 @@ setInterval(topbarSaatGuncelle, 10000);
         <button class="btn btn-primary" id="akh-aktar-btn" onclick="akhAktar()" disabled>🚀 Carileri aç + hareketleri aktar</button>
       </div>
       <div id="akh-durum" style="margin-top:10px;font-size:13px;line-height:1.6"></div>
+      <hr style="margin:14px 0;border:0;border-top:1px solid var(--border,#ddd)">
+      <div style="font-weight:600;margin-bottom:6px">🧾 Çek / Senet</div>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 10px"><b>akinsoft_cek_2026.json</b> dosyasını seçin. Önce faturaları ve cari hareketleri aktarın (cari ve banka hesapları oluşmuş olmalı). Akınsoft çeklerde banka hesabı vermediği için <b>Verilen çekler (ödenince çıkış yazılacak) ve "Takasta" müşteri çekleri</b> için aşağıdan bir banka hesabı seçin.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="file" id="akc-dosya" accept=".json" onchange="akcDosyaSecildi_(this)">
+        <select id="akc-hesap" style="min-width:240px"><option value="">— Banka hesabı seçin —</option></select>
+        <button class="btn" onclick="akcHesaplariYukle_()" title="Banka hesap listesini yenile">↻</button>
+        <button class="btn" id="akc-onizle-btn" onclick="akcOnizle()" disabled>🔍 Önizle</button>
+        <button class="btn btn-primary" id="akc-aktar-btn" onclick="akcAktar()" disabled>🚀 Çek/senetleri aktar</button>
+      </div>
+      <div id="akc-durum" style="margin-top:10px;font-size:13px;line-height:1.6"></div>
     </div>
     <div class="finans-panel" id="ayarlar-son-islemler-panel" data-bolum-anahtar="ayarlar_bolum_son_islemler">
       <div class="rapor-baslik" style="margin-top:0">Son Yapılan İşlemler</div>
@@ -4814,7 +4825,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261029a";
+const FRONT_SURUM = "20261029b";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -21324,6 +21335,53 @@ async function akhAktar(){
   _akh.calisiyor=false; document.getElementById("akh-onizle-btn").disabled=false;
   const liste=(a,f)=>a.length?"<details><summary>"+a.length+" kayıt</summary><div style='max-height:180px;overflow:auto;font-size:12px'>"+a.map(f).join("<br>")+"</div></details>":"yok";
   akhDurum_("<b>✅ Aktarım bitti</b><br>• Eklenen: <b>"+R.ok+"</b>, zaten vardı: "+R.mevcut+", <b style='color:var(--red,#c00)'>hata: "+R.hata.length+"</b><br>• Açılan cari: "+liste(R.acilanCari,x=>x.kod+" — "+x.unvan)+"<br>• Hatalar: "+liste(R.hata,x=>(x.tur||"")+" "+(x.kod||"")+" "+(x.tutar||"")+": "+x.mesaj));
+}
+
+// ═══ Akınsoft çek/senet aktarımı (Admin) ═══
+let _akc = { veri:null, onizleme:null, calisiyor:false };
+function akcDurum_(h){ const e=document.getElementById("akc-durum"); if(e) e.innerHTML=h; }
+function akcHesaplariYukle_(){
+  cariApi("getBankaYapisi").then(r=>{
+    const sel=document.getElementById("akc-hesap"); if(!sel||!r) return; const onceki=sel.value;
+    const bankaAd={}; (r.bankalar||[]).forEach(b=>bankaAd[b.id]=b.ad);
+    sel.innerHTML='<option value="">— Banka hesabı seçin —</option>'+(r.hesaplar||[]).map(h=>'<option value="'+h.id+'">'+(bankaAd[h.bankaId]||"")+" — "+h.hesapAdi+'</option>').join("");
+    if(onceki) sel.value=onceki;
+  }).catch(()=>{});
+}
+function akcDosyaSecildi_(inp){
+  const f=inp.files&&inp.files[0]; if(!f) return; akcHesaplariYukle_();
+  const r=new FileReader();
+  r.onload=()=>{ try{ _akc.veri=JSON.parse(r.result); _akc.onizleme=null;
+      document.getElementById("akc-onizle-btn").disabled=false; document.getElementById("akc-aktar-btn").disabled=true;
+      akcDurum_("📄 "+(_akc.veri.cekler||[]).length+" çek/senet okundu. Banka hesabını seçip <b>Önizle</b>'ye basın."); }
+    catch(e){ _akc.veri=null; akcDurum_("❌ Dosya okunamadı: "+e.message); } };
+  r.readAsText(f);
+}
+function akcOnizle(){
+  if(!_akc.veri||_akc.calisiyor) return; akcDurum_("⏳ Önizleniyor...");
+  cariApi("akinsoftCekOnizle",{cekler:_akc.veri.cekler}).then(r=>{
+    if(!r||!r.ok){ akcDurum_("❌ "+((r&&r.hata)||"Önizleme başarısız")); return; }
+    _akc.onizleme=r; const s=r.say;
+    akcDurum_("<b>Önizleme (henüz kayıt yapılmadı)</b><br>• Alınan (müşteri) çek/senet: <b>"+s.alinan[0]+"</b> yeni / "+s.alinan[1]+" aktarılmış<br>• Verilen (kendi) çek: <b>"+s.verilen[0]+"</b> / "+s.verilen[1]+"<br>• 2025'ten gelen çek cirosu (yalnız cari borç): <b>"+s.orphan[0]+"</b> / "+s.orphan[1]+(r.eksikCari.length?"<br>⚠️ ERP'de olmayan cariler (önce cari hareketleri aktarın): "+r.eksikCari.join(", "):""));
+    document.getElementById("akc-aktar-btn").disabled=false;
+  }).catch(e=>akcDurum_("❌ "+e.message));
+}
+async function akcAktar(){
+  if(!_akc.veri||!_akc.onizleme||_akc.calisiyor) return;
+  const hesap=document.getElementById("akc-hesap").value;
+  const gerek=_akc.veri.cekler.some(c=>c.yon==="Verilen"&&!c.orphan);
+  if(gerek&&!hesap){ alert("Verilen çekler için bir banka hesabı seçin."); return; }
+  if(!confirm("Çek/senetler AKTİF şirkete eklenecek. Mevcut kayıtlar silinmez. Devam edilsin mi?")) return;
+  _akc.calisiyor=true; ["akc-aktar-btn","akc-onizle-btn"].forEach(i=>document.getElementById(i).disabled=true);
+  const R={ok:0,mevcut:0,kismi:[],hata:[]}, l=_akc.veri.cekler;
+  try{ for(let i=0;i<l.length;i+=8){ akcDurum_("⏳ Aktarılıyor "+Math.min(i+8,l.length)+"/"+l.length);
+      const r=await cariApi("akinsoftCekAktar",{bankaHesapId:hesap,cekler:l.slice(i,i+8)});
+      if(!r||!r.ok){ R.hata.push({evrak:"parti",mesaj:(r&&r.hata)||"parti hatası"}); continue; }
+      r.sonuc.forEach(x=>{ if(x.durum==="ok") R.ok++; else if(x.durum==="mevcut") R.mevcut++; else if(x.durum==="kismi") R.kismi.push(x); else R.hata.push(x); }); } }
+  catch(e){ R.hata.push({evrak:"—",mesaj:e.message}); }
+  _akc.calisiyor=false; document.getElementById("akc-onizle-btn").disabled=false;
+  const liste=(a)=>a.length?"<details><summary>"+a.length+" kayıt</summary><div style='max-height:180px;overflow:auto;font-size:12px'>"+a.map(x=>(x.belge||"")+" "+(x.evrak||"")+" "+(x.kod||"")+" "+(x.tutar||"")+": "+x.mesaj).join("<br>")+"</div></details>":"yok";
+  akcDurum_("<b>✅ Aktarım bitti</b><br>• Eklenen: <b>"+R.ok+"</b>, zaten vardı: "+R.mevcut+"<br>• Eklendi ama durumu işlenemedi (portföyde kaldı): "+liste(R.kismi)+"<br>• Hatalar: "+liste(R.hata));
 }
 function ayarlarBolumleriHepsiniKapat(){
   const kapsayici = document.getElementById("mod-ayarlar");
