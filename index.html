@@ -4825,7 +4825,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261029b";
+const FRONT_SURUM = "20261029c";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261024e";
@@ -25028,7 +25028,16 @@ body[data-ah-stil="blok"] #home .modtile .modtile-no{color:#fff;background:rgba(
     if(id === "mod-finans") ["finansYukle","bankaHesapHareketleriYukle","posHareketleriYukle"].forEach(ac);
     if(id === "mod-rapor") ac("muhasebeRaporuYukle");
     if(id === "mod-silinenler") ac("silinenlerYukle");
-    if(id === "mod-cari"){ try{ if(typeof _cariGuncelId !== "undefined" && _cariGuncelId && typeof cariAc === "function") cariAc(_cariGuncelId); }catch(_){} }
+    // Cari: yalnız ekranda bir CARİ KAYIT sekmesi görünüyorsa o carinin detayı tazelenir.
+    // Cari Listesi (ana sekme) açıkken cariAc çağrılırsa liste modülü onu "yeni kayıt sekmesi aç" diye yorumlar
+    // ve son açılan cari üst sekmede kendiliğinden açılırdı (29 Eki 2026 düzeltmesi).
+    if(id === "mod-cari"){
+      try{
+        const ks = (typeof _kayitSekmeVeri !== "undefined" && typeof _aktifSekme !== "undefined") ? _kayitSekmeVeri[_aktifSekme] : null;
+        const listeAcik = aktif && aktif.classList.contains("lr-liste");
+        if(ks && ks.modulId === "cari" && !listeAcik && typeof _cariGuncelId !== "undefined" && _cariGuncelId && typeof cariAc === "function") cariAc(_cariGuncelId);
+      }catch(_){}
+    }
     ["sonIslemlerYukle","bugunOzetCiz"].forEach(ac);
     const t = document.createElement("div"); t.className = "ah-toast"; t.textContent = "↻ Veriler yenilendi — açık sekmeler korundu";
     document.body.appendChild(t); setTimeout(()=>t.remove(), 2200);
