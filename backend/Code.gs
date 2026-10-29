@@ -1172,7 +1172,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261029b";
+const PROGRAM_SURUM_ = "20261029d";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -1235,6 +1235,7 @@ const ADMIN_ACTIONLAR = {
   kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
   getYedekDurumu: true, yerelYedekAktivite: true, yerelYedekAktiviteOzet: true, yedekAlSimdi: true, yedekTetikleyiciKurWeb: true, saveYedekEpostalari: true, yedekEpostaGonderSimdi: true, // Yedekleme: sadece Admin
   resimOkuAyarKaydet: true, // API anahtarı: yalnız Admin
+  cariDevirKaydet: true, // Cari devir bakiyesi düzeltme: yalnız Admin
   akinsoftOnizle: true, akinsoftKartAc: true, akinsoftFaturaAktar: true, akinsoftHareketOnizle: true, akinsoftHareketAktar: true, akinsoftCekOnizle: true, akinsoftCekAktar: true, // Akınsoft 2026 aktarımı: yalnız Admin
   getKayitDefteri: true, getKayitDefteriKontrol: true, kayitDefteriBaslat: true, kayitDefteriTutarKoduDuzelt: true, kayitDefteriHatalariTemizle: true, nakliyeSorunluFaturalar: true, nakliyeSorunluFaturalariSil: true, // Kayıt Defteri: sadece Admin
 };
@@ -1330,6 +1331,10 @@ function handleRequest(e) {
       case "updateAlis":      result = updateAlis(body); break;
       case "siparistenFaturaOlustur": result = siparistenFaturaOlustur(body); break;
       case "siparisDurumGuncelle": result = siparisDurumGuncelle(body); break;
+      case "satisAciklamaGuncelle": result = satisAciklamaGuncelle(body); break;
+      case "getCariDevir":   result = getCariDevir(body); break;
+      case "getCariDevirDuzeltmeleri": result = getCariDevirDuzeltmeleri(); break;
+      case "cariDevirKaydet": result = cariDevirKaydet(body, oturum); break;
       case "getCariSiparisListesi": result = getCariSiparisListesi(body.cariId); break;
       case "silAlis":         result = silAlis(body); break;
       case "tumAlislariSilVeSifirla": result = tumAlislariSilVeSifirla(body); break;
@@ -2907,6 +2912,25 @@ function siparistenFaturaOlustur(body) {
 // body: { id, durum } — Sipariş'in elle takip edilen durumunu günceller
 // (Beklemede/Onaylandı/Teslim Edildi/Haber Verecek). Faturalanma durumu
 // (Muhasebelendi/Kısmen Faturalandı) bundan bağımsız, otomatik hesaplanır.
+// ★ (29 Eki 2026) Satış belgesinin (Fatura/Sipariş/Teklif) yalnız AÇIKLAMA alanını günceller (belge ekranındaki düzenlenebilir Açıklama kutusu).
+function satisAciklamaGuncelle(body) {
+  const id = String((body && body.id) || "").trim();
+  if (!id) return { ok: false, hata: "id gerekli" };
+  const aciklama = String((body && body.aciklama) || "").slice(0, 1000);
+  const ss = acikSS_();
+  const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
+    ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+  const data = sSheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === id) {
+      sSheet.getRange(i + 1, 7).setValue(aciklama);
+      cacheTemizle(["satisListesi"]);
+      return { ok: true, aciklama: aciklama };
+    }
+  }
+  return { ok: false, hata: "Kayıt bulunamadı" };
+}
+
 function siparisDurumGuncelle(body) {
   const id = String(body.id || "").trim();
   const durum = String(body.durum || "");
@@ -7374,6 +7398,15 @@ function getMuhasebeRaporu(body) {
     const cariTipFiltre = String(body.cariTipFiltre || "alici");
     const personelDahil = !!body.personelDahil;
     const cariIdler = Array.isArray(body.cariIdler) ? body.cariIdler.map(String).filter(Boolean) : [];
+    const hareketsizGizle = !!body.hareketsizGizle;
+    const sayiOku_ = v => { if (v === "" || v === null || v === undefined) return null; const n = parseFloat(v); return isNaN(n) ? null : n; };
+    const tutarMin = sayiOku_(body.tutarMin), tutarMax = sayiOku_(body.tutarMax);
+    function tutarAraligindaMi_(bakiye) {
+      const m = Math.abs(bakiye || 0);
+      if (tutarMin !== null && m < tutarMin - 0.005) return false;
+      if (tutarMax !== null && m > tutarMax + 0.005) return false;
+      return true;
+    }
 
     const hSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar, ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH","CARI_KODU","ISKONTO_ORANI"]);
     ensureCariEkKolonlariHepsi(hSheet);
@@ -7435,9 +7468,9 @@ function getMuhasebeRaporu(body) {
         return { cariId: c.id, cariKodu: c.cariKodu, cariAd: c.ad, cariTip: c.tip, borc: borc, alacak: alacak, bakiye: borc - alacak };
       }
       const anaSatirlar = anaCariler.filter(c => (hareketMap[c.id] || []).length > 0)
-        .map(borcAlacakSatiriOlustur_).sort((a, b) => a.cariAd.localeCompare(b.cariAd, 'tr'));
+        .map(borcAlacakSatiriOlustur_).filter(s => tutarAraligindaMi_(s.bakiye)).sort((a, b) => a.cariAd.localeCompare(b.cariAd, 'tr'));
       const personelSatirlar = personelCariler.filter(c => (hareketMap[c.id] || []).length > 0)
-        .map(borcAlacakSatiriOlustur_).sort((a, b) => a.cariAd.localeCompare(b.cariAd, 'tr'));
+        .map(borcAlacakSatiriOlustur_).filter(s => tutarAraligindaMi_(s.bakiye)).sort((a, b) => a.cariAd.localeCompare(b.cariAd, 'tr'));
       return { ok: true, tip: tip, satirlar: anaSatirlar, personelSatirlar: personelSatirlar };
     }
 
@@ -7460,10 +7493,13 @@ function getMuhasebeRaporu(body) {
       aralikHareketleri.forEach(h => { bakiye += (h.tip === "Borç") ? h.tutar : -h.tutar; h.bakiyeSonrasi = bakiye; });
       return { cariId: c.id, cariKodu: c.cariKodu, cariAd: c.ad, cariTip: c.tip, devir: devir, hareketler: aralikHareketleri, kapanisBakiye: bakiye };
     }
+    // ★ (29 Eki 2026) "Hareketi olmayanları getirme": seçili aralıkta hareketi olmayan cari bölümü gösterilmez.
+    // "Tutar aralığı": kapanış bakiyesinin MUTLAK değeri [tutarMin, tutarMax] içinde olan cariler (boş uç = sınırsız).
+    const bolumSuz_ = b => (!hareketsizGizle || b.hareketler.length > 0) && tutarAraligindaMi_(b.kapanisBakiye);
     const anaBolumler = anaCariler.filter(c => (hareketMap[c.id] || []).length > 0)
-      .map(cariBolumuOlustur_).sort((a, b) => a.cariAd.localeCompare(b.cariAd, 'tr'));
+      .map(cariBolumuOlustur_).filter(bolumSuz_).sort((a, b) => a.cariAd.localeCompare(b.cariAd, 'tr'));
     const personelBolumler = personelCariler.filter(c => (hareketMap[c.id] || []).length > 0)
-      .map(cariBolumuOlustur_).sort((a, b) => a.cariAd.localeCompare(b.cariAd, 'tr'));
+      .map(cariBolumuOlustur_).filter(bolumSuz_).sort((a, b) => a.cariAd.localeCompare(b.cariAd, 'tr'));
     return { ok: true, tip: tip, bolumler: anaBolumler, personelBolumler: personelBolumler };
   }
 

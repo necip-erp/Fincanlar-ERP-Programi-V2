@@ -308,6 +308,8 @@ function baslat(o) {
     if (a === 'silinenGeriAl') return 'Silinen kayıt geri alındı';
     if (a === 'islemHatasi') return 'İşlem yarıda hata verdi (kısmen kaydedilmiş olabilir)';
     if (a === 'siparisDurumGuncelle') return 'Sipariş durumu değişti';
+    if (a === 'satisAciklamaGuncelle') return 'Satış açıklaması değişti';
+    if (a === 'cariDevirKaydet') return 'Cari devir bakiyesi düzeltildi';
     if (a === 'siparistenFaturaOlustur') return 'Siparişten fatura oluşturuldu';
     if ((m = /^sil(.+)$/.exec(a)) || (m = /^(.+?)Sil$/.exec(a))) return (ISIM[m[1]] || m[1]) + ' silindi';
     if ((m = /^update(.+)$/.exec(a))) return (ISIM[m[1]] || m[1]) + ' düzeltildi';
