@@ -1172,7 +1172,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261030a";
+const PROGRAM_SURUM_ = "20261030b";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -1447,6 +1447,8 @@ function handleRequest(e) {
       case "saveSeriTanim":    result = saveSeriTanim(body); break;
       case "silSeriTanim":     result = silSeriTanim(body); break;
       case "seriSonrakiNoUret": result = seriSonrakiNoUret(body); break;
+      case "getFaturaSeriTakibi": result = getFaturaSeriTakibi(); break;
+      case "getFaturaSeriOnizleme": result = getFaturaSeriOnizleme(body); break;
       case "cekSeriNoUret": result = cekSeriNoUret(body); break;
       case "getBasitTanimListesi": result = getBasitTanimListesi(body.tip); break;
       case "saveBasitTanim":       result = saveBasitTanim(body); break;
@@ -2289,13 +2291,17 @@ function ensureSatisTeslimKolonlari_orj_(sheet) {
   // Gerçek Google Sheets'te 26'dan fazla sütun için sütun eklenmesi gerekir; yerel sunucu taklidinde
   // (shim) sütun sınırı yoktur ve insertColumnsAfter bulunmayabilir — o yüzden önce metot var mı bakılır.
   try {
-    if (typeof sheet.insertColumnsAfter === "function" && sheet.getMaxColumns() < 28) {
-      sheet.insertColumnsAfter(sheet.getMaxColumns(), 28 - sheet.getMaxColumns());
+    if (typeof sheet.insertColumnsAfter === "function" && sheet.getMaxColumns() < 29) {
+      sheet.insertColumnsAfter(sheet.getMaxColumns(), 29 - sheet.getMaxColumns());
     }
   } catch (e) { /* sütun zaten varsa ya da taklit ortamdaysa sessizce devam */ }
   // ★ (30 Eki 2026) 28. sütun FATURA_NO: faturanın kendi numarası (Sipariş No = SIPARIS_NO 16. sütundan AYRI takip edilir).
   if (String(sheet.getRange(1, 28).getValue() || "") !== "FATURA_NO") {
     sheet.getRange(1, 28).setValue("FATURA_NO").setFontWeight("bold").setBackground("#e8edf5");
+  }
+  // 29. sütun FATURA_TURU: "Normal" (EDM'siz) | "e-Fatura" | "e-Arşiv" | "Aktarım" (Akınsoft) — kayıt anında carinin durumundan, EDM gönderiminde gerçek türle güncellenir.
+  if (String(sheet.getRange(1, 29).getValue() || "") !== "FATURA_TURU") {
+    sheet.getRange(1, 29).setValue("FATURA_TURU").setFontWeight("bold").setBackground("#e8edf5");
   }
   if (String(sheet.getRange(1, 26).getValue() || "") !== "TESLIM_EDEN") {
     sheet.getRange(1, 26).setValue("TESLIM_EDEN").setFontWeight("bold").setBackground("#e8edf5");
@@ -2363,10 +2369,11 @@ function cariKoduHaritasiOlustur(ss) {
 //                yoksa Akınsoft'tan aktarılmış eski kayıtlarda açıklamadaki "[AKS:<no>|…]" etiketi.
 // İkisi hiçbir zaman birbirinin yerine yazılmaz; kaynak (faturaNoKaynak) hangisinden geldiğini söyler.
 function satisFaturaNoBul_(row) {
-  const girilen = String(row[27] || "").trim();
-  if (girilen) return { no: girilen, kaynak: "Girilen" };
+  // EDM'e gönderilmişse RESMİ numara EDM numarasıdır (e-Fatura/e-Arşiv serisinden); yoksa kayıtta verilen/aktarılan Fatura No.
   const efatura = String(row[16] || "").trim();
-  if (efatura) return { no: efatura, kaynak: "E-Fatura" };
+  if (efatura) return { no: efatura, kaynak: String(row[28] || "") === "e-Arşiv" ? "e-Arşiv" : "e-Fatura" };
+  const girilen = String(row[27] || "").trim();
+  if (girilen) return { no: girilen, kaynak: String(row[28] || "") === "Aktarım" ? "Aktarım" : "Normal" };
   const m = String(row[6] || "").match(/\[AKS:([^|\]]+)\|/);
   if (m && m[1].trim()) return { no: m[1].trim(), kaynak: "Akınsoft" };
   return { no: "", kaynak: "" };
@@ -2448,6 +2455,7 @@ function getSatisListesi() {
       efaturaNo: String(row[16] || ""),
       efaturaDurum: String(row[18] || ""),
       faturaNo: belgeTipi === "Fatura" ? satisFaturaNoBul_(row).no : "",
+      faturaTuru: belgeTipi === "Fatura" ? String(row[28] || "") : "",
     });
   }
   sonuc.reverse(); // ID zaman damgalı olduğundan ekleme sırası = kronolojik; en yeni en üstte
@@ -2492,8 +2500,8 @@ function getSatisDetay(satisId) {
         teslimEden: String(data[i][25] || ""),
         teslimAlan: String(data[i][26] || ""),
       };
-      if (satis.belgeTipi === "Fatura") { const fn = satisFaturaNoBul_(data[i]); satis.faturaNo = fn.no; satis.faturaNoKaynak = fn.kaynak; }
-      else { satis.faturaNo = ""; satis.faturaNoKaynak = ""; }
+      if (satis.belgeTipi === "Fatura") { const fn = satisFaturaNoBul_(data[i]); satis.faturaNo = fn.no; satis.faturaNoKaynak = fn.kaynak; satis.faturaTuru = String(data[i][28] || ""); }
+      else { satis.faturaNo = ""; satis.faturaNoKaynak = ""; satis.faturaTuru = ""; }
       break;
     }
   }
@@ -2596,6 +2604,7 @@ function saveSatis(body) {
   if (!cariId) return { ok: false, hata: "Cari (müşteri) seçimi zorunludur" };
   let cariAd = "";
   let cariEdmVar = false; // Cari E-Fatura veya E-Arşiv mükellefiyse true — KDV sonrası Tutar İskontosu'na izin verilmez.
+  let cariEFaturaMi = false, cariEArsivMi = false;
   {
     const cSheet = getOrCreateSheet(ss, SHEETS.cariHesaplar,
       ["ID","TIP","AD","TELEFON","ADRES","VERGI_NO","NOT","TARIH"]);
@@ -2605,7 +2614,9 @@ function saveSatis(body) {
     for (let i = 1; i < cData.length; i++) {
       if (String(cData[i][0]) === cariId) {
         cariAd = String(cData[i][2] || "");
-        cariEdmVar = String(cData[i][11] || "") === "Evet" || String(cData[i][12] || "") === "Evet";
+        cariEFaturaMi = String(cData[i][11] || "") === "Evet";
+        cariEArsivMi = String(cData[i][12] || "") === "Evet";
+        cariEdmVar = cariEFaturaMi || cariEArsivMi;
         break;
       }
     }
@@ -2687,7 +2698,28 @@ function saveSatis(body) {
     const durumAdlari = getSiparisDurumlari().durumlar.map(d => d.ad);
     siparisDurumu = durumAdlari.includes(body.siparisDurumu) ? body.siparisDurumu : (durumAdlari[0] || "Beklemede");
   }
-  metinliSatirEkle_(sSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || ""), "", "", "", "", "", String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim(), posHesapId, odemeTutari, String(body.teslimEden || "").trim(), String(body.teslimAlan || "").trim(), (belgeTipi === "Fatura" ? String(body.faturaNo || "").trim() : "")], [22, 23, 28]);
+  // ★ (30 Eki 2026) FATURA NO / FATURA TÜRÜ (Sipariş No'dan AYRI). Tür carinin durumundan: e-Fatura mükellefi → "e-Fatura", e-Arşiv → "e-Arşiv" (numara EDM'e
+  // gönderilirken kendi serisinden verilir), ikisi de değilse "Normal" → numara BURADA "satis_fatura" serisinden verilir. Dışarıdan açıkça numara
+  // gelirse (Akınsoft aktarımı) o numara aynen yazılır, seri tüketilmez ve tür "Aktarım" olur.
+  let faturaNo = "", faturaTuru = "", faturaSeriTur = "";
+  if (belgeTipi === "Fatura") {
+    faturaNo = String(body.faturaNo || "").trim();
+    if (faturaNo) faturaTuru = "Aktarım";
+    else if (cariEFaturaMi) faturaTuru = "e-Fatura";
+    else if (cariEArsivMi) faturaTuru = "e-Arşiv";
+    else {
+      const al = faturaSeriNoAl_("satis_fatura", {});
+      if (!al.ok) return al;
+      faturaNo = al.no; faturaTuru = "Normal"; faturaSeriTur = "satis_fatura";
+    }
+  }
+  try {
+    metinliSatirEkle_(sSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || ""), "", "", "", "", "", String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim(), posHesapId, odemeTutari, String(body.teslimEden || "").trim(), String(body.teslimAlan || "").trim(), faturaNo, faturaTuru], [22, 23, 28]);
+  } catch (eYaz) {
+    if (faturaSeriTur) faturaSeriNoGeriVer_(faturaSeriTur, faturaNo);
+    throw eYaz;
+  }
+  if (faturaSeriTur) faturaSeriLogYaz_(faturaSeriTur, faturaNo, id, tarih, "Atandı", "");
 
   // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
   // otomatik, minimal bir stok kartı oluşturulur (Alış modülündeki mantığın aynısı).
@@ -2760,7 +2792,7 @@ function saveSatis(body) {
   }
 
   cacheTemizle(["satisListesi"]);
-  return { ok: true, id: id, toplamTutar: toplamTutar };
+  return { ok: true, id: id, toplamTutar: toplamTutar, faturaNo: faturaNo, faturaTuru: faturaTuru };
 }
 
 // ════════════════════════════════════════════════
@@ -3049,11 +3081,14 @@ function silSatis(body) {
   let cariId = "";
   let kaynakSiparisId = "";
   let bulundu = false;
+  let silinenFaturaNolari_ = [];
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === id) {
       const row = data[i];
       cariId = String(row[2] || "");
       kaynakSiparisId = String(row[11] || "");
+      // ★ (30 Eki 2026) Silinen faturanın numarası Fatura Seri Takibi'nde "Fatura silindi" olarak işaretlenir (boşluk nedeni görünsün).
+      silinenFaturaNolari_ = [String(row[27] || ""), String(row[16] || "")];
       if (!body._geriAlmadanKaydetme) {
         const siparisNo = String(row[15] || "");
         const efaturaNo = String(row[16] || "");
@@ -3068,6 +3103,7 @@ function silSatis(body) {
     }
   }
   if (!bulundu) return { ok: false, hata: "Satış bulunamadı" };
+  silinenFaturaNolari_.forEach(function (n) { if (n) faturaSeriLogDurum_(n, "Fatura silindi"); });
 
   // Bu satışın otomatik yazdığı Stok Hareket Raporu satırlarını da geri al.
   stokHareketOtomatikSil(ss, id);
@@ -9603,7 +9639,8 @@ const SERI_TUR_ESKI_AD_ESLEME = {
 const SERI_TUR_ETIKETLER = {
   "": "— (otomasyona bağlı değil) —",
   siparis: "Sipariş No", teklif: "Teklif No",
-  satis_fatura: "Satış Fatura No", alis_fatura: "Alış Fatura No",
+  satis_fatura: "Satış Fatura No (EDM'ye gönderilmeyen)", alis_fatura: "Alış Fatura No",
+  efatura: "e-Fatura Seri No (EDM)", earsiv: "e-Arşiv Seri No (EDM)",
   cari_alici: "Cari No (Alıcı)", cari_satici: "Cari No (Satıcı)",
   cek_odeme: "Çek Ödeme Seri No", cek_tahsilat: "Çek Tahsilat Seri No",
 };
@@ -9675,6 +9712,13 @@ function getSeriTanimlari() {
       lock.releaseLock();
     }
   }
+  // ★ (30 Eki 2026) e-Fatura / e-Arşiv serileri yoksa varsayılanlarıyla oluşturulur (bkz. FATURA SERİ TAKİBİ).
+  if (["efatura", "earsiv"].some(t => !data.some((r, i) => i > 0 && r[0] && String(r[5] || "") === t))) {
+    const lk = kilitGetir_();
+    lk.waitLock(10000);
+    try { ["efatura", "earsiv"].forEach(t => faturaSeriSatiriGarantiEt_(sheet, t)); } finally { lk.releaseLock(); }
+    data = sheet.getDataRange().getValues();
+  }
   const seriler = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
@@ -9712,6 +9756,12 @@ function saveSeriTanim(body) {
     }
     if (!id) id = "sr_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
     const satir = [id, ad, String(body.prefix || ""), parseInt(body.sonrakiNo) || 1, parseInt(body.basamak) || 4, String(body.tur || "")];
+    // ★ (30 Eki 2026) Fatura serilerinde (e-Fatura / e-Arşiv / EDM'siz) "Sonraki No" ASLA geriye alınamaz: Ayarlar ekranı açıkken arada
+    // fatura numarası alınmışsa ekrandaki eski değer kaydedilip aynı numara ikinci kez verilmesin. İleri almak serbest.
+    if (satirIdx > 0 && FATURA_SERI_ETIKET_[satir[5]]) {
+      const mevcutSira = parseInt(data[satirIdx - 1][3]) || 1;
+      if (String(data[satirIdx - 1][2] || "") === satir[2] && satir[3] < mevcutSira) satir[3] = mevcutSira;
+    }
     if (satirIdx > 0) sheet.getRange(satirIdx, 1, 1, satir.length).setValues([satir]);
     else sheet.appendRow(satir);
     return { ok: true, id: id };
@@ -9768,6 +9818,209 @@ function cekSeriNoUret(body) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ════════════════════════════════════════════════
+// 🔢 FATURA SERİ TAKİBİ (30 Eki 2026)
+// ÜÇ AYRI seri, her biri kendi sayacıyla (Ayarlar > Seri Tanımları, TUR sütunu) ve her numara "FaturaSeriTakibi" sayfasına işlenir:
+//   • satis_fatura → EDM'ye GÖNDERİLMEYEN fatura (cari e-Fatura/e-Arşiv mükellefi değil). Numara KAYIT anında verilir (saveSatis; siparişten
+//     faturaya aktarma da saveSatis'ten geçer). Örn. SF-0012.
+//   • efatura      → e-Fatura (cari e-Fatura mükellefi). Numara EDM'e GÖNDERİM anında verilir (kullanıcı kararı, GİB boşluksuz sıra kuralı):
+//     3 harf + yıl + 9 hane, örn. FYT2026000000012 (Seri Tanımı: önek "FYT2026", basamak 9).
+//   • earsiv       → e-Arşiv (cari e-Arşiv mükellefi). Gönderim anında; örn. FYA2026000000007.
+// Gönderim başarısız olursa alınan numara, serinin SON numarasıysa geri verilir (boşluk kalmaz).
+// Sipariş No ayrı bir seridir (siparis) ve Fatura No ile karıştırılmaz.
+// ════════════════════════════════════════════════
+const FATURA_SERI_TAKIP_SAYFA_ = "FaturaSeriTakibi";
+const FATURA_SERI_TAKIP_BASLIK_ = ["ID", "TUR", "NO", "SATIS_ID", "TARIH", "DURUM", "NOT", "ZAMAN"];
+const FATURA_SERI_ETIKET_ = { efatura: "e-Fatura", earsiv: "e-Arşiv", satis_fatura: "EDM'siz Fatura" };
+
+function faturaSeriVarsayilan_(tur) {
+  const yil = Utilities.formatDate(new Date(), "Europe/Istanbul", "yyyy");
+  const p = PropertiesService.getScriptProperties();
+  if (tur === "efatura") {
+    // Eski (tek sayaçlı) düzende üretilmiş numaralarla çakışmamak için eski sayacın devamından başlar.
+    const eskiSayac = parseInt(p.getProperty("EDM_FATURA_SAYAC_" + yil) || "0", 10) || 0;
+    return { ad: "e-Fatura Seri No", prefix: String(p.getProperty("EDM_FATURA_SERI") || "FYT") + yil, ilk: eskiSayac + 1, basamak: 9 };
+  }
+  if (tur === "earsiv") return { ad: "e-Arşiv Seri No", prefix: String(p.getProperty("EDM_EARSIV_SERI") || "FYA") + yil, ilk: 1, basamak: 9 };
+  return { ad: "Satış Fatura No", prefix: "SF-", ilk: 1, basamak: 4 };
+}
+
+// kilit İÇİNDE çağrılır. TUR'a ait seri satırını döner; yoksa varsayılanıyla oluşturur.
+function faturaSeriSatiriGarantiEt_(sheet, tur) {
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] && String(data[i][5] || "") === tur) return { satir: i + 1, row: data[i] };
+  }
+  const v = faturaSeriVarsayilan_(tur);
+  sheet.appendRow(["sr_" + Date.now() + "_" + tur, v.ad, v.prefix, v.ilk, v.basamak, tur]);
+  const d2 = sheet.getDataRange().getValues();
+  return { satir: d2.length, row: d2[d2.length - 1] };
+}
+
+function faturaSeriKullanilanlar_(tur) {
+  const kullanilan = {};
+  try {
+    const sh = acikSS_().getSheetByName(FATURA_SERI_TAKIP_SAYFA_);
+    if (sh && sh.getLastRow() > 1) {
+      const v = sh.getDataRange().getValues();
+      for (let i = 1; i < v.length; i++) { if (String(v[i][1]) === tur && String(v[i][5]) !== "Geri verildi") kullanilan[String(v[i][2])] = true; }
+    }
+  } catch (e) { /* takip sayfası okunamazsa sayaç tek başına çalışır */ }
+  return kullanilan;
+}
+
+// Seriden bir sonraki numarayı ATOMİK olarak alır (kilitli). opts: { yil } (e-Fatura/e-Arşiv'de fatura tarihinin yılı).
+// Dönüş: { ok, no, sira, prefix } | { ok:false, hata }
+function faturaSeriNoAl_(tur, opts) {
+  opts = opts || {};
+  const sheet = getOrCreateSheet(acikSS_(), SHEETS.seriTanimlari, SERI_BASLIKLAR);
+  const lock = kilitGetir_();
+  lock.waitLock(10000);
+  try {
+    const b = faturaSeriSatiriGarantiEt_(sheet, tur);
+    const prefix = String(b.row[2] || "");
+    const basamak = parseInt(b.row[4]) || 4;
+    let sira = parseInt(b.row[3]) || 1;
+    // Sayaç bir şekilde geride kalmışsa (ör. Ayarlar'da eski değer kaydedilmişse) daha önce verilmiş numarayı İKİNCİ KEZ vermemek için ilerlet.
+    const kullanilan = faturaSeriKullanilanlar_(tur);
+    let no = seriFormatla(prefix, sira, basamak), deneme = 0;
+    while (kullanilan[no] && deneme < 5000) { sira++; no = seriFormatla(prefix, sira, basamak); deneme++; }
+    if (tur !== "satis_fatura") {
+      const yilPrefix = prefix.match(/(\d{4})$/);
+      if (no.length !== 16) return { ok: false, hata: (FATURA_SERI_ETIKET_[tur] || tur) + " seri numarası GİB biçiminde olmalı (3 harf + yıl + 9 hane = 16 karakter). Şu an: \"" + no + "\" (" + no.length + " karakter). Ayarlar > Seri Tanımları'nda önek (ör. FYT" + (opts.yil || "2026") + ") ve basamak (9) değerini düzeltin." };
+      if (opts.yil && (!yilPrefix || yilPrefix[1] !== String(opts.yil))) return { ok: false, hata: (FATURA_SERI_ETIKET_[tur] || tur) + " serisinin öneki \"" + prefix + "\" fatura yılı (" + opts.yil + ") ile bitmiyor. GİB kuralı gereği numara yılı fatura yılıyla aynı olmalı; Ayarlar > Seri Tanımları'nda önekin sonuna " + opts.yil + " yazın ve sonraki numarayı 1 yapın." };
+    }
+    sheet.getRange(b.satir, 4).setValue(sira + 1);
+    return { ok: true, no: no, sira: sira, prefix: prefix };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Alınan numara serinin SON numarasıysa (araya başkası girmediyse) sayacı geri alır → boşluk kalmaz.
+function faturaSeriNoGeriVer_(tur, no) {
+  try {
+    const sheet = getOrCreateSheet(acikSS_(), SHEETS.seriTanimlari, SERI_BASLIKLAR);
+    const lock = kilitGetir_();
+    lock.waitLock(10000);
+    try {
+      const data = sheet.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][0] && String(data[i][5] || "") === tur) {
+          const prefix = String(data[i][2] || "");
+          const sira = parseInt(String(no).slice(prefix.length), 10);
+          if (!isNaN(sira) && (parseInt(data[i][3]) || 1) === sira + 1) { sheet.getRange(i + 1, 4).setValue(sira); return true; }
+          return false;
+        }
+      }
+    } finally { lock.releaseLock(); }
+  } catch (e) { /* geri verme başarısızsa numara boşluk olarak takipte görünür */ }
+  return false;
+}
+
+function faturaSeriLogYaz_(tur, no, satisId, tarih, durum, not) {
+  try {
+    const sh = getOrCreateSheet(acikSS_(), FATURA_SERI_TAKIP_SAYFA_, FATURA_SERI_TAKIP_BASLIK_);
+    try { sh.getRange(2, 3, Math.max(sh.getMaxRows() - 1, 1), 1).setNumberFormat("@"); } catch (e1) {}
+    sh.appendRow(["fs_" + Date.now() + "_" + Math.floor(Math.random() * 1000), tur, String(no), String(satisId || ""), String(tarih || "").slice(0, 10), durum,
+      String(not || ""), Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm")]);
+  } catch (e) { /* takip kaydı yazılamazsa fatura işlemi yine geçerli */ }
+}
+
+function faturaSeriLogDurum_(no, durum) {
+  try {
+    const n = String(no || "").trim();
+    if (!n) return;
+    const sh = acikSS_().getSheetByName(FATURA_SERI_TAKIP_SAYFA_);
+    if (!sh || sh.getLastRow() < 2) return;
+    const v = sh.getDataRange().getValues();
+    for (let i = v.length - 1; i >= 1; i--) { if (String(v[i][2]) === n) { sh.getRange(i + 1, 6).setValue(durum); return; } }
+  } catch (e) { /* opsiyonel */ }
+}
+
+function faturaSeriSayisi_(prefix, no) {
+  const s = parseInt(String(no).slice(String(prefix).length), 10);
+  return isNaN(s) ? null : s;
+}
+
+// Carinin durumuna göre bu faturanın hangi seriden numara alacağı: efatura | earsiv | satis_fatura
+function faturaTuruBelirle_(eFatura, eArsiv) {
+  return eFatura ? "efatura" : (eArsiv ? "earsiv" : "satis_fatura");
+}
+
+// body: { cariId } — Satış formunda "bu fatura hangi seriden, sıradaki numara ne" önizlemesi (sayaç ARTIRMAZ).
+function getFaturaSeriOnizleme(body) {
+  const cariId = String((body && body.cariId) || "").trim();
+  let eF = false, eA = false;
+  if (cariId) {
+    const cl = getCariListesi();
+    const c = cl && cl.ok ? (cl.cariler || []).find(x => x.id === cariId) : null;
+    if (c) { eF = c.eFatura === "Evet"; eA = c.eArsiv === "Evet"; }
+  }
+  const tur = faturaTuruBelirle_(eF, eA);
+  const data = getOrCreateSheet(acikSS_(), SHEETS.seriTanimlari, SERI_BASLIKLAR).getDataRange().getValues();
+  let prefix, sira, basamak;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] && String(data[i][5] || "") === tur) { prefix = String(data[i][2] || ""); sira = parseInt(data[i][3]) || 1; basamak = parseInt(data[i][4]) || 4; break; }
+  }
+  if (prefix === undefined) { const v = faturaSeriVarsayilan_(tur); prefix = v.prefix; sira = v.ilk; basamak = v.basamak; }
+  const kullanilan = faturaSeriKullanilanlar_(tur);
+  let no = seriFormatla(prefix, sira, basamak), d = 0;
+  while (kullanilan[no] && d < 5000) { sira++; no = seriFormatla(prefix, sira, basamak); d++; }
+  return { ok: true, tur: tur, turAd: FATURA_SERI_ETIKET_[tur], no: no, atanma: tur === "satis_fatura" ? "kayit" : "gonderim" };
+}
+
+// Ayarlar > Seri Tanımları > "Fatura Seri Takibi": üç serinin durumu, verilen numaralar, boşluklar, EDM'e gönderilmeyi bekleyen faturalar.
+function getFaturaSeriTakibi() {
+  getSeriTanimlari(); // e-Fatura / e-Arşiv serileri yoksa varsayılanlarıyla oluşturulur
+  const ss = acikSS_();
+  const seriData = getOrCreateSheet(ss, SHEETS.seriTanimlari, SERI_BASLIKLAR).getDataRange().getValues();
+  const logSheet = ss.getSheetByName(FATURA_SERI_TAKIP_SAYFA_);
+  const logData = logSheet && logSheet.getLastRow() > 1 ? logSheet.getDataRange().getValues() : [[]];
+  const seriler = ["efatura", "earsiv", "satis_fatura"].map(function (tur) {
+    let prefix = "", sira = 1, basamak = 4, ad = "";
+    for (let i = 1; i < seriData.length; i++) {
+      if (seriData[i][0] && String(seriData[i][5] || "") === tur) { ad = String(seriData[i][1] || ""); prefix = String(seriData[i][2] || ""); sira = parseInt(seriData[i][3]) || 1; basamak = parseInt(seriData[i][4]) || 4; break; }
+    }
+    const kayitlar = [];
+    for (let i = 1; i < logData.length; i++) {
+      if (String(logData[i][1]) !== tur) continue;
+      kayitlar.push({ no: String(logData[i][2]), satisId: String(logData[i][3] || ""), tarih: hucreTarihStr(logData[i][4]), durum: String(logData[i][5] || ""), not: String(logData[i][6] || ""), zaman: cariDevirTarihGoster_(logData[i][7]) });
+    }
+    const gecerli = kayitlar.filter(k => k.durum !== "Geri verildi");
+    const var_ = {};
+    gecerli.forEach(k => { const s = faturaSeriSayisi_(prefix, k.no); if (s !== null) var_[s] = true; });
+    const sayilar = Object.keys(var_).map(Number).sort((a, b) => a - b);
+    const bosluklar = [];
+    if (sayilar.length) {
+      for (let s = sayilar[0]; s < sira && bosluklar.length < 100; s++) { if (!var_[s]) bosluklar.push(seriFormatla(prefix, s, basamak)); }
+    }
+    const silinen = gecerli.filter(k => k.durum === "Fatura silindi").map(k => k.no);
+    const bicimUyari = (tur !== "satis_fatura" && seriFormatla(prefix, sira, basamak).length !== 16) ? "Numara 16 karakter (3 harf + yıl + 9 hane) olmalı; önek ve basamağı kontrol edin." : "";
+    return {
+      tur: tur, etiket: FATURA_SERI_ETIKET_[tur], ad: ad, prefix: prefix, basamak: basamak, sonrakiNo: seriFormatla(prefix, sira, basamak),
+      adet: gecerli.length, sonVerilen: gecerli.length ? gecerli[gecerli.length - 1].no : "", bosluklar: bosluklar, silinen: silinen, uyari: bicimUyari,
+      kayitlar: kayitlar.slice(-60).reverse(),
+    };
+  });
+  // EDM'e gönderilmeyi bekleyen (e-Fatura / e-Arşiv olarak planlanmış, henüz numarası verilmemiş) faturalar
+  const bekleyenler = [];
+  try {
+    const sSheet = getOrCreateSheet(ss, SHEETS.satislar, ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
+    const sd = sSheet.getDataRange().getValues();
+    const cariKoduMap = cariKoduHaritasiOlustur(ss);
+    for (let i = sd.length - 1; i >= 1 && bekleyenler.length < 100; i--) {
+      const r = sd[i];
+      if (!r[0] || (String(r[8] || "") || "Fatura") !== "Fatura") continue;
+      const t = String(r[28] || "");
+      if ((t === "e-Fatura" || t === "e-Arşiv") && !String(r[16] || "").trim()) {
+        bekleyenler.push({ satisId: String(r[0]), tarih: hucreTarihStr(r[1]), cariKodu: cariKoduMap[String(r[2] || "")] || "", cariAd: String(r[3] || ""), tutar: parseFloat(r[4]) || 0, tur: t, siparisNo: String(r[15] || "") });
+      }
+    }
+  } catch (e) { /* opsiyonel bölüm */ }
+  return { ok: true, seriler: seriler, bekleyenler: bekleyenler };
 }
 
 // body: { id } — seçilen serinin güncel numarasını formatlar, sayacı 1 artırır, formatlı numarayı döner.
@@ -10845,15 +11098,17 @@ function edmFaturaNoUret_() {
 // Başarılı EDM gönderiminden sonra üretilen resmi e-Fatura numarasını ve GİB
 // UUID'sini Satış kaydına geri yazar (ERP ile GİB kaydı arasında numara
 // tutarlılığı için, ve UUID sonraki durum sorgulamalarında anahtar olarak kullanılır).
-function satisEfaturaNoKaydet_(satisId, efaturaNo, uuid, ublXml, gorselVeriJson) {
+function satisEfaturaNoKaydet_(satisId, efaturaNo, uuid, ublXml, gorselVeriJson, faturaTuru) {
   const ss = acikSS_();
   const sSheet = getOrCreateSheet(ss, SHEETS.satislar,
     ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
   ensureSatisBelgeTipiColonu(sSheet);
+  ensureSatisTeslimKolonlari(sSheet);
   const data = sSheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(satisId)) {
       sSheet.getRange(i + 1, 17).setValue(efaturaNo);
+      if (faturaTuru) sSheet.getRange(i + 1, 29).setValue(faturaTuru);   // gerçekte hangi seriden gönderildiyse tür onu gösterir
       if (uuid) sSheet.getRange(i + 1, 18).setValue(uuid);
       if (ublXml) sSheet.getRange(i + 1, 20).setValue(ublXml);
       if (gorselVeriJson) sSheet.getRange(i + 1, 21).setValue(gorselVeriJson);
@@ -11534,6 +11789,7 @@ function edmFaturaGonder(body) {
     return { ok: false, hata: "Faturanın hesaplanan toplamı (" + hesap.genelToplam.toFixed(2) + ") ERP'deki genel toplamdan (" + (satis.toplamlar.genelToplam || 0).toFixed(2) + ") farklı. Güvenlik için gönderilmedi; kalem tutarlarını kontrol edin." };
   }
 
+  let seriTurGonderim = "", alinanSeriNo = "";   // gönderim başarısız biterse alınan seri numarası geri verilir
   try {
     const sessionId = edmLogin_(ayar);
     const kendi = edmKendiBilgimiAl_(ayar, sessionId);
@@ -11558,9 +11814,15 @@ function edmFaturaGonder(body) {
     };
 
     const now = new Date();
+    // ★ (30 Eki 2026) Numara, türüne göre KENDİ serisinden (e-Fatura / e-Arşiv) ve fatura tarihinin yılıyla alınır; gönderim başarısız olursa geri verilir.
+    const faturaTarihIso = edmTarihIso_(satis.tarih) || Utilities.formatDate(now, "Europe/Istanbul", "yyyy-MM-dd");
+    seriTurGonderim = earsiv ? "earsiv" : "efatura";
+    const noAl = faturaSeriNoAl_(seriTurGonderim, { yil: faturaTarihIso.slice(0, 4) });
+    if (!noAl.ok) return { ok: false, hata: noAl.hata };
+    alinanSeriNo = noAl.no;
     const xmlParams = {
       uuid: Utilities.getUuid(),
-      faturaNo: edmFaturaNoUret_(),
+      faturaNo: noAl.no,
       tarih: edmTarihIso_(satis.tarih) || Utilities.formatDate(now, "Europe/Istanbul", "yyyy-MM-dd"), // ★ fatura tarihi = ERP fatura tarihi (en fazla 6 gün geri; ön kontrol doğrular)
       saat: Utilities.formatDate(now, "Europe/Istanbul", "HH:mm:ss"),
       saticiVkn: kendi.identifier,
@@ -11593,13 +11855,16 @@ function edmFaturaGonder(body) {
 
     const xml = edmSoapCagir_(ayar.url, "SendInvoiceRequest", soapBody);
     if (xml.indexOf("Fault") > -1 || xml.indexOf("faultstring") > -1) {
+      faturaSeriNoGeriVer_(seriTurGonderim, alinanSeriNo); alinanSeriNo = "";   // gönderilemedi → numara serinin sonundaysa geri verilir (boşluk kalmaz)
       return { ok: false, hata: "EDM SendInvoice hatası: " + edmXmlDegeri_(xml, "faultstring"), gonderilenXml: invoiceXml };
     }
     const returnCode = edmXmlDegeri_(xml, "RETURN_CODE");
     const status = edmXmlDegeri_(xml, "STATUS");
     if (returnCode !== "0") {
+      faturaSeriNoGeriVer_(seriTurGonderim, alinanSeriNo); alinanSeriNo = "";
       return { ok: false, hata: "EDM RETURN_CODE=" + returnCode + " (başarısız). Yanıt: " + xml.substring(0, 500) };
     }
+    alinanSeriNo = "";   // EDM kabul etti: numara kullanıldı, artık geri verilmez
     // EDM faturayı KENDİ serisinden numaralandırır; resmi numara/UUID yanıttaki <INVOICE ID= UUID=> özniteliklerindedir.
     const edmGercekNo = edmXmlOznitelik_(xml, "INVOICE", "ID");
     const edmGercekUuid = edmXmlOznitelik_(xml, "INVOICE", "UUID");
@@ -11615,7 +11880,10 @@ function edmFaturaGonder(body) {
       araToplam: hesap.araToplam, kdvToplam: hesap.kdvToplam, genelToplam: hesap.genelToplam,
     };
     if (iadeMi) iadeEfaturaNoKaydet_(satisId, gercekFaturaNo, gercekUuid, invoiceXml, JSON.stringify(gorselVeri));
-    else satisEfaturaNoKaydet_(satisId, gercekFaturaNo, gercekUuid, invoiceXml, JSON.stringify(gorselVeri));
+    else satisEfaturaNoKaydet_(satisId, gercekFaturaNo, gercekUuid, invoiceXml, JSON.stringify(gorselVeri), earsiv ? "e-Arşiv" : "e-Fatura");
+    // Fatura Seri Takibi kaydı. EDM yanıtındaki numara ERP'nin verdiğinden farklıysa not düşülür (seri sapması görünsün).
+    faturaSeriLogYaz_(seriTurGonderim, gercekFaturaNo, satisId, xmlParams.tarih, "Gönderildi",
+      [iadeMi ? "İade" : "", testMi ? "EDM TEST ortamı" : "", (edmGercekNo && edmGercekNo !== xmlParams.faturaNo) ? ("EDM farklı numara verdi; ERP'nin ayırdığı: " + xmlParams.faturaNo) : ""].filter(Boolean).join(" · "));
     try { edmSonKesimKaydet_(earsiv ? "EARSIV" : "EFATURA", testMi, xmlParams.tarih, gercekFaturaNo); } catch (e4) { /* kayıt başarısız olsa da gönderim tamam */ }
 
     let otomatikDurum = null;
@@ -11634,6 +11902,7 @@ function edmFaturaGonder(body) {
     }
     return { ok: true, canli: !testMi, tur: earsiv ? "EARSIV" : "EFATURA", durum: edmDurumTurkce_(status) || "Gönderildi", aliciUnvan: alici.unvan, efaturaNo: gercekFaturaNo, uuid: gercekUuid, ozetXml: xml.substring(0, 800), otomatikDurumSorgusu: otomatikDurum };
   } catch (err) {
+    if (alinanSeriNo) faturaSeriNoGeriVer_(seriTurGonderim, alinanSeriNo);   // EDM'e ulaşmadan/kabul edilmeden koptu → numara boşta kalmasın
     return { ok: false, hata: "EDM gönderim hatası: " + err.message };
   }
 }
@@ -12129,7 +12398,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20261030a";
+const ENSURE_SURUM_ = "20261030b";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}

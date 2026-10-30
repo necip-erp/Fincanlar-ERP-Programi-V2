@@ -2452,6 +2452,7 @@ setInterval(topbarSaatGuncelle, 10000);
       <div id="ayarlar-seri-liste"><div class="cari-empty">Yükleniyor...</div></div>
       <div class="modal-actions" style="justify-content:flex-start;margin-top:16px">
         <button class="btn" onclick="seriSatirEkle()">+ Yeni Seri</button>
+        <button class="btn" onclick="faturaSeriTakibiAc()">📊 Fatura Seri Takibi</button>
         <button class="btn btn-primary" onclick="seriTanimlariKaydet()">Kaydet</button>
       </div>
     </div>
@@ -4892,10 +4893,10 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261030a";
+const FRONT_SURUM = "20261030b";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
-const SUNUCU_EN_AZ = "20261030a";
+const SUNUCU_EN_AZ = "20261030b";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -8873,8 +8874,7 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         <span id="sm-siparis-no-badge" style="display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">
           # <span id="sm-siparis-no-metin">${s && s.siparisNo ? s.siparisNo : '—'}</span>
         </span>
-        <span id="sm-fatura-no-badge" title="Fatura numarası (Sipariş No'dan AYRI bir bilgidir)" style="display:${(s && (s.faturaNo || s.efaturaNo))?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Fatura No: <span id="sm-fatura-no-metin">${s && (s.faturaNo || s.efaturaNo) ? (s.faturaNo || s.efaturaNo) : '—'}</span></span>
-        <input type="text" id="sm-fatura-no-giris" autocomplete="off" placeholder="Fatura No (ops.)" title="Fatura numarası — Sipariş No'dan ayrı tutulur. Boş bırakılabilir (e-Fatura gönderilince EDM numarası otomatik gelir)." style="display:${(!duzenle && belgeTipiBaslangic==='Fatura')?'inline-block':'none'};width:150px;font-size:12.5px;padding:4px 10px;border:1px solid var(--border);border-radius:20px">
+        <span id="sm-fatura-no-badge" title="Fatura numarası (Sipariş No'dan AYRI bir bilgidir)" style="display:${(belgeTipiBaslangic==='Fatura')?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Fatura No: <span id="sm-fatura-no-metin">${s && (s.faturaNo || s.efaturaNo) ? (s.faturaNo || s.efaturaNo) : '—'}</span></span>
         <input type="hidden" id="sm-siparis-no-deger" value="${s && s.siparisNo ? s.siparisNo : ''}">
         <span id="sm-proje-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Proje: —</span>
         <span id="sm-faturatipi-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Tip: —</span>
@@ -9055,6 +9055,7 @@ function smKdvSonraKisitiUygula(){
     else if(eArsivMi){ earsivRozet.textContent = "E-Arşiv: Evet"; earsivRozet.style.background = "#dcf5e4"; earsivRozet.style.color = "#15803d"; }
     else { earsivRozet.textContent = "E-Arşiv: Hayır"; earsivRozet.style.background = "#fde2e2"; earsivRozet.style.color = "#b91c1c"; }
   }
+  faturaNoRozetGuncelle_();
   const fKapat = document.getElementById("sm-efatura-kapat"), aKapat = document.getElementById("sm-earsiv-kapat");
   if(fKapat) fKapat.style.display = eFaturaMi ? "inline-flex" : "none";   // yalnız "Evet" iken kapatılabilir; açmak Cari kartından
   if(aKapat) aKapat.style.display = eArsivMi ? "inline-flex" : "none";
@@ -11616,13 +11617,12 @@ function satisModalBelgeTipiDegisti(){
   if(tikFld) tikFld.style.display = (tip === "Fatura") ? "flex" : "none";
   const rozet = document.getElementById("sm-siparis-no-badge");
   if(rozet) rozet.style.display = (tip === "Sipariş" || tip === "Fatura") ? "inline-flex" : "none";
-  const fnGiris = document.getElementById("sm-fatura-no-giris");
-  if(fnGiris) fnGiris.style.display = (tip === "Fatura" && !_satisDuzenleId) ? "inline-block" : "none";
   const paketBaslik = document.getElementById("sm-paket-baslik");
   if(paketBaslik) paketBaslik.style.display = (tip === "Sipariş") ? "block" : "none";
   const vadeInp = document.getElementById("sm-vade");
   if(vadeInp && tip === "Sipariş" && !vadeInp.value) vadeInp.value = simdiTarihSaat().slice(0,10);
   if(tip === "Sipariş" || tip === "Fatura") siparisNumarasiOnizlemeYukle();
+  faturaNoRozetGuncelle_();
   satisKalemlerCiz();
   smProjeFaturaBadgeGuncelle();
 }
@@ -11703,7 +11703,6 @@ function satisKaydet(){
     odemeTipi: odemeTipi,
     dipIskontoYuzde: parseFloat(document.getElementById("sm-dip-iskonto").value) || 0,
     siparisNo: (belgeTipi === "Sipariş" || belgeTipi === "Fatura") ? (document.getElementById("sm-siparis-no-deger")||{}).value || "" : undefined,
-    faturaNo: belgeTipi === "Fatura" ? ((document.getElementById("sm-fatura-no-giris")||{}).value || "").trim() : undefined,
     tutarIskontosu: tutarIskontosu,
     tutarIskontoKdvSonra: tutarIskontoKdvSonra,
     posHesapId: posHesapId,
@@ -21853,7 +21852,7 @@ function siparisDurumSecenekleriHTML(seciliDurum){
 // Sipariş No, Teklif No, Satış/Alış Fatura No, Cari No gibi belge numaralarının
 // otomatik takibi için: her seri Ad + Prefix + Sonraki No + Basamak Sayısı tutar.
 let _seriTanimlari = [];
-let _seriTurEtiketler = {"":"— (otomasyona bağlı değil) —","siparis":"Sipariş No","teklif":"Teklif No","satis_fatura":"Satış Fatura No","alis_fatura":"Alış Fatura No","cari_alici":"Cari No (Alıcı)","cari_satici":"Cari No (Satıcı)"};
+let _seriTurEtiketler = {"":"— (otomasyona bağlı değil) —","siparis":"Sipariş No","teklif":"Teklif No","satis_fatura":"Satış Fatura No (EDM'ye gönderilmeyen)","efatura":"e-Fatura Seri No (EDM)","earsiv":"e-Arşiv Seri No (EDM)","alis_fatura":"Alış Fatura No","cari_alici":"Cari No (Alıcı)","cari_satici":"Cari No (Satıcı)"};
 function seriTanimlariYukle(){
   const el = document.getElementById("ayarlar-seri-liste");
   if(el) el.innerHTML = '<div class="cari-empty">Yükleniyor...</div>';
@@ -21885,6 +21884,47 @@ function seriTanimlariCiz(){
       <button class="btn btn-danger" style="padding:6px 10px" onclick="seriSatirSil(${i})">🗑</button>
     </div>`).join("");
 }
+// ★ (30 Eki 2026) Fatura No rozeti: Normal → kayıtta SF-… verilir; e-Fatura/e-Arşiv cari → numara EDM'e gönderilince atanır.
+let _fnOnizSayac = 0;
+function faturaNoRozetGuncelle_(){
+  const b = document.getElementById("sm-fatura-no-badge"), m = document.getElementById("sm-fatura-no-metin");
+  if(!b || !m || _satisDuzenleId) return;
+  const tip = (document.getElementById("sm-belgetipi")||{}).value;
+  b.style.display = tip === "Fatura" ? "inline-flex" : "none";
+  if(tip !== "Fatura") return;
+  const cariId = (document.getElementById("sm-cari")||{}).value || "";
+  const k = ++_fnOnizSayac;
+  cariApi("getFaturaSeriOnizleme", {cariId}).then(r=>{
+    if(k !== _fnOnizSayac || !r || !r.ok) return;
+    m.textContent = r.atanma === "gonderim" ? (r.turAd + " · EDM'e gönderilince atanır (sıradaki: " + (r.no||"—") + ")") : (r.turAd + " · kayıtta verilir (" + (r.no||"—") + ")");
+  }).catch(()=>{});
+}
+function faturaSeriTakibiAc(){
+  const eski = document.getElementById("fst-overlay"); if(eski) eski.remove();
+  const o = document.createElement("div"); o.id = "fst-overlay";
+  o.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px";
+  o.innerHTML = '<div style="background:var(--bg);color:var(--text);border-radius:12px;max-width:980px;width:100%;max-height:90vh;overflow:auto;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:16px">📊 Fatura Seri Takibi</b><button class="btn" onclick="document.getElementById(\'fst-overlay\').remove()">✕ Kapat</button></div><div id="fst-icerik" class="cari-empty">Yükleniyor...</div></div>';
+  document.body.appendChild(o);
+  cariApi("getFaturaSeriTakibi").then(r=>{
+    const el = document.getElementById("fst-icerik"); if(!el) return;
+    if(!r || !r.ok){ el.innerHTML = "Hata: " + htmlKacis((r&&(r.hata||r.error))||"bilinmiyor"); return; }
+    const e = x => htmlKacis(String(x==null?"":x));
+    let h = '<p style="font-size:12px;color:var(--text3);margin:0 0 10px">GİB numarası: 3 harf + yıl + 9 hane (16 karakter), sırada boşluk olmamalı. e-Fatura/e-Arşiv numarası EDM\'e gönderilirken, normal fatura numarası kayıtta verilir.</p>';
+    (r.seriler||[]).forEach(s=>{
+      h += '<div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px"><b>'+e(s.etiket||s.ad||s.tur)+'</b> · Ön ek: <b>'+e(s.prefix)+'</b> · Sıradaki: <b>'+e(s.sonrakiNo)+'</b> · Kullanılan: <b>'+e(s.adet)+'</b> · Son verilen: <b>'+e(s.sonVerilen||"—")+'</b>';
+      if(s.uyari) h += '<div style="color:#b91c1c;font-size:12px;margin-top:4px">⚠ '+e(s.uyari)+'</div>';
+      if(s.bosluklar && s.bosluklar.length) h += '<div style="color:#b45309;font-size:12px;margin-top:4px">Boşluklar: '+e(s.bosluklar.join(", "))+'</div>';
+      if(s.silinen && s.silinen.length) h += '<div style="font-size:12px;margin-top:4px">Silinen faturalar: '+e(s.silinen.join(", "))+'</div>';
+      const k = s.kayitlar||[];
+      if(k.length) h += '<table style="width:100%;font-size:12px;margin-top:6px;border-collapse:collapse"><tr style="text-align:left;color:var(--text3)"><th>No</th><th>Tarih</th><th>Durum</th><th>Not</th></tr>'+k.map(x=>'<tr><td>'+e(x.no)+'</td><td>'+e(x.tarih)+'</td><td>'+e(x.durum)+'</td><td>'+e(x.not)+'</td></tr>').join("")+'</table>';
+      h += '</div>';
+    });
+    const b = r.bekleyenler||[];
+    h += '<div style="border:1px solid var(--border);border-radius:10px;padding:10px"><b>EDM\'e gönderilmeyi bekleyen e-Fatura/e-Arşiv ('+b.length+')</b>' + (b.length ? '<table style="width:100%;font-size:12px;margin-top:6px"><tr style="text-align:left;color:var(--text3)"><th>Tarih</th><th>Cari</th><th>Tür</th><th>Tutar</th></tr>'+b.map(x=>'<tr><td>'+e(x.tarih)+'</td><td>'+e((x.cariKodu?x.cariKodu+" · ":"")+(x.cariAd||""))+'</td><td>'+e(x.tur)+'</td><td>'+e(x.tutar)+'</td></tr>').join("")+'</table>' : '<div style="font-size:12px;color:var(--text3);margin-top:4px">Bekleyen yok.</div>') + '</div>';
+    el.className = ""; el.innerHTML = h;
+  }).catch(err=>{ const el=document.getElementById("fst-icerik"); if(el) el.textContent = "Bağlantı hatası: "+err.message; });
+}
+
 function seriSatirEkle(){
   _seriTanimlariGuncelDegerleriOku();
   _seriTanimlari.push({id:"", ad:"Yeni Seri", prefix:"", sonrakiNo:1, basamak:4, tur:"", onizleme:""});
