@@ -1172,7 +1172,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261029d";
+const PROGRAM_SURUM_ = "20261030a";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -2289,10 +2289,14 @@ function ensureSatisTeslimKolonlari_orj_(sheet) {
   // Gerçek Google Sheets'te 26'dan fazla sütun için sütun eklenmesi gerekir; yerel sunucu taklidinde
   // (shim) sütun sınırı yoktur ve insertColumnsAfter bulunmayabilir — o yüzden önce metot var mı bakılır.
   try {
-    if (typeof sheet.insertColumnsAfter === "function" && sheet.getMaxColumns() < 27) {
-      sheet.insertColumnsAfter(sheet.getMaxColumns(), 27 - sheet.getMaxColumns());
+    if (typeof sheet.insertColumnsAfter === "function" && sheet.getMaxColumns() < 28) {
+      sheet.insertColumnsAfter(sheet.getMaxColumns(), 28 - sheet.getMaxColumns());
     }
   } catch (e) { /* sütun zaten varsa ya da taklit ortamdaysa sessizce devam */ }
+  // ★ (30 Eki 2026) 28. sütun FATURA_NO: faturanın kendi numarası (Sipariş No = SIPARIS_NO 16. sütundan AYRI takip edilir).
+  if (String(sheet.getRange(1, 28).getValue() || "") !== "FATURA_NO") {
+    sheet.getRange(1, 28).setValue("FATURA_NO").setFontWeight("bold").setBackground("#e8edf5");
+  }
   if (String(sheet.getRange(1, 26).getValue() || "") !== "TESLIM_EDEN") {
     sheet.getRange(1, 26).setValue("TESLIM_EDEN").setFontWeight("bold").setBackground("#e8edf5");
   }
@@ -2351,6 +2355,21 @@ function cariKoduHaritasiOlustur(ss) {
     if (cariId) map[cariId] = String(hData[i][8] || "");
   }
   return map;
+}
+
+// ★ (30 Eki 2026) SİPARİŞ NO ve FATURA NO AYRI bilgilerdir:
+//   Sipariş No = SIPARIS_NO (16. sütun) — ERP'nin kendi belge numarası (Sipariş/Teklif/Fatura kaydını tanımlar).
+//   Fatura No  = FATURA_NO (28. sütun, elle/Akınsoft'tan gelen fatura numarası) → yoksa EFATURA_NO (17. sütun, EDM'e gönderilince) →
+//                yoksa Akınsoft'tan aktarılmış eski kayıtlarda açıklamadaki "[AKS:<no>|…]" etiketi.
+// İkisi hiçbir zaman birbirinin yerine yazılmaz; kaynak (faturaNoKaynak) hangisinden geldiğini söyler.
+function satisFaturaNoBul_(row) {
+  const girilen = String(row[27] || "").trim();
+  if (girilen) return { no: girilen, kaynak: "Girilen" };
+  const efatura = String(row[16] || "").trim();
+  if (efatura) return { no: efatura, kaynak: "E-Fatura" };
+  const m = String(row[6] || "").match(/\[AKS:([^|\]]+)\|/);
+  if (m && m[1].trim()) return { no: m[1].trim(), kaynak: "Akınsoft" };
+  return { no: "", kaynak: "" };
 }
 
 function getSatisListesi() {
@@ -2428,6 +2447,7 @@ function getSatisListesi() {
       // için: efaturaNo doluysa bu fatura EDM'e gönderilmiş demektir.
       efaturaNo: String(row[16] || ""),
       efaturaDurum: String(row[18] || ""),
+      faturaNo: belgeTipi === "Fatura" ? satisFaturaNoBul_(row).no : "",
     });
   }
   sonuc.reverse(); // ID zaman damgalı olduğundan ekleme sırası = kronolojik; en yeni en üstte
@@ -2472,6 +2492,8 @@ function getSatisDetay(satisId) {
         teslimEden: String(data[i][25] || ""),
         teslimAlan: String(data[i][26] || ""),
       };
+      if (satis.belgeTipi === "Fatura") { const fn = satisFaturaNoBul_(data[i]); satis.faturaNo = fn.no; satis.faturaNoKaynak = fn.kaynak; }
+      else { satis.faturaNo = ""; satis.faturaNoKaynak = ""; }
       break;
     }
   }
@@ -2665,7 +2687,7 @@ function saveSatis(body) {
     const durumAdlari = getSiparisDurumlari().durumlar.map(d => d.ad);
     siparisDurumu = durumAdlari.includes(body.siparisDurumu) ? body.siparisDurumu : (durumAdlari[0] || "Beklemede");
   }
-  metinliSatirEkle_(sSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || ""), "", "", "", "", "", String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim(), posHesapId, odemeTutari, String(body.teslimEden || "").trim(), String(body.teslimAlan || "").trim()], [22, 23]);
+  metinliSatirEkle_(sSheet, [id, tarih, cariId, cariAd, toplamTutar, String(body.odemeTipi || "Peşin"), String(body.aciklama || ""), kayitTarihi, belgeTipi, dipIskontoYuzde, bankaHesapId, String(body.kaynakSiparisId || ""), siparisDurumu, tutarIskontosu, tutarIskontoKdvSonra ? 1 : 0, String(body.siparisNo || ""), "", "", "", "", "", String(body.projeKodu || "").trim(), String(body.faturaTipi || "").trim(), posHesapId, odemeTutari, String(body.teslimEden || "").trim(), String(body.teslimAlan || "").trim(), (belgeTipi === "Fatura" ? String(body.faturaNo || "").trim() : "")], [22, 23, 28]);
 
   // stokKartiOlustur işaretli ve StokTanimlari'nda henüz olmayan stok kodları için
   // otomatik, minimal bir stok kartı oluşturulur (Alış modülündeki mantığın aynısı).
@@ -6550,7 +6572,7 @@ function getFinansOzet() {
 function getRaporOzet(body) {
   const baslangic = String(body.baslangic || "");
   const bitis = String(body.bitis || "");
-  return cacheOkuVeyaHesapla("raporOzet_" + baslangic + "_" + bitis, 45, function () {
+  return cacheOkuVeyaHesapla("raporOzet_v2_" + baslangic + "_" + bitis, 45, function () {
   // yyyy-MM-dd formatında string karşılaştırması kronolojik sıralamayla aynı sonucu verir.
   // tarih artık saat de içerebildiğinden (yyyy-MM-ddTHH:mm), karşılaştırmadan önce sadece
   // gün kısmını (ilk 10 karakter) alıyoruz — yoksa "2026-08-30T14:30" gibi bir değer,
@@ -6577,7 +6599,9 @@ function getRaporOzet(body) {
         const bt = String(row[belgeTipiIdx] || "").trim();
         if (bt && bt !== "Fatura") continue;
       }
-      if (!araligaDahilMi(String(row[tarihIdx] || ""))) continue;
+      // 30 Eki 2026: Sheets tarih hücresini Date olarak tutabilir; String(Date) "Thu Sep 03" verip aralık filtresi tüm kayıtları eliyor,
+      // üst kutular 0 geliyordu. hucreTarihStr İstanbul saatine göre yyyy-MM-dd üretir.
+      if (!araligaDahilMi(hucreTarihStr(row[tarihIdx]))) continue;
       sayi++;
       toplam += parseFloat(row[tutarIdx]) || 0;
     }
@@ -6597,7 +6621,7 @@ function getRaporOzet(body) {
   for (let i = 1; i < sData.length; i++) {
     const id = String(sData[i][0] || "");
     if (!id) continue;
-    if (araligaDahilMi(String(sData[i][1] || ""))) araliktakiSatisIdleri[id] = true;
+    if (araligaDahilMi(hucreTarihStr(sData[i][1]))) araliktakiSatisIdleri[id] = true;
   }
 
   const kSheet = getOrCreateSheet(ss, SHEETS.satisKalemleri,
@@ -9412,7 +9436,7 @@ function karlilikHesapla_(ss, belgeIdler) {
     const manuelEksik = eksik.manuel;
     const cariId = String(r[2] || "");
     sonuc[id] = { id: id, tarih: tarih, belgeTipi: belgeTipi, cariId: cariId, cariAd: String(r[3] || ""), cariKodu: cariKodu[cariId] || "",
-      belgeNo: belgeTipi === "Fatura" ? String(r[16] || "") : String(r[15] || ""), siparisNo: String(r[15] || ""),
+      belgeNo: belgeTipi === "Fatura" ? satisFaturaNoBul_(r).no : String(r[15] || ""), siparisNo: String(r[15] || ""),
       toplamTutar: parseFloat(r[4]) || 0, gelir: gelir, maliyet: toplam, manuelEksik: manuelEksik, eksik: eksik, kalemSayisi: kalemler.length, kalemler: kalemler,
       raporaEkle: raporaEkleSet.has(id), manuelSayi: kalemler.filter(k => k.birimMaliyet.manuel !== null && k.birimMaliyet.manuel !== undefined).length };
   }
@@ -9811,13 +9835,34 @@ function getStokHareketListesi(body) {
         ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI","BELGE_TIPI"]);
       const sDataIT = sSheetIT.getDataRange().getValues();
       const kaynakHarita = {};
-      for (let j = 1; j < sDataIT.length; j++) { if (sDataIT[j][0]) kaynakHarita[String(sDataIT[j][0])] = String(sDataIT[j][11] || ""); }
+      const satisNoHarita = {};
+      for (let j = 1; j < sDataIT.length; j++) {
+        if (!sDataIT[j][0]) continue;
+        kaynakHarita[String(sDataIT[j][0])] = String(sDataIT[j][11] || "");
+        satisNoHarita[String(sDataIT[j][0])] = { fatura: satisFaturaNoBul_(sDataIT[j]).no, siparis: String(sDataIT[j][15] || "") };
+      }
       sonuc.forEach(h => {
         if (h.belgeTipi === "Satış Faturası" && h.belgeNo && kaynakHarita.hasOwnProperty(h.belgeNo)) {
           h.islemTuru = kaynakHarita[h.belgeNo] ? "Siparişten Faturalandı" : "Direkt Fatura";
         }
+        // ★ (30 Eki 2026) Raporda "Belge No" yerine FATURA NUMARASI gösterilir (belgeNo iç kayıt kimliğidir, kullanıcıya anlamsız).
+        if (h.belgeTipi === "Satış Faturası" && satisNoHarita[h.belgeNo]) { h.faturaNo = satisNoHarita[h.belgeNo].fatura; h.siparisNo = satisNoHarita[h.belgeNo].siparis; }
       });
     } catch (e) { /* işlem türü opsiyonel bilgi; hata raporu bozmasın */ }
+    // Alış faturası / iadeleri: Alislar 12. sütun FATURA_NUMARASI, SatisIadeler 12. sütun IADE_FATURA_NO.
+    try {
+      const alisNo = {};
+      const aSheetIT = getOrCreateSheet(ss, SHEETS.alislar, ["ID","TARIH","CARI_ID","CARI_AD","TOPLAM_TUTAR","ODEME_TIPI","ACIKLAMA","KAYIT_TARIHI"]);
+      const aDataIT = aSheetIT.getDataRange().getValues();
+      for (let j = 1; j < aDataIT.length; j++) { if (aDataIT[j][0]) alisNo[String(aDataIT[j][0])] = metinOku_(aDataIT[j][11]); }
+      const siSheetIT = ss.getSheetByName(SHEETS.satisIadeler);
+      const siNo = {};
+      if (siSheetIT && siSheetIT.getLastRow() > 1) { const siData = siSheetIT.getDataRange().getValues(); for (let j = 1; j < siData.length; j++) { if (siData[j][0]) siNo[String(siData[j][0])] = String(siData[j][11] || ""); } }
+      sonuc.forEach(h => {
+        if (h.belgeTipi === "Alış Faturası" && alisNo[h.belgeNo]) h.faturaNo = alisNo[h.belgeNo];
+        else if (h.belgeTipi === "Satış İadesi" && siNo[h.belgeNo]) h.faturaNo = siNo[h.belgeNo];
+      });
+    } catch (e) { /* opsiyonel */ }
     return sonuc;
   });
 
@@ -12084,7 +12129,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20261020a";
+const ENSURE_SURUM_ = "20261030a";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}

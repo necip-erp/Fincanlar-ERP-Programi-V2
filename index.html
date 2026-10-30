@@ -101,7 +101,13 @@ body.zemin-bulut .topbar .brand,body.zemin-yerel .topbar .brand{background:#fff;
    kendi içinde bir "sekme" olarak açılır (PWA kurulu haldeyken window.open görev
    çubuğunda ayrı bir program penceresi gibi göründüğü için bu yönteme geçildi). ── */
 .sekme-seridi{display:flex;align-items:stretch;gap:0;padding:5px 12px 0;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:thin}
-.sekme{position:relative;display:flex;align-items:center;justify-content:center;gap:9px;padding:8px 20px 7px;min-width:var(--sekme-genislik,140px);font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;cursor:pointer;border-bottom:2px solid transparent;border-right:1px solid rgba(127,127,127,.38);user-select:none;transform-origin:50% 100%;transition:background var(--t),color var(--t),transform .14s ease,box-shadow .14s ease}
+/* ★ 30 Eki: çok sekme açılınca yazılar üst üste binmesin — sekme küçülmez (flex 0 0 auto), uzun etiket "…" ile kısalır, genişlik sayıya göre ayarlanır; sekmeler sürüklenip yer değiştirir */
+.sekme{flex:0 0 auto;min-width:var(--sekme-min-eff,var(--sekme-genislik,140px));max-width:var(--sekme-maks-eff,300px);box-sizing:border-box;overflow:hidden}
+.sekme>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:var(--sekme-etiket-maks,260px)}
+.sekme.surukleniyor{opacity:.45}
+.sekme.hedef-sol{box-shadow:inset 3px 0 0 var(--blue)}
+.sekme.hedef-sag{box-shadow:inset -3px 0 0 var(--blue)}
+.sekme{position:relative;display:flex;align-items:center;justify-content:center;gap:9px;padding:8px 20px 7px;font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;cursor:pointer;border-bottom:2px solid transparent;border-right:1px solid rgba(127,127,127,.38);user-select:none;transform-origin:50% 100%;transition:background var(--t),color var(--t),transform .14s ease,box-shadow .14s ease}
 .sekme:first-child{border-left:1px solid rgba(127,127,127,.38)}
 /* sekmeler arası ton farkı: tek/çift sıradaki sekmeler hafifçe farklı tonda */
 .sekme:nth-child(odd){background:rgba(127,127,127,.07)}
@@ -3783,25 +3789,70 @@ function sekmeSeridiCiz(){
   const digerleri = _acikSekmeler.map(id=>{
     const kv = _kayitSekmeVeri[id];
     if(kv){
-      return `<div class="sekme${id===_aktifSekme?" aktif":""}" onclick="kayitSekmesiniGoster('${id}')" onmousedown="if(event.button===1){event.preventDefault();}" onauxclick="if(event.button===1){event.preventDefault(); sekmeKapat('${id}');}">
-        <span>${kv.ikon} ${kv.etiket}</span>
+      return `<div class="sekme${id===_aktifSekme?" aktif":""}" draggable="true" data-sid="${id}" title="${htmlKacis(kv.ikon+' '+kv.etiket)}" onclick="kayitSekmesiniGoster('${id}')" onmousedown="if(event.button===1){event.preventDefault();}" onauxclick="if(event.button===1){event.preventDefault(); sekmeKapat('${id}');}">
+        <span>${kv.ikon} ${htmlKacis(kv.etiket)}</span>
         <span class="sekme-kapat" onclick="event.stopPropagation(); sekmeKapat('${id}')">✕</span>
       </div>`;
     }
     const m = MODULLER.find(x=>x.id===id);
     if(!m) return "";
-    return `<div class="sekme${id===_aktifSekme?" aktif":""}" onclick="modulAc('${id}')" onmousedown="if(event.button===1){event.preventDefault();}" onauxclick="if(event.button===1){event.preventDefault(); sekmeKapat('${id}');}">
+    return `<div class="sekme${id===_aktifSekme?" aktif":""}" draggable="true" data-sid="${id}" onclick="modulAc('${id}')" onmousedown="if(event.button===1){event.preventDefault();}" onauxclick="if(event.button===1){event.preventDefault(); sekmeKapat('${id}');}">
       <span>${m.ic} ${id==="cari" ? (typeof window._cariAnaSekmeAd === "function" ? window._cariAnaSekmeAd() : "Cari Listesi") : m.lbl}</span>
       <span class="sekme-kapat" onclick="event.stopPropagation(); sekmeKapat('${id}')">✕</span>
     </div>`;
   }).join("");
   el.innerHTML = anaPill + digerleri;
+  sekmeBoyutAyarla_(el);
+  sekmeSurukleKur_(el);
   // Dar bir pencerede (ör. küçük boyutlu masaüstü uygulaması penceresi) çok sayıda sekme
   // açıkken şerit yatayda taşabilir; yeni/aktif sekmenin ince kaydırma çubuğu fark
   // edilmeden görünmez kalmaması için aktif olanı otomatik görünür alana kaydır.
   const aktifEl = el.querySelector(".sekme.aktif");
   if(aktifEl && aktifEl.scrollIntoView) aktifEl.scrollIntoView({inline:"nearest", block:"nearest"});
 }
+// ★ (30 Eki 2026) Çok sekme açıkken sekmeler birbirinin üstüne binmesin: kullanılabilir genişlik sekme sayısına bölünür;
+// sığmazsa her sekme daralır, etiket "…" ile kısalır (tam ad üzerine gelince ipucunda). Hâlâ sığmıyorsa şerit yatay kayar.
+function sekmeBoyutAyarla_(el){
+  try{
+    const sayi = el.querySelectorAll(".sekme").length;
+    if(!sayi) return;
+    const bos = Math.max(el.clientWidth - 24, 200);
+    const istenenMin = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--sekme-genislik")) || 140;
+    const kisim = Math.floor(bos / sayi);
+    const minEff = Math.max(Math.min(istenenMin, kisim), 74);
+    const maksEff = Math.max(Math.min(300, kisim), minEff);
+    el.style.setProperty("--sekme-min-eff", minEff + "px");
+    el.style.setProperty("--sekme-maks-eff", maksEff + "px");
+    el.style.setProperty("--sekme-etiket-maks", Math.max(maksEff - 64, 40) + "px");
+  }catch(e){}
+}
+// Sekmeler fareyle tutulup sürüklenerek yer değiştirir (Ana Sayfa sabit, ilk sırada kalır).
+let _sekmeSurukleId = null;
+function sekmeSurukleKur_(el){
+  el.querySelectorAll(".sekme[data-sid]").forEach(s=>{
+    s.addEventListener("dragstart", e=>{ _sekmeSurukleId = s.dataset.sid; s.classList.add("surukleniyor"); try{ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", s.dataset.sid); }catch(x){} });
+    s.addEventListener("dragend", ()=>{ _sekmeSurukleId = null; el.querySelectorAll(".sekme").forEach(x=>x.classList.remove("surukleniyor","hedef-sol","hedef-sag")); });
+    s.addEventListener("dragover", e=>{
+      if(!_sekmeSurukleId || _sekmeSurukleId === s.dataset.sid) return;
+      e.preventDefault();
+      const r = s.getBoundingClientRect(), sol = (e.clientX - r.left) < r.width/2;
+      s.classList.toggle("hedef-sol", sol); s.classList.toggle("hedef-sag", !sol);
+    });
+    s.addEventListener("dragleave", ()=>s.classList.remove("hedef-sol","hedef-sag"));
+    s.addEventListener("drop", e=>{
+      e.preventDefault();
+      const kaynak = _sekmeSurukleId, hedef = s.dataset.sid;
+      if(!kaynak || kaynak === hedef) return;
+      const r = s.getBoundingClientRect(), sol = (e.clientX - r.left) < r.width/2;
+      const liste = _acikSekmeler.filter(x=>x!==kaynak);
+      let i = liste.indexOf(hedef); if(i < 0) return;
+      liste.splice(sol ? i : i+1, 0, kaynak);
+      _acikSekmeler = liste; _sekmeSurukleId = null;
+      sekmeSeridiCiz();
+    });
+  });
+}
+window.addEventListener("resize", ()=>{ const el = document.getElementById("sekme-seridi"); if(el) sekmeBoyutAyarla_(el); });
 function sekmeKapat(id){
   _acikSekmeler = _acikSekmeler.filter(x=>x!==id);
   { const kv0 = _kayitSekmeVeri[id]; if(kv0 && /^SATIS:/.test(String(kv0.kimlik||"")) && typeof _satisPanelOnbellek !== "undefined") delete _satisPanelOnbellek[String(kv0.kimlik).slice(6)]; }   // kapanan belge sekmesinin saklı ekranı da atılır
@@ -4841,10 +4892,10 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261029d";
+const FRONT_SURUM = "20261030a";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
-const SUNUCU_EN_AZ = "20261029d";
+const SUNUCU_EN_AZ = "20261030a";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -7598,7 +7649,11 @@ function satisRaporYazdir(){
   tablolariYazdir_("Satış Raporu — " + _satisAktifBelgeTipi, document.getElementById("sr-icerik"));
 }
 function satisSekmeEtiketi_(s){
-  const no = s && s.siparisNo ? s.siparisNo : (s && s.id ? String(s.id).slice(-6) : "");
+  // ★ (30 Eki 2026) Faturada sekmede Fatura No (yoksa "Sip."+sipariş no); Sipariş/Teklif'te Sipariş No.
+  const fatura = !s || !s.belgeTipi || s.belgeTipi === "Fatura";
+  const fno = s ? (s.faturaNo || s.efaturaNo || "") : "";
+  const sno = s && s.siparisNo ? s.siparisNo : "";
+  const no = fatura ? (fno || (sno ? "Sip."+sno : (s && s.id ? String(s.id).slice(-6) : ""))) : (sno || (s && s.id ? String(s.id).slice(-6) : ""));
   return (s && s.belgeTipi ? s.belgeTipi : "Satış") + " " + no;
 }
 function satisRaporKayitAc(id){
@@ -8099,7 +8154,7 @@ function satisDetayCiz(res){
       <label style="text-transform:none;font-size:12px;color:var(--text2)">Sipariş Durumu</label>
       <div style="font-size:12px;color:var(--text3)">Fatura kesildiği için otomatik hesaplanıyor (yukarıda görünen durum) — elle değiştirilemez.</div>
     </div>` : '')}
-    ${(s.siparisNo || (s.belgeTipi||"Fatura")==="Fatura") ? `<div class="cari-info-grid">${s.siparisNo ? `<div class="cari-info-item"><div class="k">Sipariş No</div><div class="v">${s.siparisNo}</div></div>` : ""}${(s.belgeTipi||"Fatura")==="Fatura" ? `<div class="cari-info-item"><div class="k">Fatura No</div><div class="v">${s.efaturaNo || "—"}</div></div>` : ""}</div>` : ""}
+    ${(s.siparisNo || (s.belgeTipi||"Fatura")==="Fatura") ? `<div class="cari-info-grid">${s.siparisNo ? `<div class="cari-info-item"><div class="k">Sipariş No</div><div class="v">${s.siparisNo}</div></div>` : ""}${(s.belgeTipi||"Fatura")==="Fatura" ? `<div class="cari-info-item"><div class="k">Fatura No${s.faturaNoKaynak && s.faturaNoKaynak!=="Girilen" ? ' <span style="font-weight:400;color:var(--text3)">('+htmlKacis(s.faturaNoKaynak)+')</span>' : ''}</div><div class="v">${htmlKacis(s.faturaNo || s.efaturaNo || "—")}</div></div>` : ""}</div>` : ""}
     ${s.efaturaNo ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">E-Fatura No</div><div class="v">${s.efaturaNo}</div></div>${s.efaturaDurum ? `<div class="cari-info-item"><div class="k">Portal Durumu</div><div class="v">${s.efaturaDurum}</div></div>` : ""}</div>` : ""}
     ${s.kaynakSiparisId ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Kaynak</div><div class="v">Sipariş'ten aktarıldı</div></div></div>` : ""}
     <div class="cari-info-grid"><div class="cari-info-item" style="grid-column:1/-1"><div class="k">Açıklama <span style="font-weight:400;color:var(--text3)">(düzenleyebilirsiniz)</span></div>
@@ -8136,7 +8191,7 @@ function satisDetayCiz(res){
             <td style="text-align:center">${k.iskontoYuzde||0}</td>
             <td style="text-align:center">${k.kdvOrani===undefined?20:k.kdvOrani}</td>
             <td style="text-align:right">${paraFormat(k.tutar)}</td>
-            <td style="white-space:nowrap">${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını sekme olarak aç">📊</button>` : ''}${k.stokKodu ? ` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokTaniminaGitYeniSekmede('${k.stokKodu.replace(/'/g,"\\'")}')" title="Bu ürünün Stok Tanımını sekme olarak aç">📇</button>` : ''}</td>
+            <td style="white-space:nowrap">${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını sekme olarak aç (sekme adı: S.H.K-…)">📊 S.H.K</button>` : ''}${k.stokKodu ? ` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokTaniminaGitYeniSekmede('${k.stokKodu.replace(/'/g,"\\'")}')" title="Bu ürünün Stok Tanımını sekme olarak aç (sekme adı: S.T-…)">📇 S.T</button>` : ''}</td>
           </tr>`).join("")}
       </tbody>
     </table>
@@ -8160,8 +8215,10 @@ function satisSekmeBasligiGuncelle_(s){
   try{
     const tip = s.belgeTipi || "Fatura";
     const ad = tip === "Sipariş" ? "Satış Siparişi" : (tip === "Teklif" ? "Satış Teklifi" : "Satış Faturası");
-    const no = tip === "Fatura" ? (s.efaturaNo || s.siparisNo || "") : (s.siparisNo || "");
-    const etiket = [ad, s.cariAd || "", no].filter(Boolean).join("-");
+    // ★ (30 Eki 2026) Faturada sekmede FATURA NO yazar (yoksa karışmasın diye "Sip." ön ekiyle sipariş no); Sipariş/Teklif'te Sipariş No.
+    const fno = s.faturaNo || s.efaturaNo || "";
+    const no = tip === "Fatura" ? (fno || (s.siparisNo ? "Sip."+s.siparisNo : "")) : (s.siparisNo || "");
+    const etiket = [ad, kisaMetin_(s.cariAd || "", 22), no].filter(Boolean).join("-");
     const sid = Object.keys(_kayitSekmeVeri).find(x=>_kayitSekmeVeri[x].kimlik === "SATIS:"+s.id);
     if(!sid) return;
     _kayitSekmeVeri[sid].etiket = etiket;
@@ -8816,7 +8873,8 @@ function satisModalAc(onCariId, onBelgeTipi, duzenle){
         <span id="sm-siparis-no-badge" style="display:${(belgeTipiBaslangic==='Sipariş'||belgeTipiBaslangic==='Fatura')?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">
           # <span id="sm-siparis-no-metin">${s && s.siparisNo ? s.siparisNo : '—'}</span>
         </span>
-        <span id="sm-fatura-no-badge" title="Fatura numarası" style="display:${(s && s.efaturaNo)?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Fatura No: <span id="sm-fatura-no-metin">${s && s.efaturaNo ? s.efaturaNo : '—'}</span></span>
+        <span id="sm-fatura-no-badge" title="Fatura numarası (Sipariş No'dan AYRI bir bilgidir)" style="display:${(s && (s.faturaNo || s.efaturaNo))?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Fatura No: <span id="sm-fatura-no-metin">${s && (s.faturaNo || s.efaturaNo) ? (s.faturaNo || s.efaturaNo) : '—'}</span></span>
+        <input type="text" id="sm-fatura-no-giris" autocomplete="off" placeholder="Fatura No (ops.)" title="Fatura numarası — Sipariş No'dan ayrı tutulur. Boş bırakılabilir (e-Fatura gönderilince EDM numarası otomatik gelir)." style="display:${(!duzenle && belgeTipiBaslangic==='Fatura')?'inline-block':'none'};width:150px;font-size:12.5px;padding:4px 10px;border:1px solid var(--border);border-radius:20px">
         <input type="hidden" id="sm-siparis-no-deger" value="${s && s.siparisNo ? s.siparisNo : ''}">
         <span id="sm-proje-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Proje: —</span>
         <span id="sm-faturatipi-badge" style="display:none;align-items:center;font-size:12px;font-weight:700;color:var(--text2);background:var(--bg3);padding:4px 12px;border-radius:20px;white-space:nowrap">Tip: —</span>
@@ -11558,6 +11616,8 @@ function satisModalBelgeTipiDegisti(){
   if(tikFld) tikFld.style.display = (tip === "Fatura") ? "flex" : "none";
   const rozet = document.getElementById("sm-siparis-no-badge");
   if(rozet) rozet.style.display = (tip === "Sipariş" || tip === "Fatura") ? "inline-flex" : "none";
+  const fnGiris = document.getElementById("sm-fatura-no-giris");
+  if(fnGiris) fnGiris.style.display = (tip === "Fatura" && !_satisDuzenleId) ? "inline-block" : "none";
   const paketBaslik = document.getElementById("sm-paket-baslik");
   if(paketBaslik) paketBaslik.style.display = (tip === "Sipariş") ? "block" : "none";
   const vadeInp = document.getElementById("sm-vade");
@@ -11643,6 +11703,7 @@ function satisKaydet(){
     odemeTipi: odemeTipi,
     dipIskontoYuzde: parseFloat(document.getElementById("sm-dip-iskonto").value) || 0,
     siparisNo: (belgeTipi === "Sipariş" || belgeTipi === "Fatura") ? (document.getElementById("sm-siparis-no-deger")||{}).value || "" : undefined,
+    faturaNo: belgeTipi === "Fatura" ? ((document.getElementById("sm-fatura-no-giris")||{}).value || "").trim() : undefined,
     tutarIskontosu: tutarIskontosu,
     tutarIskontoKdvSonra: tutarIskontoKdvSonra,
     posHesapId: posHesapId,
@@ -12069,7 +12130,7 @@ function karlilikRaporCiz_(sadeceYoksa){
 }
 function karlilikBelgeAc(id){
   const b = _karRapor.belgeler.find(x=>x.id===id) || {};
-  kayitSekmesindeAc('satis','📤',satisSekmeEtiketi_({belgeTipi:b.belgeTipi||_karRapor.tip, siparisNo:b.siparisNo||b.belgeNo, id}),'SATIS:'+id,()=>satisAc(id));
+  kayitSekmesindeAc('satis','📤',satisSekmeEtiketi_({belgeTipi:b.belgeTipi||_karRapor.tip, faturaNo:(b.belgeTipi||_karRapor.tip)==="Fatura"?b.belgeNo:"", siparisNo:b.siparisNo||((b.belgeTipi||_karRapor.tip)==="Fatura"?"":b.belgeNo), id}),'SATIS:'+id,()=>satisAc(id));
 }
 function karlilikRaporExcel(){
   if(typeof XLSX === "undefined"){ alert("Excel kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin."); return; }
@@ -12224,7 +12285,7 @@ function urunKarBelgeAc(id){
   let b = null;
   (_urunKar.urunler||[]).some(u=>{ b = u.belgeler.find(x=>x.id===id); return !!b; });
   b = b || {};
-  kayitSekmesindeAc('satis','📤',satisSekmeEtiketi_({belgeTipi:_urunKar.tip, siparisNo:b.siparisNo||b.belgeNo, id}),'SATIS:'+id,()=>satisAc(id));
+  kayitSekmesindeAc('satis','📤',satisSekmeEtiketi_({belgeTipi:_urunKar.tip, faturaNo:_urunKar.tip==="Fatura"?b.belgeNo:"", siparisNo:b.siparisNo||(_urunKar.tip==="Fatura"?"":b.belgeNo), id}),'SATIS:'+id,()=>satisAc(id));
 }
 function urunKarDetayHtml_(u, sira, y){
   const fat = _urunKar.tip === "Fatura";
@@ -12990,7 +13051,7 @@ function alisDetayCiz(res){
             <td>${k.kdvOrani||0}</td>
             <td class="tutar-hucre">${paraFormat(k.tutar)}</td>
             <td>${k.satilanCariId ? `<div>🛒 <b>${htmlKacis(k.satilanCariAd||'')}</b></div>${k.satisVar===true ? '<div style="font-size:11px;color:#2e7d32">✔ Bu cariye satış/sipariş girilmiş</div>' : (k.satisVar===false ? '<div style="font-size:11px;color:#c62828;font-weight:700">⚠ Bu cariye bu ürün için satış/sipariş girilmemiş</div>' : '')}` : '—'}</td>
-            <td style="white-space:nowrap">${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını sekme olarak aç">📊</button>` : ''}${k.stokKodu ? ` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokTaniminaGitYeniSekmede('${k.stokKodu.replace(/'/g,"\\'")}')" title="Bu ürünün Stok Tanımını sekme olarak aç">📇</button>` : ''}</td>
+            <td style="white-space:nowrap">${(k.stokKodu||k.urunAdi) ? `<button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokHareketYeniSekmedeAc('${(k.stokKodu||k.urunAdi).replace(/'/g,"\\'")}')" title="Bu ürünün Stok Hareket kaydını sekme olarak aç (sekme adı: S.H.K-…)">📊 S.H.K</button>` : ''}${k.stokKodu ? ` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="stokTaniminaGitYeniSekmede('${k.stokKodu.replace(/'/g,"\\'")}')" title="Bu ürünün Stok Tanımını sekme olarak aç (sekme adı: S.T-…)">📇 S.T</button>` : ''}</td>
           </tr>`).join("")}
       </tbody>
     </table>
@@ -19709,6 +19770,16 @@ function mrIcerikCiz(tip, res){
   mrRenkUygula(kap);
   mrSutunSurukleKur(kap, tip);
 }
+// ★ (30 Eki 2026) Cari Hareket Raporu: Devir bakiyesi başlıkta olduğu gibi tablonun İLK SATIRI olarak da görünür
+// (Borç/Alacak sütununa işaretine göre yazılır, Bakiye = devir). Devir yoksa (0) satır eklenmez.
+function chtDevirSatiriHtml_(b){
+  const d = b.devir || 0;
+  if(Math.abs(d) < 0.005) return "";
+  const bas = (document.getElementById("rapor-baslangic")||{}).value || "";
+  return `<tr class="cht-devir-satir" style="background:var(--bg3);font-weight:700"><td>${bas?tarihGoster(bas):"—"}</td><td>Devir Bakiyesi</td>
+    <td style="text-align:right">${d>0?paraFormat(d):''}</td><td style="text-align:right">${d<0?paraFormat(-d):''}</td>
+    <td class="${bakiyeSinifi(d)}" style="text-align:right">${paraFormat(d)}</td></tr>`;
+}
 function mrIcerikCizAsil(tip, res){
   const el = document.getElementById("mr-icerik");
   if(tip === "vadesiGecenler"){
@@ -19850,11 +19921,11 @@ function mrIcerikCizAsil(tip, res){
           <div><b style="font-size:15px">${b.cariAd}</b> <span style="color:var(--text3);font-size:12.5px">${b.cariKodu?'· '+b.cariKodu:''}${b.cariTip?' · '+b.cariTip:''}</span></div>
           <div style="font-size:13px;color:var(--text3)">Devir: <b class="${bakiyeSinifi(b.devir)}">${paraFormat(b.devir)}</b> &nbsp; Kapanış: <b class="${bakiyeSinifi(b.kapanisBakiye)}">${paraFormat(b.kapanisBakiye)}</b></div>
         </div>
-        ${b.hareketler.length===0 ? '<div class="cari-empty" style="padding:10px 0">Bu aralıkta hareket yok.</div>' : `
+        ${(b.hareketler.length===0 && Math.abs(b.devir||0)<0.005) ? '<div class="cari-empty" style="padding:10px 0">Bu aralıkta hareket yok.</div>' : `
         <div style="overflow-x:auto"><table class="rapor-tbl cht-tbl" style="table-layout:fixed;width:${toplamGen}px;max-width:none;background:var(--rp-satir,#fff)">
           <colgroup>${gen.map(w=>`<col style="width:${w}px">`).join("")}</colgroup>
           <thead><tr>${["Tarih","Açıklama","Borç","Alacak","Bakiye"].map((t,i)=>`<th style="position:relative;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t}<span class="cht-grip" data-i="${i}" title="Sürükleyerek sütun genişliğini değiştir (çift tık: varsayılan)"></span></th>`).join("")}</tr></thead>
-          <tbody>${b.hareketler.map(h=>`<tr><td>${tarihGoster(h.tarih)}</td><td style="overflow:hidden;text-overflow:ellipsis" title="${htmlKacis(hkAciklamaGoster(h.aciklama))}">${hkAciklamaGoster(h.aciklama)}</td>
+          <tbody>${chtDevirSatiriHtml_(b)}${b.hareketler.map(h=>`<tr><td>${tarihGoster(h.tarih)}</td><td style="overflow:hidden;text-overflow:ellipsis" title="${htmlKacis(hkAciklamaGoster(h.aciklama))}">${hkAciklamaGoster(h.aciklama)}</td>
             <td style="text-align:right">${h.tip==='Borç'?paraFormat(h.tutar):''}</td><td style="text-align:right">${h.tip==='Alacak'?paraFormat(h.tutar):''}</td>
             <td class="${bakiyeSinifi(h.bakiyeSonrasi)}" style="text-align:right">${paraFormat(h.bakiyeSonrasi)}</td></tr>`).join("")}</tbody>
         </table></div>`}
@@ -24070,9 +24141,16 @@ const SHR_SUTUNLAR = [
   { anahtar: "alisFiyat", baslik: "Alış Fiyatı",  al: h => shrAlisFiyat_(h) },
   { anahtar: "satisFiyat",baslik: "Satış Fiyatı", al: h => shrSatisFiyat_(h) },
   { anahtar: "belgeTipi", baslik: "Belge Tipi", al: h => (h.belgeTipi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
-  { anahtar: "belgeNo",   baslik: "Belge No",   al: h => (h.belgeNo||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
+  { anahtar: "belgeNo",   baslik: "Fatura No",  al: h => shrBelgeNoGoster_(h).replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
   { anahtar: "aciklama",  baslik: "Açıklama",   al: h => (h.aciklama||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr') },
 ];
+// ★ (30 Eki 2026) Stok Hareket Raporu'nda "Belge No" yerine FATURA NO: iç kayıt kimliği (st_…/at_…) hiç gösterilmez.
+// Faturası numarasız satış faturasında karışmasın diye "Sip." ön ekiyle sipariş no; serbest metin belge no'lar (Devir vb.) aynen.
+function shrBelgeNoGoster_(h){
+  if(h.faturaNo) return String(h.faturaNo);
+  if(h.belgeTipi === "Satış Faturası" && h.siparisNo) return "Sip."+h.siparisNo;
+  return STOK_HAREKET_BELGE_TIPLERI[h.belgeTipi] ? "" : String(h.belgeNo||"");
+}
 
 // Stok hareketine yazılan birim fiyat (MALIYET_FIYATI sütunu) belgenin tipine göre okunur:
 // Satış Faturası / Satış İadesi → Satış Fiyatı; Alış Faturası / Alış İadesi / elle girişler (Devir vb.) → Alış Fiyatı.
@@ -24111,7 +24189,7 @@ function stokHareketRaporuCiz(){
     if(q){
       const eslesti = (h.stokAdi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
         (h.stokKodu||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
-        (h.belgeNo||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
+        shrBelgeNoGoster_(h).replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
         (h.renk||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
         (h.belgeTipi||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q) ||
         (h.aciklama||"").replace(/[İIıi]/g,"i").toLocaleLowerCase('tr').includes(q);
@@ -24165,7 +24243,7 @@ function stokHareketRaporuCiz(){
           const btn = belgeliMi ? `<button class="btn" style="font-size:11px;padding:4px 8px" onclick="stokHareketBelgeAc('${h.belgeTipi}','${h.belgeNo}')" title="İlgili belgeyi aç">📄 Aç</button>` : "";
           const giris = h.hareketTipi==="Giriş" ? miktarFormat(h.miktar) : "";
           const cikis = h.hareketTipi==="Çıkış" ? miktarFormat(h.miktar) : "";
-          return `<tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td>${h.renk ? htmlKacis(h.renk)+(renkAdiBul_(h.stokKodu,h.renk)!==String(h.renk) ? " — "+htmlKacis(renkAdiBul_(h.stokKodu,h.renk)) : "") : ""}</td><td class="hk-alacak">${giris}</td><td class="hk-borc">${cikis}</td><td>${miktarFormat(h.kalan)}</td><td>${h.birim}</td><td style="text-align:right">${shrAlisFiyat_(h)>0 ? paraFormat(shrAlisFiyat_(h)) : ''}</td><td style="text-align:right">${shrSatisFiyat_(h)>0 ? paraFormat(shrSatisFiyat_(h)) : ''}</td><td>${h.belgeTipi||''}${h.islemTuru?`<div style="margin-top:2px">${mrIslemTuruRozet({islemTuru:h.islemTuru})}</div>`:''}</td><td>${h.belgeNo||''}</td><td>${h.aciklama||''}</td><td>${btn}</td></tr>`;
+          return `<tr><td>${tarihGoster(h.tarih)}</td><td>${h.stokKodu||''}</td><td>${h.stokAdi}</td><td>${h.renk ? htmlKacis(h.renk)+(renkAdiBul_(h.stokKodu,h.renk)!==String(h.renk) ? " — "+htmlKacis(renkAdiBul_(h.stokKodu,h.renk)) : "") : ""}</td><td class="hk-alacak">${giris}</td><td class="hk-borc">${cikis}</td><td>${miktarFormat(h.kalan)}</td><td>${h.birim}</td><td style="text-align:right">${shrAlisFiyat_(h)>0 ? paraFormat(shrAlisFiyat_(h)) : ''}</td><td style="text-align:right">${shrSatisFiyat_(h)>0 ? paraFormat(shrSatisFiyat_(h)) : ''}</td><td>${h.belgeTipi||''}${h.islemTuru?`<div style="margin-top:2px">${mrIslemTuruRozet({islemTuru:h.islemTuru})}</div>`:''}</td><td>${htmlKacis(shrBelgeNoGoster_(h))}</td><td>${h.aciklama||''}</td><td>${btn}</td></tr>`;
         }).join("")}
       </tbody>
     </table>

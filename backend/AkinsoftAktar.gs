@@ -110,7 +110,7 @@ function akinsoftFaturaAktar(body) {
       let r;
       if (f.tur === "satis") {
         r = saveSatis({
-          cariId: cari.id, tarih: f.tarih, belgeTipi: "Fatura", odemeTipi: "Açık Hesap", aciklama: aciklama,
+          cariId: cari.id, tarih: f.tarih, belgeTipi: "Fatura", odemeTipi: "Açık Hesap", aciklama: aciklama, faturaNo: String(f.no || ""),
           tutarIskontosu: f.tutarIskontosu || 0, tutarIskontoKdvSonra: true,
           kalemler: (f.kalemler || []).map(function (k) { return { urunAdi: k.ad, miktar: k.miktar, birim: k.birim, birimFiyat: k.birimFiyat, iskontoYuzde: k.iskontoYuzde, kdvOrani: k.kdvOrani, stokKodu: k.stokKodu || "", stoksuz: !!k.hizmet }; }),
         });

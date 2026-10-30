@@ -44,8 +44,19 @@ function getCariDevir(body) {
   return { ok: true, devir: d ? { tip: d.tip, tutar: d.tutar, tarih: d.tarih } : null, duzeltmeler: duzeltmeler };
 }
 
+// ★ (30 Eki 2026) Düzeltme tarihi HER ZAMAN "gün/ay/yıl saat:dakika" (dd/MM/yyyy HH:mm) görünür.
+// Sheets "dd/MM/yyyy HH:mm" metnini kendiliğinden tarihe çevirebilir (String(Date) bozuk görünür); Date de gelse,
+// "yyyy-MM-dd HH:mm" biçiminde de gelse İstanbul saatine göre aynı biçime çevrilir.
+function cariDevirTarihGoster_(deger) {
+  if (deger instanceof Date) return Utilities.formatDate(deger, "Europe/Istanbul", "dd/MM/yyyy HH:mm");
+  const s = String(deger || "").trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+  if (m) return m[3] + "/" + m[2] + "/" + m[1] + " " + (m[4] ? m[4] + ":" + m[5] : "00:00");
+  return s;
+}
+
 function cariDevirLogSatiri_(r) {
-  return { cariId: String(r[1]), cariKodu: String(r[2] || ""), cariAd: String(r[3] || ""), tarih: String(r[4] || ""), kullanici: String(r[5] || ""),
+  return { cariId: String(r[1]), cariKodu: String(r[2] || ""), cariAd: String(r[3] || ""), tarih: cariDevirTarihGoster_(r[4]), kullanici: String(r[5] || ""),
     eskiTip: String(r[6] || ""), eskiTutar: parseFloat(r[7]) || 0, yeniTip: String(r[8] || ""), yeniTutar: parseFloat(r[9]) || 0 };
 }
 
@@ -95,6 +106,8 @@ function cariDevirKaydet(body, oturum) {
   }
 
   const logSheet = getOrCreateSheet(ss, CARI_DEVIR_LOG_SAYFA_, CARI_DEVIR_LOG_BASLIK_);
+  // Tarih sütunu metin biçimine alınır ki Sheets "dd/MM" ile "MM/dd" karışıklığıyla tarihi bozmasın.
+  try { logSheet.getRange(2, 5, Math.max(logSheet.getMaxRows() - 1, 1), 1).setNumberFormat("@"); } catch (e) {}
   logSheet.appendRow(["dv_" + Date.now(), cariId, cari.kod, cari.ad, Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm"),
     String((oturum && oturum.kullaniciAdi) || "Admin"), eskiTip, eskiTutar, yeniTip, tutar]);
   cacheTemizle(["cariListesi_v4"]);
