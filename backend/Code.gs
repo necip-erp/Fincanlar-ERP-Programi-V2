@@ -868,7 +868,7 @@ function logError(err) {
 // bankacılık düzeyinde güvenlik hedeflenmemiştir, amaç kimin ne yaptığını
 // ayırt edebilmek ve rastgele erişimi engellemektir.
 // ════════════════════════════════════════════════
-const KULLANICI_BASLIKLAR = ["ID","KULLANICI_ADI","PAROLA_HASH","ROL","AKTIF","KAYIT_TARIHI","PROFIL"];   // 7. sütun PROFIL: profil resmi (JSON; 19-20 Eki 2026), eski sayfalarda yoksa ilk kayıtta eklenir
+const KULLANICI_BASLIKLAR = ["ID","KULLANICI_ADI","PAROLA_HASH","ROL","AKTIF","KAYIT_TARIHI","PROFIL","EPOSTA"];   // 8. sütun EPOSTA: şifre sıfırlama kodu için (1 Kas 2026)   // 7. sütun PROFIL: profil resmi (JSON; 19-20 Eki 2026), eski sayfalarda yoksa ilk kayıtta eklenir
 const OTURUM_BASLIKLAR = ["TOKEN","KULLANICI_ID","KULLANICI_ADI","ROL","OLUSTURMA_TARIHI"];
 const OTURUM_SURESI_SAAT = 12;
 const VARSAYILAN_KULLANICILAR = [
@@ -966,6 +966,7 @@ function kullaniciSatirlariniOku_(ss) {
       rol: String(data[i][3]),
       aktif: String(data[i][4]) === "Evet",
       profil: profilCoz_(data[i][6]),
+      eposta: String(data[i][7] === undefined || data[i][7] === null ? "" : data[i][7]).trim(),
     });
   }
   return { sheet, satirlar };
@@ -978,7 +979,8 @@ function girisYap(body) {
 
   const ss = acikSS_();
   const { satirlar } = kullaniciSatirlariniOku_(ss);
-  const kullanici = satirlar.find(k => k.kullaniciAdi.toLowerCase() === kullaniciAdi.toLowerCase());
+  // ★ (1 Kas 2026) Kullanıcı adı YA DA e-posta adresiyle giriş (önce kullanıcı adı eşleşir).
+  const kullanici = kullaniciBul_(satirlar, kullaniciAdi);
 
   // Kullanıcı bulunamadı / pasif / parola yanlış — hangisi olduğunu belli etmeden
   // aynı genel mesaj döndürülür (kullanıcı adı denemesini kolaylaştırmamak için).
@@ -1067,28 +1069,200 @@ function parolaDegistir(body, oturum) {
   return { ok: true };
 }
 
+// ════════════════════════════════════════════════
+// ★ (1 Kas 2026) E-POSTA + "ŞİFREMİ UNUTTUM"
+// • Kullanicilar 8. sütun EPOSTA. Kullanıcı adı e-posta biçimindeyse (ör. ahmet@firma.com) ayrıca e-posta tanımlamaya gerek yok.
+// • Girişte kullanıcı adı ya da e-posta yazılabilir.
+// • Şifremi unuttum: kullanıcı adı/e-posta yazılır → 6 haneli kod e-postayla gelir (15 dk geçerli, 5 yanlış denemede iptal, 60 sn'de bir istenir)
+//   → kod + yeni parola girilir. Kod düz yazı olarak saklanmaz (SHA-256, kullanıcı kimliğiyle tuzlanmış).
+// • Mail yalnız bulutta (MailApp) atılabilir; yerel sunucu kodu üretir, mailini ortak anahtarla buluta gönderttirir (yerelDisFatura islem "sifreMail").
+// • Parola değiştirme (eski parola ile) aynen duruyor: parolaDegistir.
+// ════════════════════════════════════════════════
+const SIFIRLAMA_SHEET_ = "SifreSifirlama";
+const SIFIRLAMA_BASLIKLAR_ = ["KULLANICI_ID","KOD_HASH","SON_GECERLILIK","DENEME","ISTEK_ZAMANI"];
+const SIFIRLAMA_GECERLILIK_DK_ = 15, SIFIRLAMA_BEKLEME_SN_ = 60, SIFIRLAMA_MAX_DENEME_ = 5;
+
+function epostaGecerli_(s) {
+  s = String(s || "").trim();
+  return s.length <= 120 && /^[^\s@,;<>()"']+@[^\s@,;<>()"']+\.[^\s@,;<>()"']{2,}$/.test(s);
+}
+// Kullanıcının mail adresi: tanımlı e-posta, yoksa kullanıcı adı e-posta biçimindeyse o.
+function kullaniciEpostasi_(k) {
+  if (k.eposta && epostaGecerli_(k.eposta)) return k.eposta;
+  return epostaGecerli_(k.kullaniciAdi) ? k.kullaniciAdi : "";
+}
+function kullaniciBul_(satirlar, tanim) {
+  const t = String(tanim || "").trim().toLowerCase();
+  if (!t) return null;
+  return satirlar.find(k => k.kullaniciAdi.toLowerCase() === t) || satirlar.find(k => kullaniciEpostasi_(k).toLowerCase() === t) || null;
+}
+// Bu e-posta başka bir kullanıcının adı ya da e-postası mı? (hariçId: kendisi hariç)
+function epostaKullanimda_(satirlar, eposta, hariciId) {
+  const t = String(eposta || "").trim().toLowerCase();
+  return satirlar.some(k => k.id !== hariciId && (k.kullaniciAdi.toLowerCase() === t || kullaniciEpostasi_(k).toLowerCase() === t));
+}
+function epostaSutunuHazirla_(sheet) {
+  if (!String(sheet.getRange(1, 8).getValue() || "").trim()) sheet.getRange(1, 8).setValue("EPOSTA");
+}
+
+function sifirlamaSheet_(ss) { return getOrCreateSheet(ss, SIFIRLAMA_SHEET_, SIFIRLAMA_BASLIKLAR_); }
+function sifirlamaKodHash_(kullaniciId, kod) { return sha256Hex_("sifirla:" + kullaniciId + ":" + kod); }
+
+// Kod e-postası (yalnız bulutta çalışır). Yerel sunucu bunu "yerelDisFatura sifreMail" köprüsüyle buluta yaptırır.
+function sifreKoduMailiGonder_(adres, kod, kullaniciAdi) {
+  if (MailApp.getRemainingDailyQuota() < 1) throw new Error("Günlük e-posta kotası doldu");
+  MailApp.sendEmail({
+    to: adres,
+    subject: "Fincanlar ERP — Şifre sıfırlama kodu: " + kod,
+    body: "Merhaba " + kullaniciAdi + ",\n\nFincanlar ERP için şifre sıfırlama isteği alındı.\n\nDoğrulama kodunuz: " + kod + "\n\nKod " + SIFIRLAMA_GECERLILIK_DK_ + " dakika geçerlidir. Giriş ekranındaki \"Şifremi unuttum\" penceresine bu kodu ve yeni parolanızı yazın.\n\nBu isteği siz yapmadıysanız bu e-postayı yok sayın; parolanız değişmez.\n\n—\nFincanlar ERP otomatik ileti (" + Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm") + ")"
+  });
+}
+
+// body: { tanim: kullanıcı adı veya e-posta } — oturumsuz. Hesabın var/yok olduğunu belli etmeyen genel yanıt döner.
+function sifreSifirlaIste(body) {
+  const genel = { ok: true, mesaj: "Bu bilgiyle eşleşen ve e-posta adresi tanımlı bir kullanıcı varsa doğrulama kodu e-postayla gönderildi (" + SIFIRLAMA_GECERLILIK_DK_ + " dk geçerli). E-posta adresiniz tanımlı değilse yöneticiye (Admin) başvurun." };
+  const tanim = String((body && body.tanim) || "").trim();
+  if (!tanim) return { ok: false, hata: "Kullanıcı adı veya e-posta adresi girin" };
+  if (tanim.length > 120) return { ok: false, hata: "Geçersiz değer" };
+  const ss = acikSS_();
+  const { satirlar } = kullaniciSatirlariniOku_(ss);
+  const k = kullaniciBul_(satirlar, tanim);
+  if (!k || !k.aktif) return genel;
+  const adres = kullaniciEpostasi_(k);
+  if (!adres) return genel;
+
+  const sh = sifirlamaSheet_(ss);
+  const data = sh.getDataRange().getValues();
+  let satir = 0;
+  for (let i = 1; i < data.length; i++) { if (String(data[i][0]) === k.id) { satir = i + 1; break; } }
+  const simdi = Date.now();
+  if (satir) {
+    const sonIstek = Number(data[satir - 1][4]) || 0;
+    if (simdi - sonIstek < SIFIRLAMA_BEKLEME_SN_ * 1000) return { ok: true, mesaj: "Kod az önce gönderildi. Yeni kod için " + SIFIRLAMA_BEKLEME_SN_ + " saniye bekleyin; gelen kutusunu ve gereksiz (spam) klasörünü kontrol edin." };
+  }
+  const hex = Utilities.getUuid().replace(/-/g, "");
+  const kod = ("000000" + (parseInt(hex.slice(0, 10), 16) % 1000000)).slice(-6);
+  const kayit = [k.id, sifirlamaKodHash_(k.id, kod), String(simdi + SIFIRLAMA_GECERLILIK_DK_ * 60000), "0", String(simdi)];
+  if (satir) sh.getRange(satir, 1, 1, kayit.length).setValues([kayit]); else sh.appendRow(kayit);
+  // Eski/süresi dolmuş kayıtları temizle (sayfa büyümesin)
+  try {
+    const d2 = sh.getDataRange().getValues();
+    for (let i = d2.length - 1; i >= 1; i--) { if ((Number(d2[i][2]) || 0) < simdi - 24 * 3600 * 1000) sh.deleteRow(i + 1); }
+  } catch (e) {}
+
+  if (yerelMi_()) {
+    if (typeof YerelPosta === "undefined" || !YerelPosta) return { ok: false, hata: "Bu yerel sunucu sürümü e-posta göndermeyi desteklemiyor; Program Güncelleme (GitHub) yapıp sunucuyu yeniden başlatın." };
+    YerelPosta.ekle(JSON.stringify({ to: adres, kod: kod, kullaniciAdi: k.kullaniciAdi }));   // server.js yanıttan sonra buluttan gönderir
+  } else {
+    try { sifreKoduMailiGonder_(adres, kod, k.kullaniciAdi); }
+    catch (e) { return { ok: false, hata: "E-posta gönderilemedi: " + e.message }; }
+  }
+  return genel;
+}
+
+// body: { tanim, kod, yeniParola } — oturumsuz.
+function sifreSifirlaOnayla(body) {
+  const genelHata = { ok: false, hata: "Kod hatalı ya da süresi dolmuş. Yeni kod isteyin." };
+  const tanim = String((body && body.tanim) || "").trim();
+  const kod = String((body && body.kod) || "").replace(/\s+/g, "");
+  const yeni = String((body && body.yeniParola) || "");
+  if (!tanim || !/^\d{6}$/.test(kod)) return genelHata;
+  if (yeni.length < 6) return { ok: false, hata: "Yeni parola en az 6 karakter olmalı" };
+  const ss = acikSS_();
+  const { sheet: kSheet, satirlar } = kullaniciSatirlariniOku_(ss);
+  const k = kullaniciBul_(satirlar, tanim);
+  if (!k || !k.aktif) return genelHata;
+  const sh = sifirlamaSheet_(ss);
+  const data = sh.getDataRange().getValues();
+  let satir = 0;
+  for (let i = 1; i < data.length; i++) { if (String(data[i][0]) === k.id) { satir = i + 1; break; } }
+  if (!satir) return genelHata;
+  const r = data[satir - 1];
+  if (Date.now() > (Number(r[2]) || 0)) { sh.deleteRow(satir); return genelHata; }
+  const deneme = (Number(r[3]) || 0) + 1;
+  if (deneme > SIFIRLAMA_MAX_DENEME_) { sh.deleteRow(satir); return { ok: false, hata: "Çok fazla yanlış deneme. Yeni kod isteyin." }; }
+  if (String(r[1]) !== sifirlamaKodHash_(k.id, kod)) {
+    sh.getRange(satir, 4).setValue(String(deneme));
+    return { ok: false, hata: "Kod hatalı (" + (SIFIRLAMA_MAX_DENEME_ - deneme) + " deneme hakkı kaldı)" };
+  }
+  kSheet.getRange(k.rowIdx, 3).setValue(sha256Hex_(yeni));
+  sh.deleteRow(satir);
+  // Bu kullanıcının açık oturumları kapatılır (parola değişince eski oturum geçerli kalmasın)
+  try {
+    const oSheet = getOrCreateSheet(ss, SHEETS.oturumlar, OTURUM_BASLIKLAR);
+    const od = oSheet.getDataRange().getValues();
+    for (let i = od.length - 1; i >= 1; i--) {
+      if (String(od[i][1]) === k.id) {
+        try { CacheService.getScriptCache().remove("otr_" + aktifYil_() + "_" + String(od[i][0])); } catch (e) {}
+        oSheet.deleteRow(i + 1);
+      }
+    }
+  } catch (e) {}
+  return { ok: true, mesaj: "Parolanız değiştirildi. Yeni parolanızla giriş yapabilirsiniz." };
+}
+
+// Giriş yapan kullanıcının kendi e-posta adresi (kullanıcı adı e-posta biçimindeyse o).
+function benimEpostam(body, oturum) {
+  const ss = acikSS_();
+  const { satirlar } = kullaniciSatirlariniOku_(ss);
+  const k = satirlar.find(x => x.id === oturum.kullaniciId);
+  if (!k) return { ok: false, hata: "Kullanıcı bulunamadı" };
+  return { ok: true, eposta: k.eposta, etkin: kullaniciEpostasi_(k) };
+}
+// Kullanıcı KENDİ e-postasını değiştirir; mevcut parola istenir (açık unutulmuş oturumdan sahiplenmeyi önlemek için). eposta "" = sil.
+function epostaKaydet(body, oturum) {
+  const eposta = String((body && body.eposta) || "").trim();
+  if (eposta && !epostaGecerli_(eposta)) return { ok: false, hata: "E-posta adresi geçersiz" };
+  const ss = acikSS_();
+  const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
+  const k = satirlar.find(x => x.id === oturum.kullaniciId);
+  if (!k) return { ok: false, hata: "Kullanıcı bulunamadı" };
+  if (k.parolaHash !== sha256Hex_(String((body && body.parola) || ""))) return { ok: false, hata: "Mevcut parola yanlış" };
+  if (eposta && epostaKullanimda_(satirlar, eposta, k.id)) return { ok: false, hata: "Bu e-posta adresi başka bir kullanıcıda kayıtlı" };
+  epostaSutunuHazirla_(sheet);
+  sheet.getRange(k.rowIdx, 8).setValue(eposta);
+  return { ok: true, eposta: eposta };
+}
+// Admin: herhangi bir kullanıcının e-postasını tanımlar/değiştirir. body: { kullaniciId, eposta }
+function kullaniciEpostaGuncelle(body) {
+  const eposta = String((body && body.eposta) || "").trim();
+  if (eposta && !epostaGecerli_(eposta)) return { ok: false, hata: "E-posta adresi geçersiz" };
+  const ss = acikSS_();
+  const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
+  const k = satirlar.find(x => x.id === String(body.kullaniciId));
+  if (!k) return { ok: false, hata: "Kullanıcı bulunamadı" };
+  if (eposta && epostaKullanimda_(satirlar, eposta, k.id)) return { ok: false, hata: "Bu e-posta adresi başka bir kullanıcıda kayıtlı" };
+  epostaSutunuHazirla_(sheet);
+  sheet.getRange(k.rowIdx, 8).setValue(eposta);
+  return { ok: true, eposta: eposta };
+}
+
 // ── Aşağıdaki kullaniciXxx fonksiyonları SADECE Admin rolündeki kullanıcı
 // tarafından çağrılabilir; kontrol handleRequest içinde yapılır. ──
 function kullaniciListesiGetir() {
   const ss = acikSS_();
   const { satirlar } = kullaniciSatirlariniOku_(ss);
   // PAROLA_HASH asla frontend'e gönderilmez.
-  return { ok: true, liste: satirlar.map(k => ({ id: k.id, kullaniciAdi: k.kullaniciAdi, rol: k.rol, aktif: k.aktif, profil: k.profil || null })) };
+  return { ok: true, liste: satirlar.map(k => ({ id: k.id, kullaniciAdi: k.kullaniciAdi, rol: k.rol, aktif: k.aktif, profil: k.profil || null, eposta: k.eposta || "" })) };
 }
 
 function kullaniciEkle(body) {
   const kullaniciAdi = String(body.kullaniciAdi || "").trim();
   const rol = String(body.rol) === "Admin" ? "Admin" : "Standart";
+  const eposta = String(body.eposta || "").trim();
   if (!kullaniciAdi) return { ok: false, hata: "Kullanıcı adı gerekli" };
+  if (eposta && !epostaGecerli_(eposta)) return { ok: false, hata: "E-posta adresi geçersiz" };
 
   const ss = acikSS_();
   const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
-  if (satirlar.some(k => k.kullaniciAdi.toLowerCase() === kullaniciAdi.toLowerCase())) {
+  if (satirlar.some(k => k.kullaniciAdi.toLowerCase() === kullaniciAdi.toLowerCase() || kullaniciEpostasi_(k).toLowerCase() === kullaniciAdi.toLowerCase())) {
     return { ok: false, hata: "Bu kullanıcı adı zaten kayıtlı" };
   }
+  if (eposta && epostaKullanimda_(satirlar, eposta, "")) return { ok: false, hata: "Bu e-posta adresi başka bir kullanıcıda kayıtlı" };
   const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   const id = "kul_" + Date.now();
-  sheet.appendRow([id, kullaniciAdi, sha256Hex_(kullaniciAdi), rol, "Evet", simdi]);
+  if (eposta) epostaSutunuHazirla_(sheet);
+  sheet.appendRow([id, kullaniciAdi, sha256Hex_(kullaniciAdi), rol, "Evet", simdi, "", eposta]);
   return { ok: true, id: id };
 }
 
@@ -1172,7 +1346,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261030b";
+const PROGRAM_SURUM_ = "20261101a";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -1228,11 +1402,11 @@ function bulutYazmaAyarla(body, oturum) {
 // almadan bunlara ihtiyaç duyar).
 // Veriyi değiştirmeyen işlemler kilit beklemez (istemcideki CARI_API_YAZMA_DEGIL_ ile aynı mantık).
 const YAZMA_DEGIL_ = /^(get|akinsoftOnizle|akinsoftHareketOnizle|akinsoftCekOnizle|yerelYedek|yerelNabiz|yerelDisFatura|yerelGuncelle|yedekAlSimdi|yedekTetikleyiciKurWeb|saveYedekEpostalari|yedekEpostaGonderSimdi|calismaYillari|vadesi|stokKoduOner|edmCariSorgula|edmFaturaDurumSorgula|kullaniciListesiGetir|seriSonrakiNoUret|cekSeriNoUret|nakliyeSorunluFaturalar$)/; // giriş/çıkış/parola oturum satırı yazar → kilitli (satır kayması olmasın)
-const OTURUMSUZ_ACTIONLAR = { girisYap: true, yerelYedekYukle: true, yerelNabiz: true, yerelDisFatura: true };
+const OTURUMSUZ_ACTIONLAR = { girisYap: true, yerelYedekYukle: true, yerelNabiz: true, yerelDisFatura: true, sifreSifirlaIste: true, sifreSifirlaOnayla: true };
 // Bu action'lar sadece Admin rolündeki kullanıcı tarafından çalıştırılabilir.
 const ADMIN_ACTIONLAR = {
   eskiPanelStokKartlariniAktar: true, yilStokKartlariAktar: true, bulutYazmaAyarla: true, bulutAynaSimdi: true, bulutAynaKur: true, getEskiBulutStokKartlari: true, eskiYildanEdmOnekAktar: true, eskiYildanPlasiyerAktar: true, yeniCalismaYiliOlustur: true, sirketDuzeniKur: true, yerelYedekDurum: true, yerelYedekAyarKaydet: true, yerelYedekSimdi: true, yerelGuncelleDurum: true, yerelGuncelleKontrol: true, yerelGuncelleUygula: true, yerelGuncelleGeriAl: true, kullaniciListesiGetir: true, kullaniciEkle: true, kullaniciDurumGuncelle: true,
-  kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true,
+  kullaniciRolGuncelle: true, kullaniciParolaSifirla: true, kullaniciSil: true, kullaniciEpostaGuncelle: true,
   getYedekDurumu: true, yerelYedekAktivite: true, yerelYedekAktiviteOzet: true, yedekAlSimdi: true, yedekTetikleyiciKurWeb: true, saveYedekEpostalari: true, yedekEpostaGonderSimdi: true, // Yedekleme: sadece Admin
   resimOkuAyarKaydet: true, // API anahtarı: yalnız Admin
   cariDevirKaydet: true, // Cari devir bakiyesi düzeltme: yalnız Admin
@@ -1295,6 +1469,11 @@ function handleRequest(e) {
       case "bulutAynaKur": result = bulutAynaKur(); break;
       case "getEskiBulutStokKartlari": result = getEskiBulutStokKartlari(); break;
       case "parolaDegistir":  result = parolaDegistir(body, oturum); break;
+      case "sifreSifirlaIste":   result = sifreSifirlaIste(body); break;
+      case "sifreSifirlaOnayla": result = sifreSifirlaOnayla(body); break;
+      case "benimEpostam":    result = benimEpostam(body, oturum); break;
+      case "epostaKaydet":    result = epostaKaydet(body, oturum); break;
+      case "kullaniciEpostaGuncelle": result = kullaniciEpostaGuncelle(body); break;
       case "profilKaydet":    result = profilKaydet(body, oturum); break;
       case "getProfilResimleri": result = getProfilResimleri(); break;
       case "kullaniciListesiGetir": result = kullaniciListesiGetir(); break;
@@ -12398,7 +12577,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20261030b";
+const ENSURE_SURUM_ = "20261101a";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}

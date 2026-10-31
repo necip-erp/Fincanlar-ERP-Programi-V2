@@ -867,7 +867,7 @@ body.giris-yapildi #login-ekran{display:none}
   <div class="login-kutu">
     <img src="./fincanlar-logo.png" alt="Fincanlar">
     <h1>Fincanlar ERP — Giriş</h1>
-    <div class="fld"><label>Kullanıcı Adı</label><input id="login-kullanici" type="text" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('login-parola').focus()"></div>
+    <div class="fld"><label>Kullanıcı Adı veya E-posta</label><input id="login-kullanici" type="text" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('login-parola').focus()"></div>
     <div class="fld"><label>Şirket</label>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <div id="login-sirket-ad" style="flex:1;min-width:150px;padding:9px 12px;border-radius:8px;background:var(--bg3);font-weight:700">⏳ Şirket yükleniyor…</div>
@@ -878,6 +878,7 @@ body.giris-yapildi #login-ekran{display:none}
     <div class="fld"><label>Parola</label><input id="login-parola" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')girisDene()"></div>
     <div class="login-hata" id="login-hata"></div>
     <button id="login-btn" onclick="girisDene()">Giriş Yap</button>
+    <div style="text-align:center;margin-top:12px"><a href="#" id="login-unuttum" onclick="sifreUnuttumModalAc();return false" style="font-size:13px;color:var(--blue);text-decoration:none;font-weight:600">Şifremi unuttum</a></div>
   </div>
 </div>
 
@@ -914,6 +915,7 @@ body.giris-yapildi #login-ekran{display:none}
     <div id="kullanici-menu-liste" class="modul-switcher-liste" style="display:none;min-width:170px">
       <div class="modul-switcher-satir" onclick="kullaniciMenuKapat();profilModalAc()">🖼 Profil Resmim</div>
       <div class="modul-switcher-satir" onclick="kullaniciMenuKapat();parolaDegistirModalAc()">🔑 Parolamı Değiştir</div>
+      <div class="modul-switcher-satir" onclick="kullaniciMenuKapat();epostamModalAc()">📧 E-posta Adresim</div>
       <div class="modul-switcher-satir" onclick="cikisYapButon()">🚪 Çıkış Yap</div>
     </div>
   </div>
@@ -2656,9 +2658,10 @@ setInterval(topbarSaatGuncelle, 10000);
     </div>
     <div class="finans-panel" id="kullanici-yonetimi-panel" style="display:none">
       <div class="rapor-baslik" style="margin-top:0">Kullanıcı Yönetimi</div>
-      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Sadece Admin rolündeki kullanıcılar görebilir. Yeni kullanıcı eklenince ilk parola, kullanıcı adının kendisi olur.</p>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 14px">Sadece Admin rolündeki kullanıcılar görebilir. Yeni kullanıcı eklenince ilk parola, kullanıcı adının kendisi olur. E-posta adresi tanımlı kullanıcılar giriş ekranından e-posta adresiyle de girebilir ve "Şifremi unuttum" ile e-postaya gelen kodla yeni parola belirler.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
         <div class="fld" style="flex:1;min-width:160px;margin-bottom:0"><label>Yeni Kullanıcı Adı</label><input id="kul-yeni-ad" type="text" placeholder="Örn. Ahmet"></div>
+        <div class="fld" style="flex:1;min-width:190px;margin-bottom:0"><label>E-posta (şifre sıfırlama için)</label><input id="kul-yeni-eposta" type="email" placeholder="ornek@firma.com" autocomplete="off"></div>
         <div class="fld" style="width:140px;margin-bottom:0"><label>Rol</label><select id="kul-yeni-rol"><option value="Standart">Standart</option><option value="Admin">Admin</option></select></div>
         <button class="btn btn-primary" onclick="kullaniciEkleGonder()">+ Kullanıcı Ekle</button>
       </div>
@@ -4039,6 +4042,127 @@ function parolaDegistirGonder(){
   }).catch(()=>{ btn.disabled = false; hataEl.textContent = "Sunucuya ulaşılamadı"; });
 }
 
+// ★ (1 Kas 2026) ŞİFREMİ UNUTTUM: kullanıcı adı/e-posta → e-postaya 6 haneli kod → kod + yeni parola. Giriş ekranının (z-index 10000) üstünde açılır.
+function sifreUnuttumModalAc(){
+  const mevcut = document.getElementById("sifre-unuttum-overlay");
+  if(mevcut) mevcut.remove();
+  const ilk = (document.getElementById("login-kullanici")||{}).value || "";
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "sifre-unuttum-overlay";
+  overlay.style.zIndex = "10001";
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:360px">
+      <h3 style="margin-top:0">🔑 Şifremi Unuttum</h3>
+      <div id="su-adim1">
+        <p style="color:var(--text3);font-size:13px;margin:0 0 12px">Kullanıcı adınızı veya e-posta adresinizi yazın; e-posta adresinize 6 haneli bir kod gönderilir.</p>
+        <div class="fld"><label>Kullanıcı Adı veya E-posta</label><input id="su-tanim" type="text" autocomplete="username" value="${htmlKacis(ilk)}" onkeydown="if(event.key==='Enter')sifreKodIste()"></div>
+      </div>
+      <div id="su-adim2" style="display:none">
+        <p style="color:var(--text3);font-size:13px;margin:0 0 12px" id="su-bilgi"></p>
+        <div class="fld"><label>E-postadaki Kod (6 hane)</label><input id="su-kod" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="letter-spacing:4px;font-size:18px;text-align:center"></div>
+        <div class="fld"><label>Yeni Parola (en az 6 karakter)</label><input id="su-yeni" type="password" autocomplete="new-password"></div>
+        <div class="fld"><label>Yeni Parola (Tekrar)</label><input id="su-yeni2" type="password" autocomplete="new-password" onkeydown="if(event.key==='Enter')sifreKodOnayla()"></div>
+      </div>
+      <div class="login-hata" id="su-hata"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('sifre-unuttum-overlay').remove()">Vazgeç</button>
+        <button class="btn" id="su-tekrar-btn" style="display:none" onclick="sifreKodIste()">Kodu Tekrar Gönder</button>
+        <button class="btn btn-primary" id="su-btn" onclick="sifreKodIste()">Kod Gönder</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(()=>{ const e = document.getElementById("su-tanim"); if(e) e.focus(); }, 50);
+}
+function sifreUnuttumApi_(action, params){
+  // Giriş yapılmamış durumda çalışır: oturum belirteci gönderilmez; şirket (yıl) seçimi giriş ekranından alınır.
+  const yil = (document.getElementById("login-yil")||{}).value || localStorage.getItem("fincanlar_calisma_yili") || "";
+  return cariApi(action, Object.assign({yil, token: "-"}, params));
+}
+function sifreKodIste(){
+  const tanim = document.getElementById("su-tanim").value.trim();
+  const hataEl = document.getElementById("su-hata");
+  const btn = document.getElementById("su-btn"), tbtn = document.getElementById("su-tekrar-btn");
+  if(!tanim){ hataEl.style.color = ""; hataEl.textContent = "Kullanıcı adı veya e-posta adresi girin"; return; }
+  hataEl.textContent = ""; btn.disabled = true; tbtn.disabled = true;
+  const eski = btn.textContent; btn.textContent = "Gönderiliyor...";
+  sifreUnuttumApi_("sifreSifirlaIste", {tanim}).then(res=>{
+    btn.disabled = false; tbtn.disabled = false; btn.textContent = eski;
+    if(!res || !res.ok){
+      hataEl.style.color = "";
+      hataEl.textContent = res && res.bulutKilitli ? "Şifre sıfırlama yalnızca yerel sunucu adresinden yapılır (dükkândaki bilgisayardan ya da yerel adresten girin)." : ((res && res.hata) || "Kod gönderilemedi");
+      return;
+    }
+    document.getElementById("su-adim1").style.display = "none";
+    document.getElementById("su-adim2").style.display = "";
+    document.getElementById("su-bilgi").textContent = res.mesaj || "Kod e-postayla gönderildi.";
+    btn.textContent = "Şifreyi Değiştir"; btn.onclick = sifreKodOnayla;
+    tbtn.style.display = "";
+    const k = document.getElementById("su-kod"); if(k){ k.value = ""; k.focus(); }
+    hataEl.textContent = "";
+  }).catch(()=>{ btn.disabled = false; tbtn.disabled = false; btn.textContent = eski; hataEl.style.color = ""; hataEl.textContent = "Sunucuya ulaşılamadı, tekrar deneyin."; });
+}
+function sifreKodOnayla(){
+  const tanim = document.getElementById("su-tanim").value.trim();
+  const kod = document.getElementById("su-kod").value.trim();
+  const yeni = document.getElementById("su-yeni").value, yeni2 = document.getElementById("su-yeni2").value;
+  const hataEl = document.getElementById("su-hata");
+  hataEl.style.color = "";
+  if(!/^\d{6}$/.test(kod)){ hataEl.textContent = "E-postadaki 6 haneli kodu yazın"; return; }
+  if(yeni.length < 6){ hataEl.textContent = "Yeni parola en az 6 karakter olmalı"; return; }
+  if(yeni !== yeni2){ hataEl.textContent = "Yeni parolalar birbiriyle eşleşmiyor"; return; }
+  const btn = document.getElementById("su-btn"); btn.disabled = true;
+  sifreUnuttumApi_("sifreSifirlaOnayla", {tanim, kod, yeniParola: yeni}).then(res=>{
+    btn.disabled = false;
+    if(!res || !res.ok){ hataEl.textContent = (res && res.hata) || "Parola değiştirilemedi"; return; }
+    document.getElementById("sifre-unuttum-overlay").remove();
+    const ke = document.getElementById("login-kullanici"); if(ke) ke.value = tanim;
+    const pe = document.getElementById("login-parola"); if(pe){ pe.value = ""; pe.focus(); }
+    const he = document.getElementById("login-hata"); if(he){ he.style.color = "#16a34a"; he.textContent = "Parolanız değiştirildi, yeni parolanızla giriş yapın."; setTimeout(()=>{ he.style.color = ""; }, 8000); }
+  }).catch(()=>{ btn.disabled = false; hataEl.textContent = "Sunucuya ulaşılamadı, tekrar deneyin."; });
+}
+
+// Kullanıcının kendi e-posta adresi (mevcut parola istenir). Şifre sıfırlama kodu bu adrese gider.
+function epostamModalAc(){
+  const mevcut = document.getElementById("epostam-overlay");
+  if(mevcut) mevcut.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "epostam-overlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:360px">
+      <h3 style="margin-top:0">📧 E-posta Adresim</h3>
+      <p style="color:var(--text3);font-size:13px;margin:0 0 12px">"Şifremi unuttum" kodu bu adrese gelir; giriş ekranında kullanıcı adı yerine de bu adresi yazabilirsiniz.</p>
+      <div class="fld"><label>E-posta</label><input id="ep-eposta" type="email" autocomplete="off" placeholder="yükleniyor..."></div>
+      <div class="fld"><label>Mevcut Parola (onay için)</label><input id="ep-parola" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')epostamKaydet()"></div>
+      <div class="login-hata" id="ep-hata"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('epostam-overlay').remove()">Vazgeç</button>
+        <button class="btn btn-primary" id="ep-btn" onclick="epostamKaydet()">Kaydet</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  cariApi("benimEpostam", {}).then(res=>{
+    const el = document.getElementById("ep-eposta"); if(!el) return;
+    el.placeholder = "ornek@firma.com";
+    if(res && res.ok){ el.value = res.eposta || ""; if(!res.eposta && res.etkin) el.placeholder = res.etkin + " (kullanıcı adınız)"; }
+  }).catch(()=>{});
+}
+function epostamKaydet(){
+  const eposta = document.getElementById("ep-eposta").value.trim();
+  const parola = document.getElementById("ep-parola").value;
+  const hataEl = document.getElementById("ep-hata");
+  if(!parola){ hataEl.textContent = "Mevcut parolanızı yazın"; return; }
+  const btn = document.getElementById("ep-btn"); btn.disabled = true;
+  cariApi("epostaKaydet", {eposta, parola}).then(res=>{
+    btn.disabled = false;
+    if(!res || !res.ok){ hataEl.textContent = (res && res.hata) || "Kaydedilemedi"; return; }
+    document.getElementById("epostam-overlay").remove();
+    toastGoster(eposta ? "E-posta adresiniz kaydedildi" : "E-posta adresiniz silindi");
+  }).catch(()=>{ btn.disabled = false; hataEl.textContent = "Sunucuya ulaşılamadı"; });
+}
+
 // Arama kutusuna bir şey yazılınca doğrudan Stok > Tanımlar > Stok Tanımları listesine
 // geçilir VE yazılan terim otomatik olarak o listenin arama kutusuna uygulanıp filtrelenir
 // (önceden sadece Stok modülüne geçiyordu, gerçek bir arama yapmıyordu).
@@ -4893,10 +5017,10 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261030b";
+const FRONT_SURUM = "20261101a";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
-const SUNUCU_EN_AZ = "20261030b";
+const SUNUCU_EN_AZ = "20261101a";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -22278,6 +22402,7 @@ function kullaniciYonetimiCiz(){
     el.innerHTML = res.liste.map(k=>`
       <div class="hizli-erisim-satir" style="cursor:default">
         <span class="lbl" style="flex:1;display:flex;align-items:center;gap:8px">${profilAvatarHTML_(k.kullaniciAdi, k.profil, 26)}<span>${k.kullaniciAdi}</span></span>
+        <input type="email" value="${htmlKacis(k.eposta||"")}" placeholder="e-posta yok" autocomplete="off" title="E-posta adresi (şifre sıfırlama kodu buraya gider). Değiştirince alandan çıkın." style="width:200px;margin-right:8px;padding:5px 8px;border:1px solid var(--border);border-radius:7px;font-size:12px" onchange="kullaniciEpostaDegistir('${k.id}', this)">
         <select style="margin-right:8px" onchange="kullaniciRolDegistir('${k.id}', this.value)">
           <option value="Standart" ${k.rol==="Standart"?"selected":""}>Standart</option>
           <option value="Admin" ${k.rol==="Admin"?"selected":""}>Admin</option>
@@ -22295,12 +22420,21 @@ function kullaniciEkleGonder(){
   const ad = adEl.value.trim();
   const rol = document.getElementById("kul-yeni-rol").value;
   if(!ad){ alert("Kullanıcı adı girin"); return; }
-  cariApi("kullaniciEkle", {kullaniciAdi: ad, rol}).then(res=>{
+  const epEl = document.getElementById("kul-yeni-eposta");
+  const eposta = epEl ? epEl.value.trim() : "";
+  cariApi("kullaniciEkle", {kullaniciAdi: ad, rol, eposta}).then(res=>{
     if(!res || !res.ok){ alert((res&&res.hata)||"Eklenemedi"); return; }
-    adEl.value = "";
+    adEl.value = ""; if(epEl) epEl.value = "";
     toastGoster("Kullanıcı eklendi — ilk parolası kullanıcı adıyla aynı");
     kullaniciYonetimiCiz();
   });
+}
+function kullaniciEpostaDegistir(id, girdi){
+  const eposta = girdi.value.trim();
+  cariApi("kullaniciEpostaGuncelle", {kullaniciId: id, eposta}).then(res=>{
+    if(!res || !res.ok){ alert((res&&res.hata)||"E-posta kaydedilemedi"); kullaniciYonetimiCiz(); return; }
+    toastGoster(eposta ? "E-posta kaydedildi" : "E-posta silindi");
+  }).catch(()=>{ alert("Sunucuya ulaşılamadı"); kullaniciYonetimiCiz(); });
 }
 function kullaniciRolDegistir(id, rol){
   cariApi("kullaniciRolGuncelle", {kullaniciId: id, rol}).then(res=>{

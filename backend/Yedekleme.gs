@@ -481,6 +481,16 @@ function yerelDisFatura(body) {
     Object.keys(pe).forEach(function (k) { if (/^EDM_/.test(k) && !/^EDM_SON_/.test(k)) eo[k] = String(pe[k]); });
     return { ok: true, edm: eo };
   }
+  // ★ (1 Kas 2026) Şifre sıfırlama kodu e-postası: yerel sunucu mail atamadığı için kodu buluttan gönderttirir. Metin bulutta sabittir (yerelin keyfi metin yollaması engellenir); saatte en çok 10 mail.
+  if (body.islem === "sifreMail") {
+    var to = String(body.to || "").trim(), kod = String(body.kod || ""), ad = String(body.kullaniciAdi || "").slice(0, 60);
+    if (!epostaGecerli_(to) || !/^\d{6}$/.test(kod)) return { ok: false, hata: "Geçersiz e-posta/kod" };
+    var cache = CacheService.getScriptCache(), n = parseInt(cache.get("sifreMailSay") || "0", 10) || 0;
+    if (n >= 10) return { ok: false, hata: "Saatlik e-posta sınırına ulaşıldı" };
+    try { sifreKoduMailiGonder_(to, kod, ad); } catch (e) { return { ok: false, hata: e.message }; }
+    cache.put("sifreMailSay", String(n + 1), 3600);
+    return { ok: true };
+  }
   if (body.islem === "hsYapi") { var hy = hsYapiOku_(); return { ok: true, hsYapi: hy && !hsYapiBos_(hy) ? hy : null }; }
   return { ok: false, hata: "Bilinmeyen işlem" };
 }

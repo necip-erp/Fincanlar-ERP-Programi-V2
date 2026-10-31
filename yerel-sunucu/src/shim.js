@@ -330,6 +330,7 @@ function kurulum(depo, secenek) {
     setTimeout, clearTimeout,
     YerelGuncelle: globalThis.__YEREL_GUNCELLE__ || null,   // yalnızca yerel sunucuda var (src/guncelle.js)
     YerelDisVeri: globalThis.__YEREL_DIS_VERI__ || null,   // dış fatura köprüsü verisi (src/dis-veri.js)
+    YerelPosta: globalThis.__YEREL_POSTA__ || null,   // şifre sıfırlama kodu e-postası kuyruğu (src/server.js; mail buluttan gönderilir)
     YerelYedek: globalThis.__YEREL_YEDEK__ || null,   // yalnızca yerel sunucuda var (src/yedek.js)
     Logger: { log: (...a) => { if (secenek.sessiz !== true) console.log('[GAS]', ...a); } },
     SpreadsheetApp: {

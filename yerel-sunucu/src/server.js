@@ -25,6 +25,21 @@ globalThis.__YEREL_YEDEK__ = yedek;
 globalThis.__YEREL_GUNCELLE__ = require('./guncelle').baslat({ depo, VERI, KOK, ONYUZ, ARKA });
 const dis = require('./dis-veri').baslat({ yedek });
 globalThis.__YEREL_DIS_VERI__ = dis.durum;
+// Şifre sıfırlama kodu e-postası: arka plan (Code.gs sifreSifirlaIste) kuyruğa yazar; yanıt dönmeden önce buluttan gönderilir (yerel sunucu mail atamaz).
+const postaKuyrugu = [];
+globalThis.__YEREL_POSTA__ = { ekle(json) { try { const o = JSON.parse(json); if (o && o.to && /^\d{6}$/.test(String(o.kod))) postaKuyrugu.push({ to: String(o.to), kod: String(o.kod), kullaniciAdi: String(o.kullaniciAdi || '') }); } catch (_) {} } };
+async function postaKuyruguBosalt(cikti) {
+  if (!postaKuyrugu.length) return cikti;
+  const liste = postaKuyrugu.splice(0, postaKuyrugu.length);
+  for (const m of liste) {
+    const y = await yedek.bulutaSor({ action: 'yerelDisFatura', islem: 'sifreMail', to: m.to, kod: m.kod, kullaniciAdi: m.kullaniciAdi });
+    if (!y || !y.ok) {
+      console.error('Şifre kodu e-postası gönderilemedi:', (y && y.hata) || 'Bulut yanıt vermedi');
+      return JSON.stringify({ ok: false, hata: 'E-posta gönderilemedi: ' + ((y && y.hata) || 'bulut yanıt vermedi') + '. İnternet bağlantısını kontrol edin ya da yöneticiye başvurun.' });
+    }
+  }
+  return cikti;
+}
 const rt = calistir(depo, ARKA, { sessiz: true });
 let istekSayisi = 0, yazmaSayisi = 0;
 // Canlı bildirim (SSE): bir bilgisayar veri yazınca bağlı tüm ekranlara haber verilir.
@@ -73,6 +88,7 @@ const sunucu = http.createServer(async (req, res) => {
         const govde = await govdeOku(req, 60 * 1024 * 1024);
         try { let j = {}; try { j = JSON.parse(govde); } catch (_) {} await dis.hazirla(j.action || url.searchParams.get('action'), j); } catch (_) {}
         cikti = rt.istek('POST', Object.fromEntries(url.searchParams), govde);
+        cikti = await postaKuyruguBosalt(cikti);
       } else {
         try {
           const p = Object.fromEntries(url.searchParams); let j = {};
@@ -80,6 +96,7 @@ const sunucu = http.createServer(async (req, res) => {
           await dis.hazirla(p.action || j.action, j);
         } catch (_) {}
         cikti = rt.istek('GET', Object.fromEntries(url.searchParams));
+        cikti = await postaKuyruguBosalt(cikti);
       }
       res.writeHead(200, Object.assign({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }, cors));
       res.end(cikti);
