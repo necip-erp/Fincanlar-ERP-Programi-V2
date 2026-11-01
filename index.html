@@ -4004,39 +4004,50 @@ document.addEventListener("click", (ev)=>{
   if(wrap && !wrap.contains(ev.target)) kullaniciMenuKapat();
 });
 
-function parolaDegistirModalAc(){
+// ★ (1 Kas 2026) zorunlu=true: ilk parola (kullanıcı adıyla aynı) kullanılıyor → kapatılamaz, yeni parola belirlenene kadar tekrar açılır.
+let _parolaZorunlu_ = false, _parolaZorunluEski_ = "";
+function parolaDegistirModalAc(zorunlu, eskiHazir){
   const mevcut = document.getElementById("parola-degistir-overlay");
   if(mevcut) mevcut.remove();
+  if(zorunlu){ _parolaZorunlu_ = true; _parolaZorunluEski_ = eskiHazir || _parolaZorunluEski_; }
+  const z = _parolaZorunlu_;
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.id = "parola-degistir-overlay";
-  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  if(z) overlay.style.zIndex = "10001";
+  overlay.onclick = (e)=>{ if(!z && e.target===overlay) overlay.remove(); };
   overlay.innerHTML = `
     <div class="modal-box" style="max-width:340px">
-      <h3 style="margin-top:0">🔑 Parolamı Değiştir</h3>
-      <div class="fld"><label>Mevcut Parola</label><input id="pd-eski" type="password"></div>
-      <div class="fld"><label>Yeni Parola</label><input id="pd-yeni" type="password"></div>
-      <div class="fld"><label>Yeni Parola (Tekrar)</label><input id="pd-yeni2" type="password"></div>
+      <h3 style="margin-top:0">🔑 ${z ? "Yeni Parola Belirleyin" : "Parolamı Değiştir"}</h3>
+      ${z ? '<p style="color:var(--text3);font-size:13px;margin:0 0 12px">İlk parolanız kullanıcı adınızla aynı. Güvenlik için devam etmeden önce kendinize yeni bir parola belirleyin (en az 6 karakter, kullanıcı adından farklı).</p>' : ""}
+      <div class="fld" ${z && _parolaZorunluEski_ ? 'style="display:none"' : ""}><label>Mevcut Parola</label><input id="pd-eski" type="password" value="${z ? htmlKacis(_parolaZorunluEski_) : ""}"></div>
+      <div class="fld"><label>Yeni Parola (en az 6 karakter)</label><input id="pd-yeni" type="password" autocomplete="new-password"></div>
+      <div class="fld"><label>Yeni Parola (Tekrar)</label><input id="pd-yeni2" type="password" autocomplete="new-password" onkeydown="if(event.key==='Enter')parolaDegistirGonder()"></div>
       <div class="login-hata" id="pd-hata"></div>
       <div class="modal-actions">
-        <button class="btn" onclick="document.getElementById('parola-degistir-overlay').remove()">Vazgeç</button>
+        ${z ? "" : `<button class="btn" onclick="document.getElementById('parola-degistir-overlay').remove()">Vazgeç</button>`}
         <button class="btn btn-primary" id="pd-kaydet-btn" onclick="parolaDegistirGonder()">Kaydet</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  if(z) setTimeout(()=>{ const y = document.getElementById("pd-yeni"); if(y) y.focus(); }, 50);
 }
+// Zorunlu parola penceresi (Esc/yenileme vb. ile) kapanırsa, parola değişene kadar yeniden açılır.
+setInterval(()=>{ if(_parolaZorunlu_ && document.body.classList.contains("giris-yapildi") && !document.getElementById("parola-degistir-overlay")) parolaDegistirModalAc(true); }, 1500);
 function parolaDegistirGonder(){
   const eski = document.getElementById("pd-eski").value;
   const yeni = document.getElementById("pd-yeni").value;
   const yeni2 = document.getElementById("pd-yeni2").value;
   const hataEl = document.getElementById("pd-hata");
   if(!eski || !yeni){ hataEl.textContent = "Tüm alanları doldurun"; return; }
+  if(yeni.length < 6){ hataEl.textContent = "Yeni parola en az 6 karakter olmalı"; return; }
   if(yeni !== yeni2){ hataEl.textContent = "Yeni parolalar birbiriyle eşleşmiyor"; return; }
   const btn = document.getElementById("pd-kaydet-btn");
   btn.disabled = true;
   cariApi("parolaDegistir", {eskiParola: eski, yeniParola: yeni}).then(res=>{
     btn.disabled = false;
     if(!res || !res.ok){ hataEl.textContent = (res && res.hata) || "Parola değiştirilemedi"; return; }
+    _parolaZorunlu_ = false; _parolaZorunluEski_ = "";
     document.getElementById("parola-degistir-overlay").remove();
     toastGoster("Parolanız güncellendi");
   }).catch(()=>{ btn.disabled = false; hataEl.textContent = "Sunucuya ulaşılamadı"; });
@@ -5017,10 +5028,10 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261101a";
+const FRONT_SURUM = "20261101b";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
-const SUNUCU_EN_AZ = "20261101a";
+const SUNUCU_EN_AZ = "20261101b";
 let _bulutDurum = null;
 function bulutDurumYukle_(){
   try{
@@ -24689,6 +24700,7 @@ function girisDene(){
     document.body.classList.add("giris-yapildi");
     uygulamaKullanicisiUyGoster_();
     uygulamaAcilisRutini();
+    if(res.parolaDegistirmeli) parolaDegistirModalAc(true, parola);   // ilk parola kullanıcı adıyla aynı: yeni parola zorunlu
   }).catch(()=>{
     btn.disabled = false; btn.textContent = "Giriş Yap";
     hataEl.textContent = "Sunucuya ulaşılamadı, tekrar deneyin.";

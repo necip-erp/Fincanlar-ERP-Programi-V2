@@ -882,6 +882,24 @@ function sha256Hex_(metin) {
   return bytes.map(b => (("0" + (b & 0xFF).toString(16)).slice(-2))).join("");
 }
 
+// ★ (1 Kas 2026) TUZLU PAROLA SAKLAMA: "s2$<tuz>$<özet>" — kullanıcıya özel rastgele tuz + 100 tur SHA-256 (aynı parolalı iki kullanıcının özeti farklı olur,
+// hazır tablo saldırısı işe yaramaz). ESKİ tuzsuz kayıtlar (düz SHA-256) geçerli kalır; kullanıcı ilk girişte sessizce yeni biçime çevrilir.
+function parolaHashle_(parola, tuz) {
+  tuz = tuz || Utilities.getUuid().replace(/-/g, "").slice(0, 16);
+  let h = tuz + ":" + String(parola) + ":" + tuz;
+  for (let i = 0; i < 100; i++) h = sha256Hex_(h + ":" + tuz);
+  return "s2$" + tuz + "$" + h;
+}
+function parolaDogruMu_(kayitli, parola) {
+  kayitli = String(kayitli || "");
+  if (kayitli.indexOf("s2$") === 0) {
+    const p = kayitli.split("$");
+    return p.length === 3 && parolaHashle_(parola, p[1]) === kayitli;
+  }
+  return kayitli === sha256Hex_(String(parola));
+}
+const PAROLA_MIN_ = 6;
+
 // Sayfa yoksa oluşturur VE ilk seferde 3 varsayılan kullanıcıyı (parola =
 // kullanıcı adının kendisi) otomatik ekler. Sonraki her çağrıda sadece mevcut
 // sayfayı döndürür — burada eklenen kullanıcılar tekrar tekrar eklenmez.
@@ -894,7 +912,7 @@ function kullanicilarSheetHazirla_(ss) {
       if (sheet.getLastRow() < 2) { // lock sonrası tekrar kontrol (yarış durumu)
         const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
         VARSAYILAN_KULLANICILAR.forEach((k, i) => {
-          sheet.appendRow(["kul_" + (Date.now() + i), k.ad, sha256Hex_(k.ad), k.rol, "Evet", simdi]);
+          sheet.appendRow(["kul_" + (Date.now() + i), k.ad, parolaHashle_(k.ad), k.rol, "Evet", simdi]);
         });
       }
     } finally { lock.releaseLock(); }
@@ -978,22 +996,30 @@ function girisYap(body) {
   if (!kullaniciAdi || !parola) return { ok: false, hata: "Kullanıcı adı ve parola gerekli" };
 
   const ss = acikSS_();
-  const { satirlar } = kullaniciSatirlariniOku_(ss);
+  const { sheet: kSheet, satirlar } = kullaniciSatirlariniOku_(ss);
   // ★ (1 Kas 2026) Kullanıcı adı YA DA e-posta adresiyle giriş (önce kullanıcı adı eşleşir).
   const kullanici = kullaniciBul_(satirlar, kullaniciAdi);
 
   // Kullanıcı bulunamadı / pasif / parola yanlış — hangisi olduğunu belli etmeden
   // aynı genel mesaj döndürülür (kullanıcı adı denemesini kolaylaştırmamak için).
-  if (!kullanici || !kullanici.aktif || kullanici.parolaHash !== sha256Hex_(parola)) {
+  if (!kullanici || !kullanici.aktif || !parolaDogruMu_(kullanici.parolaHash, parola)) {
     return { ok: false, hata: "Kullanıcı adı veya parola hatalı" };
   }
+
+  // ★ (1 Kas 2026) Yazılabilir ortamda (yerel sunucu / yazma açık bulut): eski tuzsuz kayıt sessizce tuzlu biçime çevrilir;
+  // parola hâlâ kullanıcı adının kendisiyse (ilk parola / Admin sıfırlaması) ekran parola değiştirmeyi ZORUNLU tutar.
+  const yazilabilir = yerelMi_() || bulutYazmaAcikMi_();
+  if (yazilabilir && kullanici.parolaHash.indexOf("s2$") !== 0) {
+    try { kSheet.getRange(kullanici.rowIdx, 3).setValue(parolaHashle_(parola)); } catch (e) { /* yükseltme girişi engellemesin */ }
+  }
+  const parolaDegistirmeli = yazilabilir && parola === kullanici.kullaniciAdi;
 
   const token = Utilities.getUuid();
   const oturumSheet = getOrCreateSheet(ss, SHEETS.oturumlar, OTURUM_BASLIKLAR);
   oturumSheet.appendRow([token, kullanici.id, kullanici.kullaniciAdi, kullanici.rol, String(Date.now())]);
   oturumlarTemizle_(oturumSheet);
 
-  return { ok: true, token: token, kullaniciAdi: kullanici.kullaniciAdi, rol: kullanici.rol, yil: aktifYil_(), profil: kullanici.profil || null };
+  return { ok: true, token: token, kullaniciAdi: kullanici.kullaniciAdi, rol: kullanici.rol, yil: aktifYil_(), profil: kullanici.profil || null, parolaDegistirmeli: parolaDegistirmeli };
 }
 
 // Süresi dolmuş oturum satırlarını sayfadan temizler (sayfa sınırsız büyümesin diye).
@@ -1057,15 +1083,17 @@ function cikisYap(body) {
 function parolaDegistir(body, oturum) {
   const eskiParola = String(body.eskiParola || "");
   const yeniParola = String(body.yeniParola || "");
-  if (!yeniParola || yeniParola.length < 3) return { ok: false, hata: "Yeni parola en az 3 karakter olmalı" };
+  if (!yeniParola || yeniParola.length < PAROLA_MIN_) return { ok: false, hata: "Yeni parola en az " + PAROLA_MIN_ + " karakter olmalı" };
 
   const ss = acikSS_();
   const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
   const kullanici = satirlar.find(k => k.id === oturum.kullaniciId);
   if (!kullanici) return { ok: false, hata: "Kullanıcı bulunamadı" };
-  if (kullanici.parolaHash !== sha256Hex_(eskiParola)) return { ok: false, hata: "Mevcut parola yanlış" };
+  if (!parolaDogruMu_(kullanici.parolaHash, eskiParola)) return { ok: false, hata: "Mevcut parola yanlış" };
+  if (yeniParola === kullanici.kullaniciAdi) return { ok: false, hata: "Yeni parola kullanıcı adıyla aynı olamaz" };
+  if (yeniParola === eskiParola) return { ok: false, hata: "Yeni parola mevcut parolayla aynı olamaz" };
 
-  sheet.getRange(kullanici.rowIdx, 3).setValue(sha256Hex_(yeniParola));
+  sheet.getRange(kullanici.rowIdx, 3).setValue(parolaHashle_(yeniParola));
   return { ok: true };
 }
 
@@ -1167,7 +1195,7 @@ function sifreSifirlaOnayla(body) {
   const kod = String((body && body.kod) || "").replace(/\s+/g, "");
   const yeni = String((body && body.yeniParola) || "");
   if (!tanim || !/^\d{6}$/.test(kod)) return genelHata;
-  if (yeni.length < 6) return { ok: false, hata: "Yeni parola en az 6 karakter olmalı" };
+  if (yeni.length < PAROLA_MIN_) return { ok: false, hata: "Yeni parola en az " + PAROLA_MIN_ + " karakter olmalı" };
   const ss = acikSS_();
   const { sheet: kSheet, satirlar } = kullaniciSatirlariniOku_(ss);
   const k = kullaniciBul_(satirlar, tanim);
@@ -1185,7 +1213,7 @@ function sifreSifirlaOnayla(body) {
     sh.getRange(satir, 4).setValue(String(deneme));
     return { ok: false, hata: "Kod hatalı (" + (SIFIRLAMA_MAX_DENEME_ - deneme) + " deneme hakkı kaldı)" };
   }
-  kSheet.getRange(k.rowIdx, 3).setValue(sha256Hex_(yeni));
+  kSheet.getRange(k.rowIdx, 3).setValue(parolaHashle_(yeni));
   sh.deleteRow(satir);
   // Bu kullanıcının açık oturumları kapatılır (parola değişince eski oturum geçerli kalmasın)
   try {
@@ -1217,7 +1245,7 @@ function epostaKaydet(body, oturum) {
   const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
   const k = satirlar.find(x => x.id === oturum.kullaniciId);
   if (!k) return { ok: false, hata: "Kullanıcı bulunamadı" };
-  if (k.parolaHash !== sha256Hex_(String((body && body.parola) || ""))) return { ok: false, hata: "Mevcut parola yanlış" };
+  if (!parolaDogruMu_(k.parolaHash, String((body && body.parola) || ""))) return { ok: false, hata: "Mevcut parola yanlış" };
   if (eposta && epostaKullanimda_(satirlar, eposta, k.id)) return { ok: false, hata: "Bu e-posta adresi başka bir kullanıcıda kayıtlı" };
   epostaSutunuHazirla_(sheet);
   sheet.getRange(k.rowIdx, 8).setValue(eposta);
@@ -1262,7 +1290,7 @@ function kullaniciEkle(body) {
   const simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd/MM/yyyy HH:mm");
   const id = "kul_" + Date.now();
   if (eposta) epostaSutunuHazirla_(sheet);
-  sheet.appendRow([id, kullaniciAdi, sha256Hex_(kullaniciAdi), rol, "Evet", simdi, "", eposta]);
+  sheet.appendRow([id, kullaniciAdi, parolaHashle_(kullaniciAdi), rol, "Evet", simdi, "", eposta]);
   return { ok: true, id: id };
 }
 
@@ -1306,7 +1334,7 @@ function kullaniciParolaSifirla(body) {
   const { sheet, satirlar } = kullaniciSatirlariniOku_(ss);
   const kullanici = satirlar.find(k => k.id === String(body.kullaniciId));
   if (!kullanici) return { ok: false, hata: "Kullanıcı bulunamadı" };
-  sheet.getRange(kullanici.rowIdx, 3).setValue(sha256Hex_(kullanici.kullaniciAdi));
+  sheet.getRange(kullanici.rowIdx, 3).setValue(parolaHashle_(kullanici.kullaniciAdi));
   return { ok: true };
 }
 
@@ -1346,7 +1374,7 @@ function doPost(e) {
 // "bulutYazmaAyarla" ile bilinçli olarak açabilir (Script Properties: BULUT_YAZMA_ACIK = "1"|"" + kim/ne zaman).
 // Yerel sunucuda (YerelYedek nesnesi var) kilit hiç devreye girmez.
 // ════════════════════════════════════════════════
-const PROGRAM_SURUM_ = "20261101a";
+const PROGRAM_SURUM_ = "20261101b";
 function yerelMi_() { return typeof YerelYedek !== "undefined" && !!YerelYedek; }
 // ★ 16 Eki 2026 — İŞLEM GÜNLÜĞÜ (yalnız yerel sunucu): veri değiştiren her işlem; kim, ne, hangi cari (kodlu), hangi belge, yedeğe gitti mi.
 // Yerel sunucu src/yedek.js islemBasla/islemBitir ile konuşur; sayfa değişikliklerini kendisi toplar. Buraya yalnız seçili alanlar (token/parola yok) gider.
@@ -12577,7 +12605,7 @@ function yedekTetikleyiciDurumGoster() {
 // Artık bir sayfanın başlıkları BİR KEZ doğrulanınca 6 saat önbelleğe alınır; sonraki çağrılar atlanır.
 // Kod/sütun yapısı değişince ENSURE_SURUM_ arttırılırsa herkes yeniden doğrular.
 // ════════════════════════════════════════════════
-const ENSURE_SURUM_ = "20261101a";
+const ENSURE_SURUM_ = "20261101b";
 const _ensureBellek_ = {};
 function ensureAnahtar_(fn, sheet) {
   let ad = ""; try { ad = sheet.getName(); } catch (e) {}
