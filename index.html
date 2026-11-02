@@ -4694,7 +4694,9 @@ function faturaGorselIframeDoldur_(iframeId, faturaNo){
   ifr.removeAttribute("src"); ifr.srcdoc = mesaj("Fatura görseli yükleniyor…");
   faturaGorselHtmlGetir_(faturaNo).then(html=>{
     const hedef = document.getElementById(iframeId); if(!hedef) return;
-    hedef.removeAttribute("src"); hedef.srcdoc = faturaGorselKompaktHtml_(html);
+    hedef.removeAttribute("src");
+    hedef.onload = ()=>{ setTimeout(()=>{ const et = iframeId==="bfm-onay-iframe" ? "bfm-onay-zoom-yuzde" : (iframeId==="fyp-iframe" ? "fyp-zoom-yuzde" : null); if(et && document.getElementById(iframeId)) bfmSigdir(iframeId, et); }, 60); };
+    hedef.srcdoc = faturaGorselKompaktHtml_(html);
   }).catch(err=>{
     const hedef = document.getElementById(iframeId); if(!hedef) return;
     // Sunucudan alınamadı: eski web uygulaması adresine geri dön
@@ -5028,7 +5030,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261101b";
+const FRONT_SURUM = "20261102a";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261101b";
@@ -13134,6 +13136,12 @@ function alisGecisCubugu(){
   </div>`;
 }
 
+// ★ (2 Kas 2026) Alış kaydından (ör. Portaldan Gelen Fatura onayından sonra) Alış alt modül seçimine (Giriş / İade / Portaldan Gelen) dönüş.
+function alisModullerineDon(){
+  document.getElementById("mod-alis").classList.remove("detay-acik");
+  alisAnaSecimeDon();
+  modulAc("alis");
+}
 function alisListeyeDon(){
   // Detaydan "Listeye dön": Alış sekmesine (rapor/liste) geçilir; kayıt sekmesi açık kalır.
   document.getElementById("mod-alis").classList.remove("detay-acik");
@@ -13169,6 +13177,7 @@ function alisDetayCiz(res){
     ${a.projeKodu ? `<div class="cari-info-grid"><div class="cari-info-item"><div class="k">Proje Kodu</div><div class="v">${a.projeKodu}</div></div></div>` : ""}
     <div class="btnrow">
       <button class="btn btn-primary" onclick="alisDuzenleAc('${a.id}')">✏️ Düzenle</button>
+      <button class="btn" onclick="alisModullerineDon()" title="Alış alt modüllerine (Alış Girişi / İade / Portaldan Gelen Faturalar) dön">🏠 Alış Modülleri</button>
       ${a.faturaNo ? `<button class="btn" onclick="faturaGorsalAc('${a.faturaNo}')">📄 Faturayı Gör</button>` : ``}
       <button class="btn btn-danger" onclick="alisSilOnay('${a.id}')">🗑 Alışı Sil</button>
     </div>
@@ -13996,8 +14005,13 @@ function faturaGorsalAc(faturaNo){
 // Fatura başlığı (satıcı/alıcı/logo) yerine ürün tablosunun görünmesi için iframe üstten belirli px kırpılır
 // (negatif üst boşluk). Kırpma miktarı ⬆/⬇ ile ayarlanır, 🎯 ile tamamen kapatılır; ayarlar tarayıcıda saklanır.
 function bfmOdakAcikMi_(){ return localStorage.getItem("bfmFaturaOdak") !== "0"; }
-function bfmOdakPx_(){ const v = parseInt(localStorage.getItem("bfmFaturaOdakPx")||"", 10); return isNaN(v) ? 300 : Math.max(0, Math.min(4000, v)); }
-function bfmOdakX_(){ const v = parseInt(localStorage.getItem("bfmFaturaOdakX")||"", 10); return isNaN(v) ? 0 : Math.max(0, Math.min(800, v)); }
+// ★ (2 Kas 2026) Odak artık her faturada ÜRÜN TABLOSUNUN gerçek konumundan otomatik hesaplanır (eskiden sabit 300 px / son sürüklenen
+// konum kullanıldığı için faturadan faturaya ürün tablosu kayıyordu). Elle ⬆⬇/sürükleme/tekerlek kullanılırsa o fatura için elle konum geçerli olur.
+function bfmOdakPx_(){
+  if(!window._bfmOdakManuel && window._bfmOdakOtoPx != null) return Math.max(0, Math.min(4000, window._bfmOdakOtoPx));
+  const v = parseInt(localStorage.getItem("bfmFaturaOdakPx")||"", 10); return isNaN(v) ? 300 : Math.max(0, Math.min(4000, v));
+}
+function bfmOdakX_(){ if(!window._bfmOdakManuel) return 0; const v = parseInt(localStorage.getItem("bfmFaturaOdakX")||"", 10); return isNaN(v) ? 0 : Math.max(0, Math.min(800, v)); }
 function bfmOdakKirpPx_(){ return bfmOdakAcikMi_() ? bfmOdakPx_() : 0; }
 function bfmPanAcikMi_(){ return localStorage.getItem("bfmFaturaPan") !== "0"; }
 function bfmOdakKontrolHTML(){
@@ -14024,12 +14038,15 @@ function bfmOdakUygula_(){
   if(pt){ const pn = bfmPanAcikMi_(); pt.style.background = pn ? "var(--blue)" : ""; pt.style.color = pn ? "#fff" : ""; pt.style.borderColor = pn ? "var(--blue)" : ""; }
 }
 function bfmOdakAcKapat(){
+  window._bfmOdakManuel = false; // tekrar tıklayınca otomatik odağa dön
   try{ localStorage.setItem("bfmFaturaOdak", bfmOdakAcikMi_() ? "0" : "1"); }catch(e){}
   bfmOdakUygula_();
   bfmSigdir("bfm-onay-iframe","bfm-onay-zoom-yuzde");
 }
 function bfmOdakKaydir(delta){
-  try{ localStorage.setItem("bfmFaturaOdakPx", String(Math.max(0, Math.min(4000, bfmOdakPx_() + delta)))); localStorage.setItem("bfmFaturaOdak","1"); }catch(e){}
+  const _yeniPx = Math.max(0, Math.min(4000, bfmOdakPx_() + delta)); window._bfmOdakManuel = true;
+  try{ localStorage.setItem("bfmFaturaOdakX", "0"); }catch(e){}
+  try{ localStorage.setItem("bfmFaturaOdakPx", String(_yeniPx)); localStorage.setItem("bfmFaturaOdak","1"); }catch(e){}
   bfmOdakUygula_();
 }
 function bfmPanAcKapat(){
@@ -14045,7 +14062,7 @@ function bfmPanKur_(){
   let tut = false, sx = 0, sy = 0, p0 = 0, x0 = 0;
   kat.addEventListener("mousedown", e=>{
     if(e.button !== 0) return;
-    tut = true; sx = e.clientX; sy = e.clientY; p0 = bfmOdakPx_(); x0 = bfmOdakX_();
+    tut = true; sx = e.clientX; sy = e.clientY; p0 = bfmOdakPx_(); x0 = bfmOdakX_(); window._bfmOdakManuel = true;
     kat.classList.add("tutuyor"); e.preventDefault();
   });
   window.addEventListener("mousemove", e=>{
@@ -14062,14 +14079,63 @@ function bfmPanKur_(){
   kat.addEventListener("wheel", e=>{
     e.preventDefault();
     const z = zoom();
-    const p = Math.max(0, Math.min(4000, Math.round(bfmOdakPx_() + e.deltaY / z)));
+    const p = Math.max(0, Math.min(4000, Math.round(bfmOdakPx_() + e.deltaY / z))); window._bfmOdakManuel = true;
     try{ localStorage.setItem("bfmFaturaOdakPx", String(p)); localStorage.setItem("bfmFaturaOdak","1"); }catch(_){}
     bfmOdakUygula_();
   }, {passive:false});
 }
+// ★ (2 Kas 2026) Fatura görseli (srcdoc → aynı kaynak) içeriğini doğrudan ölçer: gerçek içerik genişliği/yüksekliği ve ürün tablosunun (Mal Hizmet) üst konumu.
+function bfmFaturaOlc_(iframeId){
+  const ifr = document.getElementById(iframeId); if(!ifr) return null;
+  let d = null; try{ d = ifr.contentDocument; }catch(e){ return null; }
+  if(!d || !d.body || !d.body.children || !d.body.children.length) return null;
+  const st = ifr.style, o = {z:st.zoom, mt:st.marginTop, ml:st.marginLeft, w:st.width, h:st.height};
+  let sonuc = null;
+  try{
+    st.zoom = "1"; st.marginTop = "0"; st.marginLeft = "0"; st.width = "1400px"; st.height = "500px"; // geniş, kırpmasız ölçüm
+    const win = d.defaultView, sx = (win && win.scrollX) || 0, sy = (win && win.scrollY) || 0;
+    let sag = 0, alt = 0;
+    const tum = d.body.getElementsByTagName("*");
+    for(let i=0;i<tum.length;i++){
+      const r = tum[i].getBoundingClientRect();
+      if(r.width === 0 && r.height === 0) continue;
+      if(r.bottom + sy > alt) alt = r.bottom + sy;
+      // Genişlik: blok kutular ölçüm genişliğini doldurduğu için yalnız tablo/resim gibi gerçek içerik sayılır
+      const ad = tum[i].tagName;
+      if((ad === "TABLE" || ad === "IMG" || ad === "SVG" || ad === "PRE") && r.right + sx > sag) sag = r.right + sx;
+    }
+    if(sag > 0){ const bs = win.getComputedStyle(d.body); sag += (parseFloat(bs.marginRight) || 0); } else { sag = 794; }
+    let hedef = null, enKisa = 1e12;
+    const tablolar = d.getElementsByTagName("table");
+    for(let i=0;i<tablolar.length;i++){
+      const t = tablolar[i].textContent || "";
+      if(/Mal\s*Hizmet/i.test(t) && /Miktar/i.test(t) && t.length < enKisa){ hedef = tablolar[i]; enKisa = t.length; }
+    }
+    sonuc = { sag: Math.ceil(sag), alt: Math.ceil(alt), ust: hedef ? Math.max(0, Math.floor(hedef.getBoundingClientRect().top + sy) - 8) : null };
+  }catch(e){ sonuc = null; }
+  st.zoom = o.z; st.marginTop = o.mt; st.marginLeft = o.ml; st.width = o.w; st.height = o.h;
+  return sonuc;
+}
 function bfmSigdir(iframeId, etiketId){
   const ifr = document.getElementById(iframeId); if(!ifr) return;
   const kutu = ifr.parentElement; if(!kutu) return;
+  // Ölçüm başarılıysa: Onay ekranında ürün tablosundan dip yekün satırına kadar olan bölüm tek ekrana sığdırılır; panelde tüm sayfa gerçek genişlikle sığdırılır.
+  const olc = bfmFaturaOlc_(iframeId);
+  if(olc && olc.sag > 300 && olc.alt > 200){
+    const w2 = Math.max(200, kutu.clientWidth - 6), h2 = Math.max(200, kutu.clientHeight - 6);
+    let z2;
+    if(iframeId === "bfm-onay-iframe"){
+      window._bfmOdakOtoPx = bfmOdakAcikMi_() && olc.ust != null ? olc.ust : 0;
+      const bolumH = Math.max(120, olc.alt - (olc.ust != null && bfmOdakAcikMi_() ? olc.ust : 0));
+      z2 = Math.min(w2/olc.sag, h2/bolumH);
+    } else {
+      z2 = Math.min(w2/olc.sag, h2/olc.alt);
+    }
+    z2 = Math.max(0.42, Math.min(1.6, Math.round(z2*100)/100));
+    bfmZoomIlkDegerAta(iframeId, etiketId, z2);
+    if(iframeId === "bfm-onay-iframe") bfmOdakUygula_();
+    return;
+  }
   const w = Math.max(200, kutu.clientWidth - 6), h = Math.max(200, kutu.clientHeight - 6);
   const kirp = (iframeId === "bfm-onay-iframe") ? Math.min(bfmOdakKirpPx_(), 600) : 0; // odak açıkken sayfanın üst kısmı kırpılı
   // Odak açıkken genişliğe göre sığdırılır (ürünler daha büyük görünür, dikey kaydırılır); kapalıyken sayfanın tamamı sığdırılır.
@@ -14714,6 +14780,7 @@ function alisBekleyenOnayModalAc(faturaNo){
     </div>`;
   document.body.appendChild(overlay);
   window._bfmAktifFatura = f;
+  window._bfmOdakManuel = false; window._bfmOdakOtoPx = null; window._bfmFaturaBoyut = null; // her faturada odak otomatik hesaplansın
   if(f.faturaNo) faturaGorselIframeDoldur_("bfm-onay-iframe", f.faturaNo);
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
   bfmSutunSurukleKur_();
