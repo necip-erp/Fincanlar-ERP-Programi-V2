@@ -5034,7 +5034,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261102b";
+const FRONT_SURUM = "20261102c";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261101b";
@@ -14125,6 +14125,8 @@ function bfmFaturaOlc_(iframeId){
 function bfmOdakGizle_(d, ac){
   try{
     d.querySelectorAll("[data-odak-gizli]").forEach(x=>{ const v = x.getAttribute("data-odak-gizli"); x.style.display = (v === "-") ? "" : v; x.removeAttribute("data-odak-gizli"); });
+    d.querySelectorAll("[data-odak-stil]").forEach(x=>{ x.style.cssText = x.getAttribute("data-odak-stil"); x.removeAttribute("data-odak-stil"); });
+    if(d.body && d.body.hasAttribute("data-odak-stil")){ d.body.style.cssText = d.body.getAttribute("data-odak-stil"); d.body.removeAttribute("data-odak-stil"); }
     if(!ac) return false;
     let urun = null, toplam = null, u1 = 1e12, u2 = 1e12;
     const tablolar = d.getElementsByTagName("table");
@@ -14145,14 +14147,48 @@ function bfmOdakGizle_(d, ac){
         k.setAttribute("data-odak-gizli", k.style.display || "-"); k.style.display = "none";
       });
     });
-    return true;
+    // ★ (2 Kas 2026, 2) Fatura tabloları sabit 1000 px genişlikte olduğu için kutu dar olunca yazı çok küçülüyordu. Ürün ve dip yekün tablosunun
+    // dışındaki bölümler gizlendiğinden, bunları saran tablolar kutu genişliğine yayılır (ürün adı satır kırar); zoom yüksekliğe göre bfmSigdir'de seçilir.
+    const stilVer = (x, css)=>{ if(!x.hasAttribute("data-odak-stil")) x.setAttribute("data-odak-stil", x.style.cssText || ""); x.style.cssText += ";" + css; };
+    if(d.body){ if(!d.body.hasAttribute("data-odak-stil")) d.body.setAttribute("data-odak-stil", d.body.style.cssText || ""); d.body.style.cssText += ";margin:4px;padding:0;min-width:0"; }
+    tut.forEach(n=>{ if(n.tagName === "TABLE" && n !== toplam) stilVer(n, "width:100%;max-width:none;min-width:0;box-sizing:border-box"); });
+    stilVer(urun, "width:100%;max-width:none;table-layout:auto");
+    try{ const bas = urun.rows[0] ? Array.from(urun.rows[0].cells) : []; const mi = bas.findIndex(c=>/Mal\s*Hizmet/i.test(c.textContent || "")); if(mi >= 0) stilVer(bas[mi], "min-width:170px"); }catch(e){} // ürün adı sütunu çok daralıp 5 satıra bölünmesin
+    if(toplam) stilVer(toplam, "max-width:100%;margin-left:auto;margin-top:8px");
+    return {urun: urun, toplam: toplam};
   }catch(e){ return false; }
+}
+// Odak açıkken görünen içeriğin (ürün tablosu + dip yekün) alt kenarı, belge piksel cinsinden.
+function bfmOdakIcerikAlt_(d, g){
+  let alt = 0; const sy = (d.defaultView && d.defaultView.scrollY) || 0;
+  [g.urun, g.toplam].forEach(t=>{ if(t){ const r = t.getBoundingClientRect(); if(r.bottom + sy > alt) alt = r.bottom + sy; } });
+  return Math.ceil(alt) + 8;
 }
 function bfmSigdir(iframeId, etiketId){
   const ifr = document.getElementById(iframeId); if(!ifr) return;
   const kutu = ifr.parentElement; if(!kutu) return;
   let gizlendi = false;
   if(iframeId === "bfm-onay-iframe"){ try{ const dd = ifr.contentDocument; if(dd && dd.body) gizlendi = bfmOdakGizle_(dd, bfmOdakAcikMi_()); }catch(e){} }
+  // ★ (2 Kas 2026, 2) Odak: yalnız ürün + dip yekün kaldı ve kutu genişliğine yayıldı → okunur en büyük zoom (1.3 → 0.7) seçilir, ikisi birlikte tek ekrana sığar.
+  if(iframeId === "bfm-onay-iframe" && gizlendi){
+    try{
+      const dd = ifr.contentDocument, g = gizlendi, kh = Math.max(120, kutu.clientHeight - 6), kw = Math.max(200, kutu.clientWidth - 6);
+      ifr.style.marginTop = "0"; ifr.style.marginLeft = "0"; ifr.style.height = "100%"; ifr.style.width = "100%";
+      let sec = 0, secGenis = 0;
+      for(let z = 1.3; z >= 0.7; z = Math.round((z - 0.05)*100)/100){
+        ifr.style.zoom = z;
+        const gSigar = dd.documentElement.scrollWidth <= dd.documentElement.clientWidth + 1; // içerik yana taşmıyor
+        if(gSigar && !secGenis) secGenis = z;
+        if(gSigar && bfmOdakIcerikAlt_(dd, g) * z <= kh){ sec = z; break; }
+      }
+      // Hem genişlik hem yükseklik sığmıyorsa (çok kalemli fatura) okunur boyutta (en az %80) kal; aşağısı tekerlek/sürükleme ile kaydırılır.
+      if(!sec) sec = secGenis ? Math.max(0.8, secGenis) : 0.7;
+      window._bfmOdakOtoPx = 0;
+      bfmZoomIlkDegerAta(iframeId, etiketId, sec);
+      bfmOdakUygula_();
+      return;
+    }catch(e){}
+  }
   // Ölçüm başarılıysa: Onay ekranında ürün tablosundan dip yekün satırına kadar olan bölüm tek ekrana sığdırılır; panelde tüm sayfa gerçek genişlikle sığdırılır.
   const olc = bfmFaturaOlc_(iframeId);
   if(olc && olc.sag > 300 && olc.alt > 200){
