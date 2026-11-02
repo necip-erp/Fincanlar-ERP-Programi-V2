@@ -4680,7 +4680,7 @@ function faturaGorselKompaktHtml_(html){
     + 'function hepsi(){kes();g();}if(document.readyState==="complete")hepsi();window.addEventListener("load",function(){hepsi();setTimeout(hepsi,300);setTimeout(hepsi,1200);});})();<\/script>';
   // ★ (2 Kas 2026) Fatura görseli ayrı bir belge (iframe) olduğundan, içindeki yazı seçilip Ctrl+1+C / Ctrl+1+V basılınca tuşlar ana sayfaya ulaşmıyordu.
   // Burada aynı tuş mantığı iframe içinde de izlenir; C = seçili yazıyı, V = isteği ana sayfadaki pano koduna iletir.
-  const panoJs = '<script>(function(){var t=null,K=/^(?:Digit|Numpad)([1-9])$/;document.addEventListener("keydown",function(e){try{if(!e.ctrlKey||e.altKey||e.shiftKey||e.metaKey)return;var m=K.exec(e.code||"");if(m){e.preventDefault();if(!t||t.c!==e.code)t={n:+m[1],c:e.code};return;}if(t&&(e.code==="KeyC"||e.code==="KeyV")){e.preventDefault();if(e.repeat)return;window.top.postMessage({tip:"panoTus",n:t.n,islem:e.code==="KeyC"?"C":"V",metin:String(window.getSelection?window.getSelection():"")},"*");}}catch(x){}},true);document.addEventListener("keyup",function(e){if(t&&e.code===t.c)t=null;},true);window.addEventListener("blur",function(){t=null;});})();<\/script>';
+  const panoJs = '<script>(function(){var t=null,K=/^(?:Digit|Numpad)([1-9])$/;document.addEventListener("keydown",function(e){try{if(e.code==="KeyQ"&&(e.ctrlKey||e.altKey)&&!(e.ctrlKey&&e.altKey)&&!e.shiftKey&&!e.metaKey){e.preventDefault();if(!e.repeat)window.top.postMessage({tip:"panoPanel"},"*");return;}if(!e.ctrlKey||e.altKey||e.shiftKey||e.metaKey)return;var m=K.exec(e.code||"");if(m){e.preventDefault();if(!t||t.c!==e.code)t={n:+m[1],c:e.code};return;}if(t&&(e.code==="KeyC"||e.code==="KeyV")){e.preventDefault();if(e.repeat)return;window.top.postMessage({tip:"panoTus",n:t.n,islem:e.code==="KeyC"?"C":"V",metin:String(window.getSelection?window.getSelection():"")},"*");}}catch(x){}},true);document.addEventListener("keyup",function(e){if(t&&e.code===t.c)t=null;},true);window.addEventListener("blur",function(){t=null;});})();<\/script>';
   js += panoJs;
   return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, js + "</body>") : html + js;
 }
@@ -5034,7 +5034,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261102c";
+const FRONT_SURUM = "20261103a";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261101b";
@@ -13146,6 +13146,11 @@ function alisModullerineDon(){
   alisAnaSecimeDon();
   modulAc("alis");
 }
+// ★ (3 Kas 2026) Alış kaydından doğrudan Portaldan Gelen Faturalar listesine geçiş (kayıt sekmesi açık kalır).
+function alisBekleyenlereGit(){
+  modulAc("alis");
+  alisAltModulAc("bekleyen");
+}
 function alisListeyeDon(){
   // Detaydan "Listeye dön": Alış sekmesine (rapor/liste) geçilir; kayıt sekmesi açık kalır.
   document.getElementById("mod-alis").classList.remove("detay-acik");
@@ -13182,6 +13187,7 @@ function alisDetayCiz(res){
     <div class="btnrow">
       <button class="btn btn-primary" onclick="alisDuzenleAc('${a.id}')">✏️ Düzenle</button>
       <button class="btn" onclick="alisModullerineDon()" title="Alış alt modüllerine (Alış Girişi / İade / Portaldan Gelen Faturalar) dön">🏠 Alış Modülleri</button>
+      <button class="btn" onclick="alisBekleyenlereGit()" title="Portaldan Gelen Faturalar listesine geç (bu kayıt sekmesi açık kalır)">📨 Portaldan Gelen Faturalar</button>
       ${a.faturaNo ? `<button class="btn" onclick="faturaGorsalAc('${a.faturaNo}')">📄 Faturayı Gör</button>` : ``}
       <button class="btn btn-danger" onclick="alisSilOnay('${a.id}')">🗑 Alışı Sil</button>
     </div>
@@ -26256,9 +26262,10 @@ document.addEventListener("keydown", function(e){
   function panelKapat(){ const o = document.getElementById("pano-overlay"); if(o) o.remove(); }
   function panelAc(){
     panelKapat();
-    panelOdak = document.activeElement;
+    // Odak fatura görselinin (iframe) içindeyse yapıştırma hedefi en son odaklanılan yazı alanıdır
+    panelOdak = (document.activeElement && document.activeElement.tagName === "IFRAME" && sonYazi && sonYazi.isConnected) ? sonYazi : document.activeElement;
     const o = document.createElement("div");
-    o.id = "pano-overlay";
+    o.id = "pano-overlay"; o.tabIndex = -1; o.style.outline = "none";
     o.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2147482000;display:flex;align-items:center;justify-content:center";
     o.addEventListener("mousedown", ev => { if(ev.target === o) panelKapat(); });
     const k = document.createElement("div");
@@ -26285,23 +26292,25 @@ document.addEventListener("keydown", function(e){
       k.appendChild(s);
     });
     const alt = document.createElement("div"); alt.style.cssText = "padding:10px 16px;display:flex;justify-content:space-between;color:#6b7280";
-    alt.innerHTML = "<span>Esc veya Ctrl+Q ile kapanır</span>";
+    alt.innerHTML = "<span>Esc, Ctrl+Q veya Alt+Q ile kapanır</span>";
     const temiz = document.createElement("button"); temiz.textContent = "Tümünü temizle"; temiz.style.cssText = "border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:6px;padding:3px 10px;cursor:pointer";
     temiz.onclick = () => { if(confirm("9 hafızanın hepsi silinsin mi?")){ yaz(Array(ADET).fill("")); panelAc(); } };
     alt.appendChild(temiz); k.appendChild(alt);
     o.appendChild(k); document.body.appendChild(o);
+    try{ o.focus({preventScroll:true}); }catch(_){} // odak iframe'deyse Esc / 1…9 tuşları ana sayfaya gelsin
   }
+  function qTusu(e){ return e.code === "KeyQ" && !e.shiftKey && !e.metaKey && (e.ctrlKey !== e.altKey); } // Ctrl+Q veya Alt+Q
   function durdur(e){ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
   document.addEventListener("keydown", function(e){
     try{
       if(!document.body.classList.contains("giris-yapildi")) return;
       const n = rakam(e);
       if(panelAcikMi()){
-        if(e.key === "Escape" || (e.ctrlKey && e.code === "KeyQ")){ durdur(e); panelKapat(); return; }
+        if(e.key === "Escape" || qTusu(e)){ durdur(e); panelKapat(); return; }
         if(n && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey){ durdur(e); const h = panelOdak; panelKapat(); if(h && h.focus) h.focus(); yapistir(n, h); }
         return;
       }
-      if(e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && e.code === "KeyQ"){ durdur(e); panelAc(); return; }
+      if(qTusu(e)){ durdur(e); panelAc(); return; }
       if(e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && n){
         durdur(e);
         if(!tutulan || tutulan.code !== e.code){ tutulan = { n: n, code: e.code, kullanildi: false }; beklenen = null; }
@@ -26345,8 +26354,9 @@ document.addEventListener("keydown", function(e){
   window.addEventListener("message", ev => {
     try{
       const d = ev.data;
-      if(!d || d.tip !== "panoTus") return;
+      if(!d || (d.tip !== "panoTus" && d.tip !== "panoPanel")) return;
       if(!Array.from(document.querySelectorAll("iframe")).some(f => f.contentWindow === ev.source)) return; // yalnız sayfadaki kendi iframe'lerimiz
+      if(d.tip === "panoPanel"){ if(panelAcikMi()) panelKapat(); else panelAc(); return; } // Ctrl+Q / Alt+Q fatura görseli içindeyken de panel açılır
       const n = Number(d.n); if(!(n >= 1 && n <= ADET)) return;
       if(d.islem === "C"){
         const m = String(d.metin || "");
