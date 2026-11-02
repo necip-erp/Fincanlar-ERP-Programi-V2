@@ -4675,9 +4675,13 @@ function faturaGorselKompaktHtml_(html){
       if(kap >= 0){ const kes = kap + 8, gs = html.search(/<\/body>/i), s2 = gs >= 0 ? gs : html.length; if(kes < s2) html = html.substring(0, kes) + html.substring(s2); }
     }
   }catch(e){}
-  const js = '<script>(function(){function kes(){try{var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null,false),n,son=null;while((n=w.nextNode())){if(/[\\u00d6\\u00f6Oo]denecek\\s*Tutar/i.test(n.nodeValue))son=n;}if(!son)return;var t=son.parentNode;while(t&&t!==document.body&&t.nodeName!=="TABLE")t=t.parentNode;if(!t||t===document.body)return;for(var c=t;c&&c!==document.body;c=c.parentNode){while(c.nextSibling){c.parentNode.removeChild(c.nextSibling);}}}catch(x){}}'
+  let js = '<script>(function(){function kes(){try{var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null,false),n,son=null;while((n=w.nextNode())){if(/[\\u00d6\\u00f6Oo]denecek\\s*Tutar/i.test(n.nodeValue))son=n;}if(!son)return;var t=son.parentNode;while(t&&t!==document.body&&t.nodeName!=="TABLE")t=t.parentNode;if(!t||t===document.body)return;for(var c=t;c&&c!==document.body;c=c.parentNode){while(c.nextSibling){c.parentNode.removeChild(c.nextSibling);}}}catch(x){}}'
     + 'function g(){try{var b=document.body,st=b.style,o1=st.display,o2=st.width,o3=st.margin;st.display="inline-block";st.width="max-content";var cs=getComputedStyle(b),mx=(parseFloat(cs.marginLeft)||0)+(parseFloat(cs.marginRight)||0),my=(parseFloat(cs.marginTop)||0)+(parseFloat(cs.marginBottom)||0);var w=Math.ceil(b.offsetWidth+mx),h=Math.ceil(b.offsetHeight+my);st.display=o1;st.width=o2;st.margin=o3;window.top.postMessage({tip:"faturaBoyut",w:w,h:h},"*");}catch(x){}}'
     + 'function hepsi(){kes();g();}if(document.readyState==="complete")hepsi();window.addEventListener("load",function(){hepsi();setTimeout(hepsi,300);setTimeout(hepsi,1200);});})();<\/script>';
+  // ★ (2 Kas 2026) Fatura görseli ayrı bir belge (iframe) olduğundan, içindeki yazı seçilip Ctrl+1+C / Ctrl+1+V basılınca tuşlar ana sayfaya ulaşmıyordu.
+  // Burada aynı tuş mantığı iframe içinde de izlenir; C = seçili yazıyı, V = isteği ana sayfadaki pano koduna iletir.
+  const panoJs = '<script>(function(){var t=null,K=/^(?:Digit|Numpad)([1-9])$/;document.addEventListener("keydown",function(e){try{if(!e.ctrlKey||e.altKey||e.shiftKey||e.metaKey)return;var m=K.exec(e.code||"");if(m){e.preventDefault();if(!t||t.c!==e.code)t={n:+m[1],c:e.code};return;}if(t&&(e.code==="KeyC"||e.code==="KeyV")){e.preventDefault();if(e.repeat)return;window.top.postMessage({tip:"panoTus",n:t.n,islem:e.code==="KeyC"?"C":"V",metin:String(window.getSelection?window.getSelection():"")},"*");}}catch(x){}},true);document.addEventListener("keyup",function(e){if(t&&e.code===t.c)t=null;},true);window.addEventListener("blur",function(){t=null;});})();<\/script>';
+  js += panoJs;
   return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, js + "</body>") : html + js;
 }
 const _faturaGorselOnbellek = {};
@@ -5030,7 +5034,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261102a";
+const FRONT_SURUM = "20261102b";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261101b";
@@ -14116,17 +14120,47 @@ function bfmFaturaOlc_(iframeId){
   st.zoom = o.z; st.marginTop = o.mt; st.marginLeft = o.ml; st.width = o.w; st.height = o.h;
   return sonuc;
 }
+// ★ (2 Kas 2026) "Ürünlere Odak": px ile kırpmak yerine (satırlar farklı genişlikte farklı kaydığı için tutmuyordu) fatura belgesinde yalnız
+// ÜRÜN TABLOSU ve DİP YEKÜN (Ödenecek Tutar) tablosu bırakılır, geri kalan bölümler gizlenir (kapatınca geri gelir). Başarılıysa true döner.
+function bfmOdakGizle_(d, ac){
+  try{
+    d.querySelectorAll("[data-odak-gizli]").forEach(x=>{ const v = x.getAttribute("data-odak-gizli"); x.style.display = (v === "-") ? "" : v; x.removeAttribute("data-odak-gizli"); });
+    if(!ac) return false;
+    let urun = null, toplam = null, u1 = 1e12, u2 = 1e12;
+    const tablolar = d.getElementsByTagName("table");
+    for(let i=0;i<tablolar.length;i++){
+      const t = tablolar[i].textContent || "";
+      if(/Mal\s*Hizmet/i.test(t) && /Miktar/i.test(t) && t.length < u1){ urun = tablolar[i]; u1 = t.length; }
+      if(/[ÖöOo]denecek\s*Tutar/i.test(t) && t.length < u2){ toplam = tablolar[i]; u2 = t.length; }
+    }
+    if(!urun) return false;
+    if(toplam && (urun.contains(toplam) || toplam.contains(urun) || toplam === urun)) toplam = null;
+    const tut = new Set();
+    [urun, toplam].forEach(t=>{ if(!t) return; for(let n=t; n && n !== d.body; n=n.parentElement) tut.add(n); });
+    tut.forEach(n=>{
+      const ata = n.parentElement; if(!ata) return;
+      Array.from(ata.children).forEach(k=>{
+        if(tut.has(k) || k.hasAttribute("data-odak-gizli")) return;
+        if(/^(SCRIPT|STYLE|LINK|META|TITLE)$/.test(k.tagName)) return;
+        k.setAttribute("data-odak-gizli", k.style.display || "-"); k.style.display = "none";
+      });
+    });
+    return true;
+  }catch(e){ return false; }
+}
 function bfmSigdir(iframeId, etiketId){
   const ifr = document.getElementById(iframeId); if(!ifr) return;
   const kutu = ifr.parentElement; if(!kutu) return;
+  let gizlendi = false;
+  if(iframeId === "bfm-onay-iframe"){ try{ const dd = ifr.contentDocument; if(dd && dd.body) gizlendi = bfmOdakGizle_(dd, bfmOdakAcikMi_()); }catch(e){} }
   // Ölçüm başarılıysa: Onay ekranında ürün tablosundan dip yekün satırına kadar olan bölüm tek ekrana sığdırılır; panelde tüm sayfa gerçek genişlikle sığdırılır.
   const olc = bfmFaturaOlc_(iframeId);
   if(olc && olc.sag > 300 && olc.alt > 200){
     const w2 = Math.max(200, kutu.clientWidth - 6), h2 = Math.max(200, kutu.clientHeight - 6);
     let z2;
     if(iframeId === "bfm-onay-iframe"){
-      window._bfmOdakOtoPx = bfmOdakAcikMi_() && olc.ust != null ? olc.ust : 0;
-      const bolumH = Math.max(120, olc.alt - (olc.ust != null && bfmOdakAcikMi_() ? olc.ust : 0));
+      window._bfmOdakOtoPx = gizlendi ? 0 : (bfmOdakAcikMi_() && olc.ust != null ? olc.ust : 0);
+      const bolumH = Math.max(120, olc.alt - (gizlendi ? 0 : (olc.ust != null && bfmOdakAcikMi_() ? olc.ust : 0)));
       z2 = Math.min(w2/olc.sag, h2/bolumH);
     } else {
       z2 = Math.min(w2/olc.sag, h2/olc.alt);
@@ -14781,6 +14815,7 @@ function alisBekleyenOnayModalAc(faturaNo){
   document.body.appendChild(overlay);
   window._bfmAktifFatura = f;
   window._bfmOdakManuel = false; window._bfmOdakOtoPx = null; window._bfmFaturaBoyut = null; // her faturada odak otomatik hesaplansın
+  try{ if(localStorage.getItem("bfmOdakSurum") !== "2"){ localStorage.setItem("bfmOdakSurum","2"); localStorage.setItem("bfmFaturaOdak","1"); localStorage.removeItem("bfmFaturaOdakPx"); localStorage.removeItem("bfmFaturaOdakX"); } }catch(e){}
   if(f.faturaNo) faturaGorselIframeDoldur_("bfm-onay-iframe", f.faturaNo);
   if(!_stokTanimYuklendi) stokTanimListesiYukle();
   bfmSutunSurukleKur_();
@@ -26268,6 +26303,27 @@ document.addEventListener("keydown", function(e){
   }, true);
   window.addEventListener("blur", () => { tutulan = null; });
   document.addEventListener("visibilitychange", () => { tutulan = null; });
+  // ★ (2 Kas 2026) Fatura görseli (iframe) içinden gelen Ctrl+rakam+C/V: C = iframe'de seçili yazıyı hafızaya al, V = en son odaklanılan yazı alanına yapıştır.
+  let sonYazi = null;
+  document.addEventListener("focusin", ev => { if(metinAlanMi(ev.target)) sonYazi = ev.target; }, true);
+  window.addEventListener("message", ev => {
+    try{
+      const d = ev.data;
+      if(!d || d.tip !== "panoTus") return;
+      if(!Array.from(document.querySelectorAll("iframe")).some(f => f.contentWindow === ev.source)) return; // yalnız sayfadaki kendi iframe'lerimiz
+      const n = Number(d.n); if(!(n >= 1 && n <= ADET)) return;
+      if(d.islem === "C"){
+        const m = String(d.metin || "");
+        if(!m){ bildir("Pano " + n + ": kopyalanacak seçili metin yok"); return; }
+        const r = oku(); r[n-1] = m;
+        if(yaz(r)) bildir("Pano " + n + " ← " + (m.length > 40 ? m.slice(0, 40) + "…" : m));
+      } else if(d.islem === "V"){
+        const h = (sonYazi && sonYazi.isConnected) ? sonYazi : null;
+        if(h && h.focus) h.focus();
+        yapistir(n, h);
+      }
+    }catch(err){ console.warn("Pano (iframe) hata:", err); }
+  });
 })();
 </script>
 
