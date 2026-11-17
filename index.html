@@ -5034,7 +5034,7 @@ document.addEventListener("DOMContentLoaded", baglantiRozetCiz_);
 baglantiRozetCiz_();
 
 // ── ★ 16 Eki 2026: Sürüm göstergesi + BULUT salt-okunur kilidi (tek yazma yeri: yerel sunucu) ──
-const FRONT_SURUM = "20261103a";
+const FRONT_SURUM = "20261117a";
 // ★ (24 Eki 2026) Bu sayfanın çalışabilmesi için sunucu (arka plan) programının en az hangi sürümde olması gerektiği.
 // Yalnız sayfa değişen sürümlerde (a,b,c...) arka plan numarası değişmez; bu sayı SADECE arka plan kodu (Code.gs PROGRAM_SURUM_) gerçekten yükselince arttırılır.
 const SUNUCU_EN_AZ = "20261101b";
@@ -28976,9 +28976,13 @@ function hzOvDegisti(i, alan, v){
   else if(alan === "tur") s.tur = v;
   else if(alan === "no") s.no = v;
   else if(alan === "tarih"){
-    s.tarih = v; s.oto = false; const d = hzIsoParse_(v); s.gun = d ? String(hzGunFark_(temel, d)) : "";
+    // ★ (17 Kas 2026) Tarih kutusunda yazarken yıl hanesi tamamlanmadan (0002, 0020, 0202…) tarih geçici olarak "geçerli"
+    // görünür; bunlar hesaba katılmaz, yıl 1990-2200 olunca işlenir.
+    let d = hzIsoParse_(v);
+    if(d && (d.getFullYear() < 1990 || d.getFullYear() > 2200)) d = null;
+    s.tarih = d ? v : ""; s.oto = false; s.gun = d ? String(hzGunFark_(temel, d)) : "";
     const g = hzEl("hz-ov-g-" + i); if(g) g.value = s.gun;
-    if(d){ _hzOvAnkraj = i; if(hzEl("hz-ov-aylik") && hzEl("hz-ov-aylik").checked){ hzOvAylikDoldur_(i); return; } }
+    if(d){ _hzOvAnkraj = i; if(hzEl("hz-ov-aylik") && hzEl("hz-ov-aylik").checked){ hzOvAylikDoldur_(i, false); return; } }
   } else if(alan === "gun"){
     s.gun = v; s.oto = false; const n = parseInt(v, 10);
     if(!isNaN(n)){ const d = new Date(temel); d.setDate(d.getDate() + n); s.tarih = hzIsoYaz_(d); } else s.tarih = "";
@@ -28987,17 +28991,27 @@ function hzOvDegisti(i, alan, v){
   hzOvToplamHesapla_();
 }
 // Aylık seçim: i. satırın tarihinden sonraki satırlar +1 ay ilerler (elle girilmiş satırlara dokunmaz); seçilen tarih ay sonuysa hepsi ay sonuna düşer
-function hzOvAylikDoldur_(i){
-  const a = _hzOv.satirlar[i], bas = a && hzIsoParse_(a.tarih); if(!bas) return;
+// yenidenCiz=true yalnız satır eklenince (tablo yeniden çizilir); tarih yazılırken false: kutular YERİNDE güncellenir, odak yerinden oynamaz
+// (★ 17 Kas 2026: eskiden her tarih değişiminde tüm tablo yeniden çiziliyor, yazılan kutu kayboluyor ve imleç başka alana kaçıyordu)
+function hzOvAylikDoldur_(i, yenidenCiz){
+  const a = _hzOv.satirlar[i], bas = a && hzIsoParse_(a.tarih);
+  if(!bas){ if(yenidenCiz) hzOvCiz_(); return; }
   const temel = hzOvTemel_();
   const aySonu = bas.getDate() === new Date(bas.getFullYear(), bas.getMonth() + 1, 0).getDate();
+  const degisen = [];
   for(let j = i + 1; j < _hzOv.satirlar.length; j++){
     const s = _hzOv.satirlar[j], adim = j - i;
     if(s.tarih && !s.oto) continue;
     const x = aySonu ? new Date(bas.getFullYear(), bas.getMonth() + adim + 1, 0, 12, 0, 0) : hzAyEkle_(bas, adim);
-    s.tarih = hzIsoYaz_(x); s.gun = String(hzGunFark_(temel, x)); s.oto = true;
+    s.tarih = hzIsoYaz_(x); s.gun = String(hzGunFark_(temel, x)); s.oto = true; degisen.push(j);
   }
-  hzOvCiz_();
+  if(yenidenCiz){ hzOvCiz_(); return; }
+  degisen.forEach(j=>{
+    const s = _hzOv.satirlar[j], dd = hzEl("hz-ov-d-" + j), g = hzEl("hz-ov-g-" + j);
+    if(dd) dd.value = s.tarih;
+    if(g) g.value = s.gun;
+  });
+  hzOvToplamHesapla_();
 }
 function hzOvBasDegisti(){
   const temel = hzOvTemel_();
@@ -29042,7 +29056,7 @@ function hzOvModSec(m){
 }
 function hzOvSatirEkle(n){
   for(let i = 0; i < n; i++) _hzOv.satirlar.push(hzOvBos_());
-  if(_hzOvAnkraj >= 0 && _hzOv.satirlar[_hzOvAnkraj] && hzEl("hz-ov-aylik") && hzEl("hz-ov-aylik").checked){ hzOvAylikDoldur_(_hzOvAnkraj); return; }
+  if(_hzOvAnkraj >= 0 && _hzOv.satirlar[_hzOvAnkraj] && hzEl("hz-ov-aylik") && hzEl("hz-ov-aylik").checked){ hzOvAylikDoldur_(_hzOvAnkraj, true); return; }
   hzOvCiz_();
 }
 function hzOvSatirSil(i){ _hzOv.satirlar.splice(i, 1); _hzOvAnkraj = -1; if(!_hzOv.satirlar.length) _hzOv.satirlar.push(hzOvBos_()); hzOvCiz_(); }
